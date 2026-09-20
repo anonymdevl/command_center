@@ -1,0 +1,226 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-09-20 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "in_create": 1,
+ "field_order": [
+  "business_code",
+  "src_doctype",
+  "src_name",
+  "src_row_name",
+  "src_modified",
+  "src_docstatus",
+  "ingested_at",
+  "fact_key",
+  "sec_doc",
+  "posting_date",
+  "customer",
+  "customer_group",
+  "territory",
+  "col_item",
+  "item_code",
+  "item_group",
+  "warehouse",
+  "sec_qty",
+  "qty",
+  "stock_qty",
+  "uom",
+  "col_money",
+  "base_net_amount",
+  "base_cost_amount",
+  "base_margin_amount",
+  "has_cost",
+  "sales_order"
+ ],
+ "fields": [
+  {
+   "fieldname": "business_code",
+   "fieldtype": "Data",
+   "label": "Business",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "description": "Which connected business this row belongs to. Consolidated is a GROUP BY on this column; a single business is a filter."
+  },
+  {
+   "fieldname": "src_doctype",
+   "fieldtype": "Data",
+   "label": "Source Doctype",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "src_name",
+   "fieldtype": "Data",
+   "label": "Source Document",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "src_row_name",
+   "fieldtype": "Data",
+   "label": "Source Row"
+  },
+  {
+   "fieldname": "src_modified",
+   "fieldtype": "Datetime",
+   "label": "Source Modified",
+   "search_index": 1,
+   "description": "The source document's modified timestamp at extraction. Drives the incremental watermark."
+  },
+  {
+   "fieldname": "src_docstatus",
+   "fieldtype": "Int",
+   "label": "Source Docstatus",
+   "description": "0 draft \u00b7 1 submitted \u00b7 2 cancelled"
+  },
+  {
+   "fieldname": "ingested_at",
+   "fieldtype": "Datetime",
+   "label": "Ingested At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fact_key",
+   "fieldtype": "Data",
+   "label": "Fact Key",
+   "unique": 1,
+   "read_only": 1,
+   "length": 64,
+   "description": "sha1 of business + source doctype + document + row. Makes a reload replace rather than duplicate."
+  },
+  {
+   "fieldname": "sec_doc",
+   "fieldtype": "Section Break",
+   "label": "Invoice"
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Posting Date",
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Data",
+   "label": "Customer",
+   "search_index": 1
+  },
+  {
+   "fieldname": "customer_group",
+   "fieldtype": "Data",
+   "label": "Customer Group"
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Data",
+   "label": "Territory"
+  },
+  {
+   "fieldname": "col_item",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Data",
+   "label": "Item",
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "item_group",
+   "fieldtype": "Data",
+   "label": "Item Group",
+   "search_index": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Data",
+   "label": "Warehouse"
+  },
+  {
+   "fieldname": "sec_qty",
+   "fieldtype": "Section Break",
+   "label": "Quantity and value"
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty"
+  },
+  {
+   "fieldname": "stock_qty",
+   "fieldtype": "Float",
+   "label": "Stock Qty"
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Data",
+   "label": "UOM"
+  },
+  {
+   "fieldname": "col_money",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "base_net_amount",
+   "fieldtype": "Currency",
+   "label": "Revenue",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "base_cost_amount",
+   "fieldtype": "Currency",
+   "label": "Cost",
+   "description": "incoming_rate x stock_qty, as ERPNext valued it at the time. Zero where no valuation was recorded \u2014 which is a data-quality fact, not a margin of 100%."
+  },
+  {
+   "fieldname": "base_margin_amount",
+   "fieldtype": "Currency",
+   "label": "Margin"
+  },
+  {
+   "fieldname": "has_cost",
+   "fieldtype": "Check",
+   "label": "Cost Known",
+   "description": "False where the source carried no incoming rate. Any margin KPI must exclude these rather than treat them as free stock."
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Data",
+   "label": "Sales Order"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Fact Sales Invoice Line",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Command Center Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "posting_date",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

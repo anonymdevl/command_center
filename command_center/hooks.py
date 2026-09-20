@@ -87,5 +87,8 @@ scheduler_events = {
     },
     "daily": [
         "command_center.api.changes.prune_consumed_events",
+        # Incremental by watermark, so a daily run is cheap. A full rebuild is a
+        # deliberate call to command_center.api.ingest.run(full=True).
+        "command_center.api.ingest.scheduled_load",
     ],
 }

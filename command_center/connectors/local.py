@@ -49,10 +49,51 @@ class LocalConnector(BusinessConnector):
             )
 
     def get_doc(self, doctype, name):
+        """The document, or as much of it as can be had.
+
+        A third-party app that overrides a doctype's controller and fails to
+        import takes `frappe.get_doc` down with it for that doctype — on this
+        client's site, posawesome did exactly that to Sales Invoice, and nobody
+        could open an invoice in the desk either.
+
+        The platform should degrade rather than die: fall back to a
+        controller-free read and mark the result, so a drawer shows the record
+        with a caveat instead of a screen showing a traceback. The permission
+        check still happens, against the same doctype's own permissions.
+        """
         with acting_as(self.acting_user):
-            doc = frappe.get_doc(doctype, name)
-            doc.check_permission("read")
-            return doc.as_dict()
+            try:
+                doc = frappe.get_doc(doctype, name)
+                doc.check_permission("read")
+                return doc.as_dict()
+            except ImportError:
+                frappe.log_error(
+                    title=f"Command Center: controller unavailable for {doctype}",
+                    message=frappe.get_traceback())
+                return self._get_doc_without_controller(doctype, name)
+
+    def _get_doc_without_controller(self, doctype, name):
+        if not frappe.has_permission(doctype, "read", doc=name,
+                                     user=self.acting_user):
+            raise frappe.PermissionError(
+                f"Not permitted to read {doctype} {name}")
+
+        meta = frappe.get_meta(doctype)
+        row = frappe.db.get_value(doctype, name, "*", as_dict=True)
+        if not row:
+            frappe.throw(f"{doctype} {name} not found")
+        out = dict(row)
+        out["doctype"] = doctype
+        for df in meta.get_table_fields():
+            out[df.fieldname] = frappe.db.get_all(
+                df.options, filters={"parent": name, "parenttype": doctype},
+                fields=["*"], order_by="idx asc")
+        out["_controller_unavailable"] = True
+        out["_caveat"] = (
+            f"An app installed on this site overrides {doctype} and failed to "
+            f"load. This record was read directly, so computed fields may be "
+            f"missing.")
+        return out
 
     def get_count(self, doctype, filters=None):
         with acting_as(self.acting_user):
