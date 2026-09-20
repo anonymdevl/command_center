@@ -2,6 +2,20 @@
 
 Who may open it, and what it needs to know about them.
 
+THE FILENAME MATTERS. Frappe finds a page's controller by taking the template
+name and replacing hyphens with underscores:
+
+    www/command-center.html  ->  www/command_center.py
+
+Named with a hyphen, the controller is simply never found. Frappe does not warn:
+get_context does not run, the context is empty, and the page renders anyway. Here
+that meant `window.CC_BOOT = ;` -- a syntax error, so the interface fell back to
+its signed-out defaults and showed "Guest" with no businesses and no figures.
+
+It also meant the management-only guard below never executed, so the page was
+reachable by any signed-in user. A gate that silently does not run is worse than
+no gate, because it is believed.
+
 The check happens server-side, before any context is built. A page that renders
 and then hides its contents has already sent them.
 """

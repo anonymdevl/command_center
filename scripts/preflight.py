@@ -228,7 +228,34 @@ if os.path.exists(ai):
 
 
 # --------------------------------------------------------------------------
-# 6. The frontend build arrangement
+# 6. Every www page's controller is named where Frappe will look for it
+# --------------------------------------------------------------------------
+# Frappe derives the controller name from the template by replacing hyphens with
+# underscores. A controller named with a hyphen is never found, get_context never
+# runs, and the page renders with an empty context -- no error, no warning. Any
+# guard inside that controller silently does not run.
+WWW = os.path.join(APP, "www")
+if os.path.isdir(WWW):
+    for tpl in sorted(glob.glob(os.path.join(WWW, "*.html"))):
+        stem = os.path.splitext(os.path.basename(tpl))[0]
+        wanted = os.path.join(WWW, stem.replace("-", "_") + ".py")
+        hyphened = os.path.join(WWW, stem + ".py")
+        if "-" in stem and os.path.exists(hyphened) and not os.path.exists(wanted):
+            check(False,
+                  f"www/{stem}.py will never be loaded: Frappe looks for "
+                  f"www/{stem.replace('-', '_')}.py. Rename it, or get_context "
+                  f"and every guard in it silently do not run.")
+        # A template that interpolates context must have a controller to set it.
+        source = open(tpl, encoding="utf-8").read()
+        needs_context = re.search(r"\{\{\s*(boot|csrf_token)\b", source)
+        if needs_context:
+            check(os.path.exists(wanted),
+                  f"www/{stem}.html uses {{{{ boot }}}} or {{{{ csrf_token }}}} but "
+                  f"there is no www/{stem.replace('-', '_')}.py to provide it.")
+
+
+# --------------------------------------------------------------------------
+# 7. The frontend build arrangement
 # --------------------------------------------------------------------------
 # A package.json with a build script at the APP ROOT makes `bench build` try to
 # run it, which fails on any server without Node. Keeping it in frontend/ is what
