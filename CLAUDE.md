@@ -48,6 +48,15 @@ writing, not after deploying.
 
 `frappe.client.get_list` validates field names and names the bad one. Use it as the check.
 
+**A doctype can be readable by nobody, and Frappe will not say so.** Issue on this site
+has `Custom DocPerm` rows granting read to no role, and Custom DocPerms *replace* the
+standard ones. `frappe.get_list` does not raise: it strips every field the acting roles
+cannot read and returns rows carrying only `name` and `modified`. That is why sixty
+complaints loaded blank. Ingest therefore reads as the system, via
+`BusinessConnector.as_system()` — only ingest, only the local business, and preflight
+enforces both. It widens nothing: facts are read back through `api/kpi` and `api/facts`,
+which call `require_manager()` first.
+
 ### 3. Every new module gets the guards its siblings have.
 
 Before writing a module alongside an existing one, read the existing one and carry over
@@ -148,7 +157,7 @@ frontend/src/
   legacy/hydrate.js       label → KPI, figure substitution
   components/{LegacyView,Records,DataTable,Sidebar,Topbar,Drawer,States,Appearance}.jsx
 interface/                generators that build views.json and the CSS
-scripts/preflight.py      800 checks — must pass before any push
+scripts/preflight.py      867 checks — must pass before any push
 ```
 
 **Verified live figures** (as at 2025-08-19, the data horizon): receivable

@@ -38,8 +38,12 @@ class LocalConnector(BusinessConnector):
 
     def get_list(self, doctype, filters=None, fields=None, limit=20,
                  order_by=None, group_by=None, parent_doctype=None):
+        # A system read (ingest only, see BusinessConnector.as_system) must not be
+        # field-filtered: frappe.get_list silently drops every field the acting roles
+        # cannot read, which on a doctype readable by no role means every field.
+        reader = frappe.get_all if self.system else frappe.get_list
         with acting_as(self.acting_user):
-            return frappe.get_list(
+            return reader(
                 doctype,
                 filters=filters or {},
                 fields=fields or ["name"],

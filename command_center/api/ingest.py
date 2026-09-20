@@ -26,6 +26,8 @@ def run(fact: str | None = None, business_code: str | None = None,
     require_manager()
 
     conn = connector_for(business_code) if business_code else local_connector()
+    # Building a derived table is a system act. See BusinessConnector.as_system.
+    conn = conn.as_system() if conn else conn
     if not conn:
         frappe.throw("No local business is registered.")
     if not conn.is_local:
@@ -69,6 +71,8 @@ def reconcile(business_code: str | None = None):
     """
     require_manager()
     conn = connector_for(business_code) if business_code else local_connector()
+    # Building a derived table is a system act. See BusinessConnector.as_system.
+    conn = conn.as_system() if conn else conn
     if not conn:
         frappe.throw("No local business is registered.")
 
@@ -155,6 +159,8 @@ def scheduled_load():
     conn = local_connector()
     if not conn:
         return
+    # No user runs the scheduler, so there is no identity to scope this to.
+    conn = conn.as_system()
     from command_center.ingest.base import resolve_as_of
     as_of = resolve_as_of(conn)
     for name, cls in INGESTORS.items():

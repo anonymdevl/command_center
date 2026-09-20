@@ -59,17 +59,53 @@ class BusinessConnector:
 
     is_local: bool = False
 
-    def __init__(self, business: Any, acting_user: str | None = None):
+    def __init__(self, business: Any, acting_user: str | None = None,
+                 system: bool = False):
         self.business = business
         self.code = business.business_code
         self.name = business.business_name
         self.currency = business.currency
         self.acting_user = acting_user
+        self.system = system
 
     # -- identity ----------------------------------------------------------
     def as_user(self, user: str) -> "BusinessConnector":
         """Return a connector bound to an acting identity."""
         return type(self)(self.business, acting_user=user)
+
+    def as_system(self) -> "BusinessConnector":
+        """Return a connector that reads as the system rather than as a person.
+
+        Only ingest uses this, and only against the local business. Two reasons it
+        has to exist:
+
+        The nightly load runs from the scheduler with no user at all, so there is no
+        identity whose permissions could scope it. Scoping a system job to whatever
+        user happened to trigger it would make the figures depend on who pressed the
+        button.
+
+        And a doctype can be readable by nobody. On this site, Issue's Custom DocPerm
+        rows grant read to no role -- Custom DocPerms replace the standard ones, so
+        Issue is readable by no role at all. Frappe does not raise for that: it strips
+        every field from the result and returns rows carrying only name and modified.
+        Sixty complaints therefore loaded blank, and only require_fields turned it into
+        an error instead of a plausible screen.
+
+        This does not widen who can see anything. Facts are read back through
+        api/kpi and api/facts, and every one of those calls require_manager() first.
+        What changes is that building a derived table is a system act, which is what
+        it always was.
+        """
+        if not self.is_local:
+            # A remote read goes over HTTP with the acting user's own credential on
+            # that site. There is no system identity to borrow, and silently returning
+            # a connector that ignores the flag would let a caller believe they had
+            # escalated on a peer when nothing changed.
+            raise ValueError(
+                f"{self.name} is on another site. A system read has no meaning there: "
+                f"a peer is read with the acting user's own credential, which is the "
+                f"point of not computing on anyone else's behalf.")
+        return type(self)(self.business, acting_user=self.acting_user, system=True)
 
     # -- reads -------------------------------------------------------------
     # Deliberately mirrors frappe.client so the local implementation is thin and

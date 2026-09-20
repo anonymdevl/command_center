@@ -689,6 +689,43 @@ else:
 
 
 # --------------------------------------------------------------------------
+# System reads: only ingest, only local, and ingest must actually ask for one
+# --------------------------------------------------------------------------
+# Issue on this site has Custom DocPerm rows granting read to no role. Custom DocPerms
+# replace the standard ones, so it is readable by nobody -- and frappe.get_list does not
+# raise for that, it strips every field and returns rows carrying only name and modified.
+# Sixty complaints loaded blank. Ingest therefore reads as the system; these checks keep
+# that narrow and make sure it is still asked for.
+_base = open(os.path.join(ROOT, "command_center", "connectors", "base.py")).read()
+_loc = open(os.path.join(ROOT, "command_center", "connectors", "local.py")).read()
+_ing_api = open(os.path.join(ROOT, "command_center", "api", "ingest.py")).read()
+
+check("def as_system" in _base, "connectors/base.py has no as_system")
+# The method body, not a fixed number of characters: the first version looked at the
+# first 800 and saw only the docstring, so it reported the guard missing when it was
+# there. A check that is wrong about the code is as bad as one that cannot fail.
+_as_sys = _base.split("def as_system")[1]
+_as_sys = _as_sys[: _as_sys.find("\n    def ")] if "\n    def " in _as_sys else _as_sys
+check("if not self.is_local" in _as_sys,
+      "as_system does not refuse a remote connector, so a caller could believe they had "
+      "escalated on a peer when nothing changed")
+check("frappe.get_all if self.system else frappe.get_list" in _loc,
+      "local connector does not switch to an unfiltered read for a system connector, so "
+      "a doctype readable by no role still returns rows with every field stripped")
+for _fn in ("def run(", "def reconcile(", "def scheduled_load("):
+    _body = _ing_api.split(_fn)[1][:1200] if _fn in _ing_api else ""
+    check("as_system()" in _body,
+          f"api/ingest.py {_fn.strip('def (')} does not take a system connector, so its "
+          f"reads are scoped to whoever happened to call it")
+# And nothing outside ingest may ask for one.
+for _py in sorted(_Path(ROOT).joinpath("command_center").rglob("*.py")):
+    if _py.name in ("base.py",) or "ingest" in _py.as_posix():
+        continue
+    check("as_system(" not in _py.read_text(),
+          f"{_py.relative_to(_Path(ROOT)).as_posix()} asks for a system read. Only ingest "
+          f"may: everything else is read on behalf of a person.")
+
+# --------------------------------------------------------------------------
 # The deploy script's order, because the order is why it exists
 # --------------------------------------------------------------------------
 _deploy = open(os.path.join(ROOT, "deploy.sh")).read()
