@@ -2,32 +2,15 @@ import frappe
 
 
 def execute():
-    """Register the host site as connector number one.
+    """Upgrade path only.
 
-    The app must never treat the site it is installed on as a special case. It is
-    simply the Connected Business flagged `is_local`. Every engine above this
-    layer sees N businesses and never asks which one it is living inside — which
-    is what makes moving the platform to another site a configuration change
-    rather than a rewrite.
+    A fresh install seeds through `after_install` — see the note there about
+    patches being marked applied without running. This exists for sites that
+    already carry an earlier version of the app, and for repairing a site whose
+    registry row was deleted.
     """
-    if frappe.db.exists("Connected Business", {"is_local": 1}):
-        return
+    from command_center.install import seed_local_business
 
-    company = frappe.db.get_value("Company", {}, "name", order_by="creation asc")
-    if not company:
-        # Site has no Company yet. The business is registered on first use.
-        return
-
-    currency = frappe.db.get_value("Company", company, "default_currency")
-
-    frappe.get_doc(
-        {
-            "doctype": "Connected Business",
-            "business_name": company,
-            "business_code": frappe.scrub(company)[:40],
-            "is_local": 1,
-            "erpnext_company": company,
-            "currency": currency,
-            "status": "Active",
-        }
-    ).insert(ignore_permissions=True)
+    name = seed_local_business()
+    if name:
+        frappe.db.commit()
