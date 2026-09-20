@@ -30,15 +30,17 @@ class PurchaseInvoiceIngestor(Ingestor):
         if since:
             filters["modified"] = [">", since]
 
+        pi_fields = ["name", "modified", "docstatus", "posting_date", "due_date",
+                     "status", "is_return", "supplier", "currency",
+                     "base_grand_total", "outstanding_amount"]
+
         rows = []
         while True:
-            batch = conn.get_list(
-                "Purchase Invoice", filters=filters,
-                fields=["name", "modified", "docstatus", "posting_date", "due_date",
-                        "status", "is_return", "supplier", "currency",
-                        "base_grand_total", "outstanding_amount"],
-                order_by="modified asc", limit=min(PAGE, limit or PAGE),
-            )
+            batch = require_fields(
+                conn.get_list("Purchase Invoice", filters=filters, fields=pi_fields,
+                              order_by="modified asc",
+                              limit=min(PAGE, limit or PAGE)),
+                pi_fields, "Purchase Invoice")
             if not batch:
                 break
             groups = _supplier_groups(conn, {d.get("supplier") for d in batch})
@@ -85,11 +87,11 @@ class PurchaseInvoiceLineIngestor(Ingestor):
         if since:
             filters["modified"] = [">", since]
 
-        parents = conn.get_list(
-            "Purchase Invoice", filters=filters,
-            fields=["name", "modified", "docstatus", "posting_date", "supplier"],
-            order_by="modified asc", limit=limit or 100000,
-        )
+        parent_fields = ["name", "modified", "docstatus", "posting_date", "supplier"]
+        parents = require_fields(
+            conn.get_list("Purchase Invoice", filters=filters, fields=parent_fields,
+                          order_by="modified asc", limit=limit or 100000),
+            parent_fields, "Purchase Invoice")
         if not parents:
             return []
         by_name = {p["name"]: p for p in parents}
@@ -144,9 +146,11 @@ def _supplier_groups(conn, suppliers) -> dict:
     names = [s for s in suppliers if s]
     out = {}
     for i in range(0, len(names), 300):
-        for d in conn.get_list("Supplier",
-                               filters={"name": ["in", names[i:i + 300]]},
-                               fields=["name", "supplier_group"], limit=100000):
+        for d in require_fields(
+                conn.get_list("Supplier",
+                              filters={"name": ["in", names[i:i + 300]]},
+                              fields=["name", "supplier_group"], limit=100000),
+                ["name", "supplier_group"], "Supplier"):
             out[d["name"]] = d.get("supplier_group")
     return out
 

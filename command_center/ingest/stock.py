@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from frappe.utils import flt
 
-from command_center.ingest.base import Ingestor
+from command_center.ingest.base import Ingestor, require_fields
 
 PAGE = 2000
 
@@ -35,16 +35,20 @@ class StockBalanceIngestor(Ingestor):
         if since:
             filters["modified"] = [">", since]
 
+        bin_fields = ["name", "modified", "warehouse", "item_code", "stock_uom",
+                      "actual_qty", "reserved_qty", "ordered_qty",
+                      "projected_qty", "valuation_rate", "stock_value"]
+
         rows, seen_items = [], set()
         raw = []
         while True:
-            batch = conn.get_list(
-                "Bin", filters=filters,
-                fields=["name", "modified", "warehouse", "item_code", "stock_uom",
-                        "actual_qty", "reserved_qty", "ordered_qty",
-                        "projected_qty", "valuation_rate", "stock_value"],
-                order_by="modified asc", limit=min(PAGE, limit or PAGE),
-            )
+            # Guarded: a field the source drops without complaint becomes a silently
+            # blank fact column, which is how sixty cases loaded with no status.
+            batch = require_fields(
+                conn.get_list("Bin", filters=filters, fields=bin_fields,
+                              order_by="modified asc",
+                              limit=min(PAGE, limit or PAGE)),
+                bin_fields, "Bin")
             if not batch:
                 break
             raw.extend(batch)
@@ -89,9 +93,10 @@ def _item_groups(conn, items) -> dict:
     names = [i for i in items if i]
     out = {}
     for i in range(0, len(names), 300):
-        for d in conn.get_list("Item",
-                               filters={"name": ["in", names[i:i + 300]]},
-                               fields=["name", "item_group"], limit=100000):
+        for d in require_fields(
+                conn.get_list("Item", filters={"name": ["in", names[i:i + 300]]},
+                              fields=["name", "item_group"], limit=100000),
+                ["name", "item_group"], "Item"):
             out[d["name"]] = d.get("item_group")
     return out
 

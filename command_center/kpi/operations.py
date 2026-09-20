@@ -147,6 +147,21 @@ register(
 
     # -------------------------------------------------------------------- people
     Kpi(
+        key="people_total",
+        label="On the books",
+        fact="fact_person",
+        measure="*",
+        agg="count",
+        unit="count",
+        direction="neutral",
+        # No is_active filter: this is everyone on record, which is a different figure
+        # from headcount and must not be the same number under a different label.
+        filters={},
+        note="{headcount} of them currently employed",
+        drill_filters={},
+        as_of_basis="data_horizon",
+    ),
+    Kpi(
         key="headcount",
         label="People employed",
         fact="fact_person",

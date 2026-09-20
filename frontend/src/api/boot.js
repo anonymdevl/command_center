@@ -13,12 +13,7 @@ export const boot = raw || {
   businesses: [],
   scopes: [],
   as_of: null,
-  live: [],
 };
 
 export const hasSession = Boolean(raw);
 
-/** Is this view reading loaded facts, or still showing the demonstration extract? */
-export function isLive(viewKey) {
-  return (boot.live || []).includes(viewKey);
-}

@@ -26,12 +26,23 @@ CLOSED_CASE = {"Closed", "Resolved"}
 
 
 def _paged(conn, doctype, fields, filters, limit=None, order_by="modified asc"):
-    """Walk a doctype in pages by its modified watermark."""
+    """Walk a doctype in pages by its modified watermark.
+
+    Every page is checked for the fields that were asked for. Frappe does not always
+    report an unknown field: asking Issue for resolution_date -- which this ERPNext
+    calls sla_resolution_date -- returned rows carrying only name and modified, with
+    no error. Sixty cases loaded with a blank status and no opening date, every one
+    of them counted as open, and the screen looked plausible.
+
+    A fact table that quietly loses a column is worse than one that fails to build.
+    """
     out = []
     filters = dict(filters)
     while True:
-        batch = conn.get_list(doctype, filters=filters, fields=fields,
-                              order_by=order_by, limit=min(PAGE, limit or PAGE))
+        batch = require_fields(
+            conn.get_list(doctype, filters=filters, fields=fields,
+                          order_by=order_by, limit=min(PAGE, limit or PAGE)),
+            fields, doctype)
         if not batch:
             break
         out.extend(batch)
@@ -87,8 +98,12 @@ class SalesOrderIngestor(Ingestor):
                 "base_grand_total": value,
                 # Percentages can exceed 100 on over-delivery, which would otherwise
                 # make the undelivered value negative and understate the order book.
-                "undelivered_value": max(value * (1 - min(delivered, 100.0) / 100.0), 0),
-                "unbilled_value": max(value * (1 - min(billed, 100.0) / 100.0), 0),
+                # Rounded here: a derived money column carried float noise into every
+                # total that summed it.
+                "undelivered_value": round(
+                    max(value * (1 - min(delivered, 100.0) / 100.0), 0), 2),
+                "unbilled_value": round(
+                    max(value * (1 - min(billed, 100.0) / 100.0), 0), 2),
                 "per_delivered": delivered,
                 "per_billed": billed,
                 "as_of_date": getdate(as_of),
@@ -209,7 +224,9 @@ class CaseIngestor(Ingestor):
         cases = _paged(conn, "Issue",
                        ["name", "modified", "subject", "status", "priority",
                         "issue_type", "customer", "raised_by", "opening_date",
-                        "resolution_date", "_assign"],
+                        # sla_resolution_date, not resolution_date: the latter does
+                        # not exist on Issue in ERPNext v16.
+                        "sla_resolution_date", "_assign"],
                        filters, limit)
 
         rows = []
@@ -218,7 +235,8 @@ class CaseIngestor(Ingestor):
             is_open = 0 if status in CLOSED_CASE else 1
             opened = c.get("opening_date")
             # An open case has waited until the horizon; a closed one until it closed.
-            until = as_of if is_open else (c.get("resolution_date") or as_of)
+            resolved = c.get("sla_resolution_date")
+            until = as_of if is_open else (resolved or as_of)
             days = date_diff(until, opened) if opened else None
             who = _first_assignee(c.get("_assign"))
             rows.append({
@@ -233,7 +251,7 @@ class CaseIngestor(Ingestor):
                 "raised_by": c.get("raised_by"),
                 "assigned_to": who,
                 "opening_date": opened,
-                "resolution_date": c.get("resolution_date"),
+                "resolution_date": getdate(resolved) if resolved else None,
                 "as_of_date": getdate(as_of),
                 "days_open": max(days, 0) if days is not None else None,
                 "wait_bucket": lateness_bucket(days) if is_open else "Closed",

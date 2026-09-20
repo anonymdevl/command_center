@@ -1,5 +1,4 @@
 import React from "react";
-import { isLive } from "../api/boot.js";
 
 export default function Sidebar({ nav, current, onGo }) {
   return (
@@ -22,9 +21,11 @@ export default function Sidebar({ nav, current, onGo }) {
               }}
             >
               <span>{it.label}</span>
-              {/* A badge is a live tally. Until a screen reads the facts it has
-                  nothing to count, and a number in a sidebar looks like fact. */}
-              {it.badge && isLive(it.key) ? <span className="bdg">{it.badge}</span> : null}
+              {/* No badge. A badge is a tally, and nothing here computes one yet: the
+                  designed numbers are demonstration values, and a number sitting in a
+                  sidebar reads as fact with no card around it to caveat. It comes back
+                  when the engine can count it -- "Daily brief 5" has to mean five
+                  things, not five once upon a time. */}
             </div>
           ))}
         </div>

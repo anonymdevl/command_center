@@ -7,7 +7,7 @@ and it would make every permission decision below it advisory.
 
 from __future__ import annotations
 
-from urllib.parse import quote
+from urllib.parse import urlsplit
 
 import frappe
 from frappe.query_builder.functions import Count, Sum
@@ -192,14 +192,27 @@ def _site_urls() -> dict:
 def _document_url(sites, row) -> str | None:
     """A link to the document itself.
 
-    Provenance stops being a column of codes and becomes the way in. Returns a
-    relative path for the local business so the link works whatever host the manager
-    reached this site on.
+    Built with Frappe's own get_url_to_form rather than assembling /app/<slug>/<name>
+    by hand. My hand-built version produced links that 404'd: the desk route for a
+    doctype is not always its lowercased name, and guessing it is not something this
+    app should be doing when the framework knows the answer.
+
+    A connected business is on another site, so its path is taken from the local
+    answer and prefixed with that site's URL -- the route is the same in every Frappe.
     """
     doctype, name = row.get("src_doctype"), row.get("src_name")
     if not doctype or not name:
         return None
-    base = sites.get(row.get("business_code"), "")
-    slug = doctype.lower().replace(" ", "-")
-    return f"{base}/app/{slug}/{quote(str(name))}"
+
+    try:
+        url = frappe.utils.get_url_to_form(doctype, str(name))
+    except Exception:
+        return None
+
+    base = sites.get(row.get("business_code")) or ""
+    if not base:
+        return url
+    # Keep only the path, so the peer's own host is used rather than this one's.
+    path = urlsplit(url).path
+    return f"{base}{path}"
 

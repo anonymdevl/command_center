@@ -37,14 +37,15 @@ class SalesInvoiceIngestor(Ingestor):
 
         rows, start = [], 0
         while True:
-            batch = conn.get_list(
-                "Sales Invoice", filters=filters,
-                fields=["name", "modified", "docstatus", "posting_date", "due_date",
-                        "status", "is_return", "customer", "customer_group",
-                        "territory", "currency", "base_grand_total",
-                        "outstanding_amount"],
-                order_by="modified asc", limit=min(PAGE, limit or PAGE),
-            )
+            si_fields = ["name", "modified", "docstatus", "posting_date", "due_date",
+                         "status", "is_return", "customer", "customer_group",
+                         "territory", "currency", "base_grand_total",
+                         "outstanding_amount"]
+            batch = require_fields(
+                conn.get_list("Sales Invoice", filters=filters, fields=si_fields,
+                              order_by="modified asc",
+                              limit=min(PAGE, limit or PAGE)),
+                si_fields, "Sales Invoice")
             if not batch:
                 break
             for d in batch:

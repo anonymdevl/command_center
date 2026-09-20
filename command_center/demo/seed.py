@@ -109,10 +109,18 @@ def run(business_code: str | None = None, dry_run: bool = False) -> dict:
         # write into a site the caller has no business writing to.
         doc.insert()
 
+        # ERPNext's Issue controller sets status on insert -- it does not keep what
+        # was passed in. All 49 seeded cases came out "Open", so every one counted as
+        # open and the screen showed sixty of sixty waiting. The status has to be
+        # written after the insert.
+        #
+        # The resolution field is sla_resolution_date on this version; there is no
+        # resolution_date on Issue at all.
+        if status != "Open":
+            frappe.db.set_value("Issue", doc.name, "status", status,
+                                update_modified=False)
         if status in ("Resolved", "Closed"):
-            # Set after insert: ERPNext manages resolution on status change, and
-            # writing it in the payload can be overwritten.
-            frappe.db.set_value("Issue", doc.name, "resolution_date",
+            frappe.db.set_value("Issue", doc.name, "sla_resolution_date",
                                 add_days(opened, 3 + (i % 21)), update_modified=False)
 
         # Two in three get an owner. The rest are the "nobody assigned" finding, which
@@ -128,6 +136,38 @@ def run(business_code: str | None = None, dry_run: bool = False) -> dict:
     plan["created"] = len(created)
     plan["first"], plan["last"] = (created[0], created[-1]) if created else (None, None)
     return plan
+
+
+def verify() -> dict:
+    """What the seeded data actually looks like in the site.
+
+    Written because the first seed run reported success while every case came out
+    with the wrong status. A seeder that reports what it intended rather than what
+    landed is a seeder that lies pleasantly.
+    """
+    from command_center.api.businesses import require_manager
+
+    require_manager()
+    rows = frappe.get_all("Issue",
+                          filters={"subject": ["like", f"%{MARKER}%"]},
+                          fields=["status", "issue_type", "priority",
+                                  "opening_date", "sla_resolution_date", "_assign"])
+    by_status, by_type = {}, {}
+    assigned = dated = 0
+    for r in rows:
+        by_status[r.status or "(blank)"] = by_status.get(r.status or "(blank)", 0) + 1
+        by_type[r.issue_type or "(blank)"] = by_type.get(r.issue_type or "(blank)", 0) + 1
+        if r._assign and r._assign not in ("[]", "null"):
+            assigned += 1
+        if r.opening_date:
+            dated += 1
+    return {
+        "seeded": len(rows),
+        "by_status": by_status,
+        "by_type": by_type,
+        "with_an_owner": assigned,
+        "with_an_opening_date": dated,
+    }
 
 
 def remove() -> dict:

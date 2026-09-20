@@ -1,25 +1,41 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import views from "../legacy/views.json";
 import extras from "../legacy/extras.json";
 import { boot } from "../api/boot.js";
 import { renderGreeting } from "../greeting.js";
+import { api } from "../api/client.js";
+import { useApi } from "../useApi.js";
+import Records from "./Records.jsx";
+import { hydrateCards, keysFor } from "../legacy/hydrate.js";
 
 /**
- * A view that has not been converted yet.
+ * A designed screen, with live figures put into it.
  *
- * Renders the generated markup so the interface keeps working screen by screen
- * while components replace it. This is a migration scaffold and nothing else --
- * every view here is one still to be written, and when views.json is empty this
- * component and the generators go with it.
+ * Not a scaffold any more. The designed views are the product: the spacing, the card
+ * contract, the wording and the panel structure were settled over many rounds, and
+ * rewriting them as components threw that away and demonstrated something other than
+ * what was designed.
  *
- * The markup is ours, generated at build time from fixed demonstration content.
- * No value here comes from the API, which is why dangerouslySetInnerHTML is
- * acceptable in this one place and nowhere else. A converted view renders through
- * React and is escaped.
+ * So the markup renders exactly as generated, and legacy/hydrate.js then replaces the
+ * figures inside the cards it has a KPI for and wires them to the real records. A card
+ * with nothing behind it keeps its designed figure and says on itself that it is
+ * illustrative.
+ *
+ * The markup is ours, generated at build time, which is why dangerouslySetInnerHTML is
+ * acceptable in this one place. Nothing from the API is ever written as HTML: the
+ * hydrator sets textContent and builds elements.
  */
-export default function LegacyView({ viewKey, openDrawer }) {
+export default function LegacyView({ viewKey, scope, openDrawer }) {
   const ref = useRef(null);
   const html = views[viewKey];
+  const [liveCount, setLiveCount] = useState(null);
+
+  const keys = keysFor(viewKey);
+  const figures = useApi(
+    () => (keys.length ? api.kpis({ keys, business_code: scope }) : Promise.resolve(null)),
+    [viewKey, scope, keys.join(",")],
+    { skip: keys.length === 0 }
+  );
 
   // The generated markup calls these by name from inline onclick attributes.
   useEffect(() => {
@@ -49,6 +65,29 @@ export default function LegacyView({ viewKey, openDrawer }) {
     const t = setInterval(() => renderGreeting(el, boot.user), 30000);
     return () => clearInterval(t);
   }, [viewKey]);
+
+  // Live figures into the designed cards. Runs after the markup is in the DOM and
+  // again whenever the figures or the business change.
+  useEffect(() => {
+    const root = ref.current;
+    if (!root || !html) return;
+    const live = hydrateCards(root, viewKey, figures.data, {
+      onOpen: (figure) =>
+        figure.drill?.fact
+          ? openDrawer(
+              <Records
+                scope={scope}
+                fact={figure.drill.fact}
+                filters={figure.drill.filters}
+                title={figure.label}
+                subset={figure.subset_of}
+                openDrawer={openDrawer}
+              />
+            )
+          : undefined,
+    });
+    setLiveCount(live);
+  }, [viewKey, html, figures.data, scope, openDrawer]);
 
   // Tabs inside the generated markup are plain DOM, so they are wired here
   // rather than reimplemented.
@@ -84,6 +123,14 @@ export default function LegacyView({ viewKey, openDrawer }) {
   }
 
   return (
-    <div className="view on" ref={ref} dangerouslySetInnerHTML={{ __html: html }} />
+    <>
+      {figures.error ? (
+        <div className="warn" style={{ margin: "0 0 14px" }}>
+          <b>The live figures could not be read.</b> {figures.error.message} The screen
+          below is showing its designed demonstration values.
+        </div>
+      ) : null}
+      <div className="view on" ref={ref} dangerouslySetInnerHTML={{ __html: html }} />
+    </>
   );
 }

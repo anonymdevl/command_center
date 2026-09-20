@@ -19,6 +19,7 @@ import ast
 import glob
 import json
 import os
+import json
 import re
 import sys
 
@@ -348,49 +349,30 @@ if os.path.exists(LEGACY_VIEWS):
           f"opens to its records; an unwired one falls back to the shared "
           f"'unwired' panel rather than silently losing its chevron.")
 
-# The React card must follow the same rule as the generated one.
+# Every card that shows a real figure must open to its records.
 #
-# Scanned by brace depth rather than by regex. The first version of this used
-# `<Figure\b([^>]*?)/>`, which cannot match an element whose props contain an
-# arrow function -- `onClick={() =>` has a `>` in it. So the rule matched nothing
-# and passed vacuously, which is worse than not having it.
-def _jsx_elements(src: str, tag: str):
-    """Yield the source of each self-closing <tag ... /> element."""
-    i = 0
-    needle = "<" + tag
-    while True:
-        i = src.find(needle, i)
-        if i == -1:
-            return
-        depth = 0
-        j = i + len(needle)
-        while j < len(src):
-            c = src[j]
-            if c == "{":
-                depth += 1
-            elif c == "}":
-                depth -= 1
-            elif c == "/" and depth == 0 and src[j : j + 2] == "/>":
-                yield src[i : j + 2]
-                break
-            j += 1
-        i = j + 1
-
-
-for jsx in sorted(glob.glob(os.path.join(ROOT, "frontend", "src", "views", "*.jsx"))):
-    src = open(jsx).read()
-    found = list(_jsx_elements(src, "Figure"))
-    for element in found:
-        label = re.search(r'label="([^"]*)"', element)
-        check("onClick" in element,
-              f"{os.path.relpath(jsx, ROOT)}: <Figure "
-              f"{label.group(1) if label else '?'!r} has no onClick, so it renders "
-              f"without the chevron while every generated card has one.")
-    # A check that matches nothing is not a passing check.
-    if "<Figure" in src:
-        check(len(found) > 0,
-              f"{os.path.relpath(jsx, ROOT)}: the file uses <Figure> but the "
-              f"scanner found none, so the onClick rule did not run.")
+# This used to be a scan for <Figure onClick=...> in the React views. Those views are
+# gone: the designed screens are the product, and their figures are hydrated in place.
+# Leaving the old scan would have been the third check in this file that passes
+# vacuously -- it would have found no <Figure> anywhere and reported success.
+#
+# So the same contract is checked where the cards now live: the hydrator must clear the
+# generated "not wired yet" handler and attach a real one, or a live card would still
+# open the explainer that says it is not wired.
+_hydrator = os.path.join(ROOT, "frontend", "src", "legacy", "hydrate.js")
+_h = open(_hydrator).read()
+check('card.removeAttribute("onclick")' in _h,
+      "hydrate.js does not clear the generated inline onclick, so a card showing a "
+      "real figure would still open the 'not wired yet' explainer.")
+check("card.onclick =" in _h,
+      "hydrate.js does not attach a click handler, so a hydrated card would show a "
+      "real figure with no way to open its records.")
+check('classList.add("clickable")' in _h,
+      "hydrate.js does not mark hydrated cards clickable, so they would lose the "
+      "chevron every other card has.")
+check('dataset.illustrative' in _h,
+      "hydrate.js does not mark unhydrated cards, so a demonstration figure would sit "
+      "beside a real one with nothing to tell them apart.")
 
 
 # --------------------------------------------------------------------------
@@ -584,6 +566,19 @@ else:
         check(_f in REGISTRY_FACTS,
               f"an ingestor fills {_f!r}, which facts.schema does not map")
 
+    # Every ingest module that reads from a source must check the fields came back.
+    # Frappe does not always report an unknown field: Issue returned rows carrying
+    # only name and modified when asked for resolution_date, and sixty cases loaded
+    # blank. require_fields turns that into a sentence instead of a plausible screen.
+    for _py in sorted(_ing_dir.glob("*.py")):
+        if _py.name in ("__init__.py", "base.py", "registry.py"):
+            continue
+        _text = _py.read_text()
+        if "get_list(" in _text:
+            check("require_fields" in _text,
+                  f"{_py.name} reads from a source but never calls require_fields, so "
+                  f"a field the source silently drops becomes a blank fact column")
+
     # No orphan component. Lineage.jsx survived as dead code after Records.jsx
     # replaced it, and nothing noticed -- an unused file still gets read by the next
     # person as if it were the current answer.
@@ -637,20 +632,39 @@ else:
                       f"{_jsx.name} uses flag tone {_one!r}, which the stylesheet does "
                       f"not define (it has: {', '.join(sorted(_flag_classes))})")
 
-    # Every converted screen must declare the facts it reads, so the illustrative
-    # banner is derived rather than remembered.
-    _app = (_src / "App.jsx").read_text()
-    _ported = re.search(r'const PORTED = \{(.*?)\}', _app, re.S)
-    _keys = set(re.findall(r'^\s*([a-z_]+):', _ported.group(1), re.M)) if _ported else set()
-    _ctrl = (_ROOT / "command_center" / "www" / "command_center.py").read_text()
-    _declared = re.search(r'VIEW_FACTS = \{(.*?)\n\}', _ctrl, re.S)
-    _dkeys = set(re.findall(r'"([a-z_]+)":', _declared.group(1))) if _declared else set()
-    check(_keys and _keys == _dkeys,
-          f"PORTED views {sorted(_keys)} and VIEW_FACTS {sorted(_dkeys)} disagree, so "
-          f"the illustrative banner would be wrong on the difference")
-    for _fact in re.findall(r'"(fact_[a-z_]+)"', _declared.group(1) if _declared else ""):
-        check(_fact in REGISTRY_FACTS,
-              f"VIEW_FACTS names {_fact!r}, which facts.schema does not map")
+    # Every KPI named in the hydration map must exist, and every card label it names
+    # must actually be on that screen. A label that no longer matches is a card that
+    # silently stays illustrative, and a key that does not exist is the same -- neither
+    # raises, so neither would ever be noticed.
+    _hyd = (_src / "legacy" / "hydrate.js").read_text()
+    _views_json = json.loads((_src / "legacy" / "views.json").read_text())
+    _map_body = re.search(r"export const CARD_KPIS = \{(.*?)\n\};", _hyd, re.S)
+    # Split per view rather than matching a block: an empty map written `proc: {},`
+    # has no closing brace on its own line, so a block pattern ran straight past it and
+    # read the next view's labels as belonging to it.
+    _map_src = _map_body.group(1) if _map_body else ""
+    _starts = [(m.group(1), m.end()) for m in re.finditer(r"^  (\w+): \{", _map_src, re.M)]
+    _sections = []
+    for _i, (_view, _from) in enumerate(_starts):
+        _to = _starts[_i + 1][1] - len(f"  {_starts[_i + 1][0]}: {{") if _i + 1 < len(_starts) else len(_map_src)
+        _sections.append((_view, _map_src[_from:_to]))
+    for _view, _body in _sections:
+        check(_view in _views_json,
+              f"hydrate.js maps cards for {_view!r}, which is not a designed view")
+        for _label, _key in re.findall(r'^\s*"?([^":\n]+?)"?:\s*"([a-z][a-z0-9_]+)"',
+                                       _body, re.M):
+            _label = _label.strip()
+            check(_key in REGISTRY,
+                  f"hydrate.js maps {_view}/{_label!r} to KPI {_key!r}, which is not "
+                  f"registered")
+            _seen_keys = re.findall(r':\s*"([a-z][a-z0-9_]+)"', _body)
+            check(_seen_keys.count(_key) == 1,
+                  f"{_view}: two cards both map to KPI {_key!r}, so the screen would "
+                  f"show one number twice under labels that mean different things")
+            check(f'class="lab">{_label}<' in _views_json.get(_view, ""),
+                  f"hydrate.js maps a card labelled {_label!r} on {_view}, but no card "
+                  f"on that screen carries that label, so it would stay illustrative")
+
 
     # No cycle among value dependencies. A cycle cannot be ordered, so a ratio in
     # one would be evaluated before its denominator and print an em dash -- which is

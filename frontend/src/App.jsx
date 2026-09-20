@@ -1,18 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { boot, isLive } from "./api/boot.js";
+import { boot } from "./api/boot.js";
 import { initAppearance } from "./appearance.js";
 import Topbar from "./components/Topbar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import Drawer from "./components/Drawer.jsx";
 import LegacyView from "./components/LegacyView.jsx";
-import Sales from "./views/Sales.jsx";
-import Buying from "./views/Buying.jsx";
-import Stock from "./views/Stock.jsx";
-import Delivery from "./views/Delivery.jsx";
-import People from "./views/People.jsx";
-import Complaints from "./views/Complaints.jsx";
-import Whole from "./views/Whole.jsx";
-import Money from "./views/Money.jsx";
 import nav from "./legacy/nav.json";
 
 /**
@@ -20,16 +12,17 @@ import nav from "./legacy/nav.json";
  * markup through LegacyView, so the interface keeps full parity while it is
  * converted a screen at a time.
  */
-const PORTED = {
-  ops: Whole,
-  sales: Sales,
-  fin: Money,
-  proc: Buying,
-  inv: Stock,
-  eng: Delivery,
-  hr: People,
-  cx: Complaints,
-};
+/**
+ * Views that have become components.
+ *
+ * Empty on purpose. I replaced eight designed screens with layouts of my own -- the
+ * same mistake as Command, eight more times. Converting a screen means putting real
+ * figures into the screen that was designed, not substituting a different screen.
+ *
+ * The designed views render as designed, and the figures inside them are hydrated from
+ * the KPI engine by data-kpi. See LegacyView.
+ */
+const PORTED = {};
 
 initAppearance();
 
@@ -61,8 +54,11 @@ export default function App() {
   };
 
   const Ported = PORTED[view];
-  const anyLive = (boot.live || []).length > 0;
-  const showBanner = !anyLive || !isLive(view);
+  // Every designed screen still has at least one card with no fact behind it, and the
+  // cards say which they are. The old all-or-nothing "this view is live" flag stopped
+  // being true the moment figures were hydrated card by card, so it is gone rather
+  // than left half-right.
+  const showBanner = !Ported;
 
   const ctx = useMemo(() => ({ scope, go, openDrawer: setDrawer }), [scope]);
 
@@ -95,9 +91,9 @@ function IllustrativeNotice() {
     <div className="dnote" style={{ margin: "0 0 18px" }}>
       <span className="dn-i">●</span>
       <span>
-        <b>Illustrative figures.</b> The design and the workings are real; the numbers
-        on this screen are still the demonstration extract. Each area is wired to the
-        loaded facts in turn, and a screen drops this line the moment it reads them.
+        <b>Some figures on this screen are still illustrative.</b> Cards reading the
+        loaded ERPNext data show their real value and open to the records behind it;
+        cards still showing demonstration values say so on the card itself.
       </span>
     </div>
   );

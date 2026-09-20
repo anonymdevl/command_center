@@ -126,7 +126,6 @@ def _boot(user: str) -> dict:
         "businesses": scope.get("businesses", []),
         "scopes": scope.get("scopes", []),
         "as_of": _as_of(),
-        "live": _live_views(),
     }
 
 
@@ -155,38 +154,3 @@ def _as_of():
     }
 
 
-# Which facts each converted screen reads. A screen is live when they are loaded,
-# and not before.
-VIEW_FACTS = {
-    "ops": ["fact_sales_invoice", "fact_purchase_invoice", "fact_sales_order",
-            "fact_stock_balance", "fact_sales_invoice_line", "fact_case",
-            "fact_task"],
-    "sales": ["fact_sales_invoice"],
-    "fin": ["fact_sales_invoice_line", "fact_payment_allocation"],
-    "proc": ["fact_purchase_invoice", "fact_purchase_invoice_line"],
-    "inv": ["fact_stock_balance"],
-    "eng": ["fact_sales_order", "fact_task"],
-    "hr": ["fact_person"],
-    "cx": ["fact_case"],
-}
-
-
-def _live_views() -> list[str]:
-    """Which views draw on loaded facts rather than the demo extract.
-
-    Derived, not listed. Whether a screen is live depends on whether its facts are
-    actually loaded in this site, so the answer is read from the ingest state rather
-    than from a list someone has to remember to update -- which is how the banner
-    would have claimed Sales was still illustrative after it stopped being, or
-    worse, claimed the reverse.
-    """
-    try:
-        loaded = {
-            row.fact for row in frappe.get_all(
-                "Command Center Ingest State",
-                filters={"status": "OK"}, fields=["fact"])
-        }
-    except Exception:
-        return []
-    return sorted(view for view, facts in VIEW_FACTS.items()
-                  if facts and loaded.issuperset(facts))
