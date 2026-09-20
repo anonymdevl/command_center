@@ -15,7 +15,6 @@ def after_install():
     create_manager_role()
     seed_local_business()
     frappe.db.commit()
-    _build_desk_views()
 
 
 def create_manager_role():
@@ -65,14 +64,3 @@ def seed_local_business():
         "status": "Active",
     }).insert(ignore_permissions=True)
     return doc.name
-
-
-def _build_desk_views():
-    """Cosmetic, so it must never fail the install."""
-    try:
-        from command_center.desk import build
-
-        build()
-    except Exception:
-        frappe.log_error(title="Command Center desk views",
-                         message=frappe.get_traceback())

@@ -525,3 +525,16 @@ table.dt tr:hover td{background:var(--hover)}
  background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
 .livechip.stale{background:var(--med-bg);color:var(--stale);border-color:var(--med-line)}
 .whosel:disabled{opacity:1;cursor:default}
+
+/* ============ SIDEBAR BADGES ============ */
+/* The markup emitted <span class="bdg">5</span> from the start and nothing ever
+   styled it, so it rendered as bare text against the label: "Daily brief5". */
+.navi{display:flex;align-items:center;gap:8px}
+.navi > span:first-of-type{flex:1;min-width:0;overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap}
+.navi.sub::before{flex:none}
+.bdg{flex:none;min-width:19px;height:18px;padding:0 6px;border-radius:999px;
+ background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-dim);
+ font-size:10px;font-weight:700;line-height:1;display:inline-flex;
+ align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
+.navi.on .bdg{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}

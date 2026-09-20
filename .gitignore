@@ -2,5 +2,10 @@ __pycache__/
 *.pyc
 .DS_Store
 node_modules/
-command_center/public/frontend/
 .env
+
+# The built interface IS committed: that is what keeps deployment to
+# git pull + bench migrate + bench restart, with no Node on the server.
+# Vite's manifest is not needed -- the page references stable filenames.
+command_center/public/command-center/.vite/
+frontend/dist/

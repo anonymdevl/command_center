@@ -103,7 +103,6 @@ BYPASS = ("ignore_permissions", "ignore_validate", "ignore_mandatory")
 # happened to contain "Command Center". A guard that passes by accident is not a
 # guard.
 CONFIG_MODULES = (
-    "command_center/desk.py",        # workspace, number cards, charts
     "command_center/install.py",     # the manager role, the local business
     "command_center/patches/",       # upgrade steps
     "command_center/ingest/",        # the platform's own derived tables
@@ -226,6 +225,38 @@ if os.path.exists(ai):
               f"the manager's door, requirements AI-B1..AI-B8")
     check("eval(" not in src and "exec(" not in src,
           "ai_tools.py: eval or exec present")
+
+
+# --------------------------------------------------------------------------
+# 6. The frontend build arrangement
+# --------------------------------------------------------------------------
+# A package.json with a build script at the APP ROOT makes `bench build` try to
+# run it, which fails on any server without Node. Keeping it in frontend/ is what
+# lets deployment stay git pull + migrate + restart.
+check(not os.path.exists(os.path.join(APP, "package.json")),
+      "command_center/package.json exists — bench build will try to run it and "
+      "fail on servers without Node. The frontend's package.json belongs in "
+      "frontend/.")
+check(not os.path.exists(os.path.join(ROOT, "package.json")),
+      "package.json at the repo root — same problem; keep it in frontend/.")
+
+DIST = os.path.join(APP, "public", "command-center")
+FRONTEND = os.path.join(ROOT, "frontend", "src")
+if os.path.isdir(FRONTEND):
+    check(os.path.exists(os.path.join(DIST, "command-center.js")),
+          "frontend/ exists but no built bundle in command_center/public/"
+          "command-center/. Run: cd frontend && npm run build")
+    if os.path.exists(os.path.join(DIST, "command-center.js")):
+        # A stale bundle ships the wrong interface while the source looks right,
+        # which is the failure mode of committing build output.
+        newest_src = max(
+            (os.path.getmtime(os.path.join(dirpath, f))
+             for dirpath, _, files in os.walk(FRONTEND) for f in files),
+            default=0)
+        built = os.path.getmtime(os.path.join(DIST, "command-center.js"))
+        check(built >= newest_src,
+              "the committed bundle is older than frontend/src. Run: "
+              "cd frontend && npm run build")
 
 
 # --------------------------------------------------------------------------

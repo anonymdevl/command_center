@@ -1,59 +1,37 @@
 #!/usr/bin/env python3
-"""Build the Command Center interface into the app.
+"""Emit the design system and the legacy view markup for the React frontend.
 
     python3 scripts/build_interface.py
 
-The interface is generated, not hand-edited. `interface/` holds the generators
-that produced the design we agreed; this script runs them and splits the result
-into three files the app serves:
+The interface is moving from generated vanilla markup to React components. This
+script is the bridge, and it produces two things:
 
-    command_center/public/css/command-center.css
-    command_center/public/js/command-center.js
-    command_center/www/command-center.html
+    frontend/src/styles/command-center.css   the approved design system
+    frontend/src/legacy/views.json           each view's markup, as data
 
-Editing the generated files directly is how the two copies drift, and it has
-already cost one rebuild on this project. Change `interface/`, run this, commit
-both.
+A view with a real component renders that component. A view without one renders
+its legacy markup, so the whole interface keeps working while it is converted a
+screen at a time. `legacy/` shrinks to nothing as components land, and when it is
+empty this script and `interface/` go with it.
 
-No build toolchain: the interface is vanilla HTML, CSS and JavaScript, so there
-is no Vite, no npm and nothing for `bench build` to compile. Files under
-`public/` are served through the assets symlink the moment they exist.
+The CSS is not legacy. It is the design system, it transfers unchanged, and Vite
+bundles it.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IFACE = os.path.join(ROOT, "interface")
-APP = os.path.join(ROOT, "command_center")
+FE = os.path.join(ROOT, "frontend", "src")
 
-CSS_OUT = os.path.join(APP, "public", "css", "command-center.css")
-JS_OUT = os.path.join(APP, "public", "js", "command-center.js")
-WWW_OUT = os.path.join(APP, "www", "command-center.html")
-
-PAGE = """{%- raw -%}
-<!DOCTYPE html>
-<html lang="en" data-theme="dark" data-accent="petrol" data-signal="muted">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex,nofollow">
-<title>Intelligent Command Center</title>
-<link rel="icon" href="/assets/command_center/images/command-center.svg">
-<link rel="stylesheet" href="/assets/command_center/css/command-center.css?v=__V__">
-</head>
-<body>
-__BODY__
-{%- endraw -%}
-<script>window.CC_BOOT = {{ boot }};</script>
-{%- raw -%}
-<script src="/assets/command_center/js/command-center.js?v=__V__"></script>
-</body>
-</html>
-{%- endraw -%}
-"""
+CSS_OUT = os.path.join(FE, "styles", "command-center.css")
+VIEWS_OUT = os.path.join(FE, "legacy", "views.json")
+NAV_OUT = os.path.join(FE, "legacy", "nav.json")
+EXTRAS_OUT = os.path.join(FE, "legacy", "extras.json")
 
 
 def main() -> int:
@@ -65,25 +43,57 @@ def main() -> int:
     ns = {"IFACE": IFACE, "_src": _src, "__name__": "__interface__"}
     exec(compile(_src("build.py"), os.path.join(IFACE, "build.py"), "exec"), ns)
 
-    parts = ns["PARTS"]
-    css, body, js = parts["css"], parts["body"], parts["js"]
+    css = ns["PARTS"]["css"]
 
-    # A cache-buster so a manager does not have to hard-refresh after a deploy.
-    version = str(abs(hash(css + body + js)))[:10]
+    # Each view's markup, keyed the way the nav refers to it.
+    views = {k: v for k, v in ns["VIEWS"].items()}
+    views["denied"] = (
+        '<div class="denied"><div class="big">⛔</div>'
+        "<h4>Not available to your role</h4><p>You are signed in as a role that has "
+        "not been granted this area. Nothing is hidden on the screen — the "
+        "figures were never fetched.</p></div>"
+    )
+
+    nav = {
+        "groups": [
+            {
+                "label": gname,
+                "items": [
+                    {
+                        "key": it[0],
+                        "label": it[1],
+                        "badge": it[2] if len(it) == 4 else "",
+                        "roles": it[3] if len(it) == 4 else it[2],
+                        "sub": gname == "Areas of the business",
+                    }
+                    for it in items
+                ],
+            }
+            for gname, items in ns["NAVGROUPS"]
+        ]
+    }
+
+    extras = {
+        "drawers": ns["DR"],
+        "explainers": ns["EXH"],
+        "drill": ns["DRH"],
+        "brain": ns["BRAIN"],
+        "accents": {k: lab for k, lab, g, li, dk, n in ns["ACCENTS"]},
+    }
 
     for path, content in (
         (CSS_OUT, css),
-        (JS_OUT, js),
-        (WWW_OUT, PAGE.replace("__BODY__", body).replace("__V__", version)),
+        (VIEWS_OUT, json.dumps(views, indent=0)),
+        (NAV_OUT, json.dumps(nav, indent=1)),
+        (EXTRAS_OUT, json.dumps(extras, indent=0)),
     ):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-        rel = os.path.relpath(path, ROOT)
-        print(f"  {len(content):>9,} bytes  {rel}")
+        print(f"  {len(content):>9,} bytes  {os.path.relpath(path, ROOT)}")
 
-    print(f"\n  version {version}")
-    print("  views:", body.count('class="view"'))
+    print(f"\n  {len(views)} views, {len(extras['drawers'])} drawers, "
+          f"{len(extras['explainers'])} explainers")
     return 0
 
 

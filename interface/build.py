@@ -426,6 +426,19 @@ BOOT_CSS = """
  background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
 .livechip.stale{background:var(--med-bg);color:var(--stale);border-color:var(--med-line)}
 .whosel:disabled{opacity:1;cursor:default}
+
+/* ============ SIDEBAR BADGES ============ */
+/* The markup emitted <span class="bdg">5</span> from the start and nothing ever
+   styled it, so it rendered as bare text against the label: "Daily brief5". */
+.navi{display:flex;align-items:center;gap:8px}
+.navi > span:first-of-type{flex:1;min-width:0;overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap}
+.navi.sub::before{flex:none}
+.bdg{flex:none;min-width:19px;height:18px;padding:0 6px;border-radius:999px;
+ background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-dim);
+ font-size:10px;font-weight:700;line-height:1;display:inline-flex;
+ align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
+.navi.on .bdg{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 """
 
 BOOT_JS = """
@@ -531,6 +544,16 @@ BOOT_JS = """
       else v.insertBefore(n, v.firstChild);
     });
   }
+
+  /* -- badges claim counts, so they wait for something to count ---------- */
+  /* "Daily brief 5", "Approvals 3" read as live tallies. They were fixed
+     numbers from the walkthrough, and unlike every figure on a screen they
+     carry no caveat next to them -- a small number in a sidebar looks like
+     fact. They come back per view as that view starts reading the facts. */
+  document.querySelectorAll('.navi').forEach(function(n){
+    var k=n.dataset.nav, b=n.querySelector('.bdg');
+    if(b && liveViews.indexOf(k)===-1) b.remove();
+  });
 
   /* the interface already initialised; re-run what the payload changed */
   try{ setRole(); greet(); }catch(e){}

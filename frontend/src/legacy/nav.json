@@ -1,0 +1,264 @@
+{
+ "groups": [
+  {
+   "label": "Your day",
+   "items": [
+    {
+     "key": "command",
+     "label": "Command",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "fin",
+      "sales",
+      "audit",
+      "hr"
+     ],
+     "sub": false
+    },
+    {
+     "key": "brief",
+     "label": "Daily brief",
+     "badge": "5",
+     "roles": [
+      "ceo",
+      "fin",
+      "sales",
+      "audit",
+      "hr"
+     ],
+     "sub": false
+    },
+    {
+     "key": "myday",
+     "label": "My day",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "fin",
+      "sales",
+      "audit",
+      "hr"
+     ],
+     "sub": false
+    }
+   ]
+  },
+  {
+   "label": "Run the business",
+   "items": [
+    {
+     "key": "ops",
+     "label": "The whole business",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "fin",
+      "sales",
+      "audit",
+      "hr"
+     ],
+     "sub": false
+    },
+    {
+     "key": "health",
+     "label": "Control Health",
+     "badge": "6",
+     "roles": [
+      "ceo",
+      "fin",
+      "audit"
+     ],
+     "sub": false
+    },
+    {
+     "key": "risk",
+     "label": "Risk and compliance",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "fin",
+      "audit"
+     ],
+     "sub": false
+    }
+   ]
+  },
+  {
+   "label": "Decide and delegate",
+   "items": [
+    {
+     "key": "approvals",
+     "label": "Approvals",
+     "badge": "3",
+     "roles": [
+      "ceo",
+      "fin"
+     ],
+     "sub": false
+    },
+    {
+     "key": "delegation",
+     "label": "Work handed out",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "fin",
+      "sales",
+      "audit",
+      "hr"
+     ],
+     "sub": false
+    }
+   ]
+  },
+  {
+   "label": "Ask and find",
+   "items": [
+    {
+     "key": "ask",
+     "label": "Ask the business",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "fin",
+      "sales",
+      "audit",
+      "hr"
+     ],
+     "sub": false
+    },
+    {
+     "key": "search",
+     "label": "Find anything",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "fin",
+      "sales",
+      "audit",
+      "hr"
+     ],
+     "sub": false
+    },
+    {
+     "key": "reports",
+     "label": "Reports",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "fin",
+      "sales",
+      "audit",
+      "hr"
+     ],
+     "sub": false
+    }
+   ]
+  },
+  {
+   "label": "Areas of the business",
+   "items": [
+    {
+     "key": "sales",
+     "label": "Sales and money owed",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "fin",
+      "sales",
+      "audit"
+     ],
+     "sub": true
+    },
+    {
+     "key": "proc",
+     "label": "Buying and suppliers",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "fin",
+      "audit"
+     ],
+     "sub": true
+    },
+    {
+     "key": "inv",
+     "label": "Stock and warehouses",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "fin",
+      "sales",
+      "audit"
+     ],
+     "sub": true
+    },
+    {
+     "key": "eng",
+     "label": "Engineering",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "sales",
+      "audit"
+     ],
+     "sub": true
+    },
+    {
+     "key": "cx",
+     "label": "Customer complaints",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "sales",
+      "audit"
+     ],
+     "sub": true
+    },
+    {
+     "key": "fin",
+     "label": "Money in and out",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "fin",
+      "audit"
+     ],
+     "sub": true
+    },
+    {
+     "key": "hr",
+     "label": "People",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "hr",
+      "audit"
+     ],
+     "sub": true
+    },
+    {
+     "key": "it",
+     "label": "Systems and access",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "audit"
+     ],
+     "sub": true
+    },
+    {
+     "key": "aud",
+     "label": "Internal audit",
+     "badge": "",
+     "roles": [
+      "ceo",
+      "audit"
+     ],
+     "sub": true
+    }
+   ]
+  }
+ ]
+}

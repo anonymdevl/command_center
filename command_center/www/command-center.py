@@ -29,6 +29,8 @@ def get_context(context):
 
     context.no_cache = 1
     context.boot = json.dumps(_boot(user))
+    # The interface posts to /api/method, so it needs the token for this session.
+    context.csrf_token = json.dumps(frappe.sessions.get_csrf_token())
     return context
 
 
