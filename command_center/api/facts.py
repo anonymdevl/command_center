@@ -7,13 +7,16 @@ and it would make every permission decision below it advisory.
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import frappe
 from frappe.query_builder.functions import Count, Sum
 from pypika import Order
 
-from command_center.api.businesses import require_manager
+from command_center.api.businesses import currency_for, require_manager
 from command_center.facts.schema import (
     DIMENSIONS, FACTS, MEASURES, condition, filterable)
+from command_center.facts import presentation
 
 
 
@@ -75,23 +78,128 @@ def query(fact: str, measures=None, group_by=None, filters=None,
 
 
 @frappe.whitelist()
-def lineage(fact: str, filters=None, business_code: str = None, limit: int = 100):
-    """Which records produced a figure.
+def records(fact: str, filters=None, business_code: str = None, limit: int = 100):
+    """The records behind a figure, as something to decide on.
 
-    Drill-down is not a separate feature. Every fact row carries its source, so
-    this selects the contributing rows and hands back their document identity.
+    Three things come back, and the first two are the point:
+
+      summary     what these records add up to, and how concentrated they are. "Three
+                  customers are half of it" is the sentence that changes a decision;
+                  a hundred rows never says it.
+
+      columns     declared server-side per fact, in plain words, so every drawer on
+                  every screen describes the same fact the same way.
+
+      rows        ordered largest first, each carrying a link that opens the document
+                  in ERPNext.
+
+    This replaces lineage(), which returned src_name, src_row_name and src_modified.
+    That proved the figure traced to a document, which was the engineering
+    requirement and is not information a manager can use.
     """
     require_manager()
+
     target = FACTS.get(fact)
     if not target:
-        frappe.throw(f"Unknown fact '{fact}'.")
+        frappe.throw(f"Unknown fact '{fact}'. Known: {', '.join(sorted(FACTS))}")
+    spec = presentation.spec(fact)
+    if not spec:
+        frappe.throw(f"No presentation is declared for '{fact}'.")
 
     filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
     if business_code and business_code != "__all__":
         filters["business_code"] = business_code
 
-    return frappe.db.get_all(
+    allowed = filterable(fact)
+    for field in filters:
+        if field not in allowed:
+            frappe.throw(f"Cannot filter {fact} on '{field}'.")
+
+    t = frappe.qb.DocType(target)
+
+    # ---- the whole set, before any limit. A summary over the first hundred rows
+    # would describe the page rather than the figure.
+    measure, measure_word = spec["total"]
+    totals = frappe.qb.from_(t).select(Sum(t[measure]), Count(t.name))
+    for field, rule in filters.items():
+        totals = totals.where(condition(t[field], rule))
+    total_value, total_count = (totals.run() or [(0, 0)])[0]
+
+    # ---- concentration: where the weight sits
+    dimension, dimension_word = spec["concentrate_on"]
+    conc = frappe.qb.from_(t).select(t[dimension], Sum(t[measure]).as_("v"),
+                                     Count(t.name).as_("n"))
+    for field, rule in filters.items():
+        conc = conc.where(condition(t[field], rule))
+    conc = conc.groupby(t[dimension]).orderby("v", order=Order.desc).limit(5)
+    top = conc.run(as_dict=True)
+
+    # ---- the rows themselves
+    rows = frappe.db.get_all(
         target, filters=filters,
-        fields=["business_code", "src_doctype", "src_name", "src_row_name",
-                "src_docstatus", "src_modified", "ingested_at"],
-        order_by="src_modified desc", limit=min(int(limit), 500))
+        fields=presentation.select_fields(fact),
+        order_by=f"{spec['order_by']} desc",
+        limit=min(int(limit), 500))
+
+    sites = _site_urls()
+    for row in rows:
+        presentation.derive(fact, row)
+        row["open_url"] = _document_url(sites, row)
+
+    whole = total_value or 0
+    return {
+        "fact": fact,
+        "noun": spec["noun"],
+        "scope": business_code or "__all__",
+        "currency": currency_for(business_code),
+        "columns": spec["columns"],
+        "rows": rows,
+        "summary": {
+            "count": total_count or 0,
+            "shown": len(rows),
+            "total": whole,
+            "measure_word": measure_word,
+            "dimension_word": dimension_word,
+            "concentration": [
+                {
+                    "label": c.get(dimension) or "not stated",
+                    "value": c["v"],
+                    "count": c["n"],
+                    "share": round((c["v"] or 0) / whole * 100, 1) if whole else None,
+                }
+                for c in top
+            ],
+            "top_share": (round(sum(c["v"] or 0 for c in top) / whole * 100, 1)
+                          if whole and top else None),
+        },
+    }
+
+
+def _site_urls() -> dict:
+    """Where each business's ERPNext lives, so a row can be opened in it.
+
+    The local business is this site; a connected one is its own URL. Read once per
+    request rather than per row.
+    """
+    urls = {}
+    for b in frappe.get_all("Connected Business",
+                            filters={"status": "Active"},
+                            fields=["business_code", "is_local", "site_url"]):
+        urls[b.business_code] = "" if b.is_local else (b.site_url or "").rstrip("/")
+    return urls
+
+
+def _document_url(sites, row) -> str | None:
+    """A link to the document itself.
+
+    Provenance stops being a column of codes and becomes the way in. Returns a
+    relative path for the local business so the link works whatever host the manager
+    reached this site on.
+    """
+    doctype, name = row.get("src_doctype"), row.get("src_name")
+    if not doctype or not name:
+        return None
+    base = sites.get(row.get("business_code"), "")
+    slug = doctype.lower().replace(" ", "-")
+    return f"{base}/app/{slug}/{quote(str(name))}"
+

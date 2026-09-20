@@ -3,7 +3,7 @@ import { api } from "../api/client.js";
 import { boot } from "../api/boot.js";
 import { useApi } from "../useApi.js";
 import Kpis from "../components/Kpis.jsx";
-import Lineage from "../components/Lineage.jsx";
+import Records from "../components/Records.jsx";
 import Panel from "../components/Panel.jsx";
 import ViewHead from "../components/ViewHead.jsx";
 import DataTable from "../components/DataTable.jsx";
@@ -92,12 +92,13 @@ export default function Money({ scope, openDrawer }) {
             rows={rows.map((r) => ({ __key: r.item_group || "—", ...r }))}
             onRowClick={(r) =>
               openDrawer(
-                <Lineage
+                <Records
                   scope={scope}
                   fact="fact_sales_invoice_line"
                   filters={{ ...SUBMITTED, has_cost: 1, item_group: r.item_group }}
                   title={r.item_group || "Ungrouped"}
                   subset="invoice lines that carry a valuation"
+                  openDrawer={openDrawer}
                 />
               )
             }
@@ -134,11 +135,12 @@ export default function Money({ scope, openDrawer }) {
             rows={pay.map((r) => ({ __key: r.payment_type || "—", ...r }))}
             onRowClick={(r) =>
               openDrawer(
-                <Lineage
+                <Records
                   scope={scope}
                   fact="fact_payment_allocation"
                   filters={{ payment_type: r.payment_type }}
                   title={`${r.payment_type} allocations`}
+                  openDrawer={openDrawer}
                 />
               )
             }

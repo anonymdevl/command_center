@@ -547,6 +547,22 @@ else:
                 check(_key in REGISTRY,
                       f"{_jsx.name} names KPI {_key!r}, which is not registered")
 
+    # No orphan component. Lineage.jsx survived as dead code after Records.jsx
+    # replaced it, and nothing noticed -- an unused file still gets read by the next
+    # person as if it were the current answer.
+    _all_jsx = sorted(_src.rglob("*.jsx"))
+    _imported = set()
+    for _f in _all_jsx:
+        for _m in re.findall(r'from\s+"[^"]*/([A-Za-z0-9_]+)\.jsx"', _f.read_text()):
+            _imported.add(_m)
+    for _f in _all_jsx:
+        _stem = _f.stem
+        if _stem in ("App", "main"):
+            continue
+        check(_stem in _imported,
+              f"{_f.relative_to(_ROOT).as_posix()} is imported by nothing. Delete it "
+              f"or wire it up; dead code reads as the current answer.")
+
     # A flag tone must be a class the stylesheet defines. "bad" was invented in the
     # components and styled nowhere, so a failed load rendered as an ordinary badge.
     _css_file = _src / "styles" / "command-center.css"

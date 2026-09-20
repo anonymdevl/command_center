@@ -2,7 +2,7 @@ import React from "react";
 import { api } from "../api/client.js";
 import { useApi } from "../useApi.js";
 import Figure from "./Figure.jsx";
-import Lineage from "./Lineage.jsx";
+import Records from "./Records.jsx";
 import { Loading, Failed } from "./States.jsx";
 import { exact, shortDate } from "../format.js";
 
@@ -130,12 +130,13 @@ function open(k, scope, openDrawer) {
     return;
   }
   openDrawer(
-    <Lineage
+    <Records
       scope={scope}
       fact={k.drill.fact}
       filters={k.drill.filters}
       title={k.label}
       subset={k.subset_of}
+                  openDrawer={openDrawer}
     />
   );
 }

@@ -122,8 +122,9 @@ export const api = {
       limit,
     }),
 
-  lineage: ({ fact, filters, business_code, limit }) =>
-    call("command_center.api.facts.lineage", { fact, filters, business_code, limit }),
+  /* What is behind a figure: the summary, the concentration, the records. */
+  records: ({ fact, filters, business_code, limit }) =>
+    call("command_center.api.facts.records", { fact, filters, business_code, limit }),
 
   /* Figures. The screen names them; the server decides what they mean. */
   kpis: ({ keys, business_code }) =>

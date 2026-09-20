@@ -158,7 +158,6 @@ def _as_of():
 # Which facts each converted screen reads. A screen is live when they are loaded,
 # and not before.
 VIEW_FACTS = {
-    "command": ["fact_sales_invoice", "fact_sales_invoice_line"],
     "sales": ["fact_sales_invoice"],
     "fin": ["fact_sales_invoice_line", "fact_payment_allocation"],
 }

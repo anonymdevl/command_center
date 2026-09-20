@@ -11,6 +11,7 @@ from __future__ import annotations
 import frappe
 from frappe.query_builder.functions import Count, Sum
 
+from command_center.api.businesses import currency_for
 from command_center.facts.schema import FACTS, condition
 from command_center.kpi.registry import (
     Kpi, dependencies, get, load_all, value_dependencies, _resolve_token)
@@ -25,7 +26,7 @@ def _evaluate_one(kpi: Kpi, business_code, resolved: dict) -> dict:
     value = (_ratio(kpi, resolved) if kpi.agg == "ratio"
              else _aggregate(kpi, business_code))
     state = _load_state(kpi.fact, business_code)
-    currency = _currency(business_code) if kpi.unit == "currency" else None
+    currency = currency_for(business_code) if kpi.unit == "currency" else None
 
     return {
         "key": kpi.key,
@@ -190,20 +191,6 @@ def _status(state) -> dict:
     return {"state": "live", "days_behind": days, "message": None}
 
 
-def _currency(business_code: str | None):
-    """One currency, or none because there is more than one.
-
-    Across all businesses the figure is only a number if every site reports in the
-    same currency. When they do not, saying so is the only honest answer -- adding
-    cedis to dollars produces a total that means nothing.
-    """
-    if business_code and business_code != "__all__":
-        return frappe.db.get_value("Connected Business",
-                                   {"business_code": business_code}, "currency")
-    found = {c for (c,) in frappe.db.sql(
-        """select distinct currency from `tabConnected Business`
-           where enabled = 1 and ifnull(currency, '') != ''""") }
-    return found.pop() if len(found) == 1 else None
 
 
 def _render_note(kpi: Kpi, values: dict, results: dict) -> str:

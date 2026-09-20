@@ -215,6 +215,17 @@ table.dt tr:hover td{background:var(--hover)}
  transition:transform .22s cubic-bezier(.32,.72,0,1);overflow-y:auto;padding:20px 22px;
  box-shadow:var(--shadow2)}
 .drawer.on{transform:none}
+/* The answer, before the rows. A drawer that opens onto a hundred records and no
+   sentence makes the reader do the summarising, which is the work they opened it to
+   avoid. */
+.dsum{padding:14px 16px;margin:0 0 14px;border:1px solid var(--line);border-radius:10px;
+background:var(--raised)}
+.dsum-n{font-size:23px;font-weight:660;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.dsum-t{font-size:12px;color:var(--mut);margin-top:5px;line-height:1.55}
+.dsum-t b{color:var(--txt);font-weight:640}
+/* Through to the document itself. Provenance stops being a column of codes. */
+.dlink{color:var(--accent);text-decoration:none;font-weight:600;white-space:nowrap}
+.dlink:hover{text-decoration:underline}
 .dhead{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:13px;
  border-bottom:1px solid var(--line);margin-bottom:14px}
 .dhead .dt{font-size:11px;color:var(--accent);letter-spacing:.05em;text-transform:uppercase;font-weight:650}

@@ -3,7 +3,7 @@ import { api } from "../api/client.js";
 import { boot } from "../api/boot.js";
 import { useApi } from "../useApi.js";
 import Kpis from "../components/Kpis.jsx";
-import Lineage from "../components/Lineage.jsx";
+import Records from "../components/Records.jsx";
 import Panel from "../components/Panel.jsx";
 import DataTable from "../components/DataTable.jsx";
 import { Loading, Failed } from "../components/States.jsx";
@@ -105,12 +105,13 @@ export default function Sales({ scope, openDrawer }) {
             }))}
             onRowClick={(r) =>
               openDrawer(
-                <Lineage
+                <Records
                   scope={scope}
                   fact="fact_sales_invoice"
                   filters={{ ...UNPAID, ageing_bucket: r.ageing_bucket }}
                   title={`Owed, ${r.ageing_bucket}`}
                   subset="everything owed"
+                  openDrawer={openDrawer}
                 />
               )
             }
@@ -136,12 +137,13 @@ export default function Sales({ scope, openDrawer }) {
             rows={top.map((r) => ({ __key: r.customer, ...r }))}
             onRowClick={(r) =>
               openDrawer(
-                <Lineage
+                <Records
                   scope={scope}
                   fact="fact_sales_invoice"
                   filters={{ ...UNPAID, customer: r.customer }}
                   title={r.customer}
                   subset="everything owed"
+                  openDrawer={openDrawer}
                 />
               )
             }

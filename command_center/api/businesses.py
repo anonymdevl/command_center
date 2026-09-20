@@ -83,3 +83,22 @@ def test_connection(business_code: str):
 
     conn = connector_for(business_code)
     return {"business": conn.name, "reachable": conn.ping()}
+
+
+def currency_for(business_code: str | None) -> str | None:
+    """One currency, or none because there is more than one.
+
+    Across all businesses a money figure is only a number if every site reports in
+    the same currency. When they do not, saying so is the only honest answer: adding
+    cedis to dollars produces a total that means nothing.
+
+    Defined here because both the KPI engine and the records drawer need it, and it
+    was briefly defined in both.
+    """
+    if business_code and business_code != "__all__":
+        return frappe.db.get_value("Connected Business",
+                                   {"business_code": business_code}, "currency")
+    found = {c for (c,) in frappe.db.sql(
+        """select distinct currency from `tabConnected Business`
+           where status = 'Active' and ifnull(currency, '') != ''""")}
+    return found.pop() if len(found) == 1 else None
