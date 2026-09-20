@@ -113,7 +113,9 @@ against stubbed frappe (`/tmp/kpitest/all.py` pattern) — use it.
 self-checks, then clears cache and restarts — in that order, which preflight enforces.
 `--reseed` rebuilds the demonstration complaints (and forces a full reload, because
 reseeding deletes documents and their fact rows would otherwise survive). `--full`
-rebuilds every fact from scratch. Never hand over a list of bench commands again: a
+rebuilds every fact from scratch. Migrate runs `--skip-failing` because two ERPNext
+v14/v15 patches fail on this site and are unrelated to this app; the skip is announced in
+the output, and `--strict` turns it off. Never hand over a list of bench commands again: a
 sequence typed by hand is a sequence that can be got wrong, and a multi-line paste loses
 its first character.
 
