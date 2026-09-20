@@ -1,0 +1,40 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-09-19 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": ["business_code", "source_doctype", "source_name", "event",
+                 "occurred_at", "consumed"],
+ "fields": [
+  {"fieldname": "business_code", "fieldtype": "Data", "label": "Business",
+   "in_list_view": 1, "search_index": 1},
+  {"fieldname": "source_doctype", "fieldtype": "Data", "label": "Document Type",
+   "in_list_view": 1, "search_index": 1},
+  {"fieldname": "source_name", "fieldtype": "Data", "label": "Document",
+   "in_list_view": 1},
+  {"fieldname": "event", "fieldtype": "Select", "label": "Event",
+   "options": "Insert\nSubmit\nUpdate\nCancel", "in_list_view": 1},
+  {"fieldname": "occurred_at", "fieldtype": "Datetime", "label": "Occurred At",
+   "search_index": 1},
+  {"fieldname": "consumed", "fieldtype": "Check", "label": "Consumed",
+   "search_index": 1}
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-19 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Change Event",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "delete": 1, "report": 1, "export": 1},
+  {"role": "Command Center Manager", "read": 1, "report": 1}
+ ],
+ "sort_field": "occurred_at",
+ "sort_order": "DESC",
+ "states": []
+}

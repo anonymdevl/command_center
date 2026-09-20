@@ -1,0 +1,25 @@
+[project]
+name = "command_center"
+authors = [{ name = "Michael Appiah-Kubi", email = "ai4powersoft@gmail.com" }]
+description = "Intelligent Command Center — an executive intelligence layer over ERPNext."
+requires-python = ">=3.10"
+readme = "README.md"
+dynamic = ["version"]
+
+# Deliberately minimal. `requests` ships with Frappe and is declared here only so
+# the dependency is visible; it is left unpinned so pip resolves to whatever
+# version the bench already has rather than pulling a second copy.
+dependencies = [
+    "requests",
+]
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.module]
+name = "command_center"
+
+[tool.bench.frappe-dependencies]
+frappe = ">=16.0.0,<17.0.0"
+erpnext = ">=16.0.0,<17.0.0"
