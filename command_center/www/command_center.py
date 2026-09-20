@@ -160,6 +160,8 @@ def _as_of():
 VIEW_FACTS = {
     "sales": ["fact_sales_invoice"],
     "fin": ["fact_sales_invoice_line", "fact_payment_allocation"],
+    "proc": ["fact_purchase_invoice", "fact_purchase_invoice_line"],
+    "inv": ["fact_stock_balance"],
 }
 
 

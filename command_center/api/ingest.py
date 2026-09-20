@@ -11,7 +11,7 @@ from frappe.query_builder.functions import Count, Sum
 
 from command_center.api.businesses import require_manager
 from command_center.connectors.registry import connector_for, local_connector
-from command_center.ingest.sales import INGESTORS
+from command_center.ingest.registry import INGESTORS
 
 
 @frappe.whitelist()

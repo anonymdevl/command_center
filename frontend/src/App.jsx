@@ -6,6 +6,8 @@ import Sidebar from "./components/Sidebar.jsx";
 import Drawer from "./components/Drawer.jsx";
 import LegacyView from "./components/LegacyView.jsx";
 import Sales from "./views/Sales.jsx";
+import Buying from "./views/Buying.jsx";
+import Stock from "./views/Stock.jsx";
 import Money from "./views/Money.jsx";
 import nav from "./legacy/nav.json";
 
@@ -17,6 +19,8 @@ import nav from "./legacy/nav.json";
 const PORTED = {
   sales: Sales,
   fin: Money,
+  proc: Buying,
+  inv: Stock,
 };
 
 initAppearance();

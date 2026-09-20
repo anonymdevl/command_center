@@ -489,7 +489,9 @@ sys.path.insert(0, ROOT)
 try:
     from command_center.kpi.registry import (
         REGISTRY, validate_registry, dependencies, value_dependencies)
-    from command_center.kpi import sales  # noqa: F401  registers on import
+    # Every definition module, not just sales -- a KPI registered in a module this
+    # check does not import is a KPI it will call unregistered.
+    from command_center.kpi import buying, sales, stock  # noqa: F401
 except Exception as exc:                                   # pragma: no cover
     check(False, f"the KPI registry does not import cleanly: {exc!r}")
     REGISTRY = {}
@@ -546,6 +548,36 @@ else:
             for _key in re.findall(r'"([a-z][a-z0-9_]{3,})"', _arr):
                 check(_key in REGISTRY,
                       f"{_jsx.name} names KPI {_key!r}, which is not registered")
+
+    # An ingestor's target must resolve. A class attribute declared after a property
+    # of the same name silently replaces it -- `target: str = ""` sat below the
+    # target property and made every ingestor write to an empty table name. Nothing
+    # else in this file would have caught it.
+    import ast as _ast
+    _ing_dir = _ROOT / "command_center" / "ingest"
+    _declared_facts = set()
+    for _py in sorted(_ing_dir.glob("*.py")):
+        _tree = _ast.parse(_py.read_text())
+        for _cls in [n for n in _ast.walk(_tree) if isinstance(n, _ast.ClassDef)]:
+            _attrs = [t.target.id for t in _cls.body if isinstance(t, _ast.AnnAssign)]
+            _attrs += [t.targets[0].id for t in _cls.body
+                       if isinstance(t, _ast.Assign) and isinstance(t.targets[0], _ast.Name)]
+            _props = [n.name for n in _cls.body if isinstance(n, _ast.FunctionDef)
+                      and any(getattr(d, "id", "") == "property" for d in n.decorator_list)]
+            _shadowed = set(_attrs) & set(_props)
+            check(not _shadowed,
+                  f"{_py.name}: {_cls.name} declares {sorted(_shadowed)} as a class "
+                  f"attribute as well as a property; the attribute wins and the "
+                  f"property never runs")
+            for _dup in {a for a in _attrs if _attrs.count(a) > 1}:
+                check(False, f"{_py.name}: {_cls.name} declares {_dup!r} twice")
+            for _t in _cls.body:
+                if (isinstance(_t, _ast.AnnAssign) and getattr(_t.target, "id", "") == "fact"
+                        and isinstance(_t.value, _ast.Constant) and _t.value.value):
+                    _declared_facts.add(_t.value.value)
+    for _f in sorted(_declared_facts):
+        check(_f in REGISTRY_FACTS,
+              f"an ingestor fills {_f!r}, which facts.schema does not map")
 
     # No orphan component. Lineage.jsx survived as dead code after Records.jsx
     # replaced it, and nothing noticed -- an unused file still gets read by the next

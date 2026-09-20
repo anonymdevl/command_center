@@ -229,4 +229,6 @@ def _plain(result: dict) -> str:
         return f"{result.get('currency') or ''} {value:,.2f}".strip()
     if result["unit"] == "count":
         return f"{int(value):,}"
+    if result["unit"] == "quantity":
+        return f"{value:,.0f}" if float(value).is_integer() else f"{value:,.2f}"
     return str(value)

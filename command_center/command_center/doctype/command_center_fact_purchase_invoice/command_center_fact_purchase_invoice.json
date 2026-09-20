@@ -1,0 +1,199 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-09-20 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "in_create": 1,
+ "field_order": [
+  "business_code",
+  "src_doctype",
+  "src_name",
+  "src_row_name",
+  "src_modified",
+  "src_docstatus",
+  "ingested_at",
+  "fact_key",
+  "sec_doc",
+  "posting_date",
+  "due_date",
+  "status",
+  "is_return",
+  "col_party",
+  "supplier",
+  "supplier_group",
+  "currency",
+  "sec_money",
+  "base_grand_total",
+  "outstanding_amount",
+  "col_age",
+  "as_of_date",
+  "days_overdue",
+  "ageing_bucket"
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Fact Purchase Invoice",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Command Center Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "posting_date",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "fields": [
+  {
+   "fieldname": "business_code",
+   "fieldtype": "Data",
+   "label": "Business",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "description": "Which connected business this row belongs to. Consolidated is a GROUP BY on this column; a single business is a filter."
+  },
+  {
+   "fieldname": "src_doctype",
+   "fieldtype": "Data",
+   "label": "Source doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_name",
+   "fieldtype": "Data",
+   "label": "Source document",
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_row_name",
+   "fieldtype": "Data",
+   "label": "Source row",
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_modified",
+   "fieldtype": "Datetime",
+   "label": "Source last changed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_docstatus",
+   "fieldtype": "Int",
+   "label": "Source docstatus",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ingested_at",
+   "fieldtype": "Datetime",
+   "label": "Read at",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fact_key",
+   "fieldtype": "Data",
+   "label": "Fact key",
+   "read_only": 1,
+   "description": "Hash of business, source doctype, document and row. Makes a reload replace rather than duplicate."
+  },
+  {
+   "fieldname": "sec_doc",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Posted",
+   "search_index": 1
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "label": "Due"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "Status"
+  },
+  {
+   "fieldname": "is_return",
+   "fieldtype": "Check",
+   "label": "Is a return"
+  },
+  {
+   "fieldname": "col_party",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Data",
+   "label": "Supplier",
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "supplier_group",
+   "fieldtype": "Data",
+   "label": "Supplier group"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Data",
+   "label": "Currency"
+  },
+  {
+   "fieldname": "sec_money",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "base_grand_total",
+   "fieldtype": "Currency",
+   "label": "Billed to us"
+  },
+  {
+   "fieldname": "outstanding_amount",
+   "fieldtype": "Currency",
+   "label": "Still to pay"
+  },
+  {
+   "fieldname": "col_age",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "as_of_date",
+   "fieldtype": "Date",
+   "label": "Measured as at",
+   "description": "Ageing is measured against the latest date the data covers, never against today."
+  },
+  {
+   "fieldname": "days_overdue",
+   "fieldtype": "Int",
+   "label": "Days overdue"
+  },
+  {
+   "fieldname": "ageing_bucket",
+   "fieldtype": "Data",
+   "label": "Ageing band",
+   "search_index": 1
+  }
+ ]
+}

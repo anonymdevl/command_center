@@ -75,6 +75,52 @@ PRESENTATION = {
             {"key": "src_name", "label": "Payment", "type": "doc"},
         ],
     },
+    "fact_purchase_invoice": {
+        "noun": "supplier invoice",
+        "order_by": "outstanding_amount",
+        "total": ("outstanding_amount", "still to pay"),
+        "concentrate_on": ("supplier", "supplier"),
+        "columns": [
+            {"key": "supplier", "label": "Supplier", "type": "text"},
+            {"key": "src_name", "label": "Invoice", "type": "doc"},
+            {"key": "posting_date", "label": "Received", "type": "date"},
+            {"key": "due_date", "label": "Due", "type": "date"},
+            {"key": "days_overdue", "label": "Days late", "type": "days"},
+            {"key": "outstanding_amount", "label": "Still to pay", "type": "currency"},
+            {"key": "base_grand_total", "label": "Invoice total", "type": "currency"},
+        ],
+    },
+    "fact_purchase_invoice_line": {
+        "noun": "purchase line",
+        "order_by": "base_net_amount",
+        "total": ("base_net_amount", "spend"),
+        "concentrate_on": ("supplier", "supplier"),
+        "columns": [
+            {"key": "supplier", "label": "Supplier", "type": "text"},
+            {"key": "item_code", "label": "Item", "type": "text"},
+            {"key": "item_group", "label": "Group", "type": "text"},
+            {"key": "qty", "label": "Qty", "type": "number"},
+            {"key": "base_net_amount", "label": "Spend", "type": "currency"},
+            {"key": "src_name", "label": "Invoice", "type": "doc"},
+            {"key": "posting_date", "label": "Date", "type": "date"},
+        ],
+    },
+    "fact_stock_balance": {
+        "noun": "stock line",
+        "order_by": "stock_value",
+        "total": ("stock_value", "stock value"),
+        "concentrate_on": ("warehouse", "warehouse"),
+        "columns": [
+            {"key": "item_code", "label": "Item", "type": "text"},
+            {"key": "item_group", "label": "Group", "type": "text"},
+            {"key": "warehouse", "label": "Warehouse", "type": "text"},
+            {"key": "actual_qty", "label": "On hand", "type": "number"},
+            {"key": "reserved_qty", "label": "Reserved", "type": "number"},
+            {"key": "available_qty", "label": "Free to sell", "type": "number"},
+            {"key": "valuation_rate", "label": "Valued at", "type": "currency"},
+            {"key": "stock_value", "label": "Value", "type": "currency"},
+        ],
+    },
 }
 
 # Always fetched, whether shown or not: the link back to ERPNext needs them.

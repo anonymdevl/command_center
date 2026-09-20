@@ -24,7 +24,10 @@ from dataclasses import dataclass, field
 
 # Units decide formatting at the edge, not in the engine. A KPI says what kind of
 # quantity it is; the interface decides how to write it.
-UNITS = ("currency", "count", "days", "percent", "ratio")
+# "count" counts records; "quantity" counts things in the world -- units of stock,
+# pieces on order. They format differently and mean different things, and calling a
+# quantity a count invites someone to read 12,000 units as 12,000 rows.
+UNITS = ("currency", "count", "quantity", "days", "percent", "ratio")
 
 # Which direction is bad. Used for tone, never to editorialise the number.
 DIRECTIONS = ("higher_is_worse", "higher_is_better", "neutral")
@@ -226,7 +229,7 @@ def dependencies(key: str) -> set[str]:
 def load_all() -> dict[str, Kpi]:
     """Import every definition module. Registration happens on import."""
     if not REGISTRY:
-        from command_center.kpi import sales  # noqa: F401
+        from command_center.kpi import buying, sales, stock  # noqa: F401
         problems = validate_registry()
         if problems:
             raise ValueError("; ".join(problems))

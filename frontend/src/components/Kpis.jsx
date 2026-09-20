@@ -71,6 +71,12 @@ export default function Kpis({ keys, scope, openDrawer, columns, what = "the fig
 function display(k) {
   if (k.value === null || k.value === undefined) return "—";
   if (k.unit === "percent") return Number(k.value).toFixed(1);
+  // A quantity is a number of things in the world, not a number of records. Written
+  // without decimals unless the stock is genuinely fractional.
+  if (k.unit === "quantity") {
+    const n = Number(k.value);
+    return Number.isInteger(n) ? n : n.toFixed(2);
+  }
   if (k.unit === "currency" && !k.currency) return exact(k.value); // see mixed_currency
   return k.value;
 }

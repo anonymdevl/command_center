@@ -1,0 +1,201 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-09-20 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "in_create": 1,
+ "field_order": [
+  "business_code",
+  "src_doctype",
+  "src_name",
+  "src_row_name",
+  "src_modified",
+  "src_docstatus",
+  "ingested_at",
+  "fact_key",
+  "sec_where",
+  "warehouse",
+  "item_code",
+  "item_group",
+  "col_qty",
+  "stock_uom",
+  "actual_qty",
+  "reserved_qty",
+  "available_qty",
+  "sec_value",
+  "ordered_qty",
+  "projected_qty",
+  "col_value",
+  "valuation_rate",
+  "stock_value",
+  "has_valuation"
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Fact Stock Balance",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Command Center Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "stock_value",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "fields": [
+  {
+   "fieldname": "business_code",
+   "fieldtype": "Data",
+   "label": "Business",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "description": "Which connected business this row belongs to. Consolidated is a GROUP BY on this column; a single business is a filter."
+  },
+  {
+   "fieldname": "src_doctype",
+   "fieldtype": "Data",
+   "label": "Source doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_name",
+   "fieldtype": "Data",
+   "label": "Source document",
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_row_name",
+   "fieldtype": "Data",
+   "label": "Source row",
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_modified",
+   "fieldtype": "Datetime",
+   "label": "Source last changed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_docstatus",
+   "fieldtype": "Int",
+   "label": "Source docstatus",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ingested_at",
+   "fieldtype": "Datetime",
+   "label": "Read at",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fact_key",
+   "fieldtype": "Data",
+   "label": "Fact key",
+   "read_only": 1,
+   "description": "Hash of business, source doctype, document and row. Makes a reload replace rather than duplicate."
+  },
+  {
+   "fieldname": "sec_where",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Data",
+   "label": "Warehouse",
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Data",
+   "label": "Item",
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "item_group",
+   "fieldtype": "Data",
+   "label": "Item group",
+   "search_index": 1
+  },
+  {
+   "fieldname": "col_qty",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stock_uom",
+   "fieldtype": "Data",
+   "label": "Unit"
+  },
+  {
+   "fieldname": "actual_qty",
+   "fieldtype": "Float",
+   "label": "On hand"
+  },
+  {
+   "fieldname": "reserved_qty",
+   "fieldtype": "Float",
+   "label": "Reserved"
+  },
+  {
+   "fieldname": "available_qty",
+   "fieldtype": "Float",
+   "label": "Free to sell",
+   "description": "On hand less reserved. Stated as its own column because the difference is the number anyone actually needs."
+  },
+  {
+   "fieldname": "sec_value",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "ordered_qty",
+   "fieldtype": "Float",
+   "label": "On order"
+  },
+  {
+   "fieldname": "projected_qty",
+   "fieldtype": "Float",
+   "label": "Projected"
+  },
+  {
+   "fieldname": "col_value",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "valuation_rate",
+   "fieldtype": "Currency",
+   "label": "Valued at"
+  },
+  {
+   "fieldname": "stock_value",
+   "fieldtype": "Currency",
+   "label": "Value on hand"
+  },
+  {
+   "fieldname": "has_valuation",
+   "fieldtype": "Check",
+   "label": "Has a valuation",
+   "description": "Zero where ERPNext holds no valuation for the item. Stock with no value is a data-quality fact, not free stock."
+  }
+ ]
+}
