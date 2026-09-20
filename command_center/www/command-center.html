@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>Intelligent Command Center</title>
 <link rel="icon" href="/assets/command_center/images/command-center.svg">
-<link rel="stylesheet" href="/assets/command_center/command-center/command-center.css">
+{% if assets.css %}<link rel="stylesheet" href="{{ assets.css }}">{% endif %}
 </head>
 <body>
 <div id="cc-root"></div>
@@ -17,6 +17,6 @@
 window.CC_BOOT = {{ boot | safe }};
 window.csrf_token = {{ csrf_token | safe }};
 </script>
-<script type="module" src="/assets/command_center/command-center/command-center.js"></script>
+<script type="module" src="{{ assets.js }}"></script>
 </body>
 </html>

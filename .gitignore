@@ -7,5 +7,6 @@ node_modules/
 # The built interface IS committed: that is what keeps deployment to
 # git pull + bench migrate + bench restart, with no Node on the server.
 # Vite's manifest is not needed -- the page references stable filenames.
-command_center/public/command-center/.vite/
+# .vite/manifest.json IS committed: the page reads it to find the hashed
+# bundle. Without it the template has no way to know the filename.
 frontend/dist/

@@ -17,17 +17,17 @@ export default defineConfig({
     outDir: "../command_center/public/command-center",
     emptyOutDir: true,
     manifest: true,
-    // Stable names: the Jinja template references them directly, so there is no
-    // manifest lookup at request time and no chance of the page pointing at a
-    // bundle that a rebuild renamed.
+    // Content-hashed names. A stable filename meant a browser kept serving the
+    // previous bundle after a deploy, which is indistinguishable from a fix that
+    // did not work -- and cost several rounds of chasing symptoms that were
+    // already fixed on the server. The page reads the manifest, so the URL
+    // changes whenever the content does and no one has to remember to
+    // hard-refresh.
     rollupOptions: {
       output: {
-        entryFileNames: "command-center.js",
-        chunkFileNames: "[name].js",
-        assetFileNames: (info) =>
-          info.name && info.name.endsWith(".css")
-            ? "command-center.css"
-            : "[name][extname]",
+        entryFileNames: "command-center.[hash].js",
+        chunkFileNames: "[name].[hash].js",
+        assetFileNames: "[name].[hash][extname]",
       },
     },
   },

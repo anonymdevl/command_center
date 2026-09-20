@@ -2,27 +2,13 @@
 import sys; sys.path.insert(0,IFACE)
 exec(_src('chart.py'))
 exec(_src('data.py'))
-def g(n): return f"{n:,.0f}"
+# g() is defined once, in p2.py. Defining it here shadowed that copy and the two drifted apart.
 
-def _money(val, cur):
-    """GHS leads; magnitude and any qualifier follow. Non-money units keep the old suffix form."""
-    c=(cur or "").strip()
-    if "GHS" in c:
-        rest=c.replace("GHS","",1).strip()          # "M" / "k" / "owed" / "at risk" / ""
-        mag=rest if rest in ("M","k","m","K") else ""
-        note=""  if mag else rest
-        return (f'<span class="cx">GHS</span>{val}'
-                + (f'<span class="mag">{mag}</span>' if mag else "")
-                + (f' <span class="cur">{note}</span>' if note else ""))
-    return f'{val}' + (f' <span class="cur">{c}</span>' if c else "")
+# _money() is defined once, in p2.py. Defining it here shadowed that copy and the two drifted apart.
 
-def kpi(lab,val,cur="",delta="",dcls="flat",flag="",explain=""):
-    f=f'<span class="flag">{flag}</span>' if flag else ''
-    d=f'<div class="delta {dcls}">{delta or "&nbsp;"}</div>'
-    od=f''' onclick="explain('{explain}')"''' if explain else ''
-    cl="kpi clickable" if explain else "kpi"
-    return (f'<div class="{cl}"{od}><div class="khead"><div class="lab">{lab}</div>{f}</div>'
-            f'<div class="val">{_money(val,cur)}</div>{d}</div>')
+# kpi() is defined once, in p2.py. It was redefined here and the two
+# disagreed by one class, which is why cards looked different between
+# views. Do not reintroduce it.
 
 def panel(title, body, sub="", explain=""):
     od=f''' onclick="explain('{explain}')"''' if explain else ''
@@ -31,28 +17,9 @@ def panel(title, body, sub="", explain=""):
 
 def thin(t): return f'<div class="thin">{t}</div>'
 
-def _afig(fig,cur):
-    c=(cur or "").strip()
-    if c.startswith("GHS"):
-        rest=c[3:].strip()
-        return (f'<span class="cx">GHS</span>{fig}'
-                + (f' <small>{rest}</small>' if rest else ""))
-    return f'{fig}' + (f' <small>{c}</small>' if c else "")
+# _afig() is defined once, in p2.py. Defining it here shadowed that copy and the two drifted apart.
 
-def alert(sev,what,why,sowhat,fig,cur,srcdt,srcnm,owner,elapsed,drawer="",acts=None):
-    acts=acts or ["Assign","Request evidence","Approve","Defer","Escalate","Dismiss"]
-    first=acts[0]; restacts=acts[1:]
-    menu="".join(f'<button class="{"dgr" if a in ("Dismiss","Reject") else ""}">{a}</button>' for a in restacts)
-    ab=(f'<button class="btn pri">{first}</button>'
-        + (f'<span class="more"><button class="morebtn" onclick="moreMenu(this)">&#8943;</button>'
-           f'<div class="moremenu">{menu}</div></span>' if restacts else ''))
-    od=f' onclick="openDrawer({SQ}{drawer}{SQ})"' if drawer else ''
-    return f'''<div class="alert {sev}"><div class="arow"><div>
-<div class="awhat">{what}</div><div class="awhy">{why}</div><div class="asw">→ {sowhat}</div></div>
-<div class="afig">{_afig(fig,cur)}</div></div>
-<div class="ameta"><span class="chip src"{od}>{srcdt} · <b>{srcnm}</b></span>
-<span class="chip">Owner <b>{owner}</b></span><span class="chip">Elapsed <b>{elapsed}</b></span></div>
-<div class="acts">{ab}</div></div>'''
+# alert() is defined once, in p2.py. Defining it here shadowed that copy and the two drifted apart.
 
 # ============ SALES ============
 V_SALES=f'''<div class="topbar"><div><h3>Sales and money owed to us</h3>

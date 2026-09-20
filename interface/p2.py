@@ -17,12 +17,33 @@ def _money(val, cur):
                 + (f' <span class="cur">{note}</span>' if note else ""))
     return f'{val}' + (f' <span class="cur">{c}</span>' if c else "")
 
-def kpi(lab,val,cur="",delta="",dcls="flat",flag="",dr=""):
-    f=f'<span class="flag">{flag}</span>' if flag else ''
-    d=f'<div class="delta {dcls}">{delta or "&nbsp;"}</div>'
-    od=f' onclick="{dr}"' if dr else ''
-    return (f'<div class="kpi"{od}><div class="khead"><div class="lab">{lab}</div>{f}</div>'
-            f'<div class="val">{_money(val,cur)}</div>{d}</div>')
+def kpi(lab, val, cur="", delta="", dcls="flat", flag="", dr="", explain=""):
+    """The card. One definition, used by every view.
+
+    This function was defined twice -- here and again in views_a.py, which
+    silently shadowed it. The two differed by one class: the later one added
+    `clickable`, the earlier one did not. So views generated before the
+    redefinition had working click targets and no chevron, and views generated
+    after had both. Same component, two appearances, which is the one thing a
+    component is supposed to make impossible.
+
+    It must match components/Figure.jsx. Both render the same contract:
+    centred figure, label and flag on one line, hairline above the footnote
+    whether or not there is a footnote, and the chevron exactly when the card
+    opens something.
+    """
+    f = f'<span class="flag">{flag}</span>' if flag else ''
+    d = f'<div class="delta {dcls}">{delta or "&nbsp;"}</div>'
+    # Every figure opens to its records -- that is the product's promise, and a
+    # card that cannot be opened would be an exception to it. Cards not yet
+    # wired fall back to a shared panel that says so plainly, rather than
+    # showing no affordance and looking like a different component.
+    action = dr or f"explain('{explain or 'unwired'}')"
+    od = f' onclick="{action}"'
+    cl = "kpi clickable"
+    return (f'<div class="{cl}"{od}><div class="khead"><div class="lab">{lab}</div>{f}</div>'
+            f'<div class="val">{_money(val, cur)}</div>{d}</div>')
+
 
 def _afig(fig,cur):
     c=(cur or "").strip()
@@ -32,21 +53,21 @@ def _afig(fig,cur):
                 + (f' <small>{rest}</small>' if rest else ""))
     return f'{fig}' + (f' <small>{c}</small>' if c else "")
 
-def alert(sev,what,why,sowhat,fig,cur,srcdt,srcnm,owner,elapsed,drawer="",acts=None):
-    acts=acts or ["Assign","Request evidence","Approve","Defer","Escalate","Dismiss"]
-    first=acts[0]; restacts=acts[1:]
-    menu="".join(f'<button class="{"dgr" if a in ("Dismiss","Reject") else ""}">{a}</button>' for a in restacts)
-    ab=(f'<button class="btn pri">{first}</button>'
-        + (f'<span class="more"><button class="morebtn" onclick="moreMenu(this)">&#8943;</button>'
-           f'<div class="moremenu">{menu}</div></span>' if restacts else ''))
-    od=f' onclick="{drawer}"' if drawer else ''
-    return f'''<div class="alert {sev}"><div class="arow"><div>
-<div class="awhat">{what}</div><div class="awhy">{why}</div>
-<div class="asw">→ {sowhat}</div></div>
-<div class="afig">{_afig(fig,cur)}</div></div>
-<div class="ameta"><span class="chip src"{od}>{srcdt} · <b>{srcnm}</b></span>
-<span class="chip">Owner <b>{owner}</b></span><span class="chip">Elapsed <b>{elapsed}</b></span></div>
-<div class="acts">{ab}</div></div>'''
+def alert(sev, what, why, sowhat, fig, cur, srcdt, srcnm, owner, elapsed, drawer='', acts=None):
+    acts = acts or ['Assign', 'Request evidence', 'Approve', 'Defer', 'Escalate', 'Dismiss']
+    first = acts[0]
+    restacts = acts[1:]
+    menu = ''.join((f'''<button class="{('dgr' if a in ('Dismiss', 'Reject') else '')}">{a}</button>''' for a in restacts))
+    ab = f'<button class="btn pri">{first}</button>' + (f'<span class="more"><button class="morebtn" onclick="moreMenu(this)">&#8943;</button><div class="moremenu">{menu}</div></span>' if restacts else '')
+        # Callers pass either a drawer key or a ready-made handler. Both styles
+    # exist because this function was defined twice and each copy taught its
+    # own callers a different convention; accepting both is how they unify
+    # without rewriting every call site.
+    od = ''
+    if drawer:
+        handler = drawer if '(' in drawer else f'openDrawer({SQ}{drawer}{SQ})'
+        od = f' onclick="{handler}"'
+    return f'<div class="alert {sev}"><div class="arow"><div>\n<div class="awhat">{what}</div><div class="awhy">{why}</div><div class="asw">→ {sowhat}</div></div>\n<div class="afig">{_afig(fig, cur)}</div></div>\n<div class="ameta"><span class="chip src"{od}>{srcdt} · <b>{srcnm}</b></span>\n<span class="chip">Owner <b>{owner}</b></span><span class="chip">Elapsed <b>{elapsed}</b></span></div>\n<div class="acts">{ab}</div></div>'
 
 # ---------------- V: COMMAND ----------------
 V_COMMAND=f'''<div class="topbar"><div><h3 class="hello" id="greet">Good morning</h3></div></div>

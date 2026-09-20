@@ -103,6 +103,15 @@ export default function Sales({ scope, openDrawer }) {
           currency={currency}
           note={`${count(insideCount)} invoices`}
           tone="flat"
+          onClick={() =>
+            openDrawer(
+              <Lineage
+                scope={scope}
+                title="Owed, but not yet three months old"
+                filters={{ ...UNPAID, ageing_bucket: ["in", ["Not yet due", "0-30", "31-60", "61-90"]] }}
+              />
+            )
+          }
         />
         <Figure
           label="Ten largest hold"
@@ -110,6 +119,15 @@ export default function Sales({ scope, openDrawer }) {
           currency={currency}
           note={`${percent(topTen, total)} of everything owed`}
           tone="dn"
+          onClick={() =>
+            openDrawer(
+              <Lineage
+                scope={scope}
+                title="The ten largest balances"
+                filters={{ ...UNPAID, customer: ["in", top.slice(0, 10).map((r) => r.customer)] }}
+              />
+            )
+          }
         />
       </div>
 

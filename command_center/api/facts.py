@@ -76,8 +76,9 @@ def query(fact: str, measures=None, group_by=None, filters=None,
     q = q.select(Count(t.name).as_("rows"))
 
     for field, value in (filters or {}).items():
-        if field not in DIMENSIONS[fact] + MEASURES[fact] + [
-                "src_docstatus", "src_name", "ageing_bucket", "has_cost"]:
+        allowed = DIMENSIONS[fact] + MEASURES[fact] + [
+            "src_docstatus", "src_name", "ageing_bucket", "has_cost"]
+        if field not in allowed:
             frappe.throw(f"Cannot filter {fact} on '{field}'.")
         if isinstance(value, (list, tuple)) and len(value) == 2:
             op, v = value

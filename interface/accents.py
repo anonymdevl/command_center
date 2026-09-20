@@ -15,9 +15,9 @@ def ratio(a,b):
 
 # (key, label, group, light accent, dark accent, note)
 ACCENTS=[
- ("gold","Gold","Golds and browns","#8c6108","#e3b champion","the original — classic with cream"),
+ ("gold","Gold","Golds and browns","#8c6108","#e3b95e","the original — classic with cream"),
  ("brass","Brass","Golds and browns","#786012","#d9c069","softer, more antique than gold"),
- ("bronze","Bronze","Golds and browns","#7d5626","#d0a museum","browner, less yellow"),
+ ("bronze","Bronze","Golds and browns","#7d5626","#d0a071","browner, less yellow"),
  ("copper","Copper","Golds and browns","#9c4f24","#e09062","warm and strong — sits near the warning orange"),
  ("coffee","Coffee","Golds and browns","#584234","#c0a89a","deep espresso brown, very quiet"),
  ("petrol","Petrol","Blues and teals","#0d5c6b","#7fd4dd","deep teal-cyan — the classic cream partner"),
@@ -33,8 +33,6 @@ ACCENTS=[
  ("charcoal","Charcoal","Neutral","#33343a","#a8aab4","no colour at all; the numbers carry it"),
 ]
 # fix the two placeholder typos deterministically
-FIX={"gold":"#e3b95e","bronze":"#d0a071"}
-ACCENTS=[(k,l,g,li,FIX.get(k,dk),n) for k,l,g,li,dk,n in ACCENTS]
 
 def css():
     out=[]

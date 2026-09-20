@@ -1,6 +1,19 @@
 # -*- coding: utf-8 -*-
 # Every clickable card -> where the number comes from, how it is worked out, what is behind it.
 EX={
+ "unwired":("This figure is not wired to the records yet",
+  "It comes from the demonstration extract, like everything else on a screen "
+  "still carrying the illustrative line.",
+  [("Where it will come from","The fact tables, which already hold the loaded records"),
+   ("What it will show here","Every source document behind the number, by name"),
+   ("Why the arrow is there anyway","Every figure in this platform opens to its "
+    "records. A card that could not be opened would be the exception, and the "
+    "design does not have exceptions \u2014 so the affordance is honest about "
+    "what it will do, and this panel is honest about not doing it yet."),
+   ("When it changes","When this area is wired to the facts, at which point the "
+    "screen also drops its illustrative line")],
+  "The records exist and reconcile; no screen but Sales and money owed reads "
+  "them yet."),
  "rev":("Money coming in","Confirmed customer orders, added up by the month they were placed.",
   [("Where it is kept","ERPNext, under customer orders"),
    ("What counts","Only confirmed orders. Anything still a draft is left out."),

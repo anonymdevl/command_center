@@ -42,10 +42,43 @@ def get_context(context):
         raise frappe.Redirect
 
     context.no_cache = 1
+    context.assets = _assets()
     context.boot = _payload(_boot(user))
     # The interface posts to /api/method, so it needs the token for this session.
     context.csrf_token = _payload(frappe.sessions.get_csrf_token())
     return context
+
+
+def _assets() -> dict:
+    """Where the built interface actually is.
+
+    Filenames carry a content hash, so the URL changes whenever the bundle does
+    and a browser cannot serve a stale copy after a deploy. That is worth the
+    manifest lookup: a cached bundle looks exactly like a fix that did not work,
+    and telling the two apart by hand wasted several rounds.
+    """
+    import os
+
+    base = os.path.join(frappe.get_app_path("command_center"),
+                        "public", "command-center")
+    manifest_path = os.path.join(base, ".vite", "manifest.json")
+    url = "/assets/command_center/command-center/"
+
+    try:
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        # Vite keys the entry by the HTML file it was built from, not by the
+        # script inside it. Find the entry rather than assuming the key.
+        entry = next(v for v in manifest.values() if v.get("isEntry"))
+        css = entry.get("css") or []
+        return {"js": url + entry["file"],
+                "css": url + css[0] if css else None}
+    except Exception:
+        # A missing or unreadable manifest must not blank the page. Fall back to
+        # the unhashed names and say so in the log rather than failing silently.
+        frappe.log_error(title="Command Center assets",
+                         message=f"No usable manifest at {manifest_path}")
+        return {"js": url + "command-center.js", "css": url + "command-center.css"}
 
 
 def _payload(value) -> str:

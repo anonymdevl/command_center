@@ -29,6 +29,26 @@ function partOfDay(hour) {
   return { word: "Good morning", icon: "dawn" };
 }
 
+/**
+ * Parse the icon in the SVG namespace.
+ *
+ * Assigning innerHTML on an element created with createElementNS is not
+ * reliably parsed as SVG across browsers -- the nodes can land in the HTML
+ * namespace and render nothing at all, with no error to explain it. DOMParser
+ * with image/svg+xml is unambiguous.
+ */
+function buildIcon(kind) {
+  const markup =
+    `<svg xmlns="http://www.w3.org/2000/svg" class="tod" viewBox="0 0 48 48" fill="none">` +
+    `${ICONS[kind]}</svg>`;
+  const doc = new DOMParser().parseFromString(markup, "image/svg+xml");
+  const node = doc.documentElement;
+  if (!node || node.nodeName === "parsererror") {
+    return document.createComment("icon failed to parse");
+  }
+  return document.importNode(node, true);
+}
+
 export function renderGreeting(el, user) {
   if (!el) return;
   const now = new Date();
@@ -51,11 +71,5 @@ export function renderGreeting(el, user) {
     })} · ${now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
   text.append(line, when);
 
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", "tod");
-  svg.setAttribute("viewBox", "0 0 48 48");
-  svg.setAttribute("fill", "none");
-  svg.innerHTML = ICONS[icon];
-
-  el.append(text, svg);
+  el.append(text, buildIcon(icon));
 }
