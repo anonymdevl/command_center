@@ -19,7 +19,7 @@ exec(_src('records.py'))
 exec(_src('tidy.py'))
 
 EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + """
-.tod{width:34px;height:34px;flex:none;overflow:visible}
+.tod{flex:none;overflow:visible}
 .todray{animation:todspin 22s linear infinite;transform-origin:24px 24px}
 .todcore{animation:todbreathe 3.4s ease-in-out infinite;transform-origin:24px 24px}
 .todrise{animation:todrise 4.5s ease-in-out infinite;transform-origin:24px 34px}
@@ -32,7 +32,7 @@ EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + """
 @keyframes todrise{0%,100%{transform:translateY(1.5px)}50%{transform:translateY(-1.5px)}}
 @keyframes todglow{0%,100%{opacity:.55}50%{opacity:1}}
 @keyframes todtwinkle{0%,100%{opacity:.25}50%{opacity:1}}
-.hello{display:flex;align-items:center;gap:11px;margin-bottom:4px}
+
 .live{display:inline-flex;align-items:center;gap:7px;background:var(--ok-bg);
  border:1px solid var(--ok-line);border-radius:7px;padding:4px 10px;font-size:11px;
  color:var(--ok);font-weight:550;white-space:nowrap}
@@ -55,8 +55,6 @@ EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + """
 .who::after{content:"\\25BE";position:absolute;right:0;top:8px;font-size:9px;color:var(--dim);pointer-events:none}
 .whotxt span{font-size:10px;color:var(--dim);display:block;line-height:1.2}
 
-.hello{display:flex;align-items:center;gap:12px;margin-bottom:4px}
-.tod{width:38px;height:38px;flex:none}
 @media(max-width:900px){.who .whotxt{display:none}}
 
 .kpis.six{grid-template-columns:repeat(6,1fr)}
@@ -431,6 +429,40 @@ BOOT_CSS = """
 .who.nopick::after{content:none}
 .who.nopick{cursor:default}
 
+/* ============ THE DRILL AFFORDANCE ============ */
+/* It sat at bottom:7px, below the footnote rather than beside it. The footnote
+   box is 26px tall and ends 15px above the card's bottom edge, so its text
+   centres at about 22.5px -- a 13px glyph therefore starts at 16px. */
+.kpi.clickable::after,
+.bk.clickable::before{
+  content:"\203a";position:absolute;bottom:16px;right:12px;
+  color:var(--dim);font-size:13px;line-height:1;pointer-events:none}
+/* .bk already uses ::after for the hairline on tiles with no footnote, so the
+   chevron goes on ::before there. */
+.bk.clickable{position:relative}
+.kpi.clickable .delta,
+.bk.clickable .v{padding-right:15px}
+.kpi.clickable:hover::after,
+.bk.clickable:hover::before{color:var(--accent)}
+.bk.clickable{cursor:pointer}
+
+/* ============ THE GREETING ============ */
+/* #greet is an <h3>, so the icon is a flex child of a heading: a long name
+   pushed it onto its own line. Pinned so it cannot wrap and centred so it spans
+   both lines of text rather than sitting against one of them. */
+.hello{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;margin-bottom:4px}
+.hello > .greet-text{flex:1 1 auto;min-width:0}
+.hello > .greet-text > .greet-line{white-space:nowrap;overflow:hidden;
+ text-overflow:ellipsis}
+.hello .tod{flex:0 0 38px;width:38px;height:38px;align-self:center}
+@media(max-width:700px){.hello .tod{flex-basis:32px;width:32px;height:32px}}
+
+/* ============ SPACING ============ */
+/* The illustrative banner sat directly on the greeting. */
+.view > .topbar:first-child,
+.view > .hello:first-child{margin-top:4px}
+#ccdnote{margin-bottom:18px !important}
+
 /* ============ SIDEBAR BADGES ============ */
 /* The markup emitted <span class="bdg">5</span> from the start and nothing ever
    styled it, so it rendered as bare text against the label: "Daily brief5". */
@@ -563,6 +595,40 @@ BOOT_JS = """
   try{ setRole(); greet(); }catch(e){}
 })();
 """
+
+
+def normalise_cards(html: str) -> str:
+    """Give every tile the same affordance, whichever view built it.
+
+    .kpi cards come from one function now. .bk tiles do not come from a function
+    at all -- there are twenty-five hand-written sites -- which is why five
+    screens kept their old appearance while the rest changed. Rewriting all of
+    them by hand would be a large, error-prone edit of markup that components
+    will replace anyway, so the contract is applied here instead, once, to
+    whatever the generators produced.
+
+    This is a bridge. It disappears with the last legacy view.
+    """
+    import re as _re
+
+    def fix(m):
+        classes, attrs = m.group(1), m.group(2)
+        if "clickable" in classes:
+            return m.group(0)
+        # A tile with no drill target still opens: every figure in this platform
+        # answers "which records?", and a tile that did not would look like a
+        # different component as well as breaking the promise.
+        if "onclick" not in attrs:
+            attrs += ' onclick="explain(&#39;unwired&#39;)"'
+        return f'<div class="{classes} clickable"{attrs}>'
+
+    # Variants matter: Control Health's six questions are class="bk q", and a
+    # pattern that only matched the bare class left that whole screen behind --
+    # which is how it was reported as unchanged.
+    return _re.sub(r'<div class="(bk(?:\s+[\w-]+)*)"((?:(?!>).)*)>', fix, html)
+
+
+VIEWS = {k: normalise_cards(v) for k, v in VIEWS.items()}
 
 _i = BODY.index("<script>")
 _j = BODY.rindex("</script>")

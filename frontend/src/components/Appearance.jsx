@@ -33,12 +33,20 @@ export default function Appearance() {
       <button
         className="themebtn"
         title="Appearance"
+        aria-label="Appearance"
         onClick={(e) => {
           e.stopPropagation();
           setOpen((o) => !o);
         }}
       >
-        {look.theme === "light" ? "◘" : "◑"}
+        {/* Drawn rather than typed. The original used the characters U+25D1 and
+            U+25D8, which render as a missing-glyph box in fonts that lack them
+            -- which is what this button had become. */}
+        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor"
+                  strokeWidth="1.4" />
+          <path d="M8 1.4A6.6 6.6 0 0 1 8 14.6Z" fill="currentColor" />
+        </svg>
       </button>
 
       <div className={`appearmenu${open ? " on" : ""}`} onClick={(e) => e.stopPropagation()}>

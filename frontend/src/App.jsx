@@ -76,7 +76,7 @@ export default function App() {
  */
 function IllustrativeNotice() {
   return (
-    <div className="dnote" style={{ margin: "14px 26px 0" }}>
+    <div className="dnote" style={{ margin: "14px 26px 20px" }}>
       <span className="dn-i">●</span>
       <span>
         <b>Illustrative figures.</b> The design and the workings are real; the numbers

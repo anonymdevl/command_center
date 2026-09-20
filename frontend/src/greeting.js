@@ -57,7 +57,9 @@ export function renderGreeting(el, user) {
   el.textContent = "";
 
   const text = document.createElement("div");
+  text.className = "greet-text";
   const line = document.createElement("div");
+  line.className = "greet-line";
   // textContent, not innerHTML: the name comes from the session.
   line.textContent = `${word}, ${user?.name || "there"}`;
   const when = document.createElement("div");

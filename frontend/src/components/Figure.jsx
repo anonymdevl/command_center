@@ -25,6 +25,9 @@ export default function Figure({
   onClick,
   title,
 }) {
+  // Every figure opens to its records, so a card without a handler is a
+  // mistake rather than a variant. preflight fails on one; this keeps the
+  // rendered result honest if one slips through.
   const clickable = typeof onClick === "function";
   const parts =
     currency != null ? money(value, currency) : { figure: null, suffix: "" };
