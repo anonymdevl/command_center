@@ -108,8 +108,14 @@ write the push script.
 wrong" costs an hour of someone else's day. The KPI engine can be exercised offline
 against stubbed frappe (`/tmp/kpitest/all.py` pattern) — use it.
 
-**One command, not a loop.** `bench ... execute command_center.api.ingest.run` loads every
-fact. Multi-line shell pasted into a terminal loses its first character.
+**Deploying is one command.** On the server: `cd ~/frappe-bench-16/apps/command_center &&
+./deploy.sh`. It pulls, migrates, loads every fact, prints the load status and the
+self-checks, then clears cache and restarts — in that order, which preflight enforces.
+`--reseed` rebuilds the demonstration complaints (and forces a full reload, because
+reseeding deletes documents and their fact rows would otherwise survive). `--full`
+rebuilds every fact from scratch. Never hand over a list of bench commands again: a
+sequence typed by hand is a sequence that can be got wrong, and a multi-line paste loses
+its first character.
 
 **Push scripts** are disposable `.push-N.sh` at the repo root: rebuild, preflight, commit,
 push, self-delete. The connected folder cannot unlink files, so **all deletions go in the
@@ -134,12 +140,13 @@ command_center/
   api/{kpi,facts,ingest,businesses,actions}.py
   demo/seed.py            marked, removable, non-financial
   www/command_center.py   the page controller (underscore filename — hyphens never run)
+deploy.sh                 the one command the server runs
 frontend/src/
   legacy/views.json       THE DESIGNED SCREENS — do not replace
   legacy/hydrate.js       label → KPI, figure substitution
   components/{LegacyView,Records,DataTable,Sidebar,Topbar,Drawer,States,Appearance}.jsx
 interface/                generators that build views.json and the CSS
-scripts/preflight.py      796 checks — must pass before any push
+scripts/preflight.py      800 checks — must pass before any push
 ```
 
 **Verified live figures** (as at 2025-08-19, the data horizon): receivable
@@ -160,7 +167,8 @@ departments; 57 tasks in flight, 24 past due.
    not facts.
 4. Ask the business, Find anything, Reports.
 5. A "Refresh figures" control in the interface, and the load history on Control Health,
-   so nobody types a bench command to see current numbers.
+   so nobody opens a terminal to see current numbers. `deploy.sh` covers the deploy; this
+   is about the day-to-day refresh.
 6. Alert engine and the first five rules.
 7. Correct blueprint §8.5 to the stack actually built (React + Vite, own API client, no
    frappe-react-sdk / TanStack / Recharts / Playwright).

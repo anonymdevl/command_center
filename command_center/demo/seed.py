@@ -138,6 +138,19 @@ def run(business_code: str | None = None, dry_run: bool = False) -> dict:
     return plan
 
 
+def reseed() -> dict:
+    """Remove and recreate in one call, then report what landed.
+
+    Exists because repairing the seeded cases was three separate bench commands that
+    had to be typed in the right order. Anything that has to be done in a sequence
+    should be one call, or the sequence is a thing that can be got wrong.
+    """
+    removed = remove()
+    created = run()
+    return {"removed": removed["removed"], "created": created["created"],
+            "landed": verify()}
+
+
 def verify() -> dict:
     """What the seeded data actually looks like in the site.
 

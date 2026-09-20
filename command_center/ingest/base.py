@@ -99,8 +99,16 @@ class Ingestor:
             rows = self.extract(conn, since=since, limit=limit, as_of=as_of)
             rows = [self.stamp(r, conn.code) for r in rows]
 
-            if rows:
+            if full:
+                # A full load means the table is rebuilt from what the source holds
+                # now. Purging only the batch leaves rows behind for documents that
+                # have since been deleted, and those orphans keep being counted: 49
+                # deleted complaints would have stayed in the figures with nothing to
+                # show they were gone. "Full" has to mean full.
+                self._purge_all(conn.code)
+            elif rows:
                 self._purge(conn.code, {r["src_name"] for r in rows})
+            if rows:
                 self._insert(rows)
 
             watermark = max((r.get("src_modified") for r in rows
@@ -165,6 +173,10 @@ class Ingestor:
                 "business_code": business_code,
                 "src_name": ["in", names[i:i + CHUNK]],
             })
+
+    def _purge_all(self, business_code: str):
+        """Every row this business has in this fact. Only ever called for a full load."""
+        frappe.db.delete(self.target, {"business_code": business_code})
 
     def _insert(self, rows: list[dict]):
         fields = sorted({k for r in rows for k in r})

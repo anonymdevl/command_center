@@ -689,6 +689,28 @@ else:
 
 
 # --------------------------------------------------------------------------
+# The deploy script's order, because the order is why it exists
+# --------------------------------------------------------------------------
+_deploy = open(os.path.join(ROOT, "deploy.sh")).read()
+# Anchored on the commands, not on prose: the first version matched the word
+# "migrate" in this script's own header comment and reported the order wrong.
+_steps = ('git -C "$APP_DIR" pull', 'bench --site "$SITE" migrate',
+          "command_center.api.ingest.run", "bench restart")
+_order = [_deploy.find(x) for x in _steps]
+check(all(i != -1 for i in _order),
+      "deploy.sh is missing one of pull, migrate, ingest or restart")
+check(_order == sorted(_order),
+      "deploy.sh runs its steps out of order: pull, then migrate, then ingest, then "
+      "restart. Ingesting before migrate hits a missing table; restarting before "
+      "ingest serves half an update.")
+check("FULL=1" in _deploy.split("seed.reseed")[-1][:400],
+      "deploy.sh reseeds without forcing a full reload, so the fact rows of the "
+      "deleted documents would survive and keep being counted.")
+check("--ff-only" in _deploy,
+      "deploy.sh pulls without --ff-only, so a diverged server checkout would merge "
+      "silently instead of stopping.")
+
+# --------------------------------------------------------------------------
 print(f"preflight: {checks} checks")
 if problems:
     print(f"\n{len(problems)} problem(s):\n")
