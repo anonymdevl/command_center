@@ -106,13 +106,17 @@ def _charts():
 # ---------------------------------------------------------------------------
 def _workspace(cards, charts):
     name = "Command Center"
-    doc = (frappe.get_doc("Workspace", name)
-           if frappe.db.exists("Workspace", name) else frappe.new_doc("Workspace"))
+    existing = frappe.db.exists("Workspace", name)
+    doc = frappe.get_doc("Workspace", name) if existing else frappe.new_doc("Workspace")
 
+    # `name` is deliberately not set: Workspace autonames from `label`, and
+    # assigning name on a new document fights that. `public` is a read-only field,
+    # so it is written after the insert rather than through update().
     doc.update({
-        "name": name, "label": name, "title": name,
-        "module": "Command Center", "public": 1, "is_hidden": 0,
-        "icon": "dashboard-list", "sequence_id": 99,
+        "label": name, "title": name,
+        "module": "Command Center", "app": "command_center",
+        "type": "Workspace", "is_hidden": 0,
+        "icon": "dashboard", "sequence_id": 99,
     })
 
     # Without this every user sees the workspace in the desk sidebar, which
@@ -151,6 +155,11 @@ def _workspace(cards, charts):
     doc.content = json.dumps(_content(cards, charts))
     doc.flags.ignore_links = True
     doc.save(ignore_permissions=True)
+
+    # read_only on the doctype, so set it directly once the row exists
+    if not doc.public:
+        frappe.db.set_value("Workspace", doc.name, "public", 1,
+                            update_modified=False)
     return doc.name
 
 

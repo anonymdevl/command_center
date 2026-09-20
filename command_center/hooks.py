@@ -12,6 +12,12 @@ app_license = "Proprietary"
 # package.json, and served at /command-center. Until that build exists the route
 # renders the placeholder in www/command-center.html. The file name must match
 # to_route, and the bare path needs its own rule or it 404s.
+# frappe/boot.py builds the tile's route from `app_home`, NOT from the `route`
+# key in add_to_apps_screen -- that key is only read by the sidebar switcher. With
+# neither set, app_route falls back to the first permitted workspace, and with no
+# workspace it is an empty string and the tile goes nowhere.
+app_home = "/command-center"
+
 # The tile on /apps. `has_permission` decides whether it is shown at all, so a
 # user without the role does not see a door they cannot open.
 add_to_apps_screen = [
