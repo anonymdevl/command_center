@@ -115,6 +115,10 @@ def _workspace(cards, charts):
         "icon": "dashboard-list", "sequence_id": 99,
     })
 
+    # Without this every user sees the workspace in the desk sidebar, which
+    # contradicts the guard on the page it links to.
+    doc.set("roles", [{"role": "Command Center Manager"}])
+
     doc.set("number_cards", [{"number_card_name": c} for c in cards])
     doc.set("charts", [{"chart_name": c, "label": c} for c in charts])
     doc.set("shortcuts", [

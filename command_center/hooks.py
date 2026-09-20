@@ -12,6 +12,18 @@ app_license = "Proprietary"
 # package.json, and served at /command-center. Until that build exists the route
 # renders the placeholder in www/command-center.html. The file name must match
 # to_route, and the bare path needs its own rule or it 404s.
+# The tile on /apps. `has_permission` decides whether it is shown at all, so a
+# user without the role does not see a door they cannot open.
+add_to_apps_screen = [
+    {
+        "name": "command_center",
+        "logo": "/assets/command_center/images/command-center.svg",
+        "title": "Command Center",
+        "route": "/command-center",
+        "has_permission": "command_center.api.businesses.has_app_permission",
+    }
+]
+
 website_route_rules = [
     {"from_route": "/command-center/<path:app_path>", "to_route": "command-center"},
     {"from_route": "/command-center", "to_route": "command-center"},

@@ -12,6 +12,25 @@ import frappe
 
 ROLE = "Command Center Manager"
 
+# The only definition of who may enter. The apps-screen tile, the page guard and
+# every endpoint read this one set, so a change here cannot leave a door open
+# somewhere else.
+#
+# System Manager is included so the people who administer the site can support it.
+# Everyone else is sent to /management-only.
+ALLOWED_ROLES = {ROLE, "System Manager"}
+
+
+def has_app_permission() -> bool:
+    """Whether to show the Command Center tile on /apps.
+
+    Frappe calls this for the apps screen. Returning False hides the tile rather
+    than offering a link that leads to a refusal.
+    """
+    if frappe.session.user == "Guest":
+        return False
+    return bool(ALLOWED_ROLES.intersection(frappe.get_roles()))
+
 
 def require_manager():
     """The platform is management-only.
@@ -19,7 +38,7 @@ def require_manager():
     There is no general staff view, by design and by contract. A staff member's
     window into the business is ERPNext itself.
     """
-    if ROLE not in frappe.get_roles() and "System Manager" not in frappe.get_roles():
+    if not ALLOWED_ROLES.intersection(frappe.get_roles()):
         frappe.throw("The Command Center is available to management only.",
                      frappe.PermissionError)
 

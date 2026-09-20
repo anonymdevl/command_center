@@ -1,0 +1,75 @@
+{% raw %}<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reserved for Management</title>
+<style>
+  :root{
+    --bg:#12100c; --surface:#1a1712; --line:#2b2621; --ink:#efe9dd;
+    --mut:#a49a8c; --dim:#7d7365; --accent:#d9a53b;
+  }
+  @media (prefers-color-scheme: light){
+    :root{--bg:#f6f4ef; --surface:#fffdf8; --line:#e2dcd0; --ink:#241f18;
+          --mut:#5d564b; --dim:#8b8275; --accent:#8c6108;}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;
+    background:var(--bg);color:var(--ink);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding:24px}
+  .card{max-width:430px;width:100%;background:var(--surface);
+    border:1px solid var(--line);border-radius:14px;padding:34px 32px;
+    box-shadow:0 1px 2px rgba(0,0,0,.06),0 14px 40px rgba(0,0,0,.10)}
+  .mark{width:46px;height:46px;margin-bottom:20px;display:block}
+  h1{font-size:18px;font-weight:640;letter-spacing:-.01em;margin:0 0 12px}
+  p{color:var(--mut);font-size:13.5px;margin:0 0 12px}
+  p.last{margin-bottom:24px}
+  .who{font-size:12px;color:var(--dim);padding-top:16px;
+    border-top:1px solid var(--line);margin-top:8px}
+  a.btn{display:inline-block;background:var(--accent);color:#12100c;
+    text-decoration:none;font-size:13px;font-weight:620;
+    padding:9px 18px;border-radius:999px;white-space:nowrap}
+  a.alt{display:inline-block;margin-left:12px;color:var(--mut);
+    font-size:13px;text-decoration:none;white-space:nowrap}
+  a.alt:hover{color:var(--ink)}
+</style></head>
+<body>
+  <div class="card">
+    <svg class="mark" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="m1" x1="0" y1="0" x2="0.6" y2="1">
+          <stop offset="0" stop-color="#1b222e"/><stop offset="1" stop-color="#0b0e13"/>
+        </linearGradient>
+        <linearGradient id="m2" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="#9a7429"/><stop offset="1" stop-color="#e0ad44"/>
+        </linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="15" fill="url(#m1)"/>
+      <rect x=".75" y=".75" width="62.5" height="62.5" rx="14.25" fill="none"
+            stroke="#ffffff" stroke-opacity=".07"/>
+      <g fill="url(#m2)">
+        <rect x="17" y="36" width="6.5" height="11" rx="3.25" opacity=".55"/>
+        <rect x="28.75" y="30" width="6.5" height="17" rx="3.25" opacity=".8"/>
+        <rect x="40.5" y="24" width="6.5" height="23" rx="3.25"/>
+      </g>
+      <path d="M14 26.5Q32 11.5 50 26.5" fill="none" stroke="#e0ad44"
+            stroke-width="2.6" stroke-linecap="round"/>
+      <circle cx="50" cy="26.5" r="3.4" fill="#e0ad44"/>
+      <circle cx="50" cy="26.5" r="6.4" fill="none" stroke="#e0ad44" stroke-opacity=".28"/>
+    </svg>
+
+    <h1>Reserved for management</h1>
+    <p>The Command Center answers questions about the business as a whole, so it is
+    open only to the people accountable for it.</p>
+    <p class="last">Your own work is unaffected — everything you normally use is
+    still in ERPNext.</p>
+
+    <a class="btn" href="/app">Back to ERPNext</a>
+    <a class="alt" href="/apps">All apps</a>
+
+    {% if frappe.session.user != "Guest" %}
+    <div class="who">Signed in as {{ frappe.utils.get_fullname(frappe.session.user) }}.
+    If you should have access, ask whoever administers the system.</div>
+    {% endif %}
+  </div>
+</body></html>{% endraw %}

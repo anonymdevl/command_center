@@ -174,7 +174,41 @@ for py in sorted(glob.glob(os.path.join(APP, "**", "*.py"), recursive=True)):
 
 
 # --------------------------------------------------------------------------
-# 4. The assistant's catalogue stays closed
+# 4. Who may enter is defined once
+# --------------------------------------------------------------------------
+# api/businesses.py owns ALLOWED_ROLES. Everything else reads it. A second
+# hardcoded role check is how an access rule ends up true in one place and false
+# in another -- the apps tile showing a door the page then refuses, or worse.
+ROLE_LITERAL = "Command Center Manager"
+MAY_NAME_THE_ROLE = (
+    "command_center/api/businesses.py",  # defines it
+    "command_center/install.py",         # creates it
+    "command_center/desk.py",            # restricts the workspace to it
+    "command_center/hooks.py",           # names it in the fixtures export filter
+)
+for py in sorted(glob.glob(os.path.join(APP, "**", "*.py"), recursive=True)):
+    rel = os.path.relpath(py, ROOT).replace(os.sep, "/")
+    if rel in MAY_NAME_THE_ROLE:
+        continue
+    src = open(py).read()
+    tree = ast.parse(src)
+    docstrings = {
+        ast.get_docstring(n, clean=False)
+        for n in ast.walk(tree)
+        if isinstance(n, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef,
+                          ast.ClassDef))
+    }
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Constant) and node.value == ROLE_LITERAL
+                and node.value not in docstrings):
+            check(False,
+                  f"{rel}: hardcodes {ROLE_LITERAL!r}. Import ALLOWED_ROLES from "
+                  f"command_center.api.businesses instead, so there is one "
+                  f"definition of who may enter.")
+
+
+# --------------------------------------------------------------------------
+# 5. The assistant's catalogue stays closed
 # --------------------------------------------------------------------------
 ai = os.path.join(APP, "api", "ai_tools.py")
 if os.path.exists(ai):
