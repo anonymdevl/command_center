@@ -83,12 +83,19 @@ function AsOf() {
 
 function Who() {
   const u = boot.user || {};
+  const roles = (u.roles || []).join(" \u00b7 ") || "Management";
   return (
-    <div className="who" style={{ cursor: "default" }}>
+    <div className="who nopick" style={{ cursor: "default" }}>
       <div className="av">{u.initials}</div>
       <div className="whotxt">
-        <div style={{ font: "600 12px var(--sans)", lineHeight: 1.25 }}>{u.name}</div>
-        <span>{(u.roles || []).join(" · ") || "Management"}</span>
+        {/* .whosel carries the name's type, width and truncation. The original
+            was a <select> of personas; with a real session the only person it
+            can be is the one signed in, so it is no longer a control -- but it
+            keeps the class, because that is what the design styles. */}
+        <div className="whosel" title={u.name}>
+          {u.name}
+        </div>
+        <span>{roles}</span>
       </div>
     </div>
   );

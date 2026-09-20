@@ -525,6 +525,10 @@ table.dt tr:hover td{background:var(--hover)}
  background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
 .livechip.stale{background:var(--med-bg);color:var(--stale);border-color:var(--med-line)}
 .whosel:disabled{opacity:1;cursor:default}
+/* The caret was drawn for a persona dropdown. With a real session there is
+   nothing to choose, so the arrow would promise a menu that never opens. */
+.who.nopick::after{content:none}
+.who.nopick{cursor:default}
 
 /* ============ SIDEBAR BADGES ============ */
 /* The markup emitted <span class="bdg">5</span> from the start and nothing ever
