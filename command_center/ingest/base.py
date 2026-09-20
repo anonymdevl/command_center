@@ -104,12 +104,20 @@ class Ingestor:
                     "rows": len(rows), "watermark": str(watermark) if watermark else None}
 
         except Exception:
+            # Capture before the rollback: get_traceback() reads the live
+            # exception, and anything that raises in between would replace it.
+            failure = frappe.get_traceback()
             frappe.db.rollback()
-            state.reload()
-            state.update({"status": "Failed", "last_run": started,
-                          "last_error": frappe.get_traceback()[-900:]})
-            state.save(ignore_permissions=True)
-            frappe.db.commit()
+            try:
+                state = self._state(conn.code)
+                state.update({"status": "Failed", "last_run": started,
+                              "last_error": failure[-900:]})
+                state.save(ignore_permissions=True)
+                frappe.db.commit()
+            except Exception:
+                # Recording the failure must never replace the failure.
+                frappe.log_error(title=f"Command Center ingest {self.fact}",
+                                 message=failure)
             raise
 
     # -- plumbing -------------------------------------------------------------
@@ -117,11 +125,18 @@ class Ingestor:
         name = f"{self.fact}-{business_code}"
         if frappe.db.exists("Command Center Ingest State", name):
             return frappe.get_doc("Command Center Ingest State", name)
-        return frappe.get_doc({
+        doc = frappe.get_doc({
             "doctype": "Command Center Ingest State",
             "fact": self.fact, "business_code": business_code,
             "status": "Never Run",
         }).insert(ignore_permissions=True)
+        # Committed immediately so it survives the rollback in load()'s failure
+        # path. Without this, a first run that fails rolls back the state row it
+        # is about to write the failure into, and reload() then raises
+        # DoesNotExistError -- which replaces the real error with a misleading
+        # "not found". That cost a debugging cycle.
+        frappe.db.commit()
+        return doc
 
     def _purge(self, business_code: str, src_names: set[str]):
         """Remove this batch's rows before reinserting them.
