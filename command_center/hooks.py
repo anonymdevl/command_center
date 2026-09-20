@@ -65,9 +65,14 @@ TRACKED_DOCTYPES = [
     "Employee",
 ]
 
+# Project, Task, Issue and Employee are not submittable, so on_submit and
+# on_update_after_submit never fire for them — without on_update, a task moving
+# to Overdue would never reach the feed. on_update is included for that reason,
+# and record_event drops the duplicate Frappe produces during a submit.
 doc_events = {
     "*": {
         "after_insert": "command_center.api.changes.record_event",
+        "on_update": "command_center.api.changes.record_event",
         "on_submit": "command_center.api.changes.record_event",
         "on_update_after_submit": "command_center.api.changes.record_event",
         "on_cancel": "command_center.api.changes.record_event",

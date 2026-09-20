@@ -15,6 +15,7 @@ from command_center.hooks import TRACKED_DOCTYPES
 
 EVENT_BY_HOOK = {
     "after_insert": "Insert",
+    "on_update": "Update",
     "on_submit": "Submit",
     "on_update_after_submit": "Update",
     "on_cancel": "Cancel",
@@ -28,6 +29,13 @@ def record_event(doc, method=None):
     try:
         event = EVENT_BY_HOOK.get(method)
         if not event:
+            return
+
+        # Frappe runs on_update *and* on_submit during a submit, which would
+        # record the same transaction twice. A submitted document's edits arrive
+        # through on_update_after_submit, so an on_update on a docstatus-1
+        # document is always that duplicate.
+        if method == "on_update" and getattr(doc, "docstatus", 0) == 1:
             return
 
         code = frappe.cache().get_value(
