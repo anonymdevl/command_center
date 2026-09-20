@@ -8,10 +8,10 @@ has no ingestor.
 
 from __future__ import annotations
 
-from command_center.ingest import buying, sales, stock
+from command_center.ingest import buying, operations, sales, stock
 
 INGESTORS: dict = {}
-for module in (sales, buying, stock):
+for module in (sales, buying, stock, operations):
     for fact, cls in module.INGESTORS.items():
         if fact in INGESTORS:
             raise ValueError(

@@ -1,0 +1,228 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-09-20 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "in_create": 1,
+ "field_order": [
+  "business_code",
+  "src_doctype",
+  "src_name",
+  "src_row_name",
+  "src_modified",
+  "src_docstatus",
+  "ingested_at",
+  "fact_key",
+  "sec_doc",
+  "transaction_date",
+  "delivery_date",
+  "status",
+  "col_party",
+  "customer",
+  "customer_group",
+  "territory",
+  "currency",
+  "sec_money",
+  "base_grand_total",
+  "undelivered_value",
+  "unbilled_value",
+  "col_prog",
+  "per_delivered",
+  "per_billed",
+  "sec_age",
+  "as_of_date",
+  "days_late",
+  "lateness_bucket",
+  "is_open"
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Fact Sales Order",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Command Center Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "transaction_date",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "fields": [
+  {
+   "fieldname": "business_code",
+   "fieldtype": "Data",
+   "label": "Business",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "description": "Which connected business this row belongs to."
+  },
+  {
+   "fieldname": "src_doctype",
+   "fieldtype": "Data",
+   "label": "Source doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_name",
+   "fieldtype": "Data",
+   "label": "Source document",
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_row_name",
+   "fieldtype": "Data",
+   "label": "Source row",
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_modified",
+   "fieldtype": "Datetime",
+   "label": "Source last changed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_docstatus",
+   "fieldtype": "Int",
+   "label": "Source docstatus",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ingested_at",
+   "fieldtype": "Datetime",
+   "label": "Read at",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fact_key",
+   "fieldtype": "Data",
+   "label": "Fact key",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_doc",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "transaction_date",
+   "fieldtype": "Date",
+   "label": "Ordered",
+   "search_index": 1
+  },
+  {
+   "fieldname": "delivery_date",
+   "fieldtype": "Date",
+   "label": "Promised"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "Status",
+   "search_index": 1
+  },
+  {
+   "fieldname": "col_party",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Data",
+   "label": "Customer",
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "customer_group",
+   "fieldtype": "Data",
+   "label": "Customer group"
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Data",
+   "label": "Territory"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Data",
+   "label": "Currency"
+  },
+  {
+   "fieldname": "sec_money",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "base_grand_total",
+   "fieldtype": "Currency",
+   "label": "Order value"
+  },
+  {
+   "fieldname": "undelivered_value",
+   "fieldtype": "Currency",
+   "label": "Not yet delivered",
+   "description": "Order value less the delivered share. The promise still outstanding."
+  },
+  {
+   "fieldname": "unbilled_value",
+   "fieldtype": "Currency",
+   "label": "Not yet invoiced"
+  },
+  {
+   "fieldname": "col_prog",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "per_delivered",
+   "fieldtype": "Percent",
+   "label": "Delivered %"
+  },
+  {
+   "fieldname": "per_billed",
+   "fieldtype": "Percent",
+   "label": "Invoiced %"
+  },
+  {
+   "fieldname": "sec_age",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "as_of_date",
+   "fieldtype": "Date",
+   "label": "Measured as at"
+  },
+  {
+   "fieldname": "days_late",
+   "fieldtype": "Int",
+   "label": "Days past promise"
+  },
+  {
+   "fieldname": "lateness_bucket",
+   "fieldtype": "Data",
+   "label": "Lateness band",
+   "search_index": 1
+  },
+  {
+   "fieldname": "is_open",
+   "fieldtype": "Check",
+   "label": "Still open"
+  }
+ ]
+}

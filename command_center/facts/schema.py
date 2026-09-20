@@ -20,6 +20,10 @@ FACTS = {
     "fact_purchase_invoice": "Command Center Fact Purchase Invoice",
     "fact_purchase_invoice_line": "Command Center Fact Purchase Invoice Line",
     "fact_stock_balance": "Command Center Fact Stock Balance",
+    "fact_sales_order": "Command Center Fact Sales Order",
+    "fact_task": "Command Center Fact Task",
+    "fact_person": "Command Center Fact Person",
+    "fact_case": "Command Center Fact Case",
 }
 
 # What each fact may be grouped by. An allow-list, because a group_by taken from a
@@ -38,6 +42,14 @@ DIMENSIONS = {
                                    "item_group", "warehouse", "posting_date",
                                    "business_code"],
     "fact_stock_balance": ["warehouse", "item_code", "item_group", "business_code"],
+    "fact_sales_order": ["customer", "customer_group", "territory", "status",
+                         "lateness_bucket", "transaction_date", "business_code"],
+    "fact_task": ["project", "assigned_to", "status", "priority",
+                  "lateness_bucket", "exp_end_date", "business_code"],
+    "fact_person": ["department", "designation", "branch", "employment_type",
+                    "status", "business_code"],
+    "fact_case": ["customer", "status", "priority", "issue_type", "wait_bucket",
+                  "assigned_to", "opening_date", "business_code"],
 }
 
 MEASURES = {
@@ -49,6 +61,11 @@ MEASURES = {
     "fact_purchase_invoice_line": ["base_net_amount", "qty", "stock_qty"],
     "fact_stock_balance": ["stock_value", "actual_qty", "reserved_qty",
                            "available_qty", "ordered_qty", "projected_qty"],
+    "fact_sales_order": ["base_grand_total", "undelivered_value", "unbilled_value",
+                         "per_delivered", "per_billed"],
+    "fact_task": ["days_late"],
+    "fact_person": ["tenure_days"],
+    "fact_case": ["days_open"],
 }
 
 # Columns every fact carries, which a filter may name even though they are neither
@@ -57,7 +74,9 @@ LINEAGE = ["src_doctype", "src_name", "src_row_name", "src_docstatus",
            "src_modified", "ingested_at", "fact_key"]
 
 # Scoping columns that are not free-text dimensions.
-FLAGS = ["ageing_bucket", "has_cost", "has_valuation", "src_docstatus"]
+FLAGS = ["ageing_bucket", "has_cost", "has_valuation", "src_docstatus",
+         "lateness_bucket", "wait_bucket", "is_open", "is_assigned", "is_active",
+         "has_user", "days_late", "days_open", "days_overdue", "tenure_days"]
 
 OPERATORS = (">", ">=", "<", "<=", "=", "!=", "in", "not in", "like")
 

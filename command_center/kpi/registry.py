@@ -42,8 +42,14 @@ class Kpi:
     unit: str
     direction: str = "neutral"
 
-    agg: str = "sum"                  # sum | count | ratio
+    agg: str = "sum"                  # sum | count | count_distinct | ratio
     filters: dict = field(default_factory=dict)
+
+    # For count_distinct: which column's distinct values to count. "How many
+    # departments" is a count of distinct departments among people, not a count of
+    # people -- and counting rows there would report headcount under a label that
+    # says departments.
+    distinct_on: str | None = None
 
     # A ratio is not aggregated from a table; it is two other KPIs divided. Margin
     # percent is the case that forced this: the correct denominator is the net of
@@ -81,8 +87,17 @@ class Kpi:
             problems.append(f"{self.key}: unit {self.unit!r} is not one of {UNITS}")
         if self.direction not in DIRECTIONS:
             problems.append(f"{self.key}: direction {self.direction!r} is unknown")
-        if self.agg not in ("sum", "count", "ratio"):
-            problems.append(f"{self.key}: agg {self.agg!r} is not sum, count or ratio")
+        if self.agg not in ("sum", "count", "count_distinct", "ratio"):
+            problems.append(
+                f"{self.key}: agg {self.agg!r} is not sum, count, count_distinct "
+                f"or ratio")
+        if self.agg == "count_distinct" and not self.distinct_on:
+            problems.append(
+                f"{self.key}: count_distinct needs distinct_on to say which column's "
+                f"distinct values are being counted")
+        if self.distinct_on and self.agg != "count_distinct":
+            problems.append(
+                f"{self.key}: distinct_on only means something for count_distinct")
         if self.agg == "sum" and self.measure == "*":
             problems.append(f"{self.key}: cannot sum '*'")
         if self.agg == "ratio":
@@ -229,7 +244,8 @@ def dependencies(key: str) -> set[str]:
 def load_all() -> dict[str, Kpi]:
     """Import every definition module. Registration happens on import."""
     if not REGISTRY:
-        from command_center.kpi import buying, sales, stock  # noqa: F401
+        from command_center.kpi import (  # noqa: F401
+            buying, operations, sales, stock)
         problems = validate_registry()
         if problems:
             raise ValueError("; ".join(problems))

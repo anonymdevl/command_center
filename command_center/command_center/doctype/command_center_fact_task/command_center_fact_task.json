@@ -1,0 +1,217 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-09-20 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "in_create": 1,
+ "field_order": [
+  "business_code",
+  "src_doctype",
+  "src_name",
+  "src_row_name",
+  "src_modified",
+  "src_docstatus",
+  "ingested_at",
+  "fact_key",
+  "sec_doc",
+  "subject",
+  "status",
+  "priority",
+  "col_who",
+  "project",
+  "project_name",
+  "owner_user",
+  "assigned_to",
+  "sec_time",
+  "exp_start_date",
+  "exp_end_date",
+  "completed_on",
+  "col_age",
+  "as_of_date",
+  "days_late",
+  "lateness_bucket",
+  "is_open",
+  "is_assigned"
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Fact Task",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Command Center Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "exp_end_date",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "fields": [
+  {
+   "fieldname": "business_code",
+   "fieldtype": "Data",
+   "label": "Business",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "description": "Which connected business this row belongs to."
+  },
+  {
+   "fieldname": "src_doctype",
+   "fieldtype": "Data",
+   "label": "Source doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_name",
+   "fieldtype": "Data",
+   "label": "Source document",
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_row_name",
+   "fieldtype": "Data",
+   "label": "Source row",
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_modified",
+   "fieldtype": "Datetime",
+   "label": "Source last changed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "src_docstatus",
+   "fieldtype": "Int",
+   "label": "Source docstatus",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ingested_at",
+   "fieldtype": "Datetime",
+   "label": "Read at",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fact_key",
+   "fieldtype": "Data",
+   "label": "Fact key",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_doc",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Data",
+   "label": "What",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "Status",
+   "search_index": 1
+  },
+  {
+   "fieldname": "priority",
+   "fieldtype": "Data",
+   "label": "Priority"
+  },
+  {
+   "fieldname": "col_who",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Data",
+   "label": "Project",
+   "search_index": 1
+  },
+  {
+   "fieldname": "project_name",
+   "fieldtype": "Data",
+   "label": "Project name"
+  },
+  {
+   "fieldname": "owner_user",
+   "fieldtype": "Data",
+   "label": "Raised by"
+  },
+  {
+   "fieldname": "assigned_to",
+   "fieldtype": "Data",
+   "label": "Assigned to",
+   "search_index": 1
+  },
+  {
+   "fieldname": "sec_time",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "exp_start_date",
+   "fieldtype": "Date",
+   "label": "Due to start"
+  },
+  {
+   "fieldname": "exp_end_date",
+   "fieldtype": "Date",
+   "label": "Due"
+  },
+  {
+   "fieldname": "completed_on",
+   "fieldtype": "Date",
+   "label": "Finished"
+  },
+  {
+   "fieldname": "col_age",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "as_of_date",
+   "fieldtype": "Date",
+   "label": "Measured as at"
+  },
+  {
+   "fieldname": "days_late",
+   "fieldtype": "Int",
+   "label": "Days past due"
+  },
+  {
+   "fieldname": "lateness_bucket",
+   "fieldtype": "Data",
+   "label": "Lateness band",
+   "search_index": 1
+  },
+  {
+   "fieldname": "is_open",
+   "fieldtype": "Check",
+   "label": "Still open"
+  },
+  {
+   "fieldname": "is_assigned",
+   "fieldtype": "Check",
+   "label": "Has an owner",
+   "description": "Zero where nobody is assigned. Unowned work is the finding, not a blank."
+  }
+ ]
+}

@@ -131,7 +131,12 @@ def _aggregate(kpi: Kpi, business_code: str | None):
 
     t = frappe.qb.DocType(target)
     q = frappe.qb.from_(t)
-    q = q.select(Count(t.name) if kpi.agg == "count" else Sum(t[kpi.measure]))
+    if kpi.agg == "count":
+        q = q.select(Count(t.name))
+    elif kpi.agg == "count_distinct":
+        q = q.select(Count(t[kpi.distinct_on]).distinct())
+    else:
+        q = q.select(Sum(t[kpi.measure]))
 
     if business_code and business_code != "__all__":
         q = q.where(t.business_code == business_code)

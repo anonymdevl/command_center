@@ -136,6 +136,13 @@ const DIMENSION_FIELD = {
   fact_sales_invoice: "customer",
   fact_sales_invoice_line: "customer",
   fact_payment_allocation: "party",
+  fact_purchase_invoice: "supplier",
+  fact_purchase_invoice_line: "supplier",
+  fact_stock_balance: "warehouse",
+  fact_sales_order: "customer",
+  fact_task: "assigned_to",
+  fact_person: "department",
+  fact_case: "customer",
 };
 
 /** The records. Columns and their order are the server's, so every drawer agrees. */

@@ -491,7 +491,7 @@ try:
         REGISTRY, validate_registry, dependencies, value_dependencies)
     # Every definition module, not just sales -- a KPI registered in a module this
     # check does not import is a KPI it will call unregistered.
-    from command_center.kpi import buying, sales, stock  # noqa: F401
+    from command_center.kpi import buying, operations, sales, stock  # noqa: F401
 except Exception as exc:                                   # pragma: no cover
     check(False, f"the KPI registry does not import cleanly: {exc!r}")
     REGISTRY = {}
@@ -510,6 +510,11 @@ else:
         check(kpi.subset_of is not None or kpi.share_of is None,
               f"KPI {kpi.key} has share_of but no subset_of, so a screen can show "
               f"the percentage without saying what the whole is")
+
+    for kpi in REGISTRY.values():
+        if kpi.agg == "count_distinct":
+            check(bool(kpi.distinct_on),
+                  f"KPI {kpi.key} counts distinct values of nothing")
 
     # Every fact a KPI names must be one the schema maps. Reading the module as
     # text keeps this check free of frappe.
@@ -594,6 +599,26 @@ else:
         check(_stem in _imported,
               f"{_f.relative_to(_ROOT).as_posix()} is imported by nothing. Delete it "
               f"or wire it up; dead code reads as the current answer.")
+
+    # The drawer's nested drill must know the grouping column for every fact, and it
+    # must be the same column the server concentrates on -- otherwise clicking a row
+    # in "where it is concentrated" filters by something else and the numbers move.
+    _rec = (_src / "components" / "Records.jsx").read_text()
+    _dim_block = re.search(r"const DIMENSION_FIELD = \{(.*?)\};", _rec, re.S)
+    _dims = dict(re.findall(r"(fact_[a-z_]+):\s*\"([a-z_]+)\"",
+                            _dim_block.group(1) if _dim_block else ""))
+    _pres = (_ROOT / "command_center" / "facts" / "presentation.py").read_text()
+    for _fact in REGISTRY_FACTS:
+        check(_fact in _dims,
+              f"Records.jsx DIMENSION_FIELD has no entry for {_fact}, so its drawer "
+              f"cannot drill into a concentration row")
+        _spec = re.search(r'"%s": \{(.*?)\n    \},' % _fact, _pres, re.S)
+        if _spec and _fact in _dims:
+            _on = re.search(r'"concentrate_on": \("([a-z_]+)"', _spec.group(1))
+            if _on:
+                check(_dims[_fact] == _on.group(1),
+                      f"{_fact}: the drawer drills on {_dims[_fact]!r} but the server "
+                      f"concentrates on {_on.group(1)!r}")
 
     # A flag tone must be a class the stylesheet defines. "bad" was invented in the
     # components and styled nowhere, so a failed load rendered as an ordinary badge.

@@ -163,3 +163,24 @@ def scheduled_load():
         except Exception:
             frappe.log_error(title=f"Command Center ingest: {name}",
                              message=frappe.get_traceback())
+
+
+@frappe.whitelist()
+def seed_demo(dry_run: bool = True):
+    """Top up the thin part of the demonstration extract.
+
+    Defaults to a dry run: it reports what it would create and creates nothing. A
+    seeder that writes on its first accidental call is a seeder that eventually
+    writes into the wrong site.
+    """
+    require_manager()
+    from command_center.demo import seed
+    return seed.run(dry_run=dry_run)
+
+
+@frappe.whitelist()
+def unseed_demo():
+    """Remove exactly what seed_demo created."""
+    require_manager()
+    from command_center.demo import seed
+    return seed.remove()

@@ -215,6 +215,27 @@ def ageing_bucket(days: int | None) -> str:
     return "90+"
 
 
+def lateness_bucket(days: int | None) -> str:
+    """How late something is, in the bands the interface says.
+
+    Deliberately the same shape as ageing_bucket, so a manager reading "over 90" on a
+    receivable and "over 90" on an undelivered order is reading the same thing. Two
+    sets of bands with different edges is how two screens come to disagree about what
+    "late" means.
+    """
+    if days is None:
+        return "No date set"
+    if days <= 0:
+        return "Not yet due"
+    if days <= 30:
+        return "0-30"
+    if days <= 60:
+        return "31-60"
+    if days <= 90:
+        return "61-90"
+    return "90+"
+
+
 def resolve_as_of(conn) -> str:
     """The date ageing is measured against, and it is not today by default.
 

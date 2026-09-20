@@ -8,6 +8,10 @@ import LegacyView from "./components/LegacyView.jsx";
 import Sales from "./views/Sales.jsx";
 import Buying from "./views/Buying.jsx";
 import Stock from "./views/Stock.jsx";
+import Delivery from "./views/Delivery.jsx";
+import People from "./views/People.jsx";
+import Complaints from "./views/Complaints.jsx";
+import Whole from "./views/Whole.jsx";
 import Money from "./views/Money.jsx";
 import nav from "./legacy/nav.json";
 
@@ -17,10 +21,14 @@ import nav from "./legacy/nav.json";
  * converted a screen at a time.
  */
 const PORTED = {
+  ops: Whole,
   sales: Sales,
   fin: Money,
   proc: Buying,
   inv: Stock,
+  eng: Delivery,
+  hr: People,
+  cx: Complaints,
 };
 
 initAppearance();
