@@ -1,6 +1,6 @@
 [project]
 name = "command_center"
-authors = [{ name = "Michael Appiah-Kubi", email = "ai4powersoft@gmail.com" }]
+authors = [{ name = "Michael Appiah-Kubi", email = "kubiappiahmichael@gmail.com" }]
 description = "Intelligent Command Center — an executive intelligence layer over ERPNext."
 requires-python = ">=3.10"
 readme = "README.md"

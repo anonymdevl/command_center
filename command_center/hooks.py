@@ -2,7 +2,7 @@ app_name = "command_center"
 app_title = "Intelligent Command Center"
 app_publisher = "Michael Appiah-Kubi"
 app_description = "An executive intelligence layer over ERPNext."
-app_email = "ai4powersoft@gmail.com"
+app_email = "kubiappiahmichael@gmail.com"
 app_license = "Proprietary"
 
 # ---------------------------------------------------------------------------
