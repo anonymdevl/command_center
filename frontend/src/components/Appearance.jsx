@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getAppearance, setAppearance } from "../appearance.js";
-import accents from "../legacy/extras.json";
+import extras from "../legacy/extras.json";
 
-const ACCENTS = accents.accents || {};
+const ACCENTS = extras.accents || [];
 const SIGNALS = [
   ["vivid", "Vivid"],
   ["muted", "Muted"],
@@ -53,17 +53,24 @@ export default function Appearance() {
 
         <div className="amsec">Accent</div>
         <div className="swatches">
-          {Object.keys(ACCENTS).map((a) => (
+          {ACCENTS.map((a) => (
             <button
-              key={a}
-              className={`sw${look.accent === a ? " on" : ""}`}
-              data-a={a}
-              title={ACCENTS[a]}
-              onClick={() => set("accent", a)}
+              key={a.key}
+              className={`sw${look.accent === a.key ? " on" : ""}`}
+              data-a={a.key}
+              title={`${a.label} \u2014 ${a.note}`}
+              /* Split disc: dark half, light half. Without this every swatch is
+                 an empty circle, which is what the port shipped. */
+              style={{
+                background: `linear-gradient(135deg, ${a.dark} 0 50%, ${a.light} 50% 100%)`,
+              }}
+              onClick={() => set("accent", a.key)}
             />
           ))}
         </div>
-        <div className="swname">{ACCENTS[look.accent] || ""}</div>
+        <div className="swname">
+          {ACCENTS.find((a) => a.key === look.accent)?.label || ""}
+        </div>
 
         <div className="amsec">Signal strength</div>
         <div className="seg">

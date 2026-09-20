@@ -269,22 +269,134 @@
 "src": []
 }
 ],
-"accents": {
-"gold": "Gold",
-"brass": "Brass",
-"bronze": "Bronze",
-"copper": "Copper",
-"coffee": "Coffee",
-"petrol": "Petrol",
-"teal": "Teal",
-"ink": "Ink",
-"steel": "Steel",
-"slate": "Slate",
-"plum": "Plum",
-"wine": "Wine",
-"violet": "Violet",
-"olive": "Olive",
-"sage": "Sage",
-"charcoal": "Charcoal"
+"accents": [
+{
+"key": "gold",
+"label": "Gold",
+"group": "Golds and browns",
+"light": "#8c6108",
+"dark": "#e3b95e",
+"note": "the original \u2014 classic with cream"
+},
+{
+"key": "brass",
+"label": "Brass",
+"group": "Golds and browns",
+"light": "#786012",
+"dark": "#d9c069",
+"note": "softer, more antique than gold"
+},
+{
+"key": "bronze",
+"label": "Bronze",
+"group": "Golds and browns",
+"light": "#7d5626",
+"dark": "#d0a071",
+"note": "browner, less yellow"
+},
+{
+"key": "copper",
+"label": "Copper",
+"group": "Golds and browns",
+"light": "#9c4f24",
+"dark": "#e09062",
+"note": "warm and strong \u2014 sits near the warning orange"
+},
+{
+"key": "coffee",
+"label": "Coffee",
+"group": "Golds and browns",
+"light": "#584234",
+"dark": "#c0a89a",
+"note": "deep espresso brown, very quiet"
+},
+{
+"key": "petrol",
+"label": "Petrol",
+"group": "Blues and teals",
+"light": "#0d5c6b",
+"dark": "#7fd4dd",
+"note": "deep teal-cyan \u2014 the classic cream partner"
+},
+{
+"key": "teal",
+"label": "Teal",
+"group": "Blues and teals",
+"light": "#126b63",
+"dark": "#68cfc2",
+"note": "greener than petrol"
+},
+{
+"key": "ink",
+"label": "Ink",
+"group": "Blues and teals",
+"light": "#1f3d63",
+"dark": "#8fb4f0",
+"note": "deep navy \u2014 quiet and institutional"
+},
+{
+"key": "steel",
+"label": "Steel",
+"group": "Blues and teals",
+"light": "#2c5773",
+"dark": "#8cb8d6",
+"note": "mid blue, a little softer than ink"
+},
+{
+"key": "slate",
+"label": "Slate",
+"group": "Blues and teals",
+"light": "#3f4f63",
+"dark": "#a3b4c9",
+"note": "blue-grey, deliberately recessive"
+},
+{
+"key": "plum",
+"label": "Plum",
+"group": "Purples and reds",
+"light": "#5e2d54",
+"dark": "#d49ccd",
+"note": "aubergine \u2014 editorial, warm-leaning"
+},
+{
+"key": "wine",
+"label": "Wine",
+"group": "Purples and reds",
+"light": "#6d2739",
+"dark": "#d69aa6",
+"note": "oxblood \u2014 rich, sits near the critical red"
+},
+{
+"key": "violet",
+"label": "Violet",
+"group": "Purples and reds",
+"light": "#5348c7",
+"dark": "#9aa0f5",
+"note": "the indigo you had before"
+},
+{
+"key": "olive",
+"label": "Olive",
+"group": "Greens",
+"light": "#55601f",
+"dark": "#bcc77a",
+"note": "earthy and dry"
+},
+{
+"key": "sage",
+"label": "Sage",
+"group": "Greens",
+"light": "#44604f",
+"dark": "#9dc2ac",
+"note": "muted green \u2014 sits near the success green"
+},
+{
+"key": "charcoal",
+"label": "Charcoal",
+"group": "Neutral",
+"light": "#33343a",
+"dark": "#a8aab4",
+"note": "no colour at all; the numbers carry it"
 }
+]
 }

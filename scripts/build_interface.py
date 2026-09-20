@@ -78,7 +78,13 @@ def main() -> int:
         "explainers": ns["EXH"],
         "drill": ns["DRH"],
         "brain": ns["BRAIN"],
-        "accents": {k: lab for k, lab, g, li, dk, n in ns["ACCENTS"]},
+        # Each swatch is a split disc of its light and dark accent. The
+        # generated markup carried that gradient inline; the component needs the
+        # same two colours or every swatch renders as an empty circle.
+        "accents": [
+            {"key": k, "label": lab, "group": g, "light": li, "dark": dk, "note": n}
+            for k, lab, g, li, dk, n in ns["ACCENTS"]
+        ],
     }
 
     for path, content in (

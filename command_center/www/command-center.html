@@ -14,8 +14,8 @@
 /* Everything the interface needs on first paint, delivered inline so the
    greeting and the business scope are right immediately rather than flashing a
    placeholder. */
-window.CC_BOOT = {{ boot }};
-window.csrf_token = {{ csrf_token }};
+window.CC_BOOT = {{ boot | safe }};
+window.csrf_token = {{ csrf_token | safe }};
 </script>
 <script type="module" src="/assets/command_center/command-center/command-center.js"></script>
 </body>

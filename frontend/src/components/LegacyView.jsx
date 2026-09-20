@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from "react";
 import views from "../legacy/views.json";
 import extras from "../legacy/extras.json";
+import { boot } from "../api/boot.js";
+import { renderGreeting } from "../greeting.js";
 
 /**
  * A view that has not been converted yet.
@@ -36,6 +38,17 @@ export default function LegacyView({ viewKey, openDrawer }) {
       delete window.closeDrawer;
     };
   }, [openDrawer]);
+
+  // The generated markup has an empty #greet that the old script filled on a
+  // timer. Ported here so the command screen still greets the person by name
+  // until that view becomes a component.
+  useEffect(() => {
+    const el = ref.current?.querySelector("#greet");
+    if (!el) return;
+    renderGreeting(el, boot.user);
+    const t = setInterval(() => renderGreeting(el, boot.user), 30000);
+    return () => clearInterval(t);
+  }, [viewKey]);
 
   // Tabs inside the generated markup are plain DOM, so they are wired here
   // rather than reimplemented.

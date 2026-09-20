@@ -28,10 +28,27 @@ def get_context(context):
         raise frappe.Redirect
 
     context.no_cache = 1
-    context.boot = json.dumps(_boot(user))
+    context.boot = _payload(_boot(user))
     # The interface posts to /api/method, so it needs the token for this session.
-    context.csrf_token = json.dumps(frappe.sessions.get_csrf_token())
+    context.csrf_token = _payload(frappe.sessions.get_csrf_token())
     return context
+
+
+def _payload(value) -> str:
+    """JSON for a <script> block, marked safe in the template.
+
+    Frappe's Jinja autoescapes, so `{{ boot }}` arrives as &quot;…&quot; and the
+    script is a syntax error -- the interface then sees no payload at all and
+    falls back to a signed-out default, which reads as an empty business switcher
+    and the wrong name in the corner. One escape, two symptoms.
+
+    `| safe` in the template is only safe because of the substitution below: a
+    business named with a closing script tag would otherwise end the block early.
+    """
+    return (json.dumps(value)
+            .replace("<", "\\u003c")
+            .replace(">", "\\u003e")
+            .replace("&", "\\u0026"))
 
 
 def _boot(user: str) -> dict:
