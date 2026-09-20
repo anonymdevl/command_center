@@ -124,7 +124,11 @@ self-checks, then clears cache and restarts — in that order, which preflight e
 reseeding deletes documents and their fact rows would otherwise survive). `--full`
 rebuilds every fact from scratch. Migrate runs `--skip-failing` because two ERPNext
 v14/v15 patches fail on this site and are unrelated to this app; the skip is announced in
-the output, and `--strict` turns it off. Never hand over a list of bench commands again: a
+the output, and `--strict` turns it off. Migrate takes a site-wide lock that a previous
+migrate's queued search-index rebuild can still hold, so it retries three times thirty
+seconds apart before giving up with an explanation; `--no-migrate` skips the step for a
+change that touched no doctype. Deleting the lock file does not release the lock. Never
+hand over a list of bench commands again: a
 sequence typed by hand is a sequence that can be got wrong, and a multi-line paste loses
 its first character.
 
