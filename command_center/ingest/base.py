@@ -34,6 +34,21 @@ CHUNK = 5000
 
 
 class Ingestor:
+    # An ingestor names the fact it fills; the doctype it writes to comes from the
+    # shared schema. Declaring both invites them to drift, and a fact written to one
+    # table and read from another is a silent zero.
+    fact: str = ""
+
+    @property
+    def target(self) -> str:
+        from command_center.facts.schema import FACTS
+        name = FACTS.get(self.fact)
+        if not name:
+            raise ValueError(
+                f"{type(self).__name__} fills {self.fact!r}, which facts.schema "
+                f"does not know. Add it there and nowhere else.")
+        return name
+
     """One fact table, one source grain."""
 
     fact: str = ""

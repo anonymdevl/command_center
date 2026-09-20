@@ -479,6 +479,129 @@ if os.path.exists(CSS_FILE):
 
 
 # --------------------------------------------------------------------------
+# KPI registry. The definition modules import no frappe, deliberately -- so the
+# whole catalogue can be validated here, before anything is deployed, rather than
+# failing on a screen in front of the client.
+# --------------------------------------------------------------------------
+from pathlib import Path as _Path
+_ROOT = _Path(ROOT)
+sys.path.insert(0, ROOT)
+try:
+    from command_center.kpi.registry import (
+        REGISTRY, validate_registry, dependencies, value_dependencies)
+    from command_center.kpi import sales  # noqa: F401  registers on import
+except Exception as exc:                                   # pragma: no cover
+    check(False, f"the KPI registry does not import cleanly: {exc!r}")
+    REGISTRY = {}
+else:
+    check(bool(REGISTRY), "the KPI registry is empty")
+    REGISTRY_FACTS = set(re.findall(
+        r'"(fact_[a-z_]+)":\s*"Command Center Fact',
+        (_Path(ROOT) / "command_center" / "facts" / "schema.py").read_text()))
+
+    for detail in validate_registry():
+        check(False, f"KPI registry: {detail}")
+
+    for kpi in REGISTRY.values():
+        check(not kpi.validate(), f"KPI {kpi.key}: " + "; ".join(kpi.validate()))
+        check(bool(kpi.label.strip()), f"KPI {kpi.key} has no label")
+        check(kpi.subset_of is not None or kpi.share_of is None,
+              f"KPI {kpi.key} has share_of but no subset_of, so a screen can show "
+              f"the percentage without saying what the whole is")
+
+    # Every fact a KPI names must be one the schema maps. Reading the module as
+    # text keeps this check free of frappe.
+    _eng = (_ROOT / "command_center" / "facts" / "schema.py").read_text()
+    _known = set(re.findall(r'"(fact_[a-z_]+)":\s*"Command Center Fact', _eng))
+    for kpi in REGISTRY.values():
+        check(kpi.fact in _known,
+              f"KPI {kpi.key} reads fact {kpi.fact!r}, which facts.schema does not map")
+
+    # And every fact the engine maps must be a doctype that exists in this app.
+    for fact, doctype in re.findall(r'"(fact_[a-z_]+)":\s*"([^"]+)"', _eng):
+        folder = doctype.lower().replace(" ", "_")
+        path = _ROOT / "command_center" / "command_center" / "doctype" / folder
+        check(path.is_dir(),
+              f"facts.schema maps {fact} to {doctype!r}, but {folder}/ does not exist")
+
+
+    # The map existed twice before (api/facts.ALLOWED and kpi/engine.FACTS). This
+    # fails the build if a third copy appears.
+    _homes = []
+    for _py in sorted((_ROOT / "command_center").rglob("*.py")):
+        if re.search(r'^\s*"fact_sales_invoice"\s*:\s*"Command Center Fact',
+                     _py.read_text(), re.M):
+            _homes.append(_py.relative_to(_ROOT).as_posix())
+    check(_homes == ["command_center/facts/schema.py"],
+          f"the fact-to-doctype map should be defined only in facts/schema.py, "
+          f"found in: {_homes}")
+
+    # A KPI key typed into a screen must exist. Without this a typo is a card that
+    # silently does not render, which is worse than an error.
+    _src = _ROOT / "frontend" / "src"
+    for _jsx in sorted(_src.rglob("*.jsx")):
+        _text = _jsx.read_text()
+        for _arr in re.findall(r'(?:HEADLINE|FIGURES|QUALITY|keys)\s*=\s*[\[{]([^\]}]*)[\]}]',
+                               _text):
+            for _key in re.findall(r'"([a-z][a-z0-9_]{3,})"', _arr):
+                check(_key in REGISTRY,
+                      f"{_jsx.name} names KPI {_key!r}, which is not registered")
+
+    # A flag tone must be a class the stylesheet defines. "bad" was invented in the
+    # components and styled nowhere, so a failed load rendered as an ordinary badge.
+    _css_file = _src / "styles" / "command-center.css"
+    _flag_classes = set(re.findall(r"\.flag\.([a-z0-9-]+)", _css_file.read_text()))
+    for _jsx in sorted(_src.rglob("*.jsx")):
+        _t = _jsx.read_text()
+        for _tone in set(re.findall(r'tone:\s*"([a-z0-9- ]+)"', _t)) | set(
+                re.findall(r'`flag \$\{[^}]*\?\s*"([a-z0-9-]+)"\s*:\s*"([a-z0-9-]+)"',
+                           _t) and
+                [x for pair in re.findall(
+                    r'`flag \$\{[^}]*\?\s*"([a-z0-9-]+)"\s*:\s*"([a-z0-9-]+)"', _t)
+                 for x in pair]):
+            for _one in _tone.split():
+                check(_one in _flag_classes,
+                      f"{_jsx.name} uses flag tone {_one!r}, which the stylesheet does "
+                      f"not define (it has: {', '.join(sorted(_flag_classes))})")
+
+    # Every converted screen must declare the facts it reads, so the illustrative
+    # banner is derived rather than remembered.
+    _app = (_src / "App.jsx").read_text()
+    _ported = re.search(r'const PORTED = \{(.*?)\}', _app, re.S)
+    _keys = set(re.findall(r'^\s*([a-z_]+):', _ported.group(1), re.M)) if _ported else set()
+    _ctrl = (_ROOT / "command_center" / "www" / "command_center.py").read_text()
+    _declared = re.search(r'VIEW_FACTS = \{(.*?)\n\}', _ctrl, re.S)
+    _dkeys = set(re.findall(r'"([a-z_]+)":', _declared.group(1))) if _declared else set()
+    check(_keys and _keys == _dkeys,
+          f"PORTED views {sorted(_keys)} and VIEW_FACTS {sorted(_dkeys)} disagree, so "
+          f"the illustrative banner would be wrong on the difference")
+    for _fact in re.findall(r'"(fact_[a-z_]+)"', _declared.group(1) if _declared else ""):
+        check(_fact in REGISTRY_FACTS,
+              f"VIEW_FACTS names {_fact!r}, which facts.schema does not map")
+
+    # No cycle among value dependencies. A cycle cannot be ordered, so a ratio in
+    # one would be evaluated before its denominator and print an em dash -- which is
+    # exactly what happened, and what the previous version of this check missed by
+    # asserting check(True, ...): a check that cannot fail is worse than none,
+    # because it reads like coverage.
+    for key in REGISTRY:
+        seen, frontier, looped = set(), {key}, False
+        while frontier and not looped:
+            nxt = set()
+            for dep in frontier:
+                for onward in value_dependencies(dep):
+                    if onward == key:
+                        looped = True
+                    if onward not in seen:
+                        seen.add(onward)
+                        nxt.add(onward)
+            frontier = nxt
+        check(not looped,
+              f"KPI {key} depends on its own value through a chain of ratios, which "
+              f"cannot be evaluated in any order")
+
+
+# --------------------------------------------------------------------------
 print(f"preflight: {checks} checks")
 if problems:
     print(f"\n{len(problems)} problem(s):\n")

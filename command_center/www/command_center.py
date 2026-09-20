@@ -155,14 +155,31 @@ def _as_of():
     }
 
 
+# Which facts each converted screen reads. A screen is live when they are loaded,
+# and not before.
+VIEW_FACTS = {
+    "command": ["fact_sales_invoice", "fact_sales_invoice_line"],
+    "sales": ["fact_sales_invoice"],
+    "fin": ["fact_sales_invoice_line", "fact_payment_allocation"],
+}
+
+
 def _live_views() -> list[str]:
     """Which views draw on loaded facts rather than the demo extract.
 
-    Stated explicitly so the interface can mark the difference. A screen showing
-    illustrative numbers that looks identical to one showing real ones is how a
-    manager comes to distrust all of them.
+    Derived, not listed. Whether a screen is live depends on whether its facts are
+    actually loaded in this site, so the answer is read from the ingest state rather
+    than from a list someone has to remember to update -- which is how the banner
+    would have claimed Sales was still illustrative after it stopped being, or
+    worse, claimed the reverse.
     """
-    # Nothing yet. The facts are loaded and reconciled, but no screen reads them
-    # -- each is wired in turn. Claiming a screen is live before it is would make
-    # every other claim here worth less.
-    return []
+    try:
+        loaded = {
+            row.fact for row in frappe.get_all(
+                "Command Center Ingest State",
+                filters={"status": "OK"}, fields=["fact"])
+        }
+    except Exception:
+        return []
+    return sorted(view for view, facts in VIEW_FACTS.items()
+                  if facts and loaded.issuperset(facts))

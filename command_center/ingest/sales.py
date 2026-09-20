@@ -24,7 +24,6 @@ PAGE = 2000
 
 class SalesInvoiceIngestor(Ingestor):
     fact = "fact_sales_invoice"
-    target = "Command Center Fact Sales Invoice"
     source_doctype = "Sales Invoice"
 
     def extract(self, conn, since=None, limit=None, as_of=None):
@@ -79,7 +78,6 @@ class SalesInvoiceIngestor(Ingestor):
 
 class SalesInvoiceLineIngestor(Ingestor):
     fact = "fact_sales_invoice_line"
-    target = "Command Center Fact Sales Invoice Line"
     source_doctype = "Sales Invoice Item"
 
     def extract(self, conn, since=None, limit=None, as_of=None):
@@ -155,7 +153,6 @@ class SalesInvoiceLineIngestor(Ingestor):
 
 class PaymentAllocationIngestor(Ingestor):
     fact = "fact_payment_allocation"
-    target = "Command Center Fact Payment Allocation"
     source_doctype = "Payment Entry Reference"
 
     def extract(self, conn, since=None, limit=None, as_of=None):

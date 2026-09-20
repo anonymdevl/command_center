@@ -5,7 +5,9 @@ import Topbar from "./components/Topbar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import Drawer from "./components/Drawer.jsx";
 import LegacyView from "./components/LegacyView.jsx";
+import Command from "./views/Command.jsx";
 import Sales from "./views/Sales.jsx";
+import Money from "./views/Money.jsx";
 import nav from "./legacy/nav.json";
 
 /**
@@ -14,7 +16,9 @@ import nav from "./legacy/nav.json";
  * converted a screen at a time.
  */
 const PORTED = {
+  command: Command,
   sales: Sales,
+  fin: Money,
 };
 
 initAppearance();

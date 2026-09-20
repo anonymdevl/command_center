@@ -125,6 +125,12 @@ export const api = {
   lineage: ({ fact, filters, business_code, limit }) =>
     call("command_center.api.facts.lineage", { fact, filters, business_code, limit }),
 
+  /* Figures. The screen names them; the server decides what they mean. */
+  kpis: ({ keys, business_code }) =>
+    call("command_center.api.kpi.get", { keys, business_code }),
+  kpiCatalogue: () => call("command_center.api.kpi.catalogue"),
+  kpiVerify: (business_code) => call("command_center.api.kpi.verify", { business_code }),
+
   ingestStatus: () => call("command_center.api.ingest.status"),
   reconcile: (business_code) =>
     call("command_center.api.ingest.reconcile", { business_code }),
