@@ -122,7 +122,8 @@ class RemoteConnector(BusinessConnector):
 
     # -- reads -------------------------------------------------------------
     def get_list(self, doctype, filters=None, fields=None, limit=20,
-                 order_by=None, group_by=None):
+                 order_by=None, group_by=None, parent_doctype=None):
+        # frappe.client.get_list takes the parent doctype as `parent`.
         return self._call("frappe.client.get_list", {
             "doctype": doctype,
             "filters": filters or {},
@@ -130,6 +131,7 @@ class RemoteConnector(BusinessConnector):
             "limit_page_length": limit,
             "order_by": order_by,
             "group_by": group_by,
+            "parent": parent_doctype,
         }) or []
 
     def get_doc(self, doctype, name):

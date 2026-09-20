@@ -162,6 +162,29 @@ class Ingestor:
                                   ignore_duplicates=True)
 
 
+def require_fields(rows: list[dict], fields, context: str) -> list[dict]:
+    """Fail loudly when the source returned fewer columns than were asked for.
+
+    Frappe drops fields silently in at least one case — a child table queried
+    without `parent_doctype` comes back with only `name`, no error. The first
+    symptom was a KeyError several frames deep inside a loop, which says nothing
+    about the cause.
+
+    Checking the first row costs nothing and turns that into a sentence.
+    """
+    if not rows:
+        return rows
+    missing = [f for f in fields if f not in rows[0]]
+    if missing:
+        frappe.throw(
+            f"{context}: the source returned no {', '.join(missing)}. "
+            f"For a child table this usually means parent_doctype was not "
+            f"passed, in which case Frappe returns only 'name' and reports "
+            f"nothing. Got: {', '.join(sorted(rows[0]))}."
+        )
+    return rows
+
+
 def ageing_bucket(days: int | None) -> str:
     """The four bands, named the way the interface says them."""
     if days is None:

@@ -93,7 +93,30 @@ if os.path.exists(patches):
 # 3. Everything parses, and nothing bypasses ERPNext on a business document
 # --------------------------------------------------------------------------
 BYPASS = ("ignore_permissions", "ignore_validate", "ignore_mandatory")
-OUR_TABLES = ("Command Center", "Connected Business")
+
+# Modules whose whole job is to write configuration the platform owns -- roles,
+# workspaces, number cards, its own registry and fact tables. A bypass is correct
+# there and wrong everywhere else.
+#
+# This is an explicit list rather than a pattern, because the previous version
+# passed install.py only by coincidence: the string "Command Center Manager"
+# happened to contain "Command Center". A guard that passes by accident is not a
+# guard.
+CONFIG_MODULES = (
+    "command_center/desk.py",        # workspace, number cards, charts
+    "command_center/install.py",     # the manager role, the local business
+    "command_center/patches/",       # upgrade steps
+    "command_center/ingest/",        # the platform's own derived tables
+)
+
+# The doctypes this app ships, read from the JSON on disk rather than listed by
+# hand, so the allowance cannot drift as doctypes are added. A bypass naming one
+# of these is writing the platform's own data; a bypass naming anything else is
+# writing a document ERPNext owns.
+OUR_DOCTYPES = tuple(
+    json.load(open(j))["name"]
+    for j in sorted(glob.glob(os.path.join(DOCTYPES, "*", "*.json")))
+)
 
 for py in sorted(glob.glob(os.path.join(APP, "**", "*.py"), recursive=True)):
     rel = os.path.relpath(py, ROOT)
@@ -141,10 +164,13 @@ for py in sorted(glob.glob(os.path.join(APP, "**", "*.py"), recursive=True)):
             if kw.arg not in BYPASS:
                 continue
             snippet = ast.unparse(node)
-            ours = any(t in snippet for t in OUR_TABLES) or "/ingest/" in rel
+            declared = any(rel.replace(os.sep, "/").startswith(m)
+                           for m in CONFIG_MODULES)
+            ours = declared or any(dt in snippet for dt in OUR_DOCTYPES)
             check(ours,
-                  f"{rel}: {kw.arg} on what looks like an ERPNext document — "
-                  f"{snippet[:70]}")
+                  f"{rel}: {kw.arg} on a document this app does not own — "
+                  f"{snippet[:70]}. If this module writes platform "
+                  f"configuration, add it to CONFIG_MODULES and say why.")
 
 
 # --------------------------------------------------------------------------

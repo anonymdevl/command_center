@@ -37,7 +37,7 @@ class LocalConnector(BusinessConnector):
     is_local = True
 
     def get_list(self, doctype, filters=None, fields=None, limit=20,
-                 order_by=None, group_by=None):
+                 order_by=None, group_by=None, parent_doctype=None):
         with acting_as(self.acting_user):
             return frappe.get_list(
                 doctype,
@@ -46,6 +46,7 @@ class LocalConnector(BusinessConnector):
                 limit_page_length=limit,
                 order_by=order_by,
                 group_by=group_by,
+                parent_doctype=parent_doctype,
             )
 
     def get_doc(self, doctype, name):

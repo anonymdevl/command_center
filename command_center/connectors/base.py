@@ -76,7 +76,15 @@ class BusinessConnector:
     # the remote one maps onto endpoints that already exist on every Frappe site.
 
     def get_list(self, doctype, filters=None, fields=None, limit=20,
-                 order_by=None, group_by=None) -> list[dict]:
+                 order_by=None, group_by=None,
+                 parent_doctype=None) -> list[dict]:
+        """`parent_doctype` is required when doctype is a child table.
+
+        Without it Frappe cannot resolve permissions on a child table, and it
+        does not say so: it silently returns only `name` and drops every other
+        field requested. That failure mode is why this argument is part of the
+        interface rather than something each caller remembers.
+        """
         raise NotImplementedError
 
     def get_doc(self, doctype, name) -> dict:

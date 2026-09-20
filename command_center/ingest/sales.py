@@ -17,7 +17,7 @@ from __future__ import annotations
 import frappe
 from frappe.utils import date_diff, flt, getdate
 
-from command_center.ingest.base import Ingestor, ageing_bucket
+from command_center.ingest.base import Ingestor, ageing_bucket, require_fields
 
 PAGE = 2000
 
@@ -108,14 +108,19 @@ class SalesInvoiceLineIngestor(Ingestor):
         rows, names = [], list(by_name)
         for i in range(0, len(names), 200):
             chunk = names[i:i + 200]
-            lines = conn.get_list(
-                "Sales Invoice Item",
-                filters={"parent": ["in", chunk], "parenttype": "Sales Invoice"},
-                fields=["name", "parent", "item_code", "item_group", "warehouse",
-                        "qty", "stock_qty", "uom", "base_net_amount",
-                        "incoming_rate", "sales_order"],
-                limit=100000,
-            )
+            line_fields = ["name", "parent", "item_code", "item_group",
+                           "warehouse", "qty", "stock_qty", "uom",
+                           "base_net_amount", "incoming_rate", "sales_order"]
+            lines = require_fields(
+                conn.get_list(
+                    "Sales Invoice Item",
+                    filters={"parent": ["in", chunk],
+                             "parenttype": "Sales Invoice"},
+                    fields=line_fields,
+                    limit=100000,
+                    parent_doctype="Sales Invoice",
+                ),
+                line_fields, "Sales Invoice Item")
             for l in lines:
                 p = by_name.get(l["parent"])
                 if not p:
@@ -180,13 +185,18 @@ class PaymentAllocationIngestor(Ingestor):
         rows, names = [], list(by_name)
         for i in range(0, len(names), 200):
             chunk = names[i:i + 200]
-            refs = conn.get_list(
-                "Payment Entry Reference",
-                filters={"parent": ["in", chunk], "parenttype": "Payment Entry"},
-                fields=["name", "parent", "reference_doctype", "reference_name",
-                        "allocated_amount"],
-                limit=100000,
-            )
+            ref_fields = ["name", "parent", "reference_doctype",
+                          "reference_name", "allocated_amount"]
+            refs = require_fields(
+                conn.get_list(
+                    "Payment Entry Reference",
+                    filters={"parent": ["in", chunk],
+                             "parenttype": "Payment Entry"},
+                    fields=ref_fields,
+                    limit=100000,
+                    parent_doctype="Payment Entry",
+                ),
+                ref_fields, "Payment Entry Reference")
             inv_names = [r["reference_name"] for r in refs
                          if r.get("reference_doctype") == "Sales Invoice"]
             due = {}
