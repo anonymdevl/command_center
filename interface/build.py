@@ -59,7 +59,6 @@ EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + """
 
 .kpis.six{grid-template-columns:repeat(6,1fr)}
 .kpi.clickable:hover{border-color:var(--accent);cursor:pointer}
-.kpi.clickable::after{content:"›";position:absolute;bottom:7px;right:10px;color:var(--dim);font-size:13px}
 .panel{background:transparent;margin-bottom:16px}
 .ph{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
 .ph b{font-size:13px;font-weight:600}
@@ -435,13 +434,16 @@ BOOT_CSS = """
    centres at about 22.5px -- a 13px glyph therefore starts at 16px. */
 .kpi.clickable::after,
 .bk.clickable::before{
-  content:"\203a";position:absolute;bottom:16px;right:12px;
+  /* The literal character, not the escape \\203a: the minifier resolved that
+     as U+0203 followed by a stray "a", which rendered as a missing-glyph box
+     and the letter a on every card. */
+  content:"›";position:absolute;bottom:16px;right:12px;
   color:var(--dim);font-size:13px;line-height:1;pointer-events:none}
 /* .bk already uses ::after for the hairline on tiles with no footnote, so the
    chevron goes on ::before there. */
 .bk.clickable{position:relative}
 .kpi.clickable .delta,
-.bk.clickable .v{padding-right:15px}
+.bk.clickable .v{padding-right:18px}
 .kpi.clickable:hover::after,
 .bk.clickable:hover::before{color:var(--accent)}
 .bk.clickable{cursor:pointer}

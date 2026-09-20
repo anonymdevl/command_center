@@ -291,40 +291,40 @@ table.dt tr:hover td{background:var(--hover)}
 [data-theme="light"][data-accent="sage"]{--accent:#44604f;--accent-ink:#354b3e;--accent-dim:#d2d9d5;--accent-bg:rgba(68,96,79,.08);--accent-bg2:rgba(68,96,79,.15);--info:#44604f;--star:#44604f;--moon:#44604f;--solid:#1a1a20;--grad:linear-gradient(135deg,#44604f,#6d8376)}
 /* Charcoal — no colour at all; the numbers carry it */
 [data-accent="charcoal"]{--accent:#a8aab4;--accent-ink:#c6c8ce;--accent-dim:#36383f;--accent-bg:rgba(168,170,180,.10);--accent-bg2:rgba(168,170,180,.17);--info:#a8aab4;--star:#cfd0d6;--moon:#a8aab4;--solid:#a8aab4;--grad:linear-gradient(135deg,#a8aab4,#7c7e86)}
-[data-theme="light"][data-accent="charcoal"]{--accent:#33343a;--accent-ink:#28292d;--accent-dim:#ceced0;--accent-bg:rgba(51,52,58,.08);--accent-bg2:rgba(51,52,58,.15);--info:#33343a;--star:#33343a;--moon:#33343a;--solid:#1a1a20;--grad:linear-gradient(135deg,#33343a,#606165)}
-/* ============ SIGNAL: MUTED ============ */
-/* same four steps, chroma pulled right down so colour stops competing with content */
+[data-theme="light"][data-accent="charcoal"]{--accent:#33343a;--accent-ink:#28292d;--accent-dim:#ceced0;--accent-bg:rgba(51,52,58,.08);--accent-bg2:rgba(51,52,58,.15);--info:#33343a;--star:#33343a;--moon:#33343a;--solid:#1a1a20;--grad:linear-gradient(135deg,#33343a,#606165)}/* ============ SIGNAL LEVELS (derived, see module docstring) ============ */
+/* vivid is the base palette in :root -- it needs no rules of its own. */
 [data-signal="muted"]{
- --crit:#e0a09b; --crit-bg:rgba(224,160,155,.10); --crit-line:rgba(224,160,155,.26);
- --high:#d4ab87; --high-bg:rgba(212,171,135,.10); --high-line:rgba(212,171,135,.26);
- --med:#c6bb92; --med-bg:rgba(198,187,146,.10); --med-line:rgba(198,187,146,.26);
- --ok:#93b8a8;  --ok-bg:rgba(147,184,168,.10);  --ok-line:rgba(147,184,168,.26);
- --ok-glow:rgba(147,184,168,.40); --stale:#c6bb92;
+ --crit:#d88c8a; --crit-bg:rgba(216,140,138,0.1); --crit-line:rgba(216,140,138,0.26);
+ --high:#d5a47c; --high-bg:rgba(213,164,124,0.1); --high-line:rgba(213,164,124,0.26);
+ --med:#d6c087; --med-bg:rgba(214,192,135,0.1); --med-line:rgba(214,192,135,0.26);
+ --ok:#77bda0; --ok-bg:rgba(119,189,160,0.1); --ok-line:rgba(119,189,160,0.26);
+ --ok-glow:rgba(119,189,160,0.4); --stale:#d6c087;
 }
 [data-theme="light"][data-signal="muted"]{
- --crit:#9c4440; --crit-bg:rgba(156,68,64,.08); --crit-line:rgba(156,68,64,.22);
- --high:#8a6136; --high-bg:rgba(138,97,54,.09); --high-line:rgba(138,97,54,.22);
- --med:#70633c;  --med-bg:rgba(112,99,60,.10);  --med-line:rgba(112,99,60,.22);
- --ok:#3f6355;   --ok-bg:rgba(63,99,85,.09);    --ok-line:rgba(63,99,85,.22);
- --ok-glow:rgba(63,99,85,.28); --stale:#8a6136;
+ --crit:#9b514c; --crit-bg:rgba(155,81,76,0.1); --crit-line:rgba(155,81,76,0.26);
+ --high:#845a2e; --high-bg:rgba(132,90,46,0.1); --high-line:rgba(132,90,46,0.26);
+ --med:#6d5824; --med-bg:rgba(109,88,36,0.1); --med-line:rgba(109,88,36,0.26);
+ --ok:#205645; --ok-bg:rgba(32,86,69,0.1); --ok-line:rgba(32,86,69,0.26);
+ --ok-glow:rgba(32,86,69,0.4); --stale:#6d5824;
 }
-
-/* ============ SIGNAL: QUIET ============ */
-/* muted hues, and severity moves from a coloured block to a single coloured dot */
 [data-signal="quiet"]{
- --crit:#e0a09b; --crit-bg:rgba(224,160,155,.09); --crit-line:rgba(224,160,155,.22);
- --high:#d4ab87; --high-bg:rgba(212,171,135,.09); --high-line:rgba(212,171,135,.22);
- --med:#c6bb92; --med-bg:rgba(198,187,146,.09); --med-line:rgba(198,187,146,.22);
- --ok:#93b8a8;  --ok-bg:rgba(147,184,168,.09);  --ok-line:rgba(147,184,168,.22);
- --ok-glow:rgba(147,184,168,.36); --stale:#c6bb92;
+ --crit:#bda6a5; --crit-bg:rgba(189,166,165,0.045); --crit-line:rgba(189,166,165,0.13);
+ --high:#b6a79b; --high-bg:rgba(182,167,155,0.045); --high-line:rgba(182,167,155,0.13);
+ --med:#bbb4a2; --med-bg:rgba(187,180,162,0.045); --med-line:rgba(187,180,162,0.13);
+ --ok:#8fa59c; --ok-bg:rgba(143,165,156,0.045); --ok-line:rgba(143,165,156,0.13);
+ --ok-glow:rgba(143,165,156,0.22); --stale:#bbb4a2;
 }
 [data-theme="light"][data-signal="quiet"]{
- --crit:#9c4440; --crit-bg:rgba(156,68,64,.07); --crit-line:rgba(156,68,64,.20);
- --high:#8a6136; --high-bg:rgba(138,97,54,.08); --high-line:rgba(138,97,54,.20);
- --med:#70633c;  --med-bg:rgba(112,99,60,.09);  --med-line:rgba(112,99,60,.20);
- --ok:#3f6355;   --ok-bg:rgba(63,99,85,.08);    --ok-line:rgba(63,99,85,.20);
- --ok-glow:rgba(63,99,85,.26); --stale:#8a6136;
+ --crit:#806967; --crit-bg:rgba(128,105,103,0.045); --crit-line:rgba(128,105,103,0.13);
+ --high:#67594c; --high-bg:rgba(103,89,76,0.045); --high-line:rgba(103,89,76,0.13);
+ --med:#544d3d; --med-bg:rgba(84,77,61,0.045); --med-line:rgba(84,77,61,0.13);
+ --ok:#33433e; --ok-bg:rgba(51,67,62,0.045); --ok-line:rgba(51,67,62,0.13);
+ --ok-glow:rgba(51,67,62,0.22); --stale:#544d3d;
 }
+
+/* Quiet also changes the treatment, not just the hue: a severity block becomes a
+   neutral chip with a single coloured dot, so colour marks the row without
+   filling it. */
 [data-signal="quiet"] .tag{background:var(--raised);color:var(--mut);border:1px solid var(--line2);
  display:inline-flex;align-items:center;gap:7px;font-weight:560}
 [data-signal="quiet"] .tag::before{content:"";width:6px;height:6px;border-radius:50%;flex:none}
@@ -334,6 +334,7 @@ table.dt tr:hover td{background:var(--hover)}
 [data-signal="quiet"] .t-dr::before{background:var(--dim)}
 [data-signal="quiet"] .kpi .flag{background:var(--raised);color:var(--mut);border-color:var(--line2)}
 [data-signal="quiet"] .asw{color:var(--mut)}
+[data-signal="quiet"] .alert{border-left-width:2px}
 [data-signal="quiet"] .num[style*="--crit"]{font-weight:650}
 
 .appear{position:relative}
@@ -484,7 +485,6 @@ table.dt tr:hover td{background:var(--hover)}
 
 .kpis.six{grid-template-columns:repeat(6,1fr)}
 .kpi.clickable:hover{border-color:var(--accent);cursor:pointer}
-.kpi.clickable::after{content:"›";position:absolute;bottom:7px;right:10px;color:var(--dim);font-size:13px}
 .panel{background:transparent;margin-bottom:16px}
 .ph{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
 .ph b{font-size:13px;font-weight:600}
@@ -534,13 +534,16 @@ table.dt tr:hover td{background:var(--hover)}
    centres at about 22.5px -- a 13px glyph therefore starts at 16px. */
 .kpi.clickable::after,
 .bk.clickable::before{
-  content:"a";position:absolute;bottom:16px;right:12px;
+  /* The literal character, not the escape \203a: the minifier resolved that
+     as U+0203 followed by a stray "a", which rendered as a missing-glyph box
+     and the letter a on every card. */
+  content:"›";position:absolute;bottom:16px;right:12px;
   color:var(--dim);font-size:13px;line-height:1;pointer-events:none}
 /* .bk already uses ::after for the hairline on tiles with no footnote, so the
    chevron goes on ::before there. */
 .bk.clickable{position:relative}
 .kpi.clickable .delta,
-.bk.clickable .v{padding-right:15px}
+.bk.clickable .v{padding-right:18px}
 .kpi.clickable:hover::after,
 .bk.clickable:hover::before{color:var(--accent)}
 .bk.clickable{cursor:pointer}

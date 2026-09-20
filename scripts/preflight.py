@@ -394,6 +394,91 @@ for jsx in sorted(glob.glob(os.path.join(ROOT, "frontend", "src", "views", "*.js
 
 
 # --------------------------------------------------------------------------
+# 9. The signal levels are distinguishable, and still legible
+# --------------------------------------------------------------------------
+# Quiet's colours were once an exact copy of Muted's -- only a background alpha
+# differed, by 0.01 -- so choosing between them changed nothing anyone could see.
+# Nothing failed; it just quietly did not work. Both properties are asserted now.
+CSS_FILE = os.path.join(ROOT, "frontend", "src", "styles", "command-center.css")
+if os.path.exists(CSS_FILE):
+    _css = open(CSS_FILE).read()
+    _TOK = ("--crit", "--high", "--med", "--ok")
+
+    def _block(pat):
+        for m in re.finditer(pat + r"\{([^}]*)\}", _css):
+            if "--crit:" in m.group(1):
+                return m.group(1)
+        return ""
+
+    def _toks(b):
+        out = {}
+        for t in _TOK:
+            m = re.search(re.escape(t) + r":\s*(#[0-9a-fA-F]{6})", b)
+            if m:
+                out[t] = m.group(1)
+        return out
+
+    def _rgb(h):
+        h = h.lstrip("#")
+        return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+    def _lum(h):
+        def f(v):
+            v /= 255
+            return v / 12.92 if v <= .03928 else ((v + .055) / 1.055) ** 2.4
+        r, g, b = (f(c) for c in _rgb(h))
+        return .2126 * r + .7152 * g + .0722 * b
+
+    def _ratio(a, b):
+        la, lb = _lum(a), _lum(b)
+        hi, lo = max(la, lb), min(la, lb)
+        return (hi + .05) / (lo + .05)
+
+    def _dist(a, b):
+        import math
+        ra, rb = _rgb(a), _rgb(b)
+        rm = (ra[0] + rb[0]) / 2
+        dr, dg, db = (ra[i] - rb[i] for i in range(3))
+        return math.sqrt((2 + rm / 256) * dr * dr + 4 * dg * dg +
+                         (2 + (255 - rm) / 256) * db * db)
+
+    MIN_STEP = 25.0     # below this two levels look the same side by side
+    MIN_CONTRAST = 4.5  # normal-size text
+
+    for theme in ("dark", "light"):
+        pre = r'\[data-theme="light"\]' if theme == "light" else ""
+        base_sel = pre or r":root"
+        surf = None
+        for m in re.finditer(base_sel + r"\{([^}]*)\}", _css):
+            mm = re.search(r"--surface:\s*(#[0-9a-fA-F]{6})", m.group(1))
+            if mm:
+                surf = mm.group(1)
+                break
+
+        previous = None
+        for level, sel in (("vivid", base_sel),
+                           ("muted", pre + r'\[data-signal="muted"\]'),
+                           ("quiet", pre + r'\[data-signal="quiet"\]')):
+            tk = _toks(_block(sel))
+            check(bool(tk), f"signal level {level!r} ({theme}) defines no severity colours")
+            if not tk:
+                continue
+
+            if surf:
+                worst = min(_ratio(v, surf) for v in tk.values())
+                check(worst >= MIN_CONTRAST,
+                      f"signal {level} ({theme}): worst contrast {worst:.2f}:1 against "
+                      f"{surf}, below {MIN_CONTRAST}:1. Quieter must not mean unreadable.")
+
+            if previous:
+                step = min(_dist(previous[k], tk[k]) for k in tk if k in previous)
+                check(step >= MIN_STEP,
+                      f"signal {level} ({theme}) is only {step:.1f} from the level "
+                      f"before it. Choosing between them would change nothing visible.")
+            previous = tk
+
+
+# --------------------------------------------------------------------------
 print(f"preflight: {checks} checks")
 if problems:
     print(f"\n{len(problems)} problem(s):\n")

@@ -1,39 +1,93 @@
 # -*- coding: utf-8 -*-
-# Severity expressed three ways. Same meaning, very different volume.
-SIGNAL_CSS = """
-/* ============ SIGNAL: MUTED ============ */
-/* same four steps, chroma pulled right down so colour stops competing with content */
-[data-signal="muted"]{
- --crit:#e0a09b; --crit-bg:rgba(224,160,155,.10); --crit-line:rgba(224,160,155,.26);
- --high:#d4ab87; --high-bg:rgba(212,171,135,.10); --high-line:rgba(212,171,135,.26);
- --med:#c6bb92; --med-bg:rgba(198,187,146,.10); --med-line:rgba(198,187,146,.26);
- --ok:#93b8a8;  --ok-bg:rgba(147,184,168,.10);  --ok-line:rgba(147,184,168,.26);
- --ok-glow:rgba(147,184,168,.40); --stale:#c6bb92;
-}
-[data-theme="light"][data-signal="muted"]{
- --crit:#9c4440; --crit-bg:rgba(156,68,64,.08); --crit-line:rgba(156,68,64,.22);
- --high:#8a6136; --high-bg:rgba(138,97,54,.09); --high-line:rgba(138,97,54,.22);
- --med:#70633c;  --med-bg:rgba(112,99,60,.10);  --med-line:rgba(112,99,60,.22);
- --ok:#3f6355;   --ok-bg:rgba(63,99,85,.09);    --ok-line:rgba(63,99,85,.22);
- --ok-glow:rgba(63,99,85,.28); --stale:#8a6136;
+"""Severity expressed three ways. Same meaning, three volumes.
+
+The three levels used to be three hand-written colour tables, and Quiet's hexes
+were an exact copy of Muted's -- only the background alpha differed, by 0.01.
+Switching between them changed nothing anyone could see. Three tables cannot be
+kept in step by hand, so they are derived from one:
+
+    vivid   the base palette, full chroma. Colour does the work.
+    muted   chroma pulled down. Still colour-coded, no longer shouting.
+    quiet   chroma pulled down hard and the blocks nearly gone. Severity survives
+            as a dot and as weight -- the numbers carry it.
+
+Each level is a saturation factor and a pair of alphas, so the gaps between them
+are a property of the arithmetic rather than of someone's typing.
+"""
+import colorsys
+
+
+def _hex(h):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+def _to(rgb):
+    return "#%02x%02x%02x" % tuple(max(0, min(255, round(c * 255))) for c in rgb)
+
+
+def _rgba(h, a):
+    r, g, b = (round(c * 255) for c in _hex(h))
+    return f"rgba({r},{g},{b},{a})"
+
+
+def desaturate(h, factor, lift=0.0):
+    """Pull chroma out, optionally nudging lightness back toward mid.
+
+    Lightness is held deliberately: dropping saturation alone can leave a colour
+    too dark to read against the surface, and the point of a quieter level is
+    less shout, not less legible.
+    """
+    r, g, b = _hex(h)
+    hu, li, sa = colorsys.rgb_to_hls(r, g, b)
+    sa *= (1 - factor)
+    li = min(1.0, max(0.0, li + lift))
+    return _to(colorsys.hls_to_rgb(hu, li, sa))
+
+
+# (saturation removed, background alpha, border alpha, glow alpha, lightness lift)
+LEVELS = {
+    "muted": (0.42, 0.10, 0.26, 0.40, 0.00),
+    "quiet": (0.82, 0.045, 0.13, 0.22, 0.00),
 }
 
-/* ============ SIGNAL: QUIET ============ */
-/* muted hues, and severity moves from a coloured block to a single coloured dot */
-[data-signal="quiet"]{
- --crit:#e0a09b; --crit-bg:rgba(224,160,155,.09); --crit-line:rgba(224,160,155,.22);
- --high:#d4ab87; --high-bg:rgba(212,171,135,.09); --high-line:rgba(212,171,135,.22);
- --med:#c6bb92; --med-bg:rgba(198,187,146,.09); --med-line:rgba(198,187,146,.22);
- --ok:#93b8a8;  --ok-bg:rgba(147,184,168,.09);  --ok-line:rgba(147,184,168,.22);
- --ok-glow:rgba(147,184,168,.36); --stale:#c6bb92;
+BASE = {
+    "dark": {"crit": "#f4726e", "high": "#f5a15c", "med": "#f2cc6b", "ok": "#5ed6a4"},
+    "light": {"crit": "#b8382f", "high": "#a45a0e", "med": "#87630a", "ok": "#0c6a4d"},
 }
-[data-theme="light"][data-signal="quiet"]{
- --crit:#9c4440; --crit-bg:rgba(156,68,64,.07); --crit-line:rgba(156,68,64,.20);
- --high:#8a6136; --high-bg:rgba(138,97,54,.08); --high-line:rgba(138,97,54,.20);
- --med:#70633c;  --med-bg:rgba(112,99,60,.09);  --med-line:rgba(112,99,60,.20);
- --ok:#3f6355;   --ok-bg:rgba(63,99,85,.08);    --ok-line:rgba(63,99,85,.20);
- --ok-glow:rgba(63,99,85,.26); --stale:#8a6136;
-}
+# No lift. Raising lightness as chroma comes out was meant to keep quiet colours
+# legible, but on a pale surface lighter means *less* contrast -- it pushed the
+# light theme's quiet critical to 4.43:1, under the 4.5 threshold. Desaturating
+# alone keeps every level above it.
+LIFT = {"dark": 0.0, "light": 0.0}
+
+
+def _block(selector, theme, level):
+    sat, bg, line, glow, _ = LEVELS[level]
+    out = [f"{selector}{{"]
+    for name, base in BASE[theme].items():
+        c = desaturate(base, sat, LIFT[theme] if level == "quiet" else 0.0)
+        out.append(f" --{name}:{c}; --{name}-bg:{_rgba(c, bg)}; "
+                   f"--{name}-line:{_rgba(c, line)};")
+    ok = desaturate(BASE[theme]["ok"], sat, LIFT[theme] if level == "quiet" else 0.0)
+    med = desaturate(BASE[theme]["med"], sat, LIFT[theme] if level == "quiet" else 0.0)
+    out.append(f" --ok-glow:{_rgba(ok, glow)}; --stale:{med};")
+    out.append("}")
+    return "\n".join(out)
+
+
+SIGNAL_CSS = "\n".join([
+    "/* ============ SIGNAL LEVELS (derived, see module docstring) ============ */",
+    "/* vivid is the base palette in :root -- it needs no rules of its own. */",
+    _block('[data-signal="muted"]', "dark", "muted"),
+    _block('[data-theme="light"][data-signal="muted"]', "light", "muted"),
+    _block('[data-signal="quiet"]', "dark", "quiet"),
+    _block('[data-theme="light"][data-signal="quiet"]', "light", "quiet"),
+]) + """
+
+/* Quiet also changes the treatment, not just the hue: a severity block becomes a
+   neutral chip with a single coloured dot, so colour marks the row without
+   filling it. */
 [data-signal="quiet"] .tag{background:var(--raised);color:var(--mut);border:1px solid var(--line2);
  display:inline-flex;align-items:center;gap:7px;font-weight:560}
 [data-signal="quiet"] .tag::before{content:"";width:6px;height:6px;border-radius:50%;flex:none}
@@ -43,8 +97,10 @@ SIGNAL_CSS = """
 [data-signal="quiet"] .t-dr::before{background:var(--dim)}
 [data-signal="quiet"] .kpi .flag{background:var(--raised);color:var(--mut);border-color:var(--line2)}
 [data-signal="quiet"] .asw{color:var(--mut)}
+[data-signal="quiet"] .alert{border-left-width:2px}
 [data-signal="quiet"] .num[style*="--crit"]{font-weight:650}
 """
+
 SIGNAL_OPTIONS = ('<option value="vivid">Vivid</option>'
                   '<option value="muted">Muted</option>'
                   '<option value="quiet">Quiet</option>')

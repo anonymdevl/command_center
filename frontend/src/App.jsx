@@ -76,7 +76,9 @@ export default function App() {
  */
 function IllustrativeNotice() {
   return (
-    <div className="dnote" style={{ margin: "14px 26px 20px" }}>
+    // No horizontal margin: it sits inside .main alongside the view's own
+    // banners, so any inset here makes it narrower than they are.
+    <div className="dnote" style={{ margin: "0 0 18px" }}>
       <span className="dn-i">●</span>
       <span>
         <b>Illustrative figures.</b> The design and the workings are real; the numbers
