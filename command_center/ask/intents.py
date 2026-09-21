@@ -59,8 +59,6 @@ def _scoped(base: dict, business_code) -> dict:
 
 # ---------------------------------------------------------------------------
 def refuses(question, business_code=None):
-    if not (WRITE_WORDS.search(question) and WRITE_OBJECTS.search(question)):
-        return None
     return {
         "intent": "refuse_write",
         "answer": (
@@ -77,8 +75,6 @@ def refuses(question, business_code=None):
 
 
 def has_party_ever_paid(question, business_code=None):
-    if not re.search(r"\bever\s+paid|\bpaid\s+us|\bpayments?\s+from\b", question, re.I):
-        return None
     match = resolve.best(question, business_code, kinds=("customer",))
     if not match:
         return None
@@ -128,9 +124,6 @@ def has_party_ever_paid(question, business_code=None):
 
 
 def why_order_open(question, business_code=None):
-    if not re.search(r"\border\b.*\b(open|late|outstanding|delayed)|"
-                     r"why.*\border\b", question, re.I):
-        return None
     match = resolve.best(question, business_code, kinds=("customer",))
     if not match:
         return None
@@ -177,9 +170,6 @@ def why_order_open(question, business_code=None):
 
 
 def supplier_concentration(question, business_code=None):
-    if not re.search(r"what (if|happens).*(stop|fail|lose|lost)|depend(ent|ence)|"
-                     r"concentrat", question, re.I):
-        return None
     match = resolve.best(question, business_code, kinds=("supplier",))
     if not match:
         return None
@@ -219,8 +209,6 @@ def supplier_concentration(question, business_code=None):
 
 
 def owes_and_waiting(question, business_code=None):
-    if not re.search(r"owe.*(wait|deliver)|(wait|deliver).*owe", question, re.I):
-        return None
 
     owed = {r["customer"]: r["owed"] for r in query.grouped(
         "fact_sales_invoice", "customer", _scoped(UNPAID, business_code),
@@ -259,9 +247,6 @@ def owes_and_waiting(question, business_code=None):
 
 
 def who_owes_most(question, business_code=None):
-    if not re.search(r"\bwho\b.*\bowe|owes? us (the )?most|largest (debtor|balance)|"
-                     r"biggest debtor", question, re.I):
-        return None
 
     filters = _scoped(UNPAID, business_code)
     top5 = query.grouped("fact_sales_invoice", "customer", filters,
@@ -299,9 +284,6 @@ def who_owes_most(question, business_code=None):
 
 
 def party_brief(question, business_code=None):
-    if not re.search(r"what (should|do) i say|brief me|tell me about|summar",
-                     question, re.I):
-        return None
     match = resolve.best(question, business_code, kinds=("customer", "supplier"))
     if not match:
         return None
@@ -370,6 +352,42 @@ def party_brief(question, business_code=None):
         "checked": checked, "records": records,
     }
 
+
+# What each intent is for, in one line, for the router prompt. Beside the intents so the
+# two cannot drift, and preflight fails an intent with no description -- a router cannot
+# choose something nobody has described to it.
+DESCRIPTIONS = {
+    "refuses": "The user is asking to change, create, send, pay or delete something "
+               "rather than asking a question.",
+    "has_party_ever_paid": "Whether a named customer has ever paid us, what they paid, "
+                           "and what they still owe.",
+    "why_order_open": "Why a named customer's order is still open: how much is "
+                      "undelivered and how far past the promised date.",
+    "supplier_concentration": "How dependent we are on a named supplier: their share of "
+                              "spend and how many items have no second source.",
+    "owes_and_waiting": "Which customers both owe us money and are waiting on goods "
+                        "from us.",
+    "who_owes_most": "Who owes us the most, the largest debtors, and their share of the "
+                     "total receivable.",
+    "party_brief": "Everything on record about one named customer or supplier, for "
+                   "someone about to speak to them.",
+}
+
+
+# How the fallback router decides. These are matchers, not permission: an intent does
+# not consult them before answering, because the Gemini router may have chosen it from
+# a phrasing no pattern covers -- which is the entire point of having a router. Gating
+# the answer on the pattern too would have made the router useless, and did until it was
+# caught by a test asking "who are we most exposed to on the money side".
+MATCHERS = {
+    "refuses": lambda q: bool(WRITE_WORDS.search(q) and WRITE_OBJECTS.search(q)),
+    "has_party_ever_paid": lambda q, _p=re.compile(r"\bever\s+paid|\bpaid\s+us|\bpayments?\s+from\b", re.I): bool(_p.search(q)),
+    "why_order_open": lambda q, _p=re.compile(r"\border\b.*\b(open|late|outstanding|delayed)|" r"why.*\border\b", re.I): bool(_p.search(q)),
+    "supplier_concentration": lambda q, _p=re.compile(r"what (if|happens).*(stop|fail|lose|lost)|depend(ent|ence)|" r"concentrat", re.I): bool(_p.search(q)),
+    "owes_and_waiting": lambda q, _p=re.compile(r"owe.*(wait|deliver)|(wait|deliver).*owe", re.I): bool(_p.search(q)),
+    "who_owes_most": lambda q, _p=re.compile(r"\bwho\b.*\bowe|owes? us (the )?most|largest (debtor|balance)|" r"biggest debtor", re.I): bool(_p.search(q)),
+    "party_brief": lambda q, _p=re.compile(r"what (should|do) i say|brief me|tell me about|summar", re.I): bool(_p.search(q)),
+}
 
 # Refusal first, then specific before general.
 INTENTS = [

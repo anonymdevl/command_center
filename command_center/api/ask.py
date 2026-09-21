@@ -27,4 +27,14 @@ def answerable():
     assistant covers, without anyone reading code.
     """
     require_manager()
-    return {"questions": engine.ANSWERABLE, "planner": "patterns"}
+    from command_center.ask import gemini
+    return {
+        "questions": engine.ANSWERABLE,
+        "planner": "gemini" if gemini.configured() else "patterns",
+        "model": gemini.DEFAULT_MODEL if gemini.configured() else None,
+        # Said plainly because someone will ask what the model is given. It is the
+        # question, the handler list, and names found in the question. No figures.
+        "sent_to_model": ["the question as typed",
+                          "the list of handler names and their descriptions",
+                          "entity names found in the question itself"],
+    }

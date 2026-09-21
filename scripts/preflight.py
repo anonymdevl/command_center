@@ -785,6 +785,95 @@ check('k === "search"' in open(os.path.join(ROOT, "frontend", "src",
       "an old #search link has nowhere to land; it should redirect to the one screen")
 
 # --------------------------------------------------------------------------
+# The Gemini router: no key in the repo, no blind trust, always a fallback
+# --------------------------------------------------------------------------
+# A key committed to git is a key that has leaked. This scans every tracked text file,
+# not just the ask/ package, because the likeliest place for one to end up is a script
+# or a note somebody wrote while testing.
+_KEYISH = re.compile(r"AIza[0-9A-Za-z_\-]{30,}")
+for _path in sorted(_Path(ROOT).rglob("*")):
+    if not _path.is_file():
+        continue
+    _rel = _path.relative_to(_Path(ROOT)).as_posix()
+    if (_rel.startswith(("node_modules/", ".git/"))
+            or "/node_modules/" in _rel or _path.suffix in (".png", ".jpg", ".woff2")):
+        continue
+    try:
+        _text = _path.read_text(errors="ignore")
+    except Exception:
+        continue
+    check(not _KEYISH.search(_text),
+          f"{_rel} contains something shaped like a Google API key. Keys belong in "
+          f"site_config.json on the server, never in a tracked file.")
+
+_gem = open(os.path.join(ROOT, "command_center", "ask", "gemini.py")).read()
+_llm = open(os.path.join(ROOT, "command_center", "ask", "planner_llm.py")).read()
+_eng = open(os.path.join(ROOT, "command_center", "ask", "engine.py")).read()
+
+check("frappe.conf.get" in _gem,
+      "gemini.py does not read the key from site_config; it must not come from "
+      "anywhere a repository can hold")
+check("timeout=" in _gem,
+      "gemini.py calls the API with no timeout, so a slow third party would hang the "
+      "screen a manager is waiting on")
+check('"-latest"' in _gem or "not \"-latest\"" in _gem or "-latest" in _gem,
+      "gemini.py should record why the model name is pinned rather than floating")
+check("DEFAULT_MODEL" in _gem and "-latest" not in _gem.split("DEFAULT_MODEL =")[1][:60],
+      "the default Gemini model is a floating -latest name, so a deployed "
+      "demonstration would change behaviour with no deploy")
+
+# The router names an intent. It must be checked against the registry, and a subject it
+# did not take from the question must not be trusted.
+check("if chosen not in names" in _llm,
+      "planner_llm.py does not validate the intent name against the registry, so an "
+      "invented handler name would be acted on")
+check("not any(m[\"name\"] == subject for m in found)" in _llm
+      or "not any(m['name'] == subject for m in found)" in _llm,
+      "planner_llm.py does not check the subject came from the question, so the answer "
+      "could be about a company the user never mentioned")
+check("Never state any number" in _llm,
+      "the router prompt does not forbid the model stating a figure")
+
+# The patterns must remain reachable whatever the router does.
+check("for intent in intents.INTENTS:" in _eng,
+      "engine.plan() no longer falls back to the patterns, so no key or no network "
+      "would leave the screen with nothing")
+check('result["planner"] = "gemini"' in _eng,
+      "engine.plan() does not record that the router chose, so nobody could tell which "
+      "path answered")
+
+# An intent must not gate on the question's wording. The matcher routes; the intent
+# answers. When they were the same thing, a question the router classified correctly was
+# still refused by the intent's own regex, which made the router pointless.
+check("if not re.search(" not in _ask_intents,
+      "an intent in ask/intents.py still gates on the question's wording. The matcher "
+      "decides routing; an intent chosen by the model must answer without re-checking "
+      "the phrasing, or the router is overruled by the patterns it replaces.")
+check("MATCHERS" in _ask_intents and "MATCHERS.get(" in _eng,
+      "the fallback no longer routes through MATCHERS")
+_matcher_block = re.search(r"MATCHERS = \{(.*?)\n\}", _ask_intents, re.S)
+_matched = set(re.findall(r'"([a-z_]+)":', _matcher_block.group(1) if _matcher_block else ""))
+
+_ans_js = open(os.path.join(ROOT, "frontend", "src", "legacy", "answer.js")).read()
+check("p.planner" in _ans_js and "Gemini" in _ans_js,
+      "answer.js does not disclose which path read the question. A reader is entitled "
+      "to know whether a model was involved in interpreting their words.")
+check("not from the model" in _ans_js,
+      "answer.js does not state that the figures did not come from the model")
+
+# Every intent the router is offered must have a description.
+_names = re.findall(r"^def ([a-z_]+)\(question", _ask_intents, re.M)
+_desc_block = re.search(r"DESCRIPTIONS = \{(.*?)\n\}", _ask_intents, re.S)
+_described = set(re.findall(r'"([a-z_]+)":', _desc_block.group(1) if _desc_block else ""))
+for _n in _names:
+    check(_n in _described,
+          f"intent {_n} has no DESCRIPTIONS entry; a router cannot choose something "
+          f"nobody described to it")
+    check(_n in _matched,
+          f"intent {_n} has no MATCHERS entry, so the pattern fallback can never reach "
+          f"it and it would only work while Gemini is up")
+
+# --------------------------------------------------------------------------
 # The sidebar captions, and the screen headings agreeing with them
 # --------------------------------------------------------------------------
 # Michael settled these nineteen captions in order. They live in the NAV tuples in

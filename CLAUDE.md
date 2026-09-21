@@ -155,6 +155,8 @@ command_center/
   api/{kpi,facts,ingest,businesses,actions}.py
   ask/{resolve,intents,query,engine}.py   the question box: entity resolution,
                           answerable questions, frappe.qb aggregation, the planner seam
+  ask/{gemini,planner_llm}.py             Gemini as the router only. Key from
+                          site_config, never the repo; pinned model, not -latest
   demo/seed.py            marked, removable, non-financial
   www/command_center.py   the page controller (underscore filename — hyphens never run)
 deploy.sh                 the one command the server runs
@@ -170,7 +172,7 @@ interface/                generators that build views.json and the CSS.
                           the views_* copy wins and the p* copy is shadowed. Editing the
                           shadowed one changes nothing on screen. Find the live owner by
                           matching the rendered <h3> against the files before editing.
-scripts/preflight.py      950 checks — must pass before any push
+scripts/preflight.py      1170 checks — must pass before any push
 ```
 
 **Verified live figures** (as at 2025-08-19, the data horizon): receivable
@@ -183,18 +185,38 @@ departments; 57 tasks in flight, 24 past due.
 
 ## The question box
 
-`ask/engine.py` has a **planner seam**: `plan()` chooses an intent, `intents.py` computes
-the answer from the facts. Claude replaces the planner and nothing else — it will pick an
-intent and its subject, and every figure will still come from `intents.py`. **The model
-never states a number.** Every honesty rule here depends on the figure and the sentence
-coming from different places, so a model being confidently wrong cannot change what a
-number says.
+Two layers. **Gemini routes; the facts answer.** The model reads the question, the handler
+list and entity names found in the question, then names one handler and at most one
+subject. It computes, states, rounds and phrases nothing. Every figure comes from
+`ask/intents.py` reading the fact tables, and a test asserts the router and the patterns
+produce a byte-identical sentence for the same question.
 
-Decisions on record (Michael, this session): keep "Ask the business" and drop "Find
-anything"; deterministic first with Claude as a later layer; and when the API is wired,
-the data boundary is "whatever the question needs". That last one deserves a conversation
-with the client before it ships — it is their restored ledger, and it would mean record
-contents leaving the site.
+`MATCHERS` in `intents.py` routes the fallback and **nothing else**. An intent must never
+check the question's wording itself: when they were the same thing, a question Gemini
+classified correctly was still refused by the intent's own regex, which made the router
+pointless. Preflight fails any intent containing a phrasing guard.
+
+Everything about Gemini is optional. No key, no network, a slow reply, a malformed reply,
+an invented handler name, or a subject that was not in the question — each falls back to
+the patterns, and the answer reports which path actually decided. The screen says so too:
+"the wording was read by Gemini … the figures above came from the records, not from the
+model."
+
+**The key lives in `site_config.json`, never in the repo.** Set it with
+`bench --site <site> set-config command_center_gemini_key "..."`. Preflight scans every
+tracked file for anything shaped like a Google API key and fails the build. The model is
+pinned (`gemini-2.5-flash-lite`), not a `-latest` name, because a floating name changes a
+deployed demonstration's behaviour with nobody deploying anything.
+
+What actually leaves the site is far less than the "whatever the question needs" boundary
+Michael authorised: the question as typed, the fixed handler list, and entity names found
+in the question itself. No figures, no totals, no record contents, no customer list. Worth
+telling Gigmann precisely that. If we later let the model phrase answers, figures would
+have to go to it, and that is a separate decision.
+
+Decisions on record: keep "Ask the business" (now "Ask AI") and drop "Find anything";
+deterministic first with the model as a router; Gemini rather than Claude, on Michael's
+key.
 
 ## The sidebar captions
 

@@ -62,7 +62,7 @@ function block(p, onOpen) {
     wrap.append(who);
   }
 
-  if (p.checked?.length) wrap.append(checkedList(p.checked));
+  if (p.checked?.length) wrap.append(checkedList(p.checked, p));
   if (p.table?.rows?.length) wrap.append(table(p.table));
   if (p.suggestions?.length) wrap.append(suggestions(p.suggestions));
 
@@ -80,7 +80,7 @@ function block(p, onOpen) {
   return wrap;
 }
 
-function checkedList(items) {
+function checkedList(items, p) {
   const wrap = div("askchecked");
   wrap.append(span("askchecked-t", "What it checked"));
   const ul = document.createElement("ul");
@@ -89,6 +89,19 @@ function checkedList(items) {
     li.textContent = i;
     ul.append(li);
   });
+  // Which path understood the question. Worth showing rather than hiding: the figures
+  // are the same either way, and a reader is entitled to know whether a model was
+  // involved in reading their words.
+  if (p?.planner) {
+    const li = document.createElement("li");
+    li.textContent =
+      p.planner === "gemini"
+        ? "the wording was read by Gemini, which chose what to look up — the figures "
+          + "above came from the records, not from the model"
+        : "the wording was matched against known question patterns, with no model "
+          + "involved";
+    ul.append(li);
+  }
   wrap.append(ul);
   return wrap;
 }
