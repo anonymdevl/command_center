@@ -37,7 +37,10 @@ export default function App() {
   // Deep-link by hash so a manager can send someone a screen.
   useEffect(() => {
     const apply = () => {
-      const k = (window.location.hash || "").replace(/^#/, "");
+      let k = (window.location.hash || "").replace(/^#/, "");
+      // "Find anything" and "Ask the business" are one screen now. An old link should
+      // land on it rather than on "no screen called search".
+      if (k === "search") k = "ask";
       if (k) setView(k);
     };
     apply();

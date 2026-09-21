@@ -129,19 +129,6 @@
      "sub": false
     },
     {
-     "key": "search",
-     "label": "Find anything",
-     "badge": "",
-     "roles": [
-      "ceo",
-      "fin",
-      "sales",
-      "audit",
-      "hr"
-     ],
-     "sub": false
-    },
-    {
      "key": "reports",
      "label": "Reports",
      "badge": "",

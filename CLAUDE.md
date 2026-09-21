@@ -153,6 +153,8 @@ command_center/
   kpi/engine.py           evaluate_set, ratios, notes, as-of, data status
   kpi/{sales,buying,stock,operations}.py   the KPI definitions
   api/{kpi,facts,ingest,businesses,actions}.py
+  ask/{resolve,intents,query,engine}.py   the question box: entity resolution,
+                          answerable questions, frappe.qb aggregation, the planner seam
   demo/seed.py            marked, removable, non-financial
   www/command_center.py   the page controller (underscore filename — hyphens never run)
 deploy.sh                 the one command the server runs
@@ -161,7 +163,7 @@ frontend/src/
   legacy/hydrate.js       label → KPI, figure substitution
   components/{LegacyView,Records,DataTable,Sidebar,Topbar,Drawer,States,Appearance}.jsx
 interface/                generators that build views.json and the CSS
-scripts/preflight.py      867 checks — must pass before any push
+scripts/preflight.py      912 checks — must pass before any push
 ```
 
 **Verified live figures** (as at 2025-08-19, the data horizon): receivable
@@ -172,6 +174,21 @@ departments; 57 tasks in flight, 24 past due.
 
 ---
 
+## The question box
+
+`ask/engine.py` has a **planner seam**: `plan()` chooses an intent, `intents.py` computes
+the answer from the facts. Claude replaces the planner and nothing else — it will pick an
+intent and its subject, and every figure will still come from `intents.py`. **The model
+never states a number.** Every honesty rule here depends on the figure and the sentence
+coming from different places, so a model being confidently wrong cannot change what a
+number says.
+
+Decisions on record (Michael, this session): keep "Ask the business" and drop "Find
+anything"; deterministic first with Claude as a later layer; and when the API is wired,
+the data boundary is "whatever the question needs". That last one deserves a conversation
+with the client before it ships — it is their restored ledger, and it would mean record
+contents leaving the site.
+
 ## Still to do
 
 1. Fill the remaining illustrative cards — one KPI each. Two need engine work: a date
@@ -180,7 +197,8 @@ departments; 57 tasks in flight, 24 past due.
 2. Control Health, Risk, Systems and access, Internal audit.
 3. The task and approval engine — Daily brief, My day, Approvals, Work handed out need it,
    not facts.
-4. Ask the business, Find anything, Reports.
+4. Reports. ("Find anything" is gone — merged into Ask the business, which is the one
+   question screen. Ask answers seven kinds of question deterministically today.)
 5. A "Refresh figures" control in the interface, and the load history on Control Health,
    so nobody opens a terminal to see current numbers. `deploy.sh` covers the deploy; this
    is about the day-to-day refresh.

@@ -7,6 +7,7 @@ import { api } from "../api/client.js";
 import { useApi } from "../useApi.js";
 import Records from "./Records.jsx";
 import { hydrateCards, keysFor } from "../legacy/hydrate.js";
+import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -30,6 +31,11 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
   const html = views[viewKey];
   const [liveCount, setLiveCount] = useState(null);
 
+  // The runSearch handler is installed once, but the business can change under it. A
+  // ref keeps it reading the current scope rather than the one captured at install.
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+
   const keys = keysFor(viewKey);
   const figures = useApi(
     () => (keys.length ? api.kpis({ keys, business_code: scope }) : Promise.resolve(null)),
@@ -47,11 +53,41 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
     window.explain = show(extras.explainers);
     window.drill = show(extras.drill);
     window.closeDrawer = () => openDrawer(null);
+
+    // The designed Ask screen calls runSearch(value) from its own input and its own
+    // suggestion buttons, and expects the answer in its own #sout2. So it is wired
+    // rather than replaced: same markup, same ids, real answers.
+    window.runSearch = async (question) => {
+      const out = document.getElementById("sout2") || document.getElementById("sout");
+      if (!out) return;
+      const q = (question || "").trim();
+      if (!q) return;
+      renderThinking(out, q);
+      try {
+        const payload = await api.ask({ question: q, business_code: scopeRef.current });
+        renderAnswer(out, payload, {
+          onOpen: (records, title) =>
+            openDrawer(
+              <Records
+                scope={scopeRef.current}
+                fact={records.fact}
+                filters={records.filters}
+                title={title?.slice(0, 80) || "The records behind it"}
+                openDrawer={openDrawer}
+              />
+            ),
+        });
+      } catch (e) {
+        renderFailure(out, e?.message);
+      }
+    };
+
     return () => {
       delete window.openDrawer;
       delete window.explain;
       delete window.drill;
       delete window.closeDrawer;
+      delete window.runSearch;
     };
   }, [openDrawer]);
 

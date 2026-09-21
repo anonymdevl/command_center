@@ -71,6 +71,16 @@ EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + """
 .bul{margin-left:17px;font-size:12.5px;color:var(--mut)}
 .bul li{margin:5px 0}.bul b{color:var(--ink)}
 .sugg{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+/* The answer, and what it was checked against. One screen asks the questions now:
+   "Find anything" and "Ask the business" were two doors to one room, and the designed
+   placeholder on Find anything was already a question rather than a keyword. */
+.askans{padding:14px 16px 4px;font-size:14px;line-height:1.62}
+.askchecked{padding:10px 16px 14px;border-top:1px solid var(--line);margin-top:10px}
+.askchecked-t{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+color:var(--accent);font-weight:650;margin-bottom:6px}
+.askchecked ul{margin:0;padding-left:16px}
+.askchecked ul li{font-size:12px;color:var(--mut);line-height:1.66}
+.askchecked .sugg{margin:8px 0 0}
 .step{display:flex;gap:9px;align-items:center;font-size:12px;color:var(--mut);padding:4px 0}
 .spin{width:11px;height:11px;border:1.5px solid var(--line2);border-top-color:var(--accent);
  border-radius:50%;animation:sp .7s linear infinite;flex:none}
@@ -97,7 +107,6 @@ NAVGROUPS=[
  ("Decide and delegate",[("approvals","Approvals","3",["ceo","fin"]),
               ("delegation","Work handed out","",["ceo","fin","sales","audit","hr"])]),
  ("Ask and find",[("ask","Ask the business","",["ceo","fin","sales","audit","hr"]),
-              ("search","Find anything","",["ceo","fin","sales","audit","hr"]),
               ("reports","Reports","",["ceo","fin","sales","audit","hr"])]),
  ("Areas of the business",[("sales","Sales and money owed",["ceo","fin","sales","audit"]),
               ("proc","Buying and suppliers",["ceo","fin","audit"]),
@@ -129,7 +138,7 @@ for gi,(gname,items) in enumerate(NAVGROUPS):
     navh+=f'<div class="navgrp" data-grp="{gi}"><div class="navsec">{gname}</div>{rows}</div>'
 VIEWS={"command":V_COMMAND,"brief":V_BRIEF,"myday":V_MYDAY,"ops":V_OPS,"health":V_HEALTH,
  "approvals":V_APPROVALS,"delegation":V_DELEG,"ask":V_ASK,"reports":V_REPORTS,"risk":V_RISK,
- "search":V_SEARCH,"sales":V_SALES,"proc":V_PROC,"inv":V_INV,"eng":V_ENG,"cx":V_CX,
+ "sales":V_SALES,"proc":V_PROC,"inv":V_INV,"eng":V_ENG,"cx":V_CX,
  "fin":V_FIN,"hr":V_HR,"it":V_IT,"aud":V_AUD}
 ROLE_OF={k:r for k,lab,b,r in NAV}; ROLE_OF.update({k:r for k,lab,r in DOMS})
 for _k in ["sales","proc","inv","cx","fin","hr","health","risk"]:

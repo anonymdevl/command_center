@@ -132,6 +132,11 @@ export const api = {
   kpiCatalogue: () => call("command_center.api.kpi.catalogue"),
   kpiVerify: (business_code) => call("command_center.api.kpi.verify", { business_code }),
 
+  /* The question box. Read-only: there is no path from here to actions.py. */
+  ask: ({ question, business_code }) =>
+    call("command_center.api.ask.answer", { question, business_code }),
+  answerable: () => call("command_center.api.ask.answerable"),
+
   ingestStatus: () => call("command_center.api.ingest.status"),
   reconcile: (business_code) =>
     call("command_center.api.ingest.reconcile", { business_code }),

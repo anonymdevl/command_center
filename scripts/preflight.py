@@ -726,6 +726,65 @@ for _py in sorted(_Path(ROOT).joinpath("command_center").rglob("*.py")):
           f"may: everything else is read on behalf of a person.")
 
 # --------------------------------------------------------------------------
+# The question box: read-only, honest about failure, and one screen not two
+# --------------------------------------------------------------------------
+_ask_engine = open(os.path.join(ROOT, "command_center", "ask", "engine.py")).read()
+_ask_intents = open(os.path.join(ROOT, "command_center", "ask", "intents.py")).read()
+_ask_api = open(os.path.join(ROOT, "command_center", "api", "ask.py")).read()
+_ask_query = open(os.path.join(ROOT, "command_center", "ask", "query.py")).read()
+
+# It must not be able to change anything. The screen promises a credit note is refused
+# "not because it was told to, but because no such function exists".
+for _name, _src in (("ask/engine.py", _ask_engine), ("ask/intents.py", _ask_intents),
+                    ("api/ask.py", _ask_api), ("ask/query.py", _ask_query)):
+    check("api import actions" not in _src and "api.actions" not in _src,
+          f"{_name} can reach actions.py. The question box is read-only by "
+          f"construction, which is what makes the refusal true rather than a promise.")
+    for _write in (".insert(", ".save(", ".submit(", "db.set_value(", "db.delete("):
+        check(_write not in _src,
+              f"{_name} contains {_write} — the question box writes nothing")
+
+# Aggregation must not use SQL function strings: this Frappe version rejects them, and
+# the first draft of intents.py used them throughout.
+for _name, _src in (("ask/intents.py", _ask_intents), ("ask/query.py", _ask_query)):
+    check(not re.search(r'fields=\[[^\]]*\b(sum|count|avg|max|min)\s*\(',
+                        _src, re.I | re.S),
+          f"{_name} passes a SQL function string in fields=. Use ask/query.py, which "
+          f"builds aggregates with frappe.qb like api/facts.py does.")
+
+# A broken intent must not read as a question the platform cannot answer.
+check('"failed": True' in _ask_engine,
+      "ask/engine.py does not distinguish a failure from an unanswerable question, so "
+      "a bug inside an intent would come back as 'I do not understand'")
+check("failures.append" in _ask_engine,
+      "ask/engine.py swallows intent exceptions without recording them")
+
+# Every intent must say what it checked; the screen promises it.
+_intent_names = re.findall(r"^def ([a-z_]+)\(question", _ask_intents, re.M)
+check(len(_intent_names) >= 5,
+      f"only {len(_intent_names)} intents found in ask/intents.py")
+for _fn in _intent_names:
+    _body = _ask_intents.split(f"def {_fn}(question")[1].split("\ndef ")[0]
+    check('"checked"' in _body,
+          f"intent {_fn} returns no 'checked', but the screen promises it shows what "
+          f"it checked before it answers")
+
+# One question screen, not two.
+_views_j = json.loads(open(os.path.join(ROOT, "frontend", "src", "legacy",
+                                        "views.json")).read())
+_nav_j = json.loads(open(os.path.join(ROOT, "frontend", "src", "legacy",
+                                      "nav.json")).read())
+_nav_keys = [i["key"] for g in _nav_j["groups"] for i in g["items"]]
+check("search" not in _views_j and "search" not in _nav_keys,
+      "'Find anything' is still present. It and 'Ask the business' were two doors to "
+      "one room; the merge is not done while both exist.")
+check("ask" in _views_j and "ask" in _nav_keys,
+      "'Ask the business' is missing — that is the screen the merge keeps")
+check('k === "search"' in open(os.path.join(ROOT, "frontend", "src",
+                                            "App.jsx")).read(),
+      "an old #search link has nowhere to land; it should redirect to the one screen")
+
+# --------------------------------------------------------------------------
 # The deploy script's order, because the order is why it exists
 # --------------------------------------------------------------------------
 _deploy = open(os.path.join(ROOT, "deploy.sh")).read()
