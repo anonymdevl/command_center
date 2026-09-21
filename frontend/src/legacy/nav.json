@@ -5,7 +5,7 @@
    "items": [
     {
      "key": "command",
-     "label": "Command",
+     "label": "Home",
      "badge": "",
      "roles": [
       "ceo",
@@ -18,7 +18,7 @@
     },
     {
      "key": "brief",
-     "label": "Daily brief",
+     "label": "Executive Summary",
      "badge": "5",
      "roles": [
       "ceo",
@@ -31,7 +31,7 @@
     },
     {
      "key": "myday",
-     "label": "My day",
+     "label": "Today",
      "badge": "",
      "roles": [
       "ceo",
@@ -49,7 +49,7 @@
    "items": [
     {
      "key": "ops",
-     "label": "The whole business",
+     "label": "Business Overview",
      "badge": "",
      "roles": [
       "ceo",
@@ -62,7 +62,7 @@
     },
     {
      "key": "health",
-     "label": "Control Health",
+     "label": "Business Health",
      "badge": "6",
      "roles": [
       "ceo",
@@ -73,7 +73,7 @@
     },
     {
      "key": "risk",
-     "label": "Risk and compliance",
+     "label": "Risk and Compliance",
      "badge": "",
      "roles": [
       "ceo",
@@ -99,7 +99,7 @@
     },
     {
      "key": "delegation",
-     "label": "Work handed out",
+     "label": "Outstanding Tasks",
      "badge": "",
      "roles": [
       "ceo",
@@ -117,7 +117,7 @@
    "items": [
     {
      "key": "ask",
-     "label": "Ask the business",
+     "label": "Ask AI",
      "badge": "",
      "roles": [
       "ceo",
@@ -148,7 +148,7 @@
    "items": [
     {
      "key": "sales",
-     "label": "Sales and money owed",
+     "label": "Sales and Payments",
      "badge": "",
      "roles": [
       "ceo",
@@ -160,7 +160,7 @@
     },
     {
      "key": "proc",
-     "label": "Buying and suppliers",
+     "label": "Buying and Suppliers",
      "badge": "",
      "roles": [
       "ceo",
@@ -171,7 +171,7 @@
     },
     {
      "key": "inv",
-     "label": "Stock and warehouses",
+     "label": "Stock & Warehouses",
      "badge": "",
      "roles": [
       "ceo",
@@ -183,7 +183,7 @@
     },
     {
      "key": "eng",
-     "label": "Engineering",
+     "label": "Project Insights",
      "badge": "",
      "roles": [
       "ceo",
@@ -194,7 +194,7 @@
     },
     {
      "key": "cx",
-     "label": "Customer complaints",
+     "label": "Customer Service & Issues",
      "badge": "",
      "roles": [
       "ceo",
@@ -205,7 +205,7 @@
     },
     {
      "key": "fin",
-     "label": "Money in and out",
+     "label": "Finances",
      "badge": "",
      "roles": [
       "ceo",
@@ -216,7 +216,7 @@
     },
     {
      "key": "hr",
-     "label": "People",
+     "label": "HR & Payroll",
      "badge": "",
      "roles": [
       "ceo",
@@ -227,7 +227,7 @@
     },
     {
      "key": "it",
-     "label": "Systems and access",
+     "label": "Systems and Access",
      "badge": "",
      "roles": [
       "ceo",
@@ -237,7 +237,7 @@
     },
     {
      "key": "aud",
-     "label": "Internal audit",
+     "label": "Internal Audit",
      "badge": "",
      "roles": [
       "ceo",

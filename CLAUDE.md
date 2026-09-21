@@ -162,8 +162,15 @@ frontend/src/
   legacy/views.json       THE DESIGNED SCREENS — do not replace
   legacy/hydrate.js       label → KPI, figure substitution
   components/{LegacyView,Records,DataTable,Sidebar,Topbar,Drawer,States,Appearance}.jsx
-interface/                generators that build views.json and the CSS
-scripts/preflight.py      912 checks — must pass before any push
+interface/                generators that build views.json and the CSS.
+                          Every file loads, via two chains: p7->p6->p5->p4->p3->p2 and
+                          views_e->views_d->views_c->views_b->views_a, with the views_*
+                          set exec'd last. So where a name is defined twice -- V_SALES,
+                          V_ASK, V_PROC, V_INV, V_CX, V_FIN, V_HR, V_IT, V_AUD all are --
+                          the views_* copy wins and the p* copy is shadowed. Editing the
+                          shadowed one changes nothing on screen. Find the live owner by
+                          matching the rendered <h3> against the files before editing.
+scripts/preflight.py      950 checks — must pass before any push
 ```
 
 **Verified live figures** (as at 2025-08-19, the data horizon): receivable
@@ -189,17 +196,35 @@ the data boundary is "whatever the question needs". That last one deserves a con
 with the client before it ships — it is their restored ledger, and it would mean record
 contents leaving the site.
 
+## The sidebar captions
+
+Settled by Michael, in this order, and enforced by preflight: Home, Executive Summary,
+Today, Business Overview, Business Health, Risk and Compliance, Approvals, Outstanding
+Tasks, Ask AI, Reports, Sales and Payments, Buying and Suppliers, Stock & Warehouses,
+Project Insights, Customer Service & Issues, Finances, HR & Payroll, Systems and Access,
+Internal Audit.
+
+They live in the NAV tuples in `interface/build.py` and nowhere else. Each screen's own
+`<h3>` must say the same thing — a caption and a heading that disagree is the same fault
+as a card whose label and figure disagree. **View keys are unchanged** (`command`, `brief`,
+`myday`, `ops`, `health`, `risk`, `approvals`, `delegation`, `ask`, `reports`, `sales`,
+`proc`, `inv`, `eng`, `cx`, `fin`, `hr`, `it`, `aud`): they carry deep links, `CARD_KPIS`
+and the hydration map, so renaming them would break wiring for no gain.
+
+A nav label is rendered by React as text, so it carries a real `&`. An `<h3>` goes through
+innerHTML and carries `&amp;`. Preflight checks both.
+
 ## Still to do
 
 1. Fill the remaining illustrative cards — one KPI each. Two need engine work: a date
    filter relative to the data horizon (month-over-month), and a max-over-groups
    aggregate ("best month").
-2. Control Health, Risk, Systems and access, Internal audit.
-3. The task and approval engine — Daily brief, My day, Approvals, Work handed out need it,
-   not facts.
-4. Reports. ("Find anything" is gone — merged into Ask the business, which is the one
-   question screen. Ask answers seven kinds of question deterministically today.)
-5. A "Refresh figures" control in the interface, and the load history on Control Health,
+2. Business Health, Risk and Compliance, Systems and Access, Internal Audit.
+3. The task and approval engine — Executive Summary, Today, Approvals and Outstanding
+   Tasks need it, not facts.
+4. Reports. ("Find anything" is gone — merged into Ask AI, the one question screen, which
+   answers seven kinds of question deterministically today.)
+5. A "Refresh figures" control in the interface, and the load history on Business Health,
    so nobody opens a terminal to see current numbers. `deploy.sh` covers the deploy; this
    is about the day-to-day refresh.
 6. Alert engine and the first five rules.

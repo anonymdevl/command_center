@@ -785,6 +785,47 @@ check('k === "search"' in open(os.path.join(ROOT, "frontend", "src",
       "an old #search link has nowhere to land; it should redirect to the one screen")
 
 # --------------------------------------------------------------------------
+# The sidebar captions, and the screen headings agreeing with them
+# --------------------------------------------------------------------------
+# Michael settled these nineteen captions in order. They live in the NAV tuples in
+# interface/build.py and nowhere else, and each screen's own <h3> has to say the same
+# thing -- a sidebar reading "Sales and Payments" that opens a screen headed "Sales and
+# money owed to us" is the same fault as a card whose label and figure disagree.
+CAPTIONS = [
+    "Home", "Executive Summary", "Today", "Business Overview", "Business Health",
+    "Risk and Compliance", "Approvals", "Outstanding Tasks", "Ask AI", "Reports",
+    "Sales and Payments", "Buying and Suppliers", "Stock & Warehouses",
+    "Project Insights", "Customer Service & Issues", "Finances", "HR & Payroll",
+    "Systems and Access", "Internal Audit",
+]
+_nav = json.loads(open(os.path.join(ROOT, "frontend", "src", "legacy",
+                                    "nav.json")).read())
+_views = json.loads(open(os.path.join(ROOT, "frontend", "src", "legacy",
+                                      "views.json")).read())
+_items = [i for g in _nav["groups"] for i in g["items"]]
+_labels = [i["label"] for i in _items]
+check(_labels == CAPTIONS,
+      f"the sidebar captions are not the agreed nineteen in order.\n      got:  {_labels}"
+      f"\n      want: {CAPTIONS}")
+
+# A React-rendered label must carry a real ampersand, not an HTML entity, or it shows
+# literally as "&amp;". The h3 goes through innerHTML and needs the entity.
+for _lab in _labels:
+    check("&amp;" not in _lab,
+          f"nav label {_lab!r} contains an HTML entity. nav.json is rendered as text by "
+          f"React, so it would display the entity itself.")
+
+for _item in _items:
+    _html = _views.get(_item["key"]) or ""
+    _m = re.search(r"<h3>(.*?)</h3>", _html)
+    if not _m:
+        continue  # Home has no heading; it opens with the greeting
+    _h3 = _m.group(1).replace("&amp;", "&").strip()
+    check(_h3 == _item["label"],
+          f"screen {_item['key']} is headed {_h3!r} but its sidebar caption is "
+          f"{_item['label']!r}")
+
+# --------------------------------------------------------------------------
 # The deploy script's order, because the order is why it exists
 # --------------------------------------------------------------------------
 _deploy = open(os.path.join(ROOT, "deploy.sh")).read()

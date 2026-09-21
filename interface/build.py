@@ -98,25 +98,25 @@ color:var(--accent);font-weight:650;margin-bottom:6px}
 """
 
 NAVGROUPS=[
- ("Your day",[("command","Command","",["ceo","fin","sales","audit","hr"]),
-              ("brief","Daily brief","5",["ceo","fin","sales","audit","hr"]),
-              ("myday","My day","",["ceo","fin","sales","audit","hr"])]),
- ("Run the business",[("ops","The whole business","",["ceo","fin","sales","audit","hr"]),
-              ("health","Control Health","6",["ceo","fin","audit"]),
-              ("risk","Risk and compliance","",["ceo","fin","audit"])]),
+ ("Your day",[("command","Home","",["ceo","fin","sales","audit","hr"]),
+              ("brief","Executive Summary","5",["ceo","fin","sales","audit","hr"]),
+              ("myday","Today","",["ceo","fin","sales","audit","hr"])]),
+ ("Run the business",[("ops","Business Overview","",["ceo","fin","sales","audit","hr"]),
+              ("health","Business Health","6",["ceo","fin","audit"]),
+              ("risk","Risk and Compliance","",["ceo","fin","audit"])]),
  ("Decide and delegate",[("approvals","Approvals","3",["ceo","fin"]),
-              ("delegation","Work handed out","",["ceo","fin","sales","audit","hr"])]),
- ("Ask and find",[("ask","Ask the business","",["ceo","fin","sales","audit","hr"]),
+              ("delegation","Outstanding Tasks","",["ceo","fin","sales","audit","hr"])]),
+ ("Ask and find",[("ask","Ask AI","",["ceo","fin","sales","audit","hr"]),
               ("reports","Reports","",["ceo","fin","sales","audit","hr"])]),
- ("Areas of the business",[("sales","Sales and money owed",["ceo","fin","sales","audit"]),
-              ("proc","Buying and suppliers",["ceo","fin","audit"]),
-              ("inv","Stock and warehouses",["ceo","fin","sales","audit"]),
-              ("eng","Engineering",["ceo","sales","audit"]),
-              ("cx","Customer complaints",["ceo","sales","audit"]),
-              ("fin","Money in and out",["ceo","fin","audit"]),
-              ("hr","People",["ceo","hr","audit"]),
-              ("it","Systems and access",["ceo","audit"]),
-              ("aud","Internal audit",["ceo","audit"])])]
+ ("Areas of the business",[("sales","Sales and Payments",["ceo","fin","sales","audit"]),
+              ("proc","Buying and Suppliers",["ceo","fin","audit"]),
+              ("inv","Stock & Warehouses",["ceo","fin","sales","audit"]),
+              ("eng","Project Insights",["ceo","sales","audit"]),
+              ("cx","Customer Service & Issues",["ceo","sales","audit"]),
+              ("fin","Finances",["ceo","fin","audit"]),
+              ("hr","HR & Payroll",["ceo","hr","audit"]),
+              ("it","Systems and Access",["ceo","audit"]),
+              ("aud","Internal Audit",["ceo","audit"])])]
 NAV=[]; DOMS=[]
 for gname,items in NAVGROUPS:
     for it in items:

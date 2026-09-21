@@ -3,7 +3,7 @@ exec(_src('views_c.py'))
 
 # ============ FINANCE ============
 EXP=[90040]+[0]*3
-V_FIN=f'''<div class="topbar"><div><h3>Money in and out</h3>
+V_FIN=f'''<div class="topbar"><div><h3>Finances</h3>
 <div class="when">Full ledger · GHS · to 19 August 2025</div></div></div>
 <div class="kpis six">
 {kpi("Owed to us","9.18","M GHS","74% over 3 months late","dn","","ar")}
@@ -35,7 +35,7 @@ V_FIN=f'''<div class="topbar"><div><h3>Money in and out</h3>
 {panel("Profit on what we sell", thin("<b>Cannot be calculated from this demo extract.</b> Margin needs the cost of each item against its selling price. Costs are held, but no engineering job carries a cost at all, so service margin is invisible — that is the gap worth closing first, because installations are where margin usually leaks."))}'''
 
 # ============ HR ============
-V_HR=f'''<div class="topbar"><div><h3>People</h3>
+V_HR=f'''<div class="topbar"><div><h3>HR &amp; Payroll</h3>
 <div class="when">35 on the books · 24 active · names and pay hidden unless you hold HR</div></div></div>
 <div class="banner"><b>You are seeing this as Chief Executive.</b> Individual names, salaries and conduct
 records are hidden from every role except HR. The assistant cannot read them on your behalf either —
@@ -117,7 +117,7 @@ cannot let him sign in until his employee record and his account are joined up. 
  '<tr><td>Internal Audit</td><td>1</td><td>Read-only everywhere, plus the trail</td></tr>'
  '<tr><td>Platform administrator</td><td>2</td><td>Settings and thresholds &middot; approves nothing</td></tr>'
  '</tbody></table>'
- +thin("<b>Seven accounts, all management.</b> No general staff login exists. Work handed out reaches people "
+ +thin("<b>Seven accounts, all management.</b> No general staff login exists. Outstanding Tasks reaches people "
  "in ERPNext, where they already are."),"","access")}'''
 
 IT_GAPS=f'''<div class="two">
@@ -125,7 +125,7 @@ IT_GAPS=f'''<div class="two">
 {panel("Backups and recovery", thin("<b>Starts at go-live.</b> Last successful backup, last restore actually tested, and how long it took. A backup that has never been restored is not a backup."))}
 </div>'''
 
-V_IT=('<div class="topbar"><div><h3>Systems and access</h3>'
+V_IT=('<div class="topbar"><div><h3>Systems and Access</h3>'
  '<div class="when">Read live from ERPNext &middot; 13 Gigmann accounts &middot; 3 with role conflicts</div></div></div>'
  +f'''<div class="kpis six">
 {kpi("Staff accounts","13","","active in ERPNext","flat","","access")}

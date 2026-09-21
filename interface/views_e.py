@@ -3,7 +3,7 @@ exec(_src('views_d.py'))
 
 V_AUD_OVERVIEW=f'''<div class="kpis six">
 {kpi("Open findings","0","","nothing recorded yet","flat","","find")}
-{kpi("Raise today","6","","from Control Health","dn","","raise")}
+{kpi("Raise today","6","","from Business Health","dn","","raise")}
 {kpi("Overdue actions","0","","nothing tracked yet","flat")}
 {kpi("Repeat findings","0","","no history to compare","flat")}
 {kpi("Unsupported","88","","invoices never issued","dn","","drafts")}
@@ -113,7 +113,7 @@ not withdrawn &mdash; simply never sent. Nobody is waiting on them because nobod
  +thin("This is the cheapest thing on the whole platform to fix. A weekly list of anything raised and not "
  "submitted within seven days would have caught every one of these."),"","stuck")}'''
 
-V_AUD=('<div class="topbar"><div><h3>Internal audit</h3>'
+V_AUD=('<div class="topbar"><div><h3>Internal Audit</h3>'
  '<div class="when">Findings, corrective actions, and the record of everything that has happened</div></div></div>'
  '<div class="tabbar" data-g="taud">'
  '<button class="tab on" onclick="tab(this,&#39;taud&#39;,0)">Overview</button>'
@@ -136,7 +136,7 @@ V_SEARCH=f'''<div class="topbar"><div><h3>Find anything</h3>
 </div>
 <div id="sout"></div>'''
 
-V_ASK=f'''<div class="topbar"><div><h3>Ask the business</h3>
+V_ASK=f'''<div class="topbar"><div><h3>Ask AI</h3>
 <div class="when">Answers come from the records, and always say which ones</div></div></div>
 <div class="askbox">⌕<input id="askin" placeholder="Ask anything about the business" autocomplete="off"
  onkeyup="if(event.key==='Enter')runSearch(this.value)"></div>

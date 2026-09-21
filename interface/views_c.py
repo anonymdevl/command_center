@@ -80,7 +80,7 @@ ENG_GAPS=f'''<div class="two">
 </div>
 {panel("Maintenance we should be selling", thin("<b>Not scheduled in this demo extract.</b> Every installation should create the next service visit when it closes. None currently does, so recurring maintenance revenue is simply not being asked for."))}'''
 
-V_ENG=('<div class="topbar"><div><h3>Engineering and installations</h3>'
+V_ENG=('<div class="topbar"><div><h3>Project Insights</h3>'
  '<div class="when">Where sold revenue gets stuck &middot; 30 jobs &middot; 3 engineers</div></div></div>'
  +ENG_KPIS+
  '<div class="tabbar" data-g="teng">'
@@ -92,7 +92,7 @@ V_ENG=('<div class="topbar"><div><h3>Engineering and installations</h3>'
  '<div class="tabpane" data-g="teng" data-i="2">'+ENG_GAPS+'</div>')
 
 # ============ CUSTOMER EXPERIENCE ============
-V_CX=f'''<div class="topbar"><div><h3>Customer complaints</h3>
+V_CX=f'''<div class="topbar"><div><h3>Customer Service &amp; Issues</h3>
 <div class="when">11 cases · seeded for this demonstration</div></div></div>
 <div class="banner"><b>These eleven cases were created by us.</b> Gigmann's copy held no complaint records
 at all. The customer names are real; the complaints are not. Everything else on this screen is how the

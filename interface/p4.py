@@ -83,7 +83,7 @@ money, not in this dashboard.</li>
 and any comment — and that record cannot afterwards be edited.</li></ul></div>'''
 
 # ---------------- V: DELEGATION ----------------
-V_DELEG=f'''<div class="topbar"><div><h3>Work you have handed out</h3>
+V_DELEG=f'''<div class="topbar"><div><h3>Outstanding Tasks</h3>
 <div class="when">12 open · 3 late · 1 sent back more than once · 2 high risk</div></div></div>
 <div class="grid" style="grid-template-columns:repeat(4,1fr)">
 <div class="bk"><div class="n">12</div><div class="l">Still open</div><div class="v">work you handed out</div></div>

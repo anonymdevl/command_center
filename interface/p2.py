@@ -100,7 +100,7 @@ from Gigmann's own ERPNext. Buttons that would change a record are inert — not
  "65,100","GHS","Sales order","SAL-ORD-2025-00910","Sales","31 days","openDrawer('ejura')")}'''
 
 # ---------------- V: BRIEF ----------------
-V_BRIEF=f'''<div class="topbar"><div><h3>Daily Executive Brief</h3>
+V_BRIEF=f'''<div class="topbar"><div><h3>Executive Summary</h3>
 <div class="when">Generated 07:00 · reconciled to the customer account balances</div></div></div>
 <div class="banner">Each item states six things: <b>what happened · why it matters · the figure ·
 where it came from · who owns it · how long it has been true</b>. Every one links to the record behind it.</div>

@@ -79,7 +79,7 @@ for nm,sc,sev,note in fams:
 <div class="khead"><div class="l">{nm}</div>{flag}</div>
 <div class="n">{val}</div>{bar}<div class="v">{note}</div></div>'''
 
-V_HEALTH=f'''<div class="topbar"><div><h3>Control Health</h3>
+V_HEALTH=f'''<div class="topbar"><div><h3>Business Health</h3>
 <div class="when">Six questions, asked of the business every morning</div></div></div>
 <div style="display:grid;grid-template-columns:190px 1fr;gap:16px;align-items:center;
 background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--crit);

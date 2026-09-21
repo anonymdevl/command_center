@@ -6,11 +6,11 @@ doms=[("Sales & money owed","7,765","invoices","GHS 9.18M owed, 74% over 3 month
  ("Buying & suppliers","299","orders","Supplier terms not yet reviewed","live","proc"),
  ("Stock & warehouses","3.77","GHS M","Reserved but unavailable \u00b7 a third off warehouse","live","inv"),
  ("Engineering & installs","30","projects","Three UBUNTU jobs 19 months late","live","eng"),
- ("Customer complaints","11","cases","Seeded for the demonstration","seed","cx"),
+ ("Customer Service &amp; Issues","11","cases","Seeded for the demonstration","seed","cx"),
  ("Money in & out","14,816","postings","Reconciliation status not confirmed","live","fin"),
  ("People","35","employees","Payroll shown as status only, names hidden","live","hr"),
  ("Systems & access","\u2014","","Measured here \u2014 ERPNext holds no record","none","it"),
- ("Internal audit","\u2014","","New capability, nothing to show yet","none","aud")]
+ ("Internal Audit","\u2014","","New capability, nothing to show yet","none","aud")]
 dh=""
 for name,fig,unit,note,state,key in doms:
     lab={"live":"Live data","seed":"Seeded","none":"Not yet"}[state]
@@ -24,10 +24,10 @@ for name,fig,unit,note,state,key in doms:
 <div class="khead"><div class="l">{name}</div><span class="flag {fcls}">{lab}</span></div>
 <div class="n">{f_html}</div><div class="v">{note}</div></div>'''
 
-V_OPS=f'''<div class="topbar"><div><h3>The whole business</h3>
+V_OPS=f'''<div class="topbar"><div><h3>Business Overview</h3>
 <div class="when">Nine areas · open any one of them</div></div></div>
 <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:10px">{dh}</div>
-<div class="warn"><b>Two areas are not really in ERPNext yet.</b> Customer complaints held no records at
+<div class="warn"><b>Two areas are not really in ERPNext yet.</b> Customer Service &amp; Issues held no records at
 all until we seeded eleven for this demonstration, and internal audit has no home in ERPNext — it arrives
 with this platform. Engineering runs through Projects, but the installations there have no work
 breakdown, no owners and no dates. Worth raising before anything is signed.</div>'''

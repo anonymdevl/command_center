@@ -6,7 +6,7 @@ SUPP_AVG=[("CYNSEL INNOVATION",73,"var(--crit)","5 orders · longest 184 days"),
  ("QINGDAO HIGHTOP BIOTECH",84,"var(--crit)","1 order"),
  ("SICHUAN M.K.R CO LTD",44,"var(--high)","8 orders · 2 with no date set")]
 lead_rows=[(nm,d,c,note) for nm,d,c,note in SUPP_AVG]
-V_PROC=f'''<div class="topbar"><div><h3>Buying and suppliers</h3>
+V_PROC=f'''<div class="topbar"><div><h3>Buying and Suppliers</h3>
 <div class="when">299 purchase orders · GHS 8.4M across the fourteen largest alone</div></div></div>
 <div class="kpis six">
 {kpi("Purchase orders","299","","all time","flat","","po")}
@@ -44,7 +44,7 @@ ready. That is worth a board conversation before it becomes one.</div>
 </div>'''
 
 # ============ INVENTORY ============
-V_INV=f'''<div class="topbar"><div><h3>Stock and warehouses</h3>
+V_INV=f'''<div class="topbar"><div><h3>Stock &amp; Warehouses</h3>
 <div class="when">GHS 3,769,970 held · 2,375 product-location records across six places</div></div></div>
 <div class="kpis six">
 {kpi("Stock we hold","3.77","M GHS","a third not in any warehouse","dn","","stockval")}

@@ -22,7 +22,7 @@ def thin(t): return f'<div class="thin">{t}</div>'
 # alert() is defined once, in p2.py. Defining it here shadowed that copy and the two drifted apart.
 
 # ============ SALES ============
-V_SALES=f'''<div class="topbar"><div><h3>Sales and money owed to us</h3>
+V_SALES=f'''<div class="topbar"><div><h3>Sales and Payments</h3>
 <div class="when">7,765 invoices · 1,436 orders · 806 still unpaid</div></div></div>
 <div class="kpis six">
 {kpi("Last full month","1.55","M GHS","July 2025","up","","rev")}

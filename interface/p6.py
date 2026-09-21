@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 exec(_src('p5.py'))
 
-V_MYDAY=f'''<div class="topbar"><div><h3>My day</h3>
+V_MYDAY=f'''<div class="topbar"><div><h3>Today</h3>
 <div class="when">Friday 19 September 2026 · only what is waiting on you</div></div></div>
 <div class="grid" style="grid-template-columns:repeat(4,1fr)">
 <div class="bk" onclick="go('approvals')"><div class="n" style="color:var(--crit)">3</div><div class="l">Awaiting you</div><div class="v">GHS 124,300 involved</div></div>
@@ -29,10 +29,10 @@ V_MYDAY=f'''<div class="topbar"><div><h3>My day</h3>
 V_REPORTS=f'''<div class="topbar"><div><h3>Reports</h3>
 <div class="when">Nine reports · built from the records, never typed up by hand</div></div></div>
 <table class="dt"><thead><tr><th>Report</th><th>Checked against</th><th>When it runs</th><th>Last run</th><th></th></tr></thead><tbody>
-<tr><td><b>Daily brief</b><div style="font-size:11px;color:var(--mut)">What moved, what is wrong, what needs deciding</div></td>
+<tr><td><b>Executive Summary</b><div style="font-size:11px;color:var(--mut)">What moved, what is wrong, what needs deciding</div></td>
 <td style="color:var(--mut)">The alert and task records</td><td style="color:var(--mut)">06:00 every day</td>
 <td><span class="tag t-ok">✓ Agrees</span></td><td><button class="btn">Run</button></td></tr>
-<tr><td><b>Sales and money owed</b><div style="font-size:11px;color:var(--mut)">Orders, invoicing, collections, who owes what, discounts, biggest customers</div></td>
+<tr><td><b>Sales and Payments</b><div style="font-size:11px;color:var(--mut)">Orders, invoicing, collections, who owes what, discounts, biggest customers</div></td>
 <td style="color:var(--mut)">Customer account balances</td><td style="color:var(--mut)">Monday 07:00</td>
 <td><span class="tag t-ok">✓ Agrees</span></td><td><button class="btn">Run</button></td></tr>
 <tr><td><b>Buying and stock</b><div style="font-size:11px;color:var(--mut)">Open orders, suppliers, availability, ageing, money tied up</div></td>
@@ -86,14 +86,14 @@ image files left behind by email signatures. Searching will work from the first 
 for it to find until documents start being attached, and that is a change of habit rather than something
 to build.</div>'''
 
-V_RISK=f'''<div class="topbar"><div><h3>Risk and compliance</h3>
+V_RISK=f'''<div class="topbar"><div><h3>Risk and Compliance</h3>
 <div class="when">Ordered by how soon it bites, not by category</div></div></div>
 <div class="grid" style="grid-template-columns:repeat(5,1fr)">
 <div class="bk"><div class="n" style="color:var(--crit)">2</div><div class="l">Overdue</div><div class="v">deadlines already passed</div></div>
 <div class="bk"><div class="n" style="color:var(--high)">3</div><div class="l">Within 1 month</div><div class="v">prepare now</div></div>
 <div class="bk"><div class="n">5</div><div class="l">Within 3 months</div><div class="v">time to prepare</div></div>
 <div class="bk"><div class="n" style="color:var(--dim)">0</div><div class="l">Findings</div><div class="v">arrives with the platform</div></div>
-<div class="bk" onclick="go('health')"><div class="n" style="color:var(--high)">4</div><div class="l">Going wrong</div><div class="v">from Control Health</div></div></div>
+<div class="bk" onclick="go('health')"><div class="n" style="color:var(--high)">4</div><div class="l">Going wrong</div><div class="v">from Business Health</div></div></div>
 <div class="sect">Obligations and deadlines</div>
 <table class="dt"><thead><tr><th>What</th><th>Kind</th><th>Whose</th><th>When</th><th>Where it stands</th><th>Proof on file</th></tr></thead><tbody>
 <tr><td>Radiation registration for the X-ray installations</td><td>Regulator</td><td>Engineering</td>
@@ -106,7 +106,7 @@ V_RISK=f'''<div class="topbar"><div><h3>Risk and compliance</h3>
 <tr><td>Warranties we owe on equipment we installed</td><td>Commercial</td><td>Engineering</td><td>Per contract</td>
 <td><span class="tag t-wt">Not being tracked</span></td><td style="color:var(--high)">None</td></tr>
 </tbody></table>
-<div class="sect" style="margin-top:20px">Carried over from Control Health</div>
+<div class="sect" style="margin-top:20px">Carried over from Business Health</div>
 {alert("crit","We have promised customers stock we do not physically have, across 491 products",
  "Nobody has been made responsible for this.","Give it an owner today.","491","products",
  "Stock position","reserved but unavailable","Nobody yet","ongoing","openDrawer('stock')",
