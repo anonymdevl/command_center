@@ -313,6 +313,19 @@ if os.path.isdir(FRONTEND):
               f"{stale} is a leftover from the unhashed build and should be "
               f"deleted; a browser that cached it will keep using it")
 
+    # The offline preview (frontend/preview.html) answers every endpoint in the
+    # browser with sample figures. It is for looking at the interface on a laptop;
+    # if it ever reached the bundle, the live page would quietly show samples as
+    # though they were Gigmann's. vite builds index.html alone, and this proves it.
+    for dirpath, _, files in os.walk(DIST):
+        for f in files:
+            if f.endswith((".js", ".html")):
+                with open(os.path.join(dirpath, f), errors="ignore") as fh:
+                    check("CC_PREVIEW_MOCK" not in fh.read(),
+                          f"{f} contains the offline preview's sample API "
+                          f"(frontend/preview/mock.js). The live page would show "
+                          f"sample figures. Nothing in src/ may import it.")
+
 
 # --------------------------------------------------------------------------
 # 8. One definition per component, and every card opens something

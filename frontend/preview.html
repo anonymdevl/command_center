@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<!--
+  Offline preview of the interface. Dev server only: `npm run screens`, then open
+  /preview.html#<view>. vite builds index.html alone, so this page and the sample
+  API it loads never ship. See preview/mock.js.
+-->
+<html lang="en" data-theme="dark" data-accent="petrol" data-signal="muted">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Command Center — preview</title>
+    <style>
+      .cc-preview-tag {
+        position: fixed; left: 12px; bottom: 12px; z-index: 9999;
+        font: 600 11px/1 system-ui, sans-serif; letter-spacing: .04em;
+        padding: 6px 10px; border-radius: 999px;
+        background: #b5650b; color: #fff; pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="cc-root"></div>
+    <div class="cc-preview-tag">PREVIEW · SAMPLE DATA</div>
+    <script type="module" src="/preview/mock.js"></script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

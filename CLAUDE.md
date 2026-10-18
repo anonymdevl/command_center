@@ -142,6 +142,13 @@ its first character.
 push, self-delete. The connected folder cannot unlink files, so **all deletions go in the
 push script**. Commit messages say what was wrong and why, not just what changed.
 
+**Look before you deploy.** `cd frontend && npm run screens`, then open
+`http://localhost:8090/preview.html#<view key>`. That is the real App -- same components,
+views.json and hydrator -- with `frontend/preview/mock.js` answering the API in the
+browser from the verified figures above, so every visual change can be checked on all
+nineteen screens without a push. It is dev-only: vite builds index.html alone, and
+preflight fails if the preview's marker ever appears in the bundle.
+
 **Say what is not done.** List the screens still illustrative and why. Do not let silence
 imply completeness.
 
