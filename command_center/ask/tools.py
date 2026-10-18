@@ -263,11 +263,20 @@ def get_figures(keys, business_code=None):
     from command_center.kpi.engine import evaluate_set
     from command_center.kpi.registry import load_all
 
+    from command_center.kpi.live import LIVE, evaluate as evaluate_live
+
     known = load_all()
-    unknown = [k for k in keys or [] if k not in known]
+    unknown = [k for k in keys or [] if k not in known and k not in LIVE]
     if unknown:
-        raise ToolError(f"Unknown figure(s) {', '.join(unknown)}. Known: {', '.join(sorted(known))}")
-    return _clean(evaluate_set(list(keys), business_code))
+        raise ToolError(f"Unknown figure(s) {', '.join(unknown)}. Known: "
+                        f"{', '.join(sorted(known) + sorted(LIVE))}")
+    result = evaluate_set([k for k in keys if k in known], business_code)
+    result.update(evaluate_live([k for k in keys if k in LIVE], business_code))
+    # What the model needs to quote a figure, not the engine's internals: the rest made
+    # every lookup several times longer than its answer.
+    keep = ("label", "value", "unit", "currency", "note", "as_of", "period", "group", "basis")
+    return _clean({k: {f: v.get(f) for f in keep if v.get(f) not in (None, "", {})}
+                   for k, v in result.items()})
 
 
 def find(text: str, business_code=None):
@@ -501,8 +510,10 @@ TOOLS = {
         "query_data",
         "Totals, counts, averages, minimums or maximums over one loaded data set -- overall, "
         "broken down by up to two columns, and/or by period (day, week, month, quarter, year) "
-        "over a date column, with filters and a date range. Use for any 'how much', 'how many', "
-        "'who/which is biggest', 'by month', 'compare' question.",
+        "over a date column, with filters, a date range, an order and a limit. Do the work "
+        "here, in one call, rather than fetching rows. For breakdowns, rankings and periods; "
+        "for a headline number a defined figure (get_figures) is quicker. Submitted "
+        "documents only unless you filter src_docstatus.",
         {"fact": _FACT,
          "measures": {"type": "array", "items": {"type": "object", "properties": {
              "function": {"type": "string", "enum": list(FUNCS)},
@@ -526,8 +537,9 @@ TOOLS = {
         ["fact"])),
     "get_figures": (get_figures, _decl(
         "get_figures",
-        "The platform's defined headline figures by key -- exactly the numbers its cards "
-        "show, with their as-of date and data status. Prefer these when one matches.",
+        "First choice for any headline number: the platform's defined figures by key -- "
+        "exactly the numbers its cards show, with their note and as-of date. Ask for every "
+        "key you need in one call.",
         {"keys": {"type": "array", "items": {"type": "string"}}}, ["keys"])),
     "find": (find, _decl(
         "find",
@@ -553,8 +565,9 @@ TOOLS = {
         {"doctype": {"type": "string"}}, ["doctype"])),
     "erpnext_list": (erpnext_list, _decl(
         "erpnext_list",
-        "Rows of any ERPNext doctype the person asking may read -- including data not in the "
-        "loaded sets (quotations, leads, journals, projects, assets ...). Reads only.",
+        "Rows of any ERPNext doctype the person asking may read -- for data not in the loaded "
+        "sets (quotations, leads, journals, projects, assets ...). Ask only for the fields "
+        "you need, with filters and a small limit. Reads only.",
         {"doctype": {"type": "string"}, "fields": {"type": "array", "items": {"type": "string"}},
          "filters": _FILTERS, "order_by": {"type": "string"}, "limit": {"type": "integer"}},
         ["doctype"])),

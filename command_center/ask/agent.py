@@ -28,7 +28,7 @@ from command_center.ask import gemini, tools
 
 MAX_STEPS = 12           # rounds of tool use; the deadline below is what really bounds it
 MAX_CALLS_PER_STEP = 6   # parallel tool calls honoured in one round
-MAX_RESULT_CHARS = 24000 # one tool result, as sent back to the model
+MAX_RESULT_CHARS = 12000 # one tool result, as sent back to the model: big ones slow every round
 # A question runs inside the web request, which the server ends at 120 seconds. The
 # analyst keeps inside 100: each Gemini call gets what is left (at most 60), and with
 # 30 seconds to go it stops looking things up and answers from what it has, so a
@@ -256,9 +256,48 @@ def _system(business_code) -> str:
         f"- {f} ({tools.FACT_WORDS.get(f, f)}): breakdowns {', '.join(DIMENSIONS.get(f, []))}; "
         f"amounts {', '.join(MEASURES.get(f, []))}; dates {', '.join(_dates(f)) or 'none'}"
         for f in FACTS)
-    figures = "\n".join(f"- {k}: {v.label}" for k, v in sorted(load_all().items()))
+    figures = _definitions(load_all())
     return SYSTEM.format(today=frappe.utils.today(), as_of=as_of or "unknown",
                          business=business, data_sets=data_sets, figures=figures)
+
+
+def _definitions(registry) -> str:
+    """Every defined figure with the exact rule behind it, generated from the registry.
+
+    The model used to be told only each figure's name, so when it broke a figure down it
+    made up its own filters -- 888 "unpaid invoices" in a table under a headline of 806,
+    because it counted drafts. Given the rule, its own query agrees with the card.
+    """
+    from command_center.kpi.live import LIVE
+
+    def rule(f):
+        parts = []
+        for col, val in (f or {}).items():
+            if isinstance(val, (list, tuple)) and len(val) == 2 and isinstance(val[0], str) \
+                    and val[0] in (">", ">=", "<", "<=", "=", "!=", "like", "between", "in", "not in"):
+                parts.append(f"{col} {val[0]} {val[1]}")
+            elif isinstance(val, (list, tuple)):
+                parts.append(f"{col} in {list(val)}")
+            else:
+                parts.append(f"{col} = {val}")
+        return " and ".join(parts) or "all rows"
+
+    out = []
+    for k, v in sorted(registry.items(), key=lambda kv: (kv[1].fact, kv[0])):
+        if v.agg == "ratio":
+            what = f"{v.numerator} / {v.denominator} as a percentage"
+        else:
+            what = {"count": "count of rows", "count_distinct": f"count of distinct {v.distinct_on}",
+                    "avg": f"average {v.measure}", "max": f"largest {v.measure}",
+                    "top": f"leading {v.group_by} by {v.group_agg} of {v.measure}"}.get(
+                v.agg, f"sum of {v.measure}")
+            what += f" in {v.fact} where {rule(v.filters)}"
+            if v.period:
+                what += f", over the {v.period['window'].replace('_', ' ')} by {v.period['field']}"
+        out.append(f"- {k}: {v.label} = {what}")
+    for k, v in sorted(LIVE.items()):
+        out.append(f"- {k}: {v.label} (read straight from ERPNext)")
+    return "\n".join(out)
 
 
 def _dates(fact: str) -> list:
@@ -300,7 +339,9 @@ WHERE THE DATA IS
 1. Loaded data sets -- fast, complete, for totals, breakdowns and trends:
 {data_sets}
    Call describe_data for the full columns and date fields of any of them.
-2. The platform's defined headline figures (get_figures), the same numbers its cards show:
+2. The platform's defined figures (get_figures), the same numbers its cards show, each \
+with the exact rule behind it. Reuse these rules as your filters when you break a figure \
+down, so your totals agree with the screens:
 {figures}
 3. Live ERPNext, through erpnext_fields / erpnext_list / erpnext_count / erpnext_document: \
 any doctype the person asking may read -- quotations, leads, opportunities, journal entries, \
@@ -314,9 +355,28 @@ profit, sales and purchase analytics, purchase order analysis, stock balance, le
 ageing. Use them for finance, purchase orders and stock movements -- the loaded sets do \
 not hold the ledger. Date filters must fall within the data, which ends {as_of}.
 
+HOW TO FIND THE ANSWER -- in this order, stopping as soon as you have it
+1. A defined figure answers it: get_figures, one call with every key you need.
+2. A breakdown, ranking, comparison or period: ONE query_data call that makes the \
+database do the work -- conditions in filters, the split in group_by (up to two \
+columns), the period and date range, the order and a limit. Use the same rules as the \
+figure definitions above. Never fetch rows to count or add them up yourself.
+3. Individual records (the largest, latest, most overdue): list_records with filters, \
+order_by and a small limit.
+4. A name you are not sure of: find first, then filter on the exact name it returns.
+5. Something the loaded sets do not hold: erpnext_count, or erpnext_list with filters, \
+only the fields you need and a limit; erpnext_document for one document.
+6. Ledger, profit and loss, balance sheet, cash flow, stock movements: run_report. It is \
+slow; use it only for these.
+Put independent lookups in the same round. Most questions need one or two rounds; once \
+you can answer, stop looking and answer.
+The loaded sets count submitted documents only, as the screens do. For drafts or \
+cancelled documents, filter src_docstatus yourself (0 draft, 2 cancelled).
+
 HOW TO WORK
-- Look before you answer. Use as many tool calls as the question needs; several in one \
-round when they are independent. Use find to get exact names before filtering on them.
+- Look before you answer.
+- Answer the question that was asked. Do not widen it to other areas (supplier bills \
+when asked about invoices, say); offer those as follow-up questions instead.
 - Every figure you state must come from a tool result, or be calculated from tool results \
 with the calculation made plain. Never estimate a number you could have looked up, and \
 never invent one.
