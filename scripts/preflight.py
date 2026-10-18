@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import ast
 import glob
+import html
 import json
 import os
-import json
 import re
 import sys
 
@@ -638,17 +638,26 @@ else:
     # raises, so neither would ever be noticed.
     _hyd = (_src / "legacy" / "hydrate.js").read_text()
     _views_json = json.loads((_src / "legacy" / "views.json").read_text())
-    _map_body = re.search(r"export const CARD_KPIS = \{(.*?)\n\};", _hyd, re.S)
-    # Split per view rather than matching a block: an empty map written `proc: {},`
-    # has no closing brace on its own line, so a block pattern ran straight past it and
-    # read the next view's labels as belonging to it.
-    _map_src = _map_body.group(1) if _map_body else ""
-    _starts = [(m.group(1), m.end()) for m in re.finditer(r"^  (\w+): \{", _map_src, re.M)]
-    _sections = []
-    for _i, (_view, _from) in enumerate(_starts):
-        _to = _starts[_i + 1][1] - len(f"  {_starts[_i + 1][0]}: {{") if _i + 1 < len(_starts) else len(_map_src)
-        _sections.append((_view, _map_src[_from:_to]))
-    for _view, _body in _sections:
+    def _map_sections(name):
+        """Each view's slice of one label->KPI map in hydrate.js.
+
+        Split per view rather than matched as a block: an empty map written `proc: {},`
+        has no closing brace on its own line, so a block pattern ran straight past it
+        and read the next view's labels as belonging to it. One definition, because
+        there are now two such maps -- cards and tiles -- and they must be read the
+        same way.
+        """
+        body = re.search(r"export const %s = \{(.*?)\n\};" % name, _hyd, re.S)
+        src = body.group(1) if body else ""
+        starts = [(m.group(1), m.end()) for m in re.finditer(r"^  (\w+): \{", src, re.M)]
+        out = []
+        for i, (view, frm) in enumerate(starts):
+            to = (starts[i + 1][1] - len(f"  {starts[i + 1][0]}: {{")
+                  if i + 1 < len(starts) else len(src))
+            out.append((view, src[frm:to]))
+        return out
+
+    for _view, _body in _map_sections("CARD_KPIS"):
         check(_view in _views_json,
               f"hydrate.js maps cards for {_view!r}, which is not a designed view")
         for _label, _key in re.findall(r'^\s*"?([^":\n]+?)"?:\s*"([a-z][a-z0-9_]+)"',
@@ -665,6 +674,82 @@ else:
                   f"hydrate.js maps a card labelled {_label!r} on {_view}, but no card "
                   f"on that screen carries that label, so it would stay illustrative")
 
+    # The same for the tiles, which had no hydration at all until now: hydrate.js
+    # matched .kpi only, so thirty-four .bk tiles were illustrative with no mechanism
+    # that could ever make one live.
+    # The query itself, not the string ".bk": the file says ".bk" in half a dozen
+    # comments, so looking for that passed on a hydrator that queried nothing -- a check
+    # that cannot fail, for the third time in this project.
+    check('querySelectorAll(".bk")' in _hyd,
+          "hydrate.js does not query .bk tiles, so every tile on six screens shows a "
+          "designed figure with no way to make it live")
+    # The pill the hydrator appends to a tile needs the one rule that spaces it off the
+    # footnote. Without it the mark still renders, so nothing would look broken -- it
+    # would just sit against the text, which is how a design regression ships unnoticed.
+    check(".bk>.flag{" in _css_file.read_text().replace(" ", ""),
+          "the stylesheet has no rule for a flag that is a direct child of .bk, so the "
+          "illustrative and as-at marks on tiles have no spacing")
+
+    def _tiles_on(view):
+        """(label, block) per tile, with the label as the browser reads it.
+
+        A nav label is React text and carries a real '&'; a tile label goes through
+        innerHTML and carries '&amp;'. The map is keyed on what textContent returns, so
+        the markup is unescaped before it is compared.
+        """
+        src = _views_json.get(view, "")
+        # Each tile ends where the next begins. A fixed window instead of that bound
+        # was the fourth check in this project that could not fail: with a tile's label
+        # deleted, its window ran on into the following tile, read that tile's label,
+        # and the count still came out right.
+        _at = [m.start() for m in re.finditer(r'<div class="bk[^"]*"[^>]*>', src)]
+        found = []
+        for _i, _from in enumerate(_at):
+            block = src[_from: _at[_i + 1] if _i + 1 < len(_at) else len(src)]
+            label = re.search(r'class="l">(.*?)</div>', block, re.S)
+            foot = re.search(r'class="v">(.*?)</div>', block, re.S)
+            if label:
+                found.append((html.unescape(label.group(1)).strip(),
+                              html.unescape(foot.group(1)) if foot else ""))
+        # Proof the reader is not silently skipping tiles, which is how a check comes to
+        # cover nothing: every .bk on the screen must have been read.
+        _on_screen = src.count('class="bk')
+        check(len(found) == _on_screen,
+              f"{view}: read {len(found)} tiles but the screen has {_on_screen}, so "
+              f"some tile has no label where one is expected and would never be checked")
+        return found
+
+    _tile_views = {v for v in _views_json if 'class="bk' in _views_json[v]}
+    _tile_mapped = dict(_map_sections("TILE_KPIS"))
+    for _view in sorted(_tile_views):
+        check(_view in _tile_mapped,
+              f"{_view} has tiles but hydrate.js TILE_KPIS says nothing about it, so "
+              f"nobody has decided whether any of them can be made live")
+    for _view, _body in _tile_mapped.items():
+        check(_view in _views_json,
+              f"hydrate.js maps tiles for {_view!r}, which is not a designed view")
+        _labels = dict(_tiles_on(_view))
+        _keys = re.findall(r'\bkey:\s*"([a-z][a-z0-9_]+)"', _body)
+        for _label, _key in re.findall(
+                r'^\s*"?([^":\n]+?)"?:\s*\{\s*key:\s*"([a-z][a-z0-9_]+)"', _body, re.M):
+            _label = _label.strip()
+            check(_key in REGISTRY,
+                  f"hydrate.js maps tile {_view}/{_label!r} to KPI {_key!r}, which is "
+                  f"not registered")
+            check(_keys.count(_key) == 1,
+                  f"{_view}: two tiles both map to KPI {_key!r}, so the screen would "
+                  f"show one number twice under labels that mean different things")
+            check(_label in _labels,
+                  f"hydrate.js maps a tile labelled {_label!r} on {_view}, but no tile "
+                  f"on that screen carries that label, so it would stay illustrative")
+            # A figure typed into a tile's footnote drifts the moment the data is
+            # reloaded. The hydrator replaces such a footnote with the KPI's note, so a
+            # KPI with no note would leave the stale figure sitting under the live one.
+            if re.search(r"\d", _labels.get(_label, "")):
+                check(bool(REGISTRY[_key].note if _key in REGISTRY else False),
+                      f"{_view}: the tile {_label!r} has a figure in its footnote and "
+                      f"KPI {_key!r} has no note to replace it with, so the designed "
+                      f"figure would stay beside a live one")
 
     # No cycle among value dependencies. A cycle cannot be ordered, so a ratio in
     # one would be evaluated before its denominator and print an em dash -- which is

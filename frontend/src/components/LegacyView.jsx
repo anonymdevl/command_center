@@ -6,7 +6,7 @@ import { renderGreeting } from "../greeting.js";
 import { api } from "../api/client.js";
 import { useApi } from "../useApi.js";
 import Records from "./Records.jsx";
-import { hydrateCards, keysFor } from "../legacy/hydrate.js";
+import { hydrateCards, hydrateTiles, keysFor } from "../legacy/hydrate.js";
 import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js";
 
 /**
@@ -102,12 +102,12 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
     return () => clearInterval(t);
   }, [viewKey]);
 
-  // Live figures into the designed cards. Runs after the markup is in the DOM and
-  // again whenever the figures or the business change.
+  // Live figures into the designed cards and tiles. Runs after the markup is in the DOM
+  // and again whenever the figures or the business change.
   useEffect(() => {
     const root = ref.current;
     if (!root || !html) return;
-    const live = hydrateCards(root, viewKey, figures.data, {
+    const opts = {
       onOpen: (figure) =>
         figure.drill?.fact
           ? openDrawer(
@@ -121,8 +121,10 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
               />
             )
           : undefined,
-    });
-    setLiveCount(live);
+    };
+    setLiveCount(
+      hydrateCards(root, viewKey, figures.data, opts) +
+      hydrateTiles(root, viewKey, figures.data, opts));
   }, [viewKey, html, figures.data, scope, openDrawer]);
 
   // Tabs inside the generated markup are plain DOM, so they are wired here

@@ -431,6 +431,11 @@ BOOT_CSS = """
  padding:3px 9px;border-radius:999px;white-space:nowrap;
  background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
 .livechip.stale{background:var(--med-bg);color:var(--stale);border-color:var(--med-line)}
+/* A tile has no flag slot: only the Business Overview tiles were designed with a
+   khead, and theirs already says something about the domain rather than about the
+   figure. So the hydrator appends its own pill as a direct child, which lands after
+   the footnote because .bk .l and .bk>.khead both take order:-1. */
+.bk>.flag{margin-top:9px;align-self:center}
 .whosel:disabled{opacity:1;cursor:default}
 /* The caret was drawn for a persona dropdown. With a real session there is
    nothing to choose, so the arrow would promise a menu that never opens. */

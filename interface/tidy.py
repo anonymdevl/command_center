@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import hashlib
 import re
 
 def split_blocks(html):
@@ -63,7 +64,10 @@ def tabify(view_html, tabs=("Overview","Detail","Not yet measured"), ov_count=3)
     if gaps: names.append(tabs[2]); panes.append("".join(gaps))
     if len(panes)<=1:
         return "".join(head)+"".join(panes)
-    tid="t"+str(abs(hash(view_html))%99999)
+    # A stable digest, not hash(): str hashing is salted per process, so every build
+    # emitted new tab-group ids and views.json showed changes on a build that changed
+    # nothing. A diff that is always noisy is a diff nobody can read.
+    tid="t"+hashlib.md5(view_html.encode()).hexdigest()[:5]
     bar="".join(f'<button class="tab{" on" if i==0 else ""}" onclick="tab(this,\'{tid}\',{i})">{n}'
                 f'{f"<span class=tc>{panes[i].count(chr(60)+chr(100)+chr(105)+chr(118)+chr(32)+chr(99)+chr(108)+chr(97)+chr(115)+chr(115)+chr(61)+chr(34)+chr(112)+chr(97)+chr(110)+chr(101)+chr(108))}</span>" if False else ""}</button>'
                 for i,n in enumerate(names))

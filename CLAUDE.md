@@ -25,9 +25,15 @@ rounds: spacing, labels, card contract, wording, panel order.
 writing a new component for it. I replaced Command with my own layout, was told, and then
 did the same to eight more screens. All nine were deleted.
 
-The mechanism is `frontend/src/legacy/hydrate.js`: it finds each designed card by its
-label and swaps the figure. To make a card live, add one line to `CARD_KPIS` and define
-the KPI. That is the whole job.
+The mechanism is `frontend/src/legacy/hydrate.js`: it finds each designed card or tile
+by its label and swaps the figure. To make a card live, add one line to `CARD_KPIS`; for
+a tile, one line to `TILE_KPIS`, which also names the unit word the tile prints inside
+its number. Define the KPI. That is the whole job.
+
+A tile's footnote is replaced by the KPI's note only if the designed footnote contains a
+figure of its own. A footnote with no figure is a statement about the business — "Payroll
+shown as status only, names hidden" — and is left alone. A tile whose `onclick` calls
+`go()` keeps its navigation; only `explain()` placeholders are replaced.
 
 If a screen genuinely cannot be served this way, **say so and ask** — do not invent a
 replacement.
@@ -172,7 +178,7 @@ interface/                generators that build views.json and the CSS.
                           the views_* copy wins and the p* copy is shadowed. Editing the
                           shadowed one changes nothing on screen. Find the live owner by
                           matching the rendered <h3> against the files before editing.
-scripts/preflight.py      1170 checks — must pass before any push
+scripts/preflight.py      1209 checks — must pass before any push
 ```
 
 **Verified live figures** (as at 2025-08-19, the data horizon): receivable
@@ -238,21 +244,57 @@ innerHTML and carries `&amp;`. Preflight checks both.
 
 ## Still to do
 
-1. Fill the remaining illustrative cards — one KPI each. Two need engine work: a date
-   filter relative to the data horizon (month-over-month), and a max-over-groups
-   aggregate ("best month").
-2. Business Health, Risk and Compliance, Systems and Access, Internal Audit.
-3. The task and approval engine — Executive Summary, Today, Approvals and Outstanding
-   Tasks need it, not facts.
-4. Reports. ("Find anything" is gone — merged into Ask AI, the one question screen, which
-   answers seven kinds of question deterministically today.)
-5. A "Refresh figures" control in the interface, and the load history on Business Health,
-   so nobody opens a terminal to see current numbers. `deploy.sh` covers the deploy; this
-   is about the day-to-day refresh.
-6. Alert engine and the first five rules.
-7. Correct blueprint §8.5 to the stack actually built (React + Vite, own API client, no
-   frappe-react-sdk / TanStack / Recharts / Playwright).
-8. Second-site pairing, once one site is solid.
+Wiring first, on Michael's instruction: every card, tile, button, drawer and menu doing
+something real before any new intelligence is added. Tracked as tasks 20-31, then 18-19.
 
-Open decisions for Michael: pricing, hosting region, model provider, approval thresholds,
-cross-site write-back scope.
+**The wiring inventory, counted from the shipped views.json rather than estimated:**
+
+| | |
+|---|---|
+| Designed KPI cards | 68, of which **14 are live** |
+| `.bk` tiles | 34, of which **6 are live** — all six on Business Overview |
+| Static drawers / explainers | 78 (48 explainers, 7 drawers, 6 drill panels) |
+| Explicit `unwired` placeholders | 4 (Home 2, Internal Audit 2) |
+| Buttons with no handler | 0 |
+
+Order of work:
+
+1. ~~**Hydrate the tiles.**~~ Done. `hydrateTiles` exists and six Business Overview
+   tiles are live. The other twenty-eight are illustrative and say so on the tile, and
+   none of them is waiting on a mapping: Today and Outstanding Tasks need the task and
+   approval engine, Risk needs a compliance register, Business Health's are composite
+   scores, and the six "Awaiting …" tiles on Sales need a pipeline fact that separates
+   the stages.
+2. **Relative date filters** against the data horizon — blocks every month-over-month card.
+3. **Max-over-groups aggregate** — blocks "Best month", "Top supplier", "Longest wait",
+   "Worst shortfall".
+4. **Two more facts**: purchase orders (235 on the site) and stock movements.
+5. **Fill the 54 illustrative cards**, money screens first, then operational.
+6. **The 78 static drawers** — decide prose-or-live for each, and record the decision.
+7. **The 4 `unwired` placeholders.**
+8. **Task and approval engine** — Approvals, Today, Outstanding Tasks and Executive
+   Summary have no facts behind them and never will; they need the platform's own records.
+   TK-01..TK-08, AP-01..AP-07, AC-06.
+9. **Reports** — nine named reports, none generating anything. RP-01..RP-10.
+10. **Refresh control and load history on Business Health** — where the trust panels I
+    wrongly put on Command belong.
+11. **Click-through audit** of all 19 screens. Preflight checks source, not behaviour, so
+    only clicking can answer "does everything work as expected".
+12. **Alert engine**, five rules. AL-01..AL-07.
+13. **Blueprint §8.5**, plus Gemini and the ten facts.
+
+Then: second-site pairing.
+
+**Where the app stands against the AI requirements** (from the RTM, 355 requirements):
+all eight AI-B prohibitions hold structurally and preflight enforces them. Of the seven
+AI-P permitted abilities, AI-P1 and AI-P2 are partial, AI-P3 has no trend capability at
+all, and AI-P4 to AI-P7 are unbuilt — `draft_communication` and the task tools exist in
+`ai_tools.py` but Ask cannot reach them. Ask AI is a leaf: it reads the KPI engine so its
+figures agree with the cards, but nothing consumes its output.
+
+**Two requirements bearing on Gemini that are not yet satisfied:** AI-01 permits any
+suitable model *subject to Gigmann approval*, and SE-07 requires disclosing external
+AI/model providers. Neither is on record.
+
+Open decisions for Michael: pricing, hosting region, Gigmann's approval of Gemini
+(AI-01/SE-07), approval thresholds, cross-site write-back scope.
