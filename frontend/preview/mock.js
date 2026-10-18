@@ -159,6 +159,7 @@ const REPORT_TITLES = { rp01: "Executive Summary", rp02: "Weekly management repo
   rp03: "Monthly report", rp04: "Board report", rp05: "Sales and Payments",
   rp06: "Buying and stock", rp07: "Engineering", rp08: "People", rp09: "Compliance and audit" };
 const reportPolls = {};
+const askJobs = { n: 0 };
 
 const HANDLERS = {
   "command_center.api.kpi.get": ({ keys }) =>
@@ -216,6 +217,23 @@ const HANDLERS = {
   }),
   // The same list engine.ANALYST_EXAMPLES serves on the site (copied: there is no
   // server here to ask).
+  // Ask with live steps: a few steps appear over successive polls, then the answer.
+  "command_center.api.ask.start": ({ question }) => {
+    askJobs.n += 1;
+    const id = `ask-${askJobs.n}`;
+    askJobs[id] = { question, polls: 0 };
+    return { ask_id: id };
+  },
+  "command_center.api.ask.poll": ({ ask_id }) => {
+    const job = askJobs[ask_id];
+    if (!job) return { state: "unknown", steps: [] };
+    job.polls += 1;
+    const steps = ["Reading the headline figures", "Adding up sales invoices by customer",
+      "Working out the trend in customer payments"].slice(0, job.polls);
+    if (job.polls <= 3) return { state: "running", steps };
+    return { state: "done", steps,
+      result: HANDLERS["command_center.api.ask.answer"]({ question: job.question }) };
+  },
   // Reports: a job that is "done" on the second poll, with the sample answer as its text.
   "command_center.api.reports.generate": ({ code }) => {
     reportPolls[code] = 0;

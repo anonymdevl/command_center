@@ -23,6 +23,61 @@ def answer(question: str, business_code: str | None = None, history=None):
     return engine.answer(question, business_code, history)
 
 
+# ---------------------------------------------------------------------------
+# Asking with live progress: start() runs the question as a short job that reports
+# each lookup to the cache; poll() reads it. If no worker picks the job up, the bar
+# falls back to answer() after a few seconds, so a question never waits on a queue.
+# ---------------------------------------------------------------------------
+ASK_KEEP = 900
+
+
+def _ask_key(ask_id: str) -> str:
+    return f"cc_ask::{frappe.session.user}::{ask_id}"
+
+
+@frappe.whitelist(methods=["POST"])
+def start(question: str, business_code: str | None = None, history=None):
+    require_manager()
+    import uuid
+    if isinstance(history, str):
+        history = frappe.parse_json(history)
+    ask_id = uuid.uuid4().hex[:12]
+    frappe.cache().set_value(_ask_key(ask_id), {"state": "queued", "steps": []},
+                             expires_in_sec=ASK_KEEP)
+    # ask_id, not job_id: frappe.enqueue keeps job_id for itself.
+    frappe.enqueue("command_center.api.ask._run_ask", queue="short", timeout=300,
+                   ask_id=ask_id, question=question, business_code=business_code,
+                   history=history, user=frappe.session.user, enqueue_after_commit=False)
+    return {"ask_id": ask_id}
+
+
+@frappe.whitelist()
+def poll(ask_id: str):
+    require_manager()
+    return frappe.cache().get_value(_ask_key(ask_id)) or {"state": "unknown", "steps": []}
+
+
+def _run_ask(ask_id: str, question: str, business_code, history, user: str):
+    frappe.set_user(user)  # reads with the asker's own permissions
+    key = _ask_key(ask_id)
+    state = {"state": "running", "steps": []}
+    frappe.cache().set_value(key, state, expires_in_sec=ASK_KEEP)
+
+    def step(text):
+        if not state["steps"] or state["steps"][-1] != text:
+            state["steps"].append(text)
+            frappe.cache().set_value(key, state, expires_in_sec=ASK_KEEP)
+
+    try:
+        result = engine.answer(question, business_code, history, on_step=step)
+        frappe.cache().set_value(key, {"state": "done", "steps": state["steps"], "result": result},
+                                 expires_in_sec=ASK_KEEP)
+    except Exception as e:
+        frappe.log_error(title="Command Center ask job", message=frappe.get_traceback())
+        frappe.cache().set_value(key, {"state": "failed", "steps": state["steps"],
+                                       "error": str(e)[:300]}, expires_in_sec=ASK_KEEP)
+
+
 @frappe.whitelist()
 def check_analyst():
     """Is the analyst working on this site? Open in a browser while signed in:

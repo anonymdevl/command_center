@@ -131,7 +131,7 @@ def analyst_enabled() -> bool:
     return gemini.configured() and (frappe.conf.get("command_center_ai_mode") or "analyst") != "router"
 
 
-def answer(question: str, business_code: str | None = None, history=None) -> dict:
+def answer(question: str, business_code: str | None = None, history=None, on_step=None) -> dict:
     question = (question or "").strip()
     if not question:
         return _cannot("Ask a question and I will look it up.", [])
@@ -139,7 +139,7 @@ def answer(question: str, business_code: str | None = None, history=None) -> dic
     analyst_error = None
     if analyst_enabled():
         try:
-            result = agent.answer(question, business_code, history)
+            result = agent.answer(question, business_code, history, on_step=on_step)
         except Exception:
             frappe.log_error(title="Command Center analyst", message=frappe.get_traceback())
             result = {"answered": False, "analyst_error": "the analyst raised an error (see Error Log)"}

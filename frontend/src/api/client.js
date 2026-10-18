@@ -176,6 +176,10 @@ export const api = {
   ask: ({ question, business_code, history }, opts) =>
     call("command_center.api.ask.answer", { question, business_code, history }, opts),
   answerable: () => call("command_center.api.ask.answerable"),
+  /* The same question as a job that reports each lookup, for the live steps. */
+  askStart: ({ question, business_code, history }, opts) =>
+    call("command_center.api.ask.start", { question, business_code, history }, opts),
+  askPoll: (ask_id, opts) => call("command_center.api.ask.poll", { ask_id }, opts),
 
   /* Downloads. Reads only: nothing is written to the site, not even a File. */
   answerPdf: (args) => download("command_center.api.export.answer_pdf", args, "answer.pdf"),

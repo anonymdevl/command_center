@@ -32,9 +32,10 @@ MAX_RESULT_CHARS = 24000 # one tool result, as sent back to the model
 
 
 def answer(question: str, business_code: str | None = None, history=None,
-           max_steps: int = MAX_STEPS) -> dict | None:
+           max_steps: int = MAX_STEPS, on_step=None) -> dict | None:
     """max_steps: rounds of tool use. A question gets eight; a report (api/reports.py)
-    gathers across every area and gets more."""
+    gathers across every area and gets more. on_step(text) is told each lookup, in plain
+    words, as it starts -- the live "what it is doing" under the question bar."""
     system = _system(business_code)
     contents = _history(history) + [{"role": "user", "parts": [{"text": question}]}]
     checked, errors, drill = [], [], None
@@ -62,6 +63,11 @@ def answer(question: str, business_code: str | None = None, history=None,
         responses = []
         for call in calls[:MAX_CALLS_PER_STEP]:
             name, args = call.get("name", ""), call.get("args") or {}
+            if on_step:
+                try:
+                    on_step(tools.describe(name, args))
+                except Exception:
+                    pass  # progress is a courtesy; it never stops an answer
             try:
                 result = tools.run(name, args, business_code)
                 checked.append(tools.summary(name, args))

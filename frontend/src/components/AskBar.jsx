@@ -37,6 +37,7 @@ export default function AskBar({ scope, openDrawer }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
+  const [steps, setSteps] = useState([]);
   const [examples, setExamples] = useState(examplesCache || FALLBACK);
   const [hi, setHi] = useState(-1);
   const wrap = useRef(null);
@@ -102,12 +103,11 @@ export default function AskBar({ scope, openDrawer }) {
     setQ("");
     setHi(-1);
     setElapsed(0);
+    setSteps([]);
     setPhase("thinking");
     try {
-      const payload = await api.ask(
-        { question: text, business_code: scope, history: historyFor(scope) },
-        { signal: c.signal },
-      );
+      const args = { question: text, business_code: scope, history: historyFor(scope) };
+      const payload = await withSteps(args, c.signal, setSteps);
       if (c.signal.aborted) return;
       remember(scope, text, payload);
       setAsked(text);
@@ -205,10 +205,19 @@ export default function AskBar({ scope, openDrawer }) {
               <div>
                 <b>Looking into “{pending}”</b>
                 <span>
-                  Checking the records it needs before it answers
+                  {steps.length ? "Working through it" : "Reading the question"}
                   {elapsed >= 3 ? ` · ${elapsed}s` : ""}
-                  {elapsed >= 12 ? " — longer questions take up to half a minute" : ""}
+                  {elapsed >= 15 ? " — bigger questions take up to half a minute" : ""}
                 </span>
+                {steps.length ? (
+                  <ol className="ap-steps">
+                    {steps.map((s, i) => (
+                      <li key={i} className={i === steps.length - 1 ? "now" : "done"}>
+                        {s}
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
               </div>
               <button className="ap-act" type="button" onClick={cancel}>
                 Cancel
@@ -243,6 +252,34 @@ export default function AskBar({ scope, openDrawer }) {
       ) : null}
     </div>
   );
+}
+
+/**
+ * Ask through a job that reports each lookup, so the steps show as they happen.
+ *
+ * Falls back to the direct endpoint when the job route is not there (an older server)
+ * or no worker picks the job up within a few seconds -- a question must never wait on
+ * a queue that is not running.
+ */
+async function withSteps(args, signal, onSteps) {
+  let started;
+  try {
+    started = await api.askStart(args, { signal });
+  } catch (e) {
+    if (e?.name === "AbortError") throw e;
+    return api.ask(args, { signal });
+  }
+  const t0 = Date.now();
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 900));
+    if (signal.aborted) throw new DOMException("aborted", "AbortError");
+    const st = await api.askPoll(started.ask_id, { signal });
+    if (st?.steps) onSteps(st.steps);
+    if (st?.state === "done") return st.result;
+    if (st?.state === "failed") throw new Error(st.error || "The question could not be answered.");
+    if (st?.state === "queued" && Date.now() - t0 > 6000) return api.ask(args, { signal });
+    if (Date.now() - t0 > 240000) throw new Error("That took too long. Try asking it more narrowly.");
+  }
 }
 
 function Suggestions({ choices, recentCount, hi, onPick }) {

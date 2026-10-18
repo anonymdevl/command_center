@@ -615,6 +615,51 @@ def declarations() -> list:
     return [decl for _, decl in TOOLS.values()]
 
 
+FACT_WORDS = {
+    "fact_sales_invoice": "sales invoices", "fact_sales_invoice_line": "sales invoice lines",
+    "fact_payment_allocation": "customer payments", "fact_purchase_invoice": "supplier bills",
+    "fact_purchase_invoice_line": "supplier bill lines", "fact_stock_balance": "stock balances",
+    "fact_sales_order": "sales orders", "fact_task": "jobs and tasks",
+    "fact_person": "staff records", "fact_case": "customer issues",
+}
+INTENT_WORDS = {
+    "who_owes_most": "Working out who owes the most", "has_party_ever_paid": "Reading {s}'s payment history",
+    "why_order_open": "Looking at why {s} is still open", "supplier_concentration": "Measuring dependence on {s}",
+    "owes_and_waiting": "Finding customers who owe and are waiting", "party_brief": "Preparing a brief on {s}",
+}
+
+
+def describe(name: str, args: dict) -> str:
+    """One step, in the words a director would use -- shown live while the analyst works."""
+    a = args or {}
+    fact = FACT_WORDS.get(a.get("fact"), "the records")
+    by = ", ".join(str(g).replace("_", " ") for g in (a.get("group_by") or []))
+    if name == "query_data":
+        when = f" by {a['period']}" if a.get("period") else ""
+        return f"Adding up {fact}" + (f" by {by}" if by else "") + when
+    if name == "list_records":
+        return f"Reading the {fact}"
+    if name == "trend":
+        return f"Working out the trend in {fact}"
+    if name == "get_figures":
+        return "Reading the headline figures"
+    if name == "find":
+        return f"Looking up “{str(a.get('text', ''))[:40]}”"
+    if name == "describe_data":
+        return "Checking what data is loaded"
+    if name == "run_report":
+        return f"Running ERPNext's {a.get('report', 'report')}"
+    if name == "report_filters":
+        return f"Checking how {a.get('report', 'the report')} is filtered"
+    if name in ("erpnext_list", "erpnext_count", "erpnext_fields"):
+        return f"Reading {a.get('doctype', 'ERPNext')} records"
+    if name == "erpnext_document":
+        return f"Opening {a.get('doctype', '')} {a.get('name', '')}".strip()
+    if name in INTENT_WORDS:
+        return INTENT_WORDS[name].format(s=a.get("subject") or "it")
+    return "Looking something up"
+
+
 def summary(name: str, args: dict) -> str:
     """One readable line per call, for "what it checked"."""
     a = {k: v for k, v in (args or {}).items() if v not in (None, [], "")}

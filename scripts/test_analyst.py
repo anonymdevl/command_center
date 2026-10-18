@@ -169,6 +169,22 @@ big = {"rows": [{"n": "x" * 500}] * 200}
 fit = agent._fit(big)
 check("trimmed" in fit and len(fit["rows"]) < 200, "large results are trimmed by rows")
 
+# 8b. Live steps: each lookup is reported, in words; a broken reporter never stops an answer.
+reset()
+said = []
+script(("call", [("find", {"text": "ubuntu"}), ("query_data", {"fact": "fact_purchase_invoice_line",
+                                                                "group_by": ["supplier"]})]),
+       ("text", "Done."))
+tools.TOOLS["query_data"] = (lambda **k: {"data_set": "fact_purchase_invoice_line", "rows": []},
+                             tools.TOOLS["query_data"][1])
+r = agent.answer("Q", "GIGMANN", on_step=said.append)
+check(said == ["Looking up “ubuntu”", "Adding up supplier bill lines by supplier"],
+      f"each lookup is reported in plain words, got {said}")
+reset()
+script(("call", [("find", {"text": "x"})]), ("text", "Still answered."))
+r = agent.answer("Q", "GIGMANN", on_step=lambda t: 1 / 0)
+check(r and r["answer"] == "Still answered.", "a failing progress reporter does not stop the answer")
+
 # 9. Every tool declaration is one Gemini accepts. One invalid schema -- an OBJECT with no
 #    properties is the usual one -- makes Gemini refuse the whole request, and with it
 #    every answer.
