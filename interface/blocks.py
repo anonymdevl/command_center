@@ -153,6 +153,10 @@ table.dt tr:hover td{background:var(--hover)}
 .rp-body{font-size:var(--fs-md);line-height:1.62;color:var(--ink2)}
 .rp-body b{color:var(--ink)}
 
+/* ---- an answer on the Ask AI screen ---- */
+.ans-q{font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em;line-height:1.3;
+ padding:4px 16px 0}
+
 /* ---- the records drawer ---- */
 .drawer{border-left:0;border-radius:24px 0 0 24px;box-shadow:var(--shadow2)}
 """

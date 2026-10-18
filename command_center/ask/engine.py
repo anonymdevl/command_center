@@ -136,14 +136,26 @@ def answer(question: str, business_code: str | None = None, history=None) -> dic
     if not question:
         return _cannot("Ask a question and I will look it up.", [])
 
+    analyst_error = None
     if analyst_enabled():
         try:
             result = agent.answer(question, business_code, history)
         except Exception:
             frappe.log_error(title="Command Center analyst", message=frappe.get_traceback())
-            result = None
-        if result:
+            result = {"answered": False, "analyst_error": "the analyst raised an error (see Error Log)"}
+        if result and result.get("answered"):
             return result
+        analyst_error = (result or {}).get("analyst_error") or "the analyst returned nothing"
+
+    fallback = _fallback(question, business_code)
+    if analyst_error:
+        # Said on the answer: a fallback that looks like the analyst is how a broken
+        # analyst went unnoticed on the live site.
+        fallback["analyst_error"] = analyst_error
+    return fallback
+
+
+def _fallback(question: str, business_code: str | None = None) -> dict:
 
     result, failures, note = plan(question, business_code)
     if result:

@@ -155,7 +155,9 @@ check(calls[-1]["tools"] is False and all(c["tools"] for c in calls[:-1]),
 # 6. Gemini unreachable: None, so engine.py falls back to the patterns.
 reset()
 script(("err", "Gemini unreachable"))
-check(agent.answer("Q", "GIGMANN") is None, "no answer from the model returns None")
+r = agent.answer("Q", "GIGMANN")
+check(r and r["answered"] is False and "unreachable" in r["analyst_error"],
+      "no answer from the model says so, with the reason, for the fallback to show")
 check(any("unreachable" in (m or "") for _, m, _ in frappe.logged), "and the reason is logged")
 
 # 7. Follow-ups carry the last turns only, trimmed.
@@ -174,8 +176,10 @@ bad = []
 
 
 def walk(name, sch, path):
-    if sch.get("type") == "object" and not sch.get("properties") and path:
-        bad.append(f"{name}:{path}")
+    # Top level included: an empty parameters object is the case that broke the live
+    # site, because the first version of this test skipped it.
+    if sch.get("type") == "object" and not sch.get("properties"):
+        bad.append(f"{name}:{path or 'parameters'}")
     for k, v in (sch.get("properties") or {}).items():
         walk(name, v, f"{path}.{k}")
     if "items" in sch:
@@ -183,7 +187,8 @@ def walk(name, sch, path):
 
 
 for d in tools.declarations():
-    walk(d["name"], d.get("parameters", {}), "")
+    if "parameters" in d:
+        walk(d["name"], d["parameters"], "")
 check(not bad, f"tool schemas Gemini would reject: {bad}")
 check(len({d["name"] for d in tools.declarations()}) == len(tools.declarations()),
       "tool names are unique")

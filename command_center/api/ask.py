@@ -24,6 +24,28 @@ def answer(question: str, business_code: str | None = None, history=None):
 
 
 @frappe.whitelist()
+def check_analyst():
+    """Is the analyst working on this site? Open in a browser while signed in:
+    /api/method/command_center.api.ask.check_analyst
+
+    Sends Gemini the real tool catalogue and a one-line question, so a declaration
+    Gemini will not accept, a wrong key or a retired model shows up here, in words.
+    """
+    require_manager()
+    from command_center.ask import gemini, tools
+    if not gemini.configured():
+        return {"ok": False, "why": "No Gemini key on this site. bench --site <site> "
+                "set-config command_center_gemini_key \"...\""}
+    content, err = gemini.chat([{"role": "user", "parts": [{"text": "Reply with the word OK."}]}],
+                               tools.declarations(), "You are a connectivity check.", timeout=30)
+    if err:
+        return {"ok": False, "model": gemini.analyst_model(), "why": err[:900]}
+    text = "".join(p.get("text", "") for p in (content or {}).get("parts", []))
+    return {"ok": True, "model": gemini.analyst_model(), "tools": len(tools.declarations()),
+            "reply": text[:80], "mode": "analyst" if engine.analyst_enabled() else "router"}
+
+
+@frappe.whitelist()
 def answerable():
     """What this screen can answer today.
 

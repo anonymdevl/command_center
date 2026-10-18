@@ -308,6 +308,14 @@ function Answer({ asked, result, scope, openDrawer, onReset }) {
           : "Answered from your ERPNext data"}
       </div>
       <div className="ap-q">{asked}</div>
+      {result.analyst_error ? (
+        // The analyst failed and the basic engine answered. Said, not hidden: a
+        // fallback that passes for the analyst is how a broken one goes unnoticed.
+        <div className="ap-note">
+          The analyst could not answer this time, so this is the basic engine's answer.
+          <span>Reason: {result.analyst_error}</span>
+        </div>
+      ) : null}
       <div className="ap-body" ref={body} />
 
       {markdown && result.checked?.length ? (

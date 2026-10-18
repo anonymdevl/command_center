@@ -44,12 +44,19 @@ function block(p, onOpen, onPdf) {
   const wrap = div("panel");
   wrap.style.margin = "0 0 16px";
 
-  const head = div("ph");
-  const headText = document.createElement("div");
-  headText.append(bold(p.answered ? "Answer" : "I cannot answer that"));
-  if (p.intent) headText.append(span("", ` · ${p.intent.replace(/_/g, " ")}`));
-  head.append(headText);
-  wrap.append(head);
+  // No "Answer" heading: the question is the heading, and a label over a reply reads
+  // like an exam paper.
+  if (p.question) {
+    const q = div("ans-q");
+    q.textContent = p.question;
+    wrap.append(q);
+  }
+  if (p.analyst_error) {
+    const n = div("ap-note");
+    n.append(text("The analyst could not answer this time, so this is the basic engine's answer."),
+      span("", `Reason: ${p.analyst_error}`));
+    wrap.append(n);
+  }
 
   const body = div("askans");
   // The analyst answers in formatted text; the pattern answers are plain sentences.

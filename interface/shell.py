@@ -125,6 +125,9 @@ SHELL_CSS = """
 .ap-src .ic{color:var(--accent)}
 .ap-q{font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em;line-height:1.3;margin:8px 0 10px}
 .ap-body{font-size:var(--fs-md);line-height:1.6;color:var(--ink2)}
+.ap-note{background:var(--high-bg);color:var(--ink2);border-radius:var(--r-sm);padding:10px 12px;
+ font-size:var(--fs-sm);margin:0 0 12px}
+.ap-note span{display:block;color:var(--mut);font-size:var(--fs-xs);margin-top:3px;word-break:break-word}
 .ap-body b{color:var(--ink)}
 .ap-body .panel{margin:0!important;border:0;background:none}
 .ap-checked{margin:14px 0 4px;border-top:1px solid var(--line);padding-top:10px;font-size:var(--fs-xs);color:var(--mut)}

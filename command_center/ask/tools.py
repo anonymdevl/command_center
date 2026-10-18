@@ -468,10 +468,15 @@ _FACT = {"type": "string", "enum": list(FACTS)}
 
 
 def _decl(name, description, properties=None, required=None):
-    params = {"type": "object", "properties": properties or {}}
-    if required:
-        params["required"] = required
-    return {"name": name, "description": description, "parameters": params}
+    # A tool that takes nothing has no "parameters" at all. An object with empty
+    # properties is rejected by Gemini -- and one rejected declaration fails the whole
+    # request, which is how every question fell back to the patterns on the live site.
+    decl = {"name": name, "description": description}
+    if properties:
+        decl["parameters"] = {"type": "object", "properties": properties}
+        if required:
+            decl["parameters"]["required"] = required
+    return decl
 
 
 TOOLS = {

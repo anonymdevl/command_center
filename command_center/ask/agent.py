@@ -90,7 +90,10 @@ def answer(question: str, business_code: str | None = None, history=None,
         frappe.log_error(title="Command Center analyst", message=f"Q: {question}\n\n{e}")
 
     if not text:
-        return None
+        # Not None: engine.py falls back to the patterns, and says why the analyst
+        # did not answer instead of letting the fallback pass for the analyst.
+        return {"answered": False, "analyst_error": (errors[-1] if errors else
+                "the model returned no answer")[:400]}
     return {
         "answered": True,
         "answer": text,
