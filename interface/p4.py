@@ -57,8 +57,8 @@ V_APPROVALS=f'''<div class="topbar"><div><h3>Approvals</h3>
 <span class="chip">Value band <b>10,001 – 100,000</b></span>
 <span class="chip">Route <b>Finance Manager → Chief Executive</b></span>
 <span class="chip">Raised <b>2 hours ago</b></span></div>
-<div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:10px">
-<div style="font-size:var(--fs-2xs);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:var(--fw-semibold);margin-bottom:8px">Everything you need to decide</div>
+<div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-xs);padding:12px 14px;margin-top:10px">
+<div style="font-size:var(--fs-2xs);color:var(--dim);font-weight:var(--fw-semibold);margin-bottom:8px">Everything you need to decide</div>
 <table class="dt"><tbody>
 <tr><td style="color:var(--mut);width:180px">Invoice</td><td><span class="lnk" onclick="openDrawer('a1')">20250819090603609383</span></td></tr>
 <tr><td style="color:var(--mut)">What they owe in total</td><td>GHS 11,000 — one invoice, due 19 Aug, nothing older</td></tr>
@@ -101,7 +101,7 @@ V_DELEG=f'''<div class="topbar"><div><h3>Outstanding Tasks</h3>
 <span class="chip">Due <b>26 Sep 2026</b></span></div>
 <div class="tstate"><div class="ts done">Handed out</div><div class="ts done">Accepted</div>
 <div class="ts done">Being worked on</div><div class="ts now">Waiting on you</div><div class="ts">Closed</div></div>
-<div style="background:var(--high-bg);border:1px solid var(--high-line);border-radius:8px;padding:11px 13px">
+<div style="background:var(--high-bg);border:1px solid var(--high-line);border-radius:var(--r-xs);padding:11px 13px">
 <div style="font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--high);margin-bottom:5px">Marking it done is not the same as finishing it</div>
 <div style="font-size:var(--fs-sm);color:var(--mut);line-height:1.55">You asked for
 <b style="color:var(--ink)">a signed payment plan with dates on it</b>. K. Mensah marked this complete on

@@ -455,9 +455,11 @@ color:var(--accent);font-weight:var(--fw-bold);margin-bottom:6px}
  .kpis.six,.grid.six,.kpis[style*="repeat(6"]{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 @container panel (max-width:899px){
  .two{grid-template-columns:1fr}
- .kpis,.kpis.six,.grid,.grid.six{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+ .kpis,.kpis.six,.kpis[style],.grid,.grid.six,.grid[style]{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 @container panel (max-width:560px){
- .kpis,.kpis.six,.grid,.grid.six{grid-template-columns:minmax(0,1fr)!important}
+ /* [style] as well: the six-column rule above names the inline style, so without it
+    that rule is more specific and a phone kept three columns. */
+ .kpis,.kpis.six,.kpis[style],.grid,.grid.six,.grid[style]{grid-template-columns:minmax(0,1fr)!important}
  /* A phone is narrower than any data table here. The table scrolls inside its own
     box, so the page never moves sideways under the reader's thumb. */
  table.dt{display:block;max-width:100%;overflow-x:auto}
@@ -616,24 +618,31 @@ table.dt tr:hover td{background:var(--hover)}
 /* ---- the Ask screen's own box ---- */
 .askbox,[data-theme="light"] .askbox{border:1px solid var(--line2);box-shadow:none;padding:14px 22px}
 
-/* ---- Business Overview's signature tiles (build.py signature_tiles) ---- */
-/* Tinted, left-aligned, a cut corner with a round arrow -- the approved mockup. The
-   tints (--t1..--t3) are tokens in both themes. */
-.bk.sig{--cut:76px;--r-cut:20px;background:var(--t1);border:0;text-align:left;align-items:flex-start;
- min-height:190px;padding:22px 22px 18px;position:relative;overflow:visible}
-.bk.sig:nth-child(3n+2){background:var(--t2)}
-.bk.sig:nth-child(3n+3){background:var(--t3)}
-.bk.sig:hover{box-shadow:var(--shadow-hover);transform:translateY(-2px)}
-.bk.sig > .khead{justify-content:flex-start}
-.bk.sig .l{color:var(--ink2);font-weight:var(--fw-semibold);font-size:var(--fs-sm)}
-.bk.sig .n{justify-content:flex-start;font-size:clamp(30px,15cqi,46px);margin-top:auto;padding-top:18px}
+/* ---- the signature card, on every screen (build.py signature_tiles) ---- */
+/* Tinted, left-aligned, a cut corner with a round arrow -- the approved mockup, on every
+   .kpi card and .bk tile. The tints (--t1..--t3) are tokens in both themes and cycle
+   along each row. */
+/* :is(.kpi,.bk).sig rather than .sig: the generators' .bk:has(.n) centres a tile and is
+   as specific as two classes, so a one-class rule lost and left question tiles centred. */
+:is(.kpi,.bk).sig{--cut:76px;--r-cut:20px;background:var(--t1);border:0;text-align:left;align-items:flex-start;
+ min-height:176px;padding:20px 20px 18px;position:relative;overflow:visible;display:flex;
+ flex-direction:column}
+.sig:nth-child(3n+2){background:var(--t2)}
+.sig:nth-child(3n+3){background:var(--t3)}
+.sig:hover,[data-theme="light"] .sig:hover,.kpi.sig.clickable:hover{border:0;
+ box-shadow:var(--shadow-hover);transform:translateY(-2px)}
+.sig > .khead{justify-content:flex-start;width:100%}
+.sig .l,.sig .lab{color:var(--ink2);font-weight:var(--fw-semibold);font-size:var(--fs-sm)}
+:is(.kpi,.bk).sig .n,:is(.kpi,.bk).sig .val{justify-content:flex-start;font-size:clamp(28px,14cqi,44px);margin-top:auto;padding-top:16px;
+ text-align:left;width:100%}
 /* The footnote may take a second line beside the arrow: cutting it off with an
    ellipsis hid what the figure means. */
-.bk.sig .v{border-top:0;padding-top:0;margin-top:6px;max-width:calc(100% - var(--cut));color:var(--ink2);
- white-space:normal;overflow:visible;text-overflow:clip;line-height:1.4}
-.bk.sig > .flag[data-prov]{align-self:flex-start;margin-top:8px}
-.bk.sig:has(.n):not(:has(.v))::after{display:none}
-.bk.sig.clickable::before{display:none}
+:is(.kpi,.bk).sig .v,:is(.kpi,.bk).sig .delta{border-top:0;padding-top:0;margin-top:6px;max-width:calc(100% - var(--cut));
+ color:var(--ink2);white-space:normal;overflow:visible;text-overflow:clip;line-height:1.4;text-align:left}
+.sig > .flag[data-prov]{align-self:flex-start;margin-top:8px}
+.sig:has(.n):not(:has(.v))::after{display:none}
+.sig.clickable::before,.sig.clickable::after,.kpi.sig.clickable:hover::after{display:none}
+:is(.kpi,.bk).sig .bar{max-width:calc(100% - var(--cut));margin-left:0}
 .sig-cut{position:absolute;right:0;bottom:0;width:var(--cut);height:var(--cut);background:var(--surface);
  border-top-left-radius:var(--r-cut);pointer-events:none}
 .sig-cut::before,.sig-cut::after{content:"";position:absolute;width:var(--r-cut);height:var(--r-cut);
@@ -642,7 +651,9 @@ table.dt tr:hover td{background:var(--hover)}
 .sig-cut::after{left:calc(var(--r-cut) * -1);bottom:0}
 .sig-go{position:absolute;right:6px;bottom:6px;width:58px;height:58px;border-radius:50%;background:var(--ink);
  color:var(--surface);display:grid;place-items:center;transition:transform .2s;pointer-events:none}
-.bk.sig:hover .sig-go{transform:rotate(45deg)}
+.sig:hover .sig-go{transform:rotate(45deg)}
+/* A card inside a panel sits on the panel's surface, which the cut must match. */
+.panel .sig-cut,.panel .sig-cut::before,.panel .sig-cut::after{--surface:var(--surface)}
 
 /* ---- a written report, under the Reports table (legacy/reports.js) ---- */
 .rp{margin-top:18px}
@@ -652,6 +663,10 @@ table.dt tr:hover td{background:var(--hover)}
 .rp-acts{margin-left:auto;display:flex;gap:8px}
 .rp-body{font-size:var(--fs-md);line-height:1.62;color:var(--ink2)}
 .rp-body b{color:var(--ink)}
+
+/* ---- the last small-capital labels, in plain words like the rest ---- */
+.eyebrow,.dhead .dt,.askchecked-t{text-transform:none;letter-spacing:0;font-size:var(--fs-xs);
+ font-weight:var(--fw-semibold);color:var(--mut)}
 
 /* ---- an answer on the Ask AI screen ---- */
 .ans-q{font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em;line-height:1.3;

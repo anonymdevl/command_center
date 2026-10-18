@@ -96,9 +96,11 @@ color:var(--accent);font-weight:var(--fw-bold);margin-bottom:6px}
  .kpis.six,.grid.six,.kpis[style*="repeat(6"]{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 @container panel (max-width:899px){
  .two{grid-template-columns:1fr}
- .kpis,.kpis.six,.grid,.grid.six{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+ .kpis,.kpis.six,.kpis[style],.grid,.grid.six,.grid[style]{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 @container panel (max-width:560px){
- .kpis,.kpis.six,.grid,.grid.six{grid-template-columns:minmax(0,1fr)!important}
+ /* [style] as well: the six-column rule above names the inline style, so without it
+    that rule is more specific and a phone kept three columns. */
+ .kpis,.kpis.six,.kpis[style],.grid,.grid.six,.grid[style]{grid-template-columns:minmax(0,1fr)!important}
  /* A phone is narrower than any data table here. The table scrolls inside its own
     box, so the page never moves sideways under the reader's thumb. */
  table.dt{display:block;max-width:100%;overflow-x:auto}
@@ -636,24 +638,24 @@ VIEWS = {k: normalise_cards(v) for k, v in VIEWS.items()}
 
 
 def signature_tiles(html: str) -> str:
-    """The mockup's tiles for Business Overview: a cut corner holding an arrow button.
+    """The mockup's card: a cut corner holding an arrow button, on every figure card.
 
     Two absolutely placed spans at the start of each tile, so nothing in the flow
     moves: the label, figure, footnote and the provenance pill hydrate.js appends are
     exactly where hydration expects them, and the tile still opens with its own
-    onclick. Business Overview only -- the signature used everywhere would turn back
-    into a template.
+    onclick. Every screen, every .kpi card and .bk tile (Michael, 18 Oct 2026): one
+    screen in the new form and eighteen in the old read as a bait and switch.
     """
     import re as _re
     arrow = ('<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
              'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
              '<path d="M7 17 17 7M8.5 7H17v8.5"/></svg>')
-    return _re.sub(r'(<div class="bk(?:\s+[\w-]+)*)("(?:(?!>).)*>)',
+    return _re.sub(r'(<div class="(?:bk|kpi)(?:\s+[\w-]+)*)("(?:(?!>).)*>)',
                    lambda m: f'{m.group(1)} sig{m.group(2)}<span class="sig-cut" aria-hidden="true">'
                              f'</span><span class="sig-go" aria-hidden="true">{arrow}</span>', html)
 
 
-VIEWS["ops"] = signature_tiles(VIEWS["ops"])
+VIEWS = {k: signature_tiles(v) for k, v in VIEWS.items()}
 
 _i = BODY.index("<script>")
 _j = BODY.rindex("</script>")

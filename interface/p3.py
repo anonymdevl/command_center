@@ -83,9 +83,9 @@ V_HEALTH=f'''<div class="topbar"><div><h3>Business Health</h3>
 <div class="when">Six questions, asked of the business every morning</div></div></div>
 <div style="display:grid;grid-template-columns:190px 1fr;gap:16px;align-items:center;
 background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--crit);
-border-radius:10px;padding:16px 18px;margin-bottom:16px">
+border-radius:var(--r);padding:18px 20px;margin-bottom:16px">
 <div style="text-align:center"><div style="font-size:var(--fs-5xl);font-weight:var(--fw-bold);color:var(--crit);line-height:1">39</div>
-<div style="font-size:var(--fs-2xs);color:var(--dim);letter-spacing:.06em;text-transform:uppercase;margin-top:2px">Control health</div>
+<div style="font-size:var(--fs-2xs);color:var(--dim); font-weight:var(--fw-semibold);margin-top:2px">Control health</div>
 <div style="font-size:var(--fs-2xs);color:var(--crit);margin-top:5px">▼ 6 since last week</div></div>
 <div><div style="font-size:var(--fs-md);line-height:1.6">Three things are going badly.
 <b>We cannot reliably deliver what we have sold</b> — 491 products are promised to customers but not
