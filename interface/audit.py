@@ -36,19 +36,19 @@ def trail_rows():
     for d,t,who,k,what,where,which,detail,drill in TRAIL:
         lab,col=KIND[k]
         blob=(who+" "+what+" "+where+" "+which+" "+detail).lower()
-        det=(f'<div style="font-size:10.5px;color:var(--mut);margin-top:2px">{detail}</div>'
+        det=(f'<div style="font-size:var(--fs-2xs);color:var(--mut);margin-top:2px">{detail}</div>'
              if detail else '')
         click=(f' onclick="drill({SQ}{drill}{SQ})" style="cursor:pointer"' if drill else '')
-        arrow=('<span style="color:var(--accent);font-size:11px">&rsaquo;</span>' if drill else '')
+        arrow=('<span style="color:var(--accent);font-size:var(--fs-2xs)">&rsaquo;</span>' if drill else '')
         out+=(f'<tr data-k="{k}" data-u="{who}" data-s="{blob}"{click}>'
               f'<td style="white-space:nowrap;color:var(--mut)">{d}'
-              f'<div style="font-size:10.5px">{t}</div></td>'
+              f'<div style="font-size:var(--fs-2xs)">{t}</div></td>'
               f'<td style="white-space:nowrap">{who}</td>'
               f'<td><span class="tag" style="color:{col};background:transparent;'
               f'border:1px solid {col};white-space:nowrap">{lab}</span></td>'
               f'<td>{what}{det}</td>'
               f'<td style="color:var(--mut)">{where}'
-              f'<div style="font-size:10.5px">{which}</div></td>'
+              f'<div style="font-size:var(--fs-2xs)">{which}</div></td>'
               f'<td style="text-align:right">{arrow}</td></tr>')
     return out
 
@@ -65,7 +65,7 @@ TRAIL_FROM="5 February 2024"
 def depth_rows():
     out=""
     for lab,dt,n in TRAIL_DEPTH:
-        out+=(f'<tr><td>{lab}{f"<div style=font-size:10.5px;color:var(--dim)>{dt}</div>" if dt else ""}</td>'
+        out+=(f'<tr><td>{lab}{f"<div style=font-size:var(--fs-2xs);color:var(--dim)>{dt}</div>" if dt else ""}</td>'
               f'<td class="num">{n:,}</td></tr>')
     out+=(f'<tr style="border-top:2px solid var(--line2)"><td><b>Changes to business records</b></td>'
           f'<td class="num"><b>{TRAIL_BUSINESS:,}</b></td></tr>'
@@ -95,9 +95,9 @@ def _chg(rows):
     return out+'</tbody></table>'
 
 def _step(t,who,rows,note=""):
-    return (f'<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:600">{t} '
-            f'<span style="color:var(--dim);font-weight:400">&middot; {who}</span></div>'
-            +(f'<div style="font-size:11px;color:var(--high);margin:3px 0 5px">{note}</div>' if note else '')
+    return (f'<div style="margin-bottom:14px"><div style="font-size:var(--fs-xs);font-weight:var(--fw-semibold)">{t} '
+            f'<span style="color:var(--dim);font-weight:var(--fw-regular)">&middot; {who}</span></div>'
+            +(f'<div style="font-size:var(--fs-2xs);color:var(--high);margin:3px 0 5px">{note}</div>' if note else '')
             +_chg(rows)+'</div>')
 
 DRILL={
@@ -161,7 +161,7 @@ def drill_html(k):
     kind,ref,when,body,note=DRILL[k]
     return (f'<div class="dhead"><div><div class="dt">{kind} &middot; change history</div><h4>{ref}</h4></div>'
             f'<button class="btn" onclick="closeDrawer()">Close &#10005;</button></div>'
-            f'<p style="font-size:12.5px;color:var(--mut);margin-bottom:12px">{when}</p>'
+            f'<p style="font-size:var(--fs-sm);color:var(--mut);margin-bottom:12px">{when}</p>'
             f'{body}'
             f'<div class="warn" style="margin-top:4px">{note}</div>'
             f'<div class="acts" style="margin-top:14px"><button class="btn pri">Open in ERPNext &#8599;</button>'

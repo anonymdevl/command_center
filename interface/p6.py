@@ -29,13 +29,13 @@ V_MYDAY=f'''<div class="topbar"><div><h3>Today</h3>
 V_REPORTS=f'''<div class="topbar"><div><h3>Reports</h3>
 <div class="when">Nine reports · built from the records, never typed up by hand</div></div></div>
 <table class="dt"><thead><tr><th>Report</th><th>Checked against</th><th>When it runs</th><th>Last run</th><th></th></tr></thead><tbody>
-<tr><td><b>Executive Summary</b><div style="font-size:11px;color:var(--mut)">What moved, what is wrong, what needs deciding</div></td>
+<tr><td><b>Executive Summary</b><div style="font-size:var(--fs-2xs);color:var(--mut)">What moved, what is wrong, what needs deciding</div></td>
 <td style="color:var(--mut)">The alert and task records</td><td style="color:var(--mut)">06:00 every day</td>
 <td><span class="tag t-ok">✓ Agrees</span></td><td><button class="btn">Run</button></td></tr>
-<tr><td><b>Sales and Payments</b><div style="font-size:11px;color:var(--mut)">Orders, invoicing, collections, who owes what, discounts, biggest customers</div></td>
+<tr><td><b>Sales and Payments</b><div style="font-size:var(--fs-2xs);color:var(--mut)">Orders, invoicing, collections, who owes what, discounts, biggest customers</div></td>
 <td style="color:var(--mut)">Customer account balances</td><td style="color:var(--mut)">Monday 07:00</td>
 <td><span class="tag t-ok">✓ Agrees</span></td><td><button class="btn">Run</button></td></tr>
-<tr><td><b>Buying and stock</b><div style="font-size:11px;color:var(--mut)">Open orders, suppliers, availability, ageing, money tied up</div></td>
+<tr><td><b>Buying and stock</b><div style="font-size:var(--fs-2xs);color:var(--mut)">Open orders, suppliers, availability, ageing, money tied up</div></td>
 <td style="color:var(--mut)">Stock and supplier balances</td><td style="color:var(--mut)">Weekly</td>
 <td><span class="tag t-wt">! 3 differences</span></td><td><button class="btn">Run</button></td></tr>
 <tr><td><b>Weekly management report</b></td><td style="color:var(--mut)">Each area's own numbers</td>
@@ -44,7 +44,7 @@ V_REPORTS=f'''<div class="topbar"><div><h3>Reports</h3>
 <td><span class="tag t-ok">✓ Agrees</span></td><td><button class="btn">Run</button></td></tr>
 <tr><td><b>Engineering</b></td><td style="color:var(--mut)">Job costs against the accounts</td>
 <td style="color:var(--mut)">Weekly</td><td><span class="tag t-wt">! Costs not linked</span></td><td><button class="btn">Run</button></td></tr>
-<tr><td><b>People</b><div style="font-size:11px;color:var(--mut)">Headcount, recruitment, attendance, payroll status</div></td>
+<tr><td><b>People</b><div style="font-size:var(--fs-2xs);color:var(--mut)">Headcount, recruitment, attendance, payroll status</div></td>
 <td style="color:var(--mut)">The HR records</td><td style="color:var(--mut)">Monthly</td>
 <td><span class="tag t-ok">✓ Names hidden</span></td><td><button class="btn">Run</button></td></tr>
 <tr><td><b>Compliance and audit</b></td><td style="color:var(--mut)">The compliance records</td>
@@ -65,20 +65,20 @@ V_SEARCH=f'''<div class="topbar"><div><h3>Find anything</h3>
 <div id="searchout"></div>
 <div class="sect" style="margin-top:20px">What is actually filed against each kind of record</div>
 <div class="grid" style="grid-template-columns:repeat(4,1fr);gap:10px">
-<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:12.5px;font-weight:560">Customers and sales</div><span style="font-size:15px;font-weight:640;color:var(--ok)">2</span></div>
-<div style="font-size:10.5px;color:var(--mut);margin-top:5px">Quotes, agreements, delivery notes, invoices, receipts</div></div>
-<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:12.5px;font-weight:560">Suppliers and buying</div><span style="font-size:15px;font-weight:640;color:var(--ok)">3</span></div>
-<div style="font-size:10.5px;color:var(--mut);margin-top:5px">Quotes, orders, invoices, payment proof, warranties</div></div>
-<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:12.5px;font-weight:560">Stock and equipment</div><span style="font-size:15px;font-weight:640;color:var(--dim)">0</span></div>
-<div style="font-size:10.5px;color:var(--mut);margin-top:5px">Inspections, transfers, count sheets, write-off approvals</div></div>
-<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:12.5px;font-weight:560">Engineering jobs</div><span style="font-size:15px;font-weight:640;color:var(--dim)">0</span></div>
-<div style="font-size:10.5px;color:var(--mut);margin-top:5px">Estimates, checklists, photos, reports, customer sign-off</div></div>
-<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:12.5px;font-weight:560">Staff</div><span style="font-size:15px;font-weight:640;color:var(--ok)">24</span></div>
-<div style="font-size:10.5px;color:var(--mut);margin-top:5px">Contracts, qualifications, appraisals, handovers · <b style="color:var(--high)">restricted</b></div></div>
-<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:12.5px;font-weight:560">Projects</div><span style="font-size:15px;font-weight:640;color:var(--dim)">0</span></div>
-<div style="font-size:10.5px;color:var(--mut);margin-top:5px">Contracts, drawings, permits, certificates</div></div>
-<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:12.5px;font-weight:560">Board and governance</div><span style="font-size:15px;font-weight:640;color:var(--dim)">0</span></div>
-<div style="font-size:10.5px;color:var(--mut);margin-top:5px">Papers, policies, minutes, audit reports · <b style="color:var(--high)">restricted</b></div></div>
+<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:var(--fs-sm);font-weight:var(--fw-semibold)">Customers and sales</div><span style="font-size:var(--fs-lg);font-weight:var(--fw-bold);color:var(--ok)">2</span></div>
+<div style="font-size:var(--fs-2xs);color:var(--mut);margin-top:5px">Quotes, agreements, delivery notes, invoices, receipts</div></div>
+<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:var(--fs-sm);font-weight:var(--fw-semibold)">Suppliers and buying</div><span style="font-size:var(--fs-lg);font-weight:var(--fw-bold);color:var(--ok)">3</span></div>
+<div style="font-size:var(--fs-2xs);color:var(--mut);margin-top:5px">Quotes, orders, invoices, payment proof, warranties</div></div>
+<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:var(--fs-sm);font-weight:var(--fw-semibold)">Stock and equipment</div><span style="font-size:var(--fs-lg);font-weight:var(--fw-bold);color:var(--dim)">0</span></div>
+<div style="font-size:var(--fs-2xs);color:var(--mut);margin-top:5px">Inspections, transfers, count sheets, write-off approvals</div></div>
+<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:var(--fs-sm);font-weight:var(--fw-semibold)">Engineering jobs</div><span style="font-size:var(--fs-lg);font-weight:var(--fw-bold);color:var(--dim)">0</span></div>
+<div style="font-size:var(--fs-2xs);color:var(--mut);margin-top:5px">Estimates, checklists, photos, reports, customer sign-off</div></div>
+<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:var(--fs-sm);font-weight:var(--fw-semibold)">Staff</div><span style="font-size:var(--fs-lg);font-weight:var(--fw-bold);color:var(--ok)">24</span></div>
+<div style="font-size:var(--fs-2xs);color:var(--mut);margin-top:5px">Contracts, qualifications, appraisals, handovers · <b style="color:var(--high)">restricted</b></div></div>
+<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:var(--fs-sm);font-weight:var(--fw-semibold)">Projects</div><span style="font-size:var(--fs-lg);font-weight:var(--fw-bold);color:var(--dim)">0</span></div>
+<div style="font-size:var(--fs-2xs);color:var(--mut);margin-top:5px">Contracts, drawings, permits, certificates</div></div>
+<div class="bk"><div style="display:flex;justify-content:space-between"><div style="font-size:var(--fs-sm);font-weight:var(--fw-semibold)">Board and governance</div><span style="font-size:var(--fs-lg);font-weight:var(--fw-bold);color:var(--dim)">0</span></div>
+<div style="font-size:var(--fs-2xs);color:var(--mut);margin-top:5px">Papers, policies, minutes, audit reports · <b style="color:var(--high)">restricted</b></div></div>
 </div>
 <div class="warn"><b>There is almost nothing filed.</b> Across the whole business there are 29 documents
 attached to records — 24 of them staff files and 5 commercial. Alongside them sit roughly 38,000 small

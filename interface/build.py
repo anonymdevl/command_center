@@ -17,6 +17,7 @@ exec(_src('brain.py'))
 exec(_src('explain.py'))
 exec(_src('records.py'))
 exec(_src('tidy.py'))
+exec(_src('blocks.py'))
 exec(_src('shell.py'))
 
 EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + """
@@ -168,7 +169,7 @@ def drawer_html(d):
             f'<dl class="kv" style="margin-bottom:14px">{rows}</dl>'
             f'<div class="sect">How far it got</div><div class="chain">{ch}</div>'
             f'<div class="sect">Where this comes from</div>'
-            f'<div class="exbox"><dl class="kv" style="margin-bottom:0;grid-template-columns:130px 1fr;font-size:12px">{pr}</dl></div>'
+            f'<div class="exbox"><dl class="kv" style="margin-bottom:0;grid-template-columns:130px 1fr;font-size:var(--fs-xs)">{pr}</dl></div>'
             f'<div class="acts" style="margin-top:14px"><button class="btn pri">Open in ERPNext ↗</button>'
             f'<button class="btn">Hand this to someone</button>'
             f'<button class="btn" onclick="closeDrawer();go(\'ask\')">Ask about it</button></div>')
@@ -185,11 +186,11 @@ def ex_html(k):
                   '<div class="thin">Nothing to list for this one in the demo extract.</div>')
     return (f'<div class="dhead"><div><div class="dt">Where this comes from</div><h4>{t}</h4></div>'
             f'<button class="btn" onclick="closeDrawer()">Close &#10005;</button></div>'
-            f'<p style="font-size:13px;color:var(--mut);margin-bottom:10px">{sub}</p>'
-            f'<div style="font-size:12.5px;line-height:1.6;margin-bottom:4px">{foot}</div>'
+            f'<p style="font-size:var(--fs-sm);color:var(--mut);margin-bottom:10px">{sub}</p>'
+            f'<div style="font-size:var(--fs-sm);line-height:1.6;margin-bottom:4px">{foot}</div>'
             + recblock +
             '<div class="sect" style="margin-top:16px">How it is put together</div>'
-            f'<div class="exbox"><dl class="kv" style="margin-bottom:0;grid-template-columns:135px 1fr;font-size:12px">{r}</dl></div>'
+            f'<div class="exbox"><dl class="kv" style="margin-bottom:0;grid-template-columns:135px 1fr;font-size:var(--fs-xs)">{r}</dl></div>'
             '<div class="acts" style="margin-top:14px"><button class="btn pri">Open in ERPNext &#8599;</button>'
             '<button class="btn">Hand this to someone</button>'
             '<button class="btn" onclick="closeDrawer();go(&#39;ask&#39;)">Ask about this</button></div>')
@@ -270,7 +271,7 @@ function greet(){{
   else if(h>=17||h<5){{word='Good evening'; icon=MOON;}}
   const g=document.getElementById('greet');
   if(g) g.innerHTML='<div><div>'+word+', '+p.name+'</div>'
-    +'<div class="when" style="font-weight:400">'
+    +'<div class="when" style="font-weight:var(--fw-regular)">'
     +new Date().toLocaleDateString('en-GB',{{weekday:'long',day:'numeric',month:'long',year:'numeric'}})
     +' &middot; '+new Date().toLocaleTimeString('en-GB',{{hour:'2-digit',minute:'2-digit'}})+'</div></div>'+icon;
   const av=document.getElementById('av'), wr=document.getElementById('whorole');
@@ -637,7 +638,7 @@ _i = BODY.index("<script>")
 _j = BODY.rindex("</script>")
 PARTS = {
     # The shell goes last: it is the one owner of its rules, so nothing may follow it.
-    "css": CSS + EXTRA_CSS + BOOT_CSS + SHELL_CSS,
+    "css": CSS + EXTRA_CSS + BOOT_CSS + BLOCKS_CSS + SHELL_CSS,
     "body": BODY[:_i],
     "js": BODY[_i + len("<script>"):_j] + BOOT_JS,
 }

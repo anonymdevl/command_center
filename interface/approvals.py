@@ -57,15 +57,15 @@ def decided_rows():
         arrow=('<span style="color:var(--accent)">&rsaquo;</span>' if drill else '')
         out+=(f'<tr{click}>'
               f'<td><span class="lnk">{ref}</span>'
-              f'<div style="font-size:10.5px;color:var(--dim)">{kind}</div></td>'
-              f'<td>{party}<div style="font-size:10.5px;color:var(--dim)">raised by {who}</div></td>'
+              f'<div style="font-size:var(--fs-2xs);color:var(--dim)">{kind}</div></td>'
+              f'<td>{party}<div style="font-size:var(--fs-2xs);color:var(--dim)">raised by {who}</div></td>'
               f'<td class="num">{_c(val)}</td>'
               f'<td><span class="tag {tag[flag]}">{state}</span>'
-              f'<div style="font-size:10.5px;color:var(--mut);margin-top:3px">{note}</div></td>'
+              f'<div style="font-size:var(--fs-2xs);color:var(--mut);margin-top:3px">{note}</div></td>'
               f'<td style="text-align:right">{arrow}</td></tr>')
     return out
 
 def state_rows():
     return "".join(
       f'<tr><td><span style="color:{c}">&#9679;</span> {lab}</td><td class="num">{n}</td>'
-      f'<td style="color:var(--mut);font-size:11.5px">{note}</td></tr>' for lab,n,c,note in STATES)
+      f'<td style="color:var(--mut);font-size:var(--fs-xs)">{note}</td></tr>' for lab,n,c,note in STATES)

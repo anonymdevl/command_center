@@ -84,17 +84,17 @@ V_HEALTH=f'''<div class="topbar"><div><h3>Business Health</h3>
 <div style="display:grid;grid-template-columns:190px 1fr;gap:16px;align-items:center;
 background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--crit);
 border-radius:10px;padding:16px 18px;margin-bottom:16px">
-<div style="text-align:center"><div style="font-size:42px;font-weight:700;color:var(--crit);line-height:1">39</div>
-<div style="font-size:10.5px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase;margin-top:2px">Control health</div>
-<div style="font-size:10.5px;color:var(--crit);margin-top:5px">▼ 6 since last week</div></div>
-<div><div style="font-size:13.5px;line-height:1.6">Three things are going badly.
+<div style="text-align:center"><div style="font-size:var(--fs-5xl);font-weight:var(--fw-bold);color:var(--crit);line-height:1">39</div>
+<div style="font-size:var(--fs-2xs);color:var(--dim);letter-spacing:.06em;text-transform:uppercase;margin-top:2px">Control health</div>
+<div style="font-size:var(--fs-2xs);color:var(--crit);margin-top:5px">▼ 6 since last week</div></div>
+<div><div style="font-size:var(--fs-md);line-height:1.6">Three things are going badly.
 <b>We cannot reliably deliver what we have sold</b> — 491 products are promised to customers but not
 on the shelf, and a third of everything we own is not in any warehouse.
 <b>We are not being paid</b> — the full GHS 9.18M owed is more than three months late, with nothing at
 all in the earlier stages. <b>And approvals are being completed by whoever raised them</b> — the
 four-stage check on purchase orders exists, and the change history shows single accounts walking
 straight through it in seconds.</div>
-<div style="font-size:11.5px;color:var(--mut);margin-top:9px">This is not a score about the software.
+<div style="font-size:var(--fs-xs);color:var(--mut);margin-top:9px">This is not a score about the software.
 It measures whether the records the business runs on can be trusted this week.</div></div></div>
 <div class="sect">The six questions</div>
 <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:10px">{fh}</div>

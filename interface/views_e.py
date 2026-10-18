@@ -55,7 +55,7 @@ V_AUD_TRAIL=f'''<div class="kpis" style="grid-template-columns:repeat(4,1fr);mar
 <table class="dt" id="atrail"><thead><tr><th>When</th><th>Who</th><th>What kind</th>
 <th>What happened</th><th>Which record</th><th></th></tr></thead><tbody>{trail_rows()}</tbody></table>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;
-font-size:11.5px;color:var(--dim)">
+font-size:var(--fs-xs);color:var(--dim)">
 <span>Rows with an arrow open the change itself &mdash; field, value before, value after. Showing the most recent 21 of 91,133; paged, not trimmed &mdash;
 older entries load as you scroll back, and any date range can be opened directly.</span>
 <span><button class="btn">Load older</button></span></div>

@@ -1063,6 +1063,13 @@ if os.path.exists(CSS_FILE):
     check(not _loose,
           "the stylesheet sets font sizes off the type scale: " + ", ".join(_loose)
           + ". Use var(--fs-...) from p1.py.")
+    # The screens' own markup too: an inline size is still a size nobody chose.
+    _markup = (open(os.path.join(ROOT, "frontend", "src", "legacy", "views.json")).read()
+               + open(os.path.join(ROOT, "frontend", "src", "legacy", "extras.json")).read())
+    _inline = sorted(set(re.findall(r"font-size:\s*[\d.]+px|font-weight:\s*\d{3}", _markup)))
+    check(not _inline,
+          "screen markup sets sizes or weights off the scale: " + ", ".join(_inline[:8])
+          + ". Inline styles use var(--fs-...) and var(--fw-...) too.")
     _wloose = sorted(set(re.findall(r"font(?:-weight)?:\s*(\d{3})\b", _rules)))
     check(not _wloose,
           "the stylesheet sets font weights off the four-weight scale: " + ", ".join(_wloose)

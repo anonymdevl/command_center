@@ -49,10 +49,10 @@ def user_rows(enabled_only=True):
         flag=(f'<span class="tag t-od">{len(hits)} conflict{"s" if len(hits)>1 else ""}</span>'
               if hits else ('<span class="tag t-ok">clear</span>' if roles else
                             '<span class="tag t-dr">no roles</span>'))
-        note=("<div style='font-size:10.5px;color:var(--crit);margin-top:3px'>"
+        note=("<div style='font-size:var(--fs-2xs);color:var(--crit);margin-top:3px'>"
               +"; ".join(hits)+"</div>") if hits else ""
-        out+=(f'<tr><td>{nm}<div style="font-size:10.5px;color:var(--dim)">{em}</div></td>'
-              f'<td style="font-size:11.5px;color:var(--mut)">{rs}{note}</td>'
+        out+=(f'<tr><td>{nm}<div style="font-size:var(--fs-2xs);color:var(--dim)">{em}</div></td>'
+              f'<td style="font-size:var(--fs-xs);color:var(--mut)">{rs}{note}</td>'
               f'<td class="num">{len(roles)}</td>'
               f'<td>{flag}</td><td style="color:var(--mut);white-space:nowrap">{last}</td></tr>')
     return out
@@ -62,8 +62,8 @@ def disabled_rows():
     for nm,em,en,last,roles in USERS:
         if en: continue
         if is_vendor(em): continue
-        out+=(f'<tr><td>{nm}<div style="font-size:10.5px;color:var(--dim)">{em}</div></td>'
-              f'<td style="font-size:11.5px;color:var(--mut)">{" · ".join(roles) or "none"}</td>'
+        out+=(f'<tr><td>{nm}<div style="font-size:var(--fs-2xs);color:var(--dim)">{em}</div></td>'
+              f'<td style="font-size:var(--fs-xs);color:var(--mut)">{" · ".join(roles) or "none"}</td>'
               f'<td class="num">{len(roles)}</td><td><span class="tag t-ok">Sign-in blocked</span></td>'
               f'<td style="color:var(--mut);white-space:nowrap">{last}</td></tr>')
     return out
@@ -78,8 +78,8 @@ def vendor_rows():
     out=""
     for nm,em,en,last,roles in VENDOR_ACCTS:
         st=('<span class="tag t-wt">active</span>' if en else '<span class="tag t-ok">sign-in blocked</span>')
-        out+=(f'<tr><td>{nm}<div style="font-size:10.5px;color:var(--dim)">{em}</div></td>'
-              f'<td style="font-size:11px;color:var(--mut)">{" · ".join(roles) if roles else "none"}</td>'
+        out+=(f'<tr><td>{nm}<div style="font-size:var(--fs-2xs);color:var(--dim)">{em}</div></td>'
+              f'<td style="font-size:var(--fs-2xs);color:var(--mut)">{" · ".join(roles) if roles else "none"}</td>'
               f'<td>{len(roles)}</td><td>{st}</td>'
               f'<td style="color:var(--mut);white-space:nowrap">{last}</td></tr>')
     return out
@@ -137,17 +137,17 @@ def identity_rows():
         link=('<span class="tag t-ok">linked</span>' if linked
               else '<span class="tag t-od">no account linked</span>')
         st=('' if status=="Active" else '<span class="tag t-dr">has left</span>')
-        out+=(f'<tr><td>{nm}{st}<div style="font-size:10.5px;color:var(--dim)">{eid} &middot; {desig}</div></td>'
-              f'<td style="color:var(--mut)">{dept}<div style="font-size:10.5px">{branch}</div></td>'
-              f'<td style="font-size:11px;color:var(--mut)">{uid or "&mdash;"}</td>'
-              f'<td style="font-size:11px">{" · ".join(acc)}</td><td>{link}</td></tr>')
+        out+=(f'<tr><td>{nm}{st}<div style="font-size:var(--fs-2xs);color:var(--dim)">{eid} &middot; {desig}</div></td>'
+              f'<td style="color:var(--mut)">{dept}<div style="font-size:var(--fs-2xs)">{branch}</div></td>'
+              f'<td style="font-size:var(--fs-2xs);color:var(--mut)">{uid or "&mdash;"}</td>'
+              f'<td style="font-size:var(--fs-2xs)">{" · ".join(acc)}</td><td>{link}</td></tr>')
     for nm,em,en,last,roles in USERS:
         if em in seen or not en or is_vendor(em): continue
         acc=derive_access(roles)
-        out+=(f'<tr><td>{nm}<div style="font-size:10.5px;color:var(--dim)">no employee record</div></td>'
+        out+=(f'<tr><td>{nm}<div style="font-size:var(--fs-2xs);color:var(--dim)">no employee record</div></td>'
               f'<td style="color:var(--dim)">&mdash;</td>'
-              f'<td style="font-size:11px;color:var(--mut)">{em}</td>'
-              f'<td style="font-size:11px">{" · ".join(acc)}</td>'
+              f'<td style="font-size:var(--fs-2xs);color:var(--mut)">{em}</td>'
+              f'<td style="font-size:var(--fs-2xs)">{" · ".join(acc)}</td>'
               f'<td><span class="tag t-wt">no employee linked</span></td></tr>')
     return out
 
