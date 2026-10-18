@@ -160,6 +160,7 @@ const REPORT_TITLES = { rp01: "Executive Summary", rp02: "Weekly management repo
   rp06: "Buying and stock", rp07: "Engineering", rp08: "People", rp09: "Compliance and audit" };
 const reportPolls = {};
 const askStarted = {};
+const deepStarted = {};
 
 // A lookup is answered in its own shape: a sentence and a table, no cards or charts.
 const LOOKUP_SAMPLE = (question) => ({
@@ -250,7 +251,19 @@ const HANDLERS = {
   // server here to ask).
   // Live steps, as on the site: the answer request is still working while poll() reads
   // the steps recorded under its ask_id.
-  "command_center.api.ask.poll": ({ ask_id }) => {
+  "command_center.api.ask.poll": ({ ask_id, deep }) => {
+    if (deep) {
+      // A deeper look: three more steps over a few seconds, then the fuller answer.
+      const d0 = deepStarted[ask_id];
+      if (!d0) return { state: "unknown", steps: [] };
+      const n = Math.floor((Date.now() - d0) / 1500);
+      const steps = ["Running ERPNext's Profit and Loss Statement", "Working out the trend in sales invoices",
+        "Adding up sales orders by month"].slice(0, Math.min(3, n + 1));
+      if (n < 4) return { state: "running", steps };
+      const full = HANDLERS["command_center.api.ask.answer"]({ question: "growth" });
+      return { state: "done", steps, result: { ...full, deepened: true,
+        notice: "Preview only — this stands in for the fuller answer a deeper look produces." } };
+    }
     const t0 = askStarted[ask_id];
     if (!t0) return { state: "unknown", steps: [] };
     const n = Math.min(3, 1 + Math.floor((Date.now() - t0) / 700));
@@ -311,6 +324,7 @@ window.fetch = async (input, init = {}) => {
   // ?slow=N holds it for N.
   const slow = Number(new URLSearchParams(window.location.search).get("slow") || 0);
   if (method.endsWith("ask.answer") && args.ask_id) askStarted[args.ask_id] = Date.now();
+  const deepen = method.endsWith("ask.answer") && args.ask_id && /grow|forecast|deeper/i.test(args.question || "");
   const askWait = method.endsWith("ask.answer") ? (slow ? slow * 1000 : args.ask_id ? 2400 : 120) : 120;
   await new Promise((r) => setTimeout(r, askWait));
   if (init.signal?.aborted) throw new DOMException("aborted", "AbortError");
@@ -319,7 +333,13 @@ window.fetch = async (input, init = {}) => {
     console.warn(`[preview] no sample answer for ${method}`);
     return json(417, { message: `Preview has no sample data for ${method}.` });
   }
-  return json(200, { message: handler(args) });
+  const out = handler(args);
+  if (deepen && out && typeof out === "object") {
+    // A big question: the first pass comes back cut short and a deeper look carries on.
+    deepStarted[args.ask_id] = Date.now();
+    return json(200, { message: { ...out, cut_short: true, deep: { ask_id: args.ask_id } } });
+  }
+  return json(200, { message: out });
 };
 
 console.info(`[preview] ${PREVIEW_MARKER}: sample API active, nothing reaches a server`);

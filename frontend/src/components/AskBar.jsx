@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
-import { historyFor, recentQuestions, remember } from "../askHistory.js";
-import { withSteps } from "../askFlow.js";
+import { historyFor, recentQuestions, remember, replaceAnswer } from "../askHistory.js";
+import { followDeep, withSteps } from "../askFlow.js";
 import { renderAnswer } from "../legacy/answer.js";
 import { renderMarkdown } from "../legacy/markdown.js";
 import Icon from "./Icon.jsx";
@@ -39,6 +39,9 @@ export default function AskBar({ scope, openDrawer }) {
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [steps, setSteps] = useState([]);
+  // A big question's deeper look, carrying on in the background after the first answer.
+  const [deep, setDeep] = useState(null); // {state: running|stuck|failed, steps, error}
+  const stopDeep = useRef(null);
   const [examples, setExamples] = useState(examplesCache || FALLBACK);
   const [hi, setHi] = useState(-1);
   const wrap = useRef(null);
@@ -97,6 +100,8 @@ export default function AskBar({ scope, openDrawer }) {
       return;
     }
     ctrl.current?.abort();
+    stopDeep.current?.();
+    setDeep(null);
     const c = new AbortController();
     ctrl.current = c;
     setOpen(true);
@@ -114,6 +119,19 @@ export default function AskBar({ scope, openDrawer }) {
       setAsked(text);
       setResult(payload);
       setPhase("answer");
+      if (payload?.deep?.ask_id) {
+        setDeep({ state: "running", steps: [] });
+        stopDeep.current = followDeep(payload.deep.ask_id, {
+          onSteps: (st) => setDeep((d) => (d?.state === "running" ? { ...d, steps: st } : d)),
+          onDone: (full) => {
+            replaceAnswer(scope, text, full);
+            setResult(full);
+            setDeep(null);
+          },
+          onFailed: (why) => setDeep({ state: "failed", error: why }),
+          onStuck: () => setDeep({ state: "stuck" }),
+        });
+      }
     } catch (e) {
       if (e?.name === "AbortError") return;
       setError(e?.message || "The question could not be answered.");
@@ -128,6 +146,8 @@ export default function AskBar({ scope, openDrawer }) {
 
   const reset = () => {
     ctrl.current?.abort();
+    stopDeep.current?.();
+    setDeep(null);
     setPhase("idle");
     setResult(null);
     setAsked("");
@@ -252,6 +272,7 @@ export default function AskBar({ scope, openDrawer }) {
               openDrawer={openDrawer}
               onReset={reset}
               onAsk={ask}
+              deep={deep}
               onContinue={() => {
                 setOpen(false);
                 window.location.hash = "ask";
@@ -288,7 +309,7 @@ function Suggestions({ choices, recentCount, hi, onPick }) {
   );
 }
 
-function Answer({ asked, result, scope, openDrawer, onReset, onAsk, onContinue }) {
+function Answer({ asked, result, scope, openDrawer, onReset, onAsk, onContinue, deep }) {
   const body = useRef(null);
   const [copied, setCopied] = useState(false);
   const [hasTables, setHasTables] = useState(false);
@@ -332,6 +353,7 @@ function Answer({ asked, result, scope, openDrawer, onReset, onAsk, onContinue }
       </div>
       <div className="ap-q">{asked}</div>
       {result.notice ? <div className="ap-note info">{result.notice}</div> : null}
+      <DeepLook deep={deep} />
       {result.analyst_error ? (
         // The analyst failed and the basic engine answered. Said, not hidden: a
         // fallback that passes for the analyst is how a broken one goes unnoticed.
@@ -398,6 +420,40 @@ function Answer({ asked, result, scope, openDrawer, onReset, onAsk, onContinue }
           New question
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Where a big question's deeper look has got to, above the first answer. */
+export function DeepLook({ deep }) {
+  if (!deep) return null;
+  if (deep.state === "running") {
+    return (
+      <div className="ap-deep">
+        <span className="ap-spin" aria-hidden="true" />
+        <div>
+          <b>Taking a deeper look</b>
+          <span>
+            This question needs more than a quick pass. A fuller answer will replace this one in a
+            few minutes; the first pass is below.
+          </span>
+          {deep.steps?.length ? (
+            <ol className="ap-steps">
+              {deep.steps.map((s, i) => (
+                <li key={i} className={i === deep.steps.length - 1 ? "now" : "done"}>{s}</li>
+              ))}
+            </ol>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="ap-note">
+      {deep.state === "stuck"
+        ? "The deeper look could not start: the server's background workers are not running. This is the first-pass answer."
+        : "The deeper look stopped before it finished, so this is the first-pass answer."}
+      {deep.error ? <span>Reason: {deep.error}</span> : null}
     </div>
   );
 }

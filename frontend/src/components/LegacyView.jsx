@@ -8,8 +8,8 @@ import { useApi } from "../useApi.js";
 import Records from "./Records.jsx";
 import { hydrateCards, hydrateTiles, keysFor } from "../legacy/hydrate.js";
 import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js";
-import { clearTurns, historyFor, remember, turnsFor } from "../askHistory.js";
-import { withSteps } from "../askFlow.js";
+import { clearTurns, historyFor, remember, replaceAnswer, turnsFor } from "../askHistory.js";
+import { followDeep, withSteps } from "../askFlow.js";
 import { runReport } from "../legacy/reports.js";
 
 /**
@@ -124,6 +124,56 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
       thread.before(bar);
     };
 
+    // A big question's deeper look: a banner at the top of its turn while it works,
+    // then the fuller answer in place of the first.
+    const deepen = (out, q, askId, scope) => {
+      const banner = document.createElement("div");
+      banner.className = "ap-deep";
+      const spin = document.createElement("span");
+      spin.className = "ap-spin";
+      const body = document.createElement("div");
+      const b = document.createElement("b");
+      b.textContent = "Taking a deeper look";
+      const t = document.createElement("span");
+      t.textContent = "This question needs more than a quick pass. A fuller answer will replace "
+        + "this one in a few minutes; the first pass is below.";
+      const ol = document.createElement("ol");
+      ol.className = "ap-steps";
+      body.append(b, t, ol);
+      banner.append(spin, body);
+      out.prepend(banner);
+      const note = (text, why) => {
+        const n = document.createElement("div");
+        n.className = "ap-note";
+        n.textContent = text;
+        if (why) {
+          const r = document.createElement("span");
+          r.textContent = `Reason: ${why}`;
+          n.append(r);
+        }
+        banner.replaceWith(n);
+      };
+      followDeep(askId, {
+        onSteps: (steps) => {
+          ol.textContent = "";
+          steps.forEach((st, i) => {
+            const li = document.createElement("li");
+            li.className = i === steps.length - 1 ? "now" : "done";
+            li.textContent = st;
+            ol.append(li);
+          });
+        },
+        onDone: (full) => {
+          replaceAnswer(scope, q, full);
+          if (document.body.contains(out)) renderAnswer(out, full, answerOpts(q));
+        },
+        onFailed: (why) => note("The deeper look stopped before it finished, so this is the "
+          + "first-pass answer.", why),
+        onStuck: () => note("The deeper look could not start: the server's background workers "
+          + "are not running. This is the first-pass answer."),
+      });
+    };
+
     window.drawThread = () => {
       const thread = document.getElementById("sout2");
       if (!thread) return;
@@ -153,6 +203,7 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
         );
         remember(scopeRef.current, q, payload);
         renderAnswer(out, payload, answerOpts(q));
+        if (payload?.deep?.ask_id) deepen(out, q, payload.deep.ask_id, scopeRef.current);
       } catch (e) {
         renderFailure(out, e?.message);
       }

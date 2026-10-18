@@ -35,3 +35,35 @@ export async function withSteps(args, signal, onSteps) {
 
   return answer;
 }
+
+/**
+ * Follow a deeper look: the background job that carries on a big question from where
+ * the first answer stopped. Calls onSteps as it works, then onDone(fullerAnswer),
+ * onFailed(reason), or onStuck() if no worker has picked the job up -- the first answer
+ * stands in every case but the first. Returns a function that stops following.
+ */
+export function followDeep(askId, { onSteps, onDone, onFailed, onStuck }) {
+  let stop = false;
+  const t0 = Date.now();
+  (async () => {
+    for (let n = 0; !stop; n++) {
+      await new Promise((r) => setTimeout(r, n < 6 ? 1500 : 3000));
+      if (stop) break;
+      let st;
+      try {
+        st = await api.askPoll(askId, {}, 1);
+      } catch {
+        continue;
+      }
+      if (stop) break;
+      if (st?.steps) onSteps(st.steps);
+      if (st?.state === "done") return onDone(st.result);
+      if (st?.state === "failed") return onFailed(st.error || "the deeper look stopped");
+      if (st?.state === "queued" && Date.now() - t0 > 45000) return onStuck();
+      if (Date.now() - t0 > 11 * 60000) return onFailed("it took longer than eleven minutes");
+    }
+  })();
+  return () => {
+    stop = true;
+  };
+}

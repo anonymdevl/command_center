@@ -177,7 +177,7 @@ export const api = {
     call("command_center.api.ask.answer", { question, business_code, history, ask_id }, opts),
   answerable: () => call("command_center.api.ask.answerable"),
   /* The lookups an ask has made so far, recorded under the id the page gave it. */
-  askPoll: (ask_id, opts) => call("command_center.api.ask.poll", { ask_id }, opts),
+  askPoll: (ask_id, opts, deep = 0) => call("command_center.api.ask.poll", { ask_id, deep }, opts),
 
   /* Downloads. Reads only: nothing is written to the site, not even a File. */
   answerPdf: (args) => download("command_center.api.export.answer_pdf", args, "answer.pdf"),

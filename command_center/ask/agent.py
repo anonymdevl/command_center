@@ -38,21 +38,36 @@ WRAP_UP_AT = 30
 
 
 def answer(question: str, business_code: str | None = None, history=None,
-           max_steps: int = MAX_STEPS, on_step=None, deadline: int = DEADLINE) -> dict | None:
+           max_steps: int = MAX_STEPS, on_step=None, deadline: int = DEADLINE,
+           resume: dict | None = None) -> dict | None:
     """max_steps: rounds of tool use. A question gets eight; a report (api/reports.py)
     gathers across every area and gets more. on_step(text) is told each lookup, in plain
-    words, as it starts -- the live "what it is doing" under the question bar."""
+    words, as it starts -- the live "what it is doing" under the question bar.
+
+    resume: the conversation a cut-short answer stopped at ({"contents", "checked"}),
+    to carry on from exactly there in a background job (api/ask.py) rather than start
+    again. A cut-short answer -- the budget ran out while the analyst still wanted to
+    look further -- comes back with cut_short and _resume for that purpose."""
     system = _system(business_code)
-    contents = _history(history) + [{"role": "user", "parts": [{"text": question}]}]
-    checked, errors, drill = [], [], None
-    text, steps = None, 0
+    if resume:
+        contents = list(resume.get("contents") or [])
+        checked = list(resume.get("checked") or [])
+    else:
+        contents = _history(history) + [{"role": "user", "parts": [{"text": question}]}]
+        checked = []
+    errors, drill = [], None
+    text, steps, cut_short, snapshot = None, 0, False, None
     writes_before = _writes()
     import time
     started = time.monotonic()
 
     for steps in range(1, max_steps + 2):
         left = deadline - (time.monotonic() - started)
-        final = steps > max_steps or (steps > 1 and left < WRAP_UP_AT)
+        out_of_time = steps > 1 and left < WRAP_UP_AT and steps <= max_steps
+        final = steps > max_steps or out_of_time
+        if out_of_time and not cut_short:
+            # Where it got to, before being told to answer -- a deeper look resumes here.
+            cut_short, snapshot = True, json.loads(json.dumps(contents, default=str))
         if final:
             # Out of budget: answer from what has been gathered, and say if incomplete.
             contents.append({"role": "user", "parts": [{"text": (
@@ -62,7 +77,7 @@ def answer(question: str, business_code: str | None = None, history=None,
         # read, and a model left free to answer at once can answer from memory.
         content, err = gemini.chat(contents, None if final else tools.declarations(), system,
                                    timeout=int(max(15, min(60, left - 5))),
-                                   mode="ANY" if steps == 1 else "AUTO")
+                                   mode="ANY" if steps == 1 and not resume else "AUTO")
         if err:
             errors.append(err)
             break
@@ -133,6 +148,8 @@ def answer(question: str, business_code: str | None = None, history=None,
         "records": drill,
         "figures": [],
         "degraded": errors or None,
+        "cut_short": cut_short,
+        "_resume": {"contents": snapshot, "checked": checked} if cut_short else None,
     }
 
 

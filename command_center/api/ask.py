@@ -35,7 +35,63 @@ def answer(question: str, business_code: str | None = None, history=None, ask_id
             if not state["steps"] or state["steps"][-1] != text:
                 state["steps"].append(text)
                 frappe.cache().set_value(key, state, expires_in_sec=ASK_KEEP)
-    return engine.answer(question, business_code, history, on_step=on_step)
+    result = engine.answer(question, business_code, history, on_step=on_step)
+    resume = result.pop("_resume", None) if isinstance(result, dict) else None
+    if resume and result.get("cut_short") and ask_id:
+        _start_deep(str(ask_id)[:40], question, business_code, resume)
+        result["deep"] = {"ask_id": str(ask_id)[:40]}
+    return result
+
+
+# ---------------------------------------------------------------------------
+# A deeper look. A big question can need more lookups than a web request has time
+# for -- the server ends it at 120 seconds. Then the request answers with what it has,
+# and a job carries on from exactly where it stopped, with twenty rounds and ten
+# minutes; the page follows its steps and swaps in the fuller answer. If no worker
+# picks the job up, the first answer stands and the page says why.
+# ---------------------------------------------------------------------------
+DEEP_STEPS = 20
+DEEP_DEADLINE = 600
+
+
+def _start_deep(ask_id: str, question: str, business_code, resume: dict):
+    base = _ask_key(ask_id)
+    frappe.cache().set_value(base + "::resume", resume, expires_in_sec=ASK_KEEP)
+    frappe.cache().set_value(base + "::deep", {"state": "queued", "steps": []}, expires_in_sec=ASK_KEEP)
+    # ask_id as a keyword is fine; job_id would be swallowed by frappe.enqueue.
+    frappe.enqueue("command_center.api.ask._deep", queue="long", timeout=900,
+                   ask_id=ask_id, question=question, business_code=business_code,
+                   user=frappe.session.user, enqueue_after_commit=False)
+
+
+def _deep(ask_id: str, question: str, business_code, user: str):
+    frappe.set_user(user)  # reads with the asker's own permissions
+    from command_center.ask import agent
+    base = _ask_key(ask_id)
+    state = {"state": "running", "steps": []}
+    frappe.cache().set_value(base + "::deep", state, expires_in_sec=ASK_KEEP)
+
+    def step(text):
+        if not state["steps"] or state["steps"][-1] != text:
+            state["steps"].append(text)
+            frappe.cache().set_value(base + "::deep", state, expires_in_sec=ASK_KEEP)
+
+    try:
+        resume = frappe.cache().get_value(base + "::resume")
+        if not resume:
+            raise RuntimeError("the conversation to continue had expired")
+        result = agent.answer(question, business_code, resume=resume, max_steps=DEEP_STEPS,
+                              deadline=DEEP_DEADLINE, on_step=step)
+        if not result or not result.get("answered"):
+            raise RuntimeError((result or {}).get("analyst_error") or "no answer came back")
+        result.pop("_resume", None)
+        result["deepened"] = True
+        frappe.cache().set_value(base + "::deep", {"state": "done", "steps": state["steps"],
+                                                   "result": result}, expires_in_sec=ASK_KEEP)
+    except Exception as e:
+        frappe.log_error(title="Command Center deeper look", message=frappe.get_traceback())
+        frappe.cache().set_value(base + "::deep", {"state": "failed", "steps": state["steps"],
+                                                   "error": str(e)[:300]}, expires_in_sec=ASK_KEEP)
 
 
 # ---------------------------------------------------------------------------
@@ -49,9 +105,11 @@ def _ask_key(ask_id: str) -> str:
 
 
 @frappe.whitelist()
-def poll(ask_id: str):
+def poll(ask_id: str, deep=0):
+    """The steps so far -- of the question, or (deep=1) of its deeper look."""
     require_manager()
-    return frappe.cache().get_value(_ask_key(str(ask_id)[:40])) or {"state": "unknown", "steps": []}
+    key = _ask_key(str(ask_id)[:40]) + ("::deep" if frappe.utils.cint(deep) else "")
+    return frappe.cache().get_value(key) or {"state": "unknown", "steps": []}
 
 
 @frappe.whitelist()

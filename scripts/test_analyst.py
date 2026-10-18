@@ -336,6 +336,26 @@ r = agent.answer("Q", "GIGMANN", deadline=29)
 check(r and r["answered"] and calls_seen[0]["tools"] and not calls_seen[1]["tools"],
       f"a spent budget ends in an answer, not a timeout: {calls_seen}")
 check(calls_seen[0]["timeout"] in (23, 24), f"each call gets what is left: {calls_seen[0]['timeout']}")
+check(r.get("cut_short") and r.get("_resume") and "functionResponse" in
+      r["_resume"]["contents"][-1]["parts"][0],
+      "a cut-short answer says so, and keeps the conversation up to the last lookup's result")
+
+# 14b. A deeper look resumes from there: no forced first lookup, more rounds, the earlier
+#      lookups kept in "what it checked".
+calls_seen.clear()
+modes = []
+
+
+def _chat_resume(contents, decls, system, timeout=40, mode="AUTO"):
+    modes.append((mode, len(contents)))
+    return {"role": "model", "parts": [{"text": "The fuller answer."}]}, None
+
+
+gemini.chat = _chat_resume
+r2 = agent.answer("Q", "GIGMANN", resume=r["_resume"], max_steps=20, deadline=600)
+check(r2["answer"] == "The fuller answer." and modes[0][0] == "AUTO"
+      and modes[0][1] == len(r["_resume"]["contents"]) and r2["checked"][:1] == r["checked"][:1],
+      f"resume continues where it stopped: {modes}")
 gemini.chat = _saved
 
 

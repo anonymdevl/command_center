@@ -22,6 +22,18 @@ export function remember(scope, question, payload) {
   }
 }
 
+/** A deeper look finished: its fuller answer replaces the first one for that question. */
+export function replaceAnswer(scope, question, payload) {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const t = turns[i];
+    if (t.scope === scope && t.q === question) {
+      turns[i] = { q: question, a: payload.answer, scope, payload };
+      return;
+    }
+  }
+  remember(scope, question, payload);
+}
+
 /** The whole conversation for this business, oldest first -- the Ask AI screen's thread. */
 export function turnsFor(scope) {
   return turns.filter((t) => t.scope === scope);
