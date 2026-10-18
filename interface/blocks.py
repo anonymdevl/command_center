@@ -170,14 +170,15 @@ table.dt tr:hover td{background:var(--hover)}
 .rp-body b{color:var(--ink)}
 
 /* ---- the analyst's answers (markdown.js, charts.js) ---- */
-.md{font-size:var(--fs-md);line-height:1.68;color:var(--ink2)}
+/* The same sizes as the screens: body text at --fs-sm, the headline one step up. */
+.md{font-size:var(--fs-sm);line-height:1.62;color:var(--ink2)}
 .md > *{margin:0 0 12px}
 .md b{color:var(--ink);font-weight:var(--fw-semibold)}
-.md .md-lead{font-size:var(--fs-lg);line-height:1.55;color:var(--ink);font-weight:var(--fw-medium);
+.md .md-lead{font-size:var(--fs-md);line-height:1.55;color:var(--ink);font-weight:var(--fw-medium);
  letter-spacing:-.01em}
-.md h4{font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.015em;color:var(--ink);
+.md h4{font-size:var(--fs-md);font-weight:var(--fw-semibold);letter-spacing:-.015em;color:var(--ink);
  margin:22px 0 8px}
-.md h5{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--ink);margin:18px 0 6px}
+.md h5{font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--ink);margin:18px 0 6px}
 .md ul,.md ol{padding-left:20px}
 .md li{margin:5px 0;padding-left:2px}
 .md li::marker{color:var(--dim)}
@@ -199,13 +200,15 @@ table.dt tr:hover td{background:var(--hover)}
 .md-table table.dt tbody tr:nth-child(even) td{background:var(--zebra)}
 .md-table td.r,.md-table th.r{text-align:right;font-variant-numeric:tabular-nums}
 /* Key figures: the same tints as the cards, so an answer and a screen are one product. */
-.md-figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0 8px}
-.md-fig{background:var(--t1);border-radius:var(--r-sm);padding:13px 15px;display:flex;flex-direction:column;gap:2px;
- min-width:0}
+/* Cards size to what they hold and move to the next row when there is no room, rather
+   than squeezing a figure onto two lines. */
+.md-figs{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 8px}
+.md-fig{background:var(--t1);border-radius:var(--r-sm);padding:12px 14px;display:flex;flex-direction:column;gap:2px;
+ flex:1 1 auto;min-width:130px;max-width:100%}
 .md-fig:nth-child(3n+2){background:var(--t2)}
 .md-fig:nth-child(3n+3){background:var(--t3)}
 .md-fig-l{font-size:var(--fs-xs);color:var(--ink2);font-weight:var(--fw-semibold)}
-.md-fig-v{font-size:var(--fs-2xl);font-weight:var(--fw-semibold);letter-spacing:-.025em;color:var(--ink);
+.md-fig-v{font-size:var(--fs-xl);white-space:nowrap;font-weight:var(--fw-semibold);letter-spacing:-.025em;color:var(--ink);
  line-height:1.15;margin-top:4px;overflow-wrap:anywhere}
 .md-fig-n{font-size:var(--fs-xs);color:var(--mut)}
 .md-fig.t-bad .md-fig-v{color:var(--crit)}
@@ -272,7 +275,7 @@ table.dt tr:hover td{background:var(--hover)}
  font-weight:var(--fw-semibold);color:var(--mut)}
 
 /* ---- an answer on the Ask AI screen ---- */
-.ans-q{font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em;line-height:1.3;
+.ans-q{font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.02em;line-height:1.3;
  padding:4px 16px 0}
 
 /* ---- the records drawer ---- */

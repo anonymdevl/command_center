@@ -134,6 +134,9 @@ export default function AskBar({ scope, openDrawer }) {
     input.current?.focus();
   };
 
+  // Room for a table, chart or figure cards; a one-line answer keeps the bar's width.
+  const wide = phase === "answer" && result?.format === "markdown"
+    && /```\s*(chart|figures)|^\s*\|.*\|\s*$/m.test(result.answer || "");
   const recent = recentQuestions(scope);
   const choices = phase === "idle" ? [...recent.map((r) => ({ q: r, area: "Recent" })), ...examples] : [];
 
@@ -195,7 +198,8 @@ export default function AskBar({ scope, openDrawer }) {
       </form>
 
       {open ? (
-        <div className="askpop" id="askpop" role="region" aria-live="polite" aria-label="Answer">
+        <div className={`askpop${wide ? " wide" : ""}`} id="askpop" role="region"
+          aria-live="polite" aria-label="Answer">
           {phase === "idle" ? (
             <Suggestions choices={choices} recentCount={recent.length} hi={hi} onPick={ask} />
           ) : null}

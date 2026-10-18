@@ -161,6 +161,28 @@ const REPORT_TITLES = { rp01: "Executive Summary", rp02: "Weekly management repo
 const reportPolls = {};
 const askJobs = { n: 0 };
 
+// A lookup is answered in its own shape: a sentence and a table, no cards or charts.
+const LOOKUP_SAMPLE = (question) => ({
+  answered: true, format: "markdown", mode: "analyst", planner: "gemini",
+  model: "gemini-3.8-flash", question,
+  notice: "Preview only — no AI is connected on this laptop. This is the sample for a " +
+    "lookup question; on the live site Gemini answers each question from your data.",
+  answer: [
+    "There are **13 active users** in ERPNext; 4 more accounts are disabled.",
+    "",
+    "| User | Role profile | Last login |",
+    "|---|---|---|",
+    "| Kofi Mensah (sample) | Chief Executive | 18 Oct 2026 |",
+    "| Ama Owusu (sample) | Finance Manager | 17 Oct 2026 |",
+    "| Yaw Boateng (sample) | Stock Manager | 16 Oct 2026 |",
+    "",
+    "```followups",
+    JSON.stringify(["Which users have not logged in for 30 days?", "Who can approve purchase orders?"]),
+    "```",
+  ].join("\n"),
+  checked: ["(sample) the live site lists the lookups Gemini actually made"],
+});
+
 const HANDLERS = {
   "command_center.api.kpi.get": ({ keys }) =>
     Object.fromEntries((keys || []).map((k) => [k, figure(k)]).filter(([, f]) => f)),
@@ -171,7 +193,8 @@ const HANDLERS = {
   "command_center.api.facts.records": ({ fact }) => records(fact),
   // The shape the analyst returns, so the formatted answer can be looked at offline.
   // The figures are Biomed's verified ones; the customer rows are the samples above.
-  "command_center.api.ask.answer": ({ question }) => ({
+  "command_center.api.ask.answer": ({ question }) => (/^(how many|show|list|who is)/i.test(question || "")
+    ? LOOKUP_SAMPLE(question) : {
     answered: true,
     format: "markdown",
     mode: "analyst",

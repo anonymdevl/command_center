@@ -131,8 +131,11 @@ SHELL_CSS = """
 .ap-ans{padding:14px 16px 10px}
 .ap-src{display:flex;align-items:center;gap:7px;font-size:var(--fs-xs);color:var(--mut);font-weight:var(--fw-medium)}
 .ap-src .ic{color:var(--accent)}
-.ap-q{font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em;line-height:1.3;margin:8px 0 10px}
-.ap-body{font-size:var(--fs-md);line-height:1.6;color:var(--ink2)}
+.ap-q{font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.015em;line-height:1.35;margin:8px 0 10px}
+.ap-body{font-size:var(--fs-sm);line-height:1.6;color:var(--ink2)}
+/* An answer with a table, chart or figures gets room: the panel grows past the bar,
+   up to a reading width, instead of squeezing what is in it. */
+.askpop.wide{right:auto;width:max(100%,min(980px,calc(100vw - 320px)))}
 .ap-note{background:var(--high-bg);color:var(--ink2);border-radius:var(--r-sm);padding:10px 12px;
  font-size:var(--fs-sm);margin:0 0 12px}
 .ap-note.info{background:var(--accent-bg);color:var(--ink)}
@@ -245,8 +248,8 @@ SHELL_CSS = """
  .ask-go{width:40px;padding:0;justify-content:center}
  .ask-go span{display:none}
  .seg2{display:none}
- .askpop{position:fixed;left:10px;right:10px;top:72px;max-height:calc(100vh - 86px)}
- .ap-q{font-size:var(--fs-lg)}
+ .askpop,.askpop.wide{position:fixed;left:10px;right:10px;top:72px;width:auto;max-height:calc(100vh - 86px)}
+ .ap-q{font-size:var(--fs-md)}
  .ib{width:40px;height:40px}
  .av{width:38px;height:38px}
  .main{padding:20px 16px 56px;border-radius:var(--r)}

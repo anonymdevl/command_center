@@ -16,8 +16,9 @@ export async function withSteps(args, signal, onSteps) {
     return api.ask(args, { signal });
   }
   const t0 = Date.now();
-  for (;;) {
-    await new Promise((r) => setTimeout(r, 900));
+  for (let n = 0; ; n++) {
+    // Quick at first, so a fast answer is not held back by the polling itself.
+    await new Promise((r) => setTimeout(r, n < 3 ? 350 : 700));
     if (signal.aborted) throw new DOMException("aborted", "AbortError");
     let st;
     try {

@@ -300,5 +300,23 @@ REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S")
 check(posted == ["gemini-2.5-flash"], "a model named in site_config is never second-guessed")
 frappe.conf.pop("command_center_analyst_model", None)
 
+# 13. Thinking is asked for low; a model that refuses the setting is asked again without it.
+sent = []
+
+
+def _post2(url, params=None, json=None, timeout=None):
+    import copy
+    sent.append(copy.deepcopy(json["generationConfig"]))
+    if "thinkingConfig" in json["generationConfig"]:
+        return _R(400, {"error": {"message": "Unknown name thinkingLevel at generationConfig.thinkingConfig"}})
+    return _R(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": "OK"}]}}]})
+
+
+sys.modules["requests"] = _t.SimpleNamespace(post=_post2, get=lambda *a, **k: _R(200, {"models": listed}))
+content, err = REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S")
+check(err is None and sent[0].get("thinkingConfig") == {"thinkingLevel": "low"}
+      and "thinkingConfig" not in sent[1] and "temperature" not in sent[0],
+      f"low thinking, no temperature, and a retry without thinking on refusal: {sent}")
+
 print(f"analyst: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

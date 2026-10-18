@@ -142,18 +142,24 @@ def chat(contents: list, tools: list, system: str, timeout: int = 40, mode: str 
     if not _key():
         return None, "no Gemini key configured"
 
-    # No temperature and no thinking budget: Gemini 3 models are tuned for their
-    # defaults, and Google warns that a lowered temperature can make them loop.
+    # No temperature: Gemini 3 models are tuned for their default, and Google warns a
+    # lowered one can make them loop. Thinking set low: by default Gemini 3 reasons at
+    # length before every step, which made "how many users are active" take as long as
+    # a board report. The tools do the work; the model only has to choose them well.
     body = {
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": contents,
-        "generationConfig": {"maxOutputTokens": 8192},
+        "generationConfig": {"maxOutputTokens": 8192, "thinkingConfig": {"thinkingLevel": "low"}},
     }
     if tools:  # None for the final turn: answer from what has been gathered
         body["tools"] = [{"functionDeclarations": tools}]
         body["toolConfig"] = {"functionCallingConfig": {"mode": mode}}
     try:
         r = _post("analyst", body, timeout)
+        if r.status_code == 400 and "thinking" in r.text.lower():
+            # A model that does not know thinkingLevel: ask again without it.
+            body["generationConfig"].pop("thinkingConfig", None)
+            r = _post("analyst", body, timeout)
         if r.status_code != 200:
             return None, f"Gemini refused ({analyst_model()}): {r.status_code} {r.text[:900]}"
         payload = r.json()
