@@ -1257,6 +1257,19 @@ _missing = sorted({f"{k}:{fn}({key})" for k, h in _views.items()
                    if key not in _maps[fn]})
 check(not _missing, f"inline handlers open content that does not exist: {_missing[:8]}")
 
+# Vivid, Muted and Quiet must differ on the status pills too. Their colours were once
+# fixed hexes in blocks.py, so the three levels looked identical on every pill.
+_css_all = open(os.path.join(ROOT, "frontend", "src", "styles", "command-center.css")).read()
+for _lvl in ("muted", "quiet"):
+    _blk = re.search(r'\[data-signal="%s"\]\{([^}]*)\}' % _lvl, _css_all)
+    check(bool(_blk) and "--crit-solid:" in _blk.group(1),
+          f"the {_lvl} signal level does not set the pill colours (--crit-solid), so the "
+          f"pills look the same at every level")
+check(not re.search(r"(?<![\w-])--crit-solid:#", open(os.path.join(ROOT, "interface", "blocks.py")).read()),
+      "blocks.py defines the pill colours itself; they belong to signals.py, per level")
+check('[data-signal="quiet"] :is(.alert .asev' in _css_all,
+      "Quiet has no chip-and-dot treatment for the status pills")
+
 # Today and Outstanding Tasks hydrate from the work queue (api/work.py). Each tile the
 # map names must be on its screen, and each key must be a figure the server returns.
 _wjs = open(os.path.join(ROOT, "frontend", "src", "legacy", "work.js")).read()

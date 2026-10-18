@@ -261,13 +261,16 @@ background:var(--raised)}
 /* Plum — quiet purple, editorial */
 [data-accent="plum"]{--accent:#9a7bbd;--accent-ink:#bda9d4;--accent-dim:#3a3246;--accent-bg:rgba(154,123,189,.10);--accent-bg2:rgba(154,123,189,.17);--info:#9a7bbd;--star:#c7b6db;--moon:#9a7bbd;--solid:#9a7bbd;--on-accent:#111317;--grad:linear-gradient(#9a7bbd,#9a7bbd)}
 [data-theme="light"][data-accent="plum"]{--accent:#6a3d9e;--accent-ink:#53307b;--accent-dim:#dbd0e8;--accent-bg:rgba(106,61,158,.08);--accent-bg2:rgba(106,61,158,.14);--info:#6a3d9e;--star:#6a3d9e;--moon:#6a3d9e;--solid:#6a3d9e;--on-accent:#ffffff;--grad:linear-gradient(#6a3d9e,#6a3d9e)}/* ============ SIGNAL LEVELS (derived, see module docstring) ============ */
-/* vivid is the base palette in :root -- it needs no rules of its own. */
+/* vivid is the base palette in :root; only the solid pills need stating here. */
+:root{--crit-solid:#c2392f; --crit-dot:#c2392f; --high-solid:#b35a0b; --high-dot:#b35a0b; --med-solid:#946f05; --med-dot:#946f05; --ok-solid:#127a55; --ok-dot:#127a55; --on-solid:#fff}
+[data-theme="light"]{--crit-solid:#c2392f; --crit-dot:#c2392f; --high-solid:#b35a0b; --high-dot:#b35a0b; --med-solid:#946f05; --med-dot:#946f05; --ok-solid:#127a55; --ok-dot:#127a55; --on-solid:#fff}
 [data-signal="muted"]{
  --crit:#d1837d; --crit-bg:rgba(209,131,125,0.1); --crit-line:rgba(209,131,125,0.26);
  --high:#c7996b; --high-bg:rgba(199,153,107,0.1); --high-line:rgba(199,153,107,0.26);
  --med:#c8b47e; --med-bg:rgba(200,180,126,0.1); --med-line:rgba(200,180,126,0.26);
  --ok:#5ba889; --ok-bg:rgba(91,168,137,0.1); --ok-line:rgba(91,168,137,0.26);
  --ok-glow:rgba(91,168,137,0.4); --stale:#c8b47e;
+ --crit-solid:#b3463e; --high-solid:#a15b1d; --med-solid:#856814; --ok-solid:#1d6f52;
 }
 [data-theme="light"][data-signal="muted"]{
  --crit:#a3544e; --crit-bg:rgba(163,84,78,0.1); --crit-line:rgba(163,84,78,0.26);
@@ -275,6 +278,7 @@ background:var(--raised)}
  --med:#6b5721; --med-bg:rgba(107,87,33,0.1); --med-line:rgba(107,87,33,0.26);
  --ok:#28644f; --ok-bg:rgba(40,100,79,0.1); --ok-line:rgba(40,100,79,0.26);
  --ok-glow:rgba(40,100,79,0.4); --stale:#6b5721;
+ --crit-solid:#b3463e; --high-solid:#a15b1d; --med-solid:#856814; --ok-solid:#1d6f52;
 }
 [data-signal="quiet"]{
  --crit:#b49c9a; --crit-bg:rgba(180,156,154,0.045); --crit-line:rgba(180,156,154,0.13);
@@ -282,6 +286,7 @@ background:var(--raised)}
  --med:#afa897; --med-bg:rgba(175,168,151,0.045); --med-line:rgba(175,168,151,0.13);
  --ok:#768d84; --ok-bg:rgba(118,141,132,0.045); --ok-line:rgba(118,141,132,0.13);
  --ok-glow:rgba(118,141,132,0.22); --stale:#afa897;
+ --crit-solid:#a4534d; --high-solid:#915c2d; --med-solid:#776122; --ok-solid:#27654f;
 }
 [data-theme="light"][data-signal="quiet"]{
  --crit:#866d6b; --crit-bg:rgba(134,109,107,0.045); --crit-line:rgba(134,109,107,0.13);
@@ -289,6 +294,7 @@ background:var(--raised)}
  --med:#514b3b; --med-bg:rgba(81,75,59,0.045); --med-line:rgba(81,75,59,0.13);
  --ok:#3d4f49; --ok-bg:rgba(61,79,73,0.045); --ok-line:rgba(61,79,73,0.13);
  --ok-glow:rgba(61,79,73,0.22); --stale:#514b3b;
+ --crit-solid:#a4534d; --high-solid:#915c2d; --med-solid:#776122; --ok-solid:#27654f;
 }
 
 /* Quiet also changes the treatment, not just the hue: a severity block becomes a
@@ -800,9 +806,8 @@ div.work-table table.dt{min-width:560px}
 
 /* ---- status pills: solid colour, white words, like the Assign button (18 Oct 2026).
    The pale tint with a coloured dot read as generated; a solid pill reads as a decision
-   somebody made. Neutral states (illustrative, not run, "as at") stay quiet. ---- */
-:root{--crit-solid:#d64a3f;--high-solid:#c4661a;--med-solid:#a3800f;--ok-solid:#1f8f63;--on-solid:#fff}
-[data-theme="light"]{--crit-solid:#c2392f;--high-solid:#b35a0b;--med-solid:#946f05;--ok-solid:#127a55}
+   somebody made. Neutral states (illustrative, not run, "as at") stay quiet. The colours
+   (--*-solid) are per signal level, from signals.py. ---- */
 .flag,.bk .flag{color:var(--on-solid);background:var(--med-solid);border:0;padding:4px 10px;letter-spacing:.01em}
 .flag.f-crit,.bk .flag.f-crit{color:var(--on-solid);background:var(--crit-solid)}
 .flag.f-high,.bk .flag.f-high{color:var(--on-solid);background:var(--high-solid)}
@@ -815,6 +820,20 @@ div.work-table table.dt{min-width:560px}
 .tag.t-wt{color:var(--on-solid);background:var(--high-solid)}
 .tag.t-ok{color:var(--on-solid);background:var(--ok-solid)}
 .tag.t-dr{color:var(--mut);background:transparent;box-shadow:inset 0 0 0 1px var(--line2)}
+/* Quiet changes the treatment, not only the hue (signals.py): every status pill becomes
+   a neutral chip and the severity is a single coloured dot. These follow the solid rules
+   above, which would otherwise win over signals.py's own, earlier, quiet rules. */
+[data-signal="quiet"] :is(.alert .asev,.flag,.bk .flag,.dpill,.tag){display:inline-flex;align-items:center;gap:7px;
+ color:var(--ink2);background:var(--raised);box-shadow:inset 0 0 0 1px var(--line2)}
+[data-signal="quiet"] :is(.alert .asev,.flag,.bk .flag,.dpill,.tag)::before{content:"";width:6px;height:6px;
+ border-radius:50%;flex:none;background:var(--dim)}
+[data-signal="quiet"] :is(.alert.crit .asev,.flag.f-crit,.dpill.crit,.tag.t-od)::before{background:var(--crit-dot)}
+[data-signal="quiet"] :is(.alert.high .asev,.flag.f-high,.dpill.high,.tag.t-wt)::before{background:var(--high-dot)}
+[data-signal="quiet"] :is(.alert.med .asev,.flag.f-med,.flag:not([class*=" f-"]))::before{background:var(--med-dot)}
+[data-signal="quiet"] :is(.alert .asev.astate,.flag.f-ok,.dpill.ok,.tag.t-ok)::before{background:var(--ok-dot)}
+[data-signal="quiet"] .alert.info .asev::before{background:var(--solid)}
+[data-signal="quiet"] :is(.flag.f-dim,.flag.f-asat,.bk .flag.f-dim,.bk .flag.f-asat){color:var(--mut);background:transparent}
+[data-signal="quiet"] :is(.flag.f-dim,.flag.f-asat)::before{display:none}
 
 /* ---- live alerts (legacy/alerts.js) ---- */
 .alert .asev.astate{margin-left:6px;color:var(--on-solid);background:var(--ok-solid)}

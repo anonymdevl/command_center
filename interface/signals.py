@@ -56,6 +56,14 @@ BASE = {
     "dark": {"crit": "#f0695e", "high": "#e8994a", "med": "#e3c063", "ok": "#3fc48e"},
     "light": {"crit": "#c2392f", "high": "#a85a0a", "med": "#856307", "ok": "#127a55"},
 }
+# The solid pills (status as a filled pill with white words, 18 Oct 2026). Darker than
+# the text colours above so white reads on them; each level desaturates them by the
+# same factor as everything else, so Vivid, Muted and Quiet differ on pills too.
+# One set for both themes: the brighter dark-theme set left white words under 4.5:1
+# (amber 3.7:1), and a deep pill still stands out on a dark surface.
+_SOLID = {"crit": "#c2392f", "high": "#b35a0b", "med": "#946f05", "ok": "#127a55"}
+SOLID = {"dark": _SOLID, "light": _SOLID}
+
 # No lift. Raising lightness as chroma comes out was meant to keep quiet colours
 # legible, but on a pale surface lighter means *less* contrast -- it pushed the
 # light theme's quiet critical to 4.43:1, under the 4.5 threshold. Desaturating
@@ -73,13 +81,26 @@ def _block(selector, theme, level):
     ok = desaturate(BASE[theme]["ok"], sat, LIFT[theme] if level == "quiet" else 0.0)
     med = desaturate(BASE[theme]["med"], sat, LIFT[theme] if level == "quiet" else 0.0)
     out.append(f" --ok-glow:{_rgba(ok, glow)}; --stale:{med};")
+    # Pills take half the level's desaturation: a filled pill already carries less
+    # chroma per pixel than a word does, and at full strength Muted's pills went dusty.
+    out.append(" " + " ".join(f"--{n}-solid:{desaturate(c, sat / 2)};" for n, c in SOLID[theme].items()))
     out.append("}")
     return "\n".join(out)
 
 
+def _solid(selector, theme):
+    # --*-dot is Quiet's single mark of severity, so no level desaturates it: a grey dot
+    # says nothing.
+    return (f"{selector}{{" + " ".join(f"--{n}-solid:{c}; --{n}-dot:{c};"
+                                       for n, c in SOLID[theme].items())
+            + " --on-solid:#fff}")
+
+
 SIGNAL_CSS = "\n".join([
     "/* ============ SIGNAL LEVELS (derived, see module docstring) ============ */",
-    "/* vivid is the base palette in :root -- it needs no rules of its own. */",
+    "/* vivid is the base palette in :root; only the solid pills need stating here. */",
+    _solid(":root", "dark"),
+    _solid('[data-theme="light"]', "light"),
     _block('[data-signal="muted"]', "dark", "muted"),
     _block('[data-theme="light"][data-signal="muted"]', "light", "muted"),
     _block('[data-signal="quiet"]', "dark", "quiet"),

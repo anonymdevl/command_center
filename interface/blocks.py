@@ -297,9 +297,8 @@ div.work-table table.dt{min-width:560px}
 
 /* ---- status pills: solid colour, white words, like the Assign button (18 Oct 2026).
    The pale tint with a coloured dot read as generated; a solid pill reads as a decision
-   somebody made. Neutral states (illustrative, not run, "as at") stay quiet. ---- */
-:root{--crit-solid:#d64a3f;--high-solid:#c4661a;--med-solid:#a3800f;--ok-solid:#1f8f63;--on-solid:#fff}
-[data-theme="light"]{--crit-solid:#c2392f;--high-solid:#b35a0b;--med-solid:#946f05;--ok-solid:#127a55}
+   somebody made. Neutral states (illustrative, not run, "as at") stay quiet. The colours
+   (--*-solid) are per signal level, from signals.py. ---- */
 .flag,.bk .flag{color:var(--on-solid);background:var(--med-solid);border:0;padding:4px 10px;letter-spacing:.01em}
 .flag.f-crit,.bk .flag.f-crit{color:var(--on-solid);background:var(--crit-solid)}
 .flag.f-high,.bk .flag.f-high{color:var(--on-solid);background:var(--high-solid)}
@@ -312,6 +311,20 @@ div.work-table table.dt{min-width:560px}
 .tag.t-wt{color:var(--on-solid);background:var(--high-solid)}
 .tag.t-ok{color:var(--on-solid);background:var(--ok-solid)}
 .tag.t-dr{color:var(--mut);background:transparent;box-shadow:inset 0 0 0 1px var(--line2)}
+/* Quiet changes the treatment, not only the hue (signals.py): every status pill becomes
+   a neutral chip and the severity is a single coloured dot. These follow the solid rules
+   above, which would otherwise win over signals.py's own, earlier, quiet rules. */
+[data-signal="quiet"] :is(.alert .asev,.flag,.bk .flag,.dpill,.tag){display:inline-flex;align-items:center;gap:7px;
+ color:var(--ink2);background:var(--raised);box-shadow:inset 0 0 0 1px var(--line2)}
+[data-signal="quiet"] :is(.alert .asev,.flag,.bk .flag,.dpill,.tag)::before{content:"";width:6px;height:6px;
+ border-radius:50%;flex:none;background:var(--dim)}
+[data-signal="quiet"] :is(.alert.crit .asev,.flag.f-crit,.dpill.crit,.tag.t-od)::before{background:var(--crit-dot)}
+[data-signal="quiet"] :is(.alert.high .asev,.flag.f-high,.dpill.high,.tag.t-wt)::before{background:var(--high-dot)}
+[data-signal="quiet"] :is(.alert.med .asev,.flag.f-med,.flag:not([class*=" f-"]))::before{background:var(--med-dot)}
+[data-signal="quiet"] :is(.alert .asev.astate,.flag.f-ok,.dpill.ok,.tag.t-ok)::before{background:var(--ok-dot)}
+[data-signal="quiet"] .alert.info .asev::before{background:var(--solid)}
+[data-signal="quiet"] :is(.flag.f-dim,.flag.f-asat,.bk .flag.f-dim,.bk .flag.f-asat){color:var(--mut);background:transparent}
+[data-signal="quiet"] :is(.flag.f-dim,.flag.f-asat)::before{display:none}
 
 /* ---- live alerts (legacy/alerts.js) ---- */
 .alert .asev.astate{margin-left:6px;color:var(--on-solid);background:var(--ok-solid)}
