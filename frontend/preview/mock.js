@@ -83,16 +83,34 @@ const KPIS = {
   people_total: ["On the books", "count", 35, "neutral", "fact_person"],
   headcount: ["People employed", "count", 24, "neutral", "fact_person"],
   departments: ["Departments", "count", 11, "neutral", "fact_person"],
+  // The windowed and leader figures (18 Oct 2026), at the designed extract's values.
+  // The live site computes them; these only let the cards be looked at here.
+  order_book_count: ["Open orders", "count", 4, "neutral", "fact_sales_order", "worth GHS 84,950.00 still to deliver"],
+  cash_in_month: ["Money in, last full month", "currency", 1182400, "higher_is_better", "fact_payment_allocation", "July 2025, matched to invoices"],
+  days_to_pay: ["Days paid after the due date", "days", 41, "higher_is_worse", "fact_payment_allocation", "after the due date, on average, May – Jul 2025"],
+  revenue_last_month: ["Invoiced, last full month", "currency", 1550000, "higher_is_better", "fact_sales_invoice_line", "July 2025"],
+  revenue_best_month: ["Best month invoiced", "currency", 3190000, "higher_is_better", "fact_sales_invoice_line", "June 2025"],
+  invoices_draft: ["Invoices never issued", "count", 88, "higher_is_worse", "fact_sales_invoice", "worth GHS 903,632.00, in no total"],
+  supplier_top_share: ["Top supplier", "percent", 57, "higher_is_worse", "fact_purchase_invoice_line", "CYNSEL (sample), of all supplier spend"],
+  supplier_top2_share: ["Top two suppliers", "percent", 95, "higher_is_worse", "fact_purchase_invoice_line", "CYNSEL and MEDISOURCE (sample)"],
+  stock_worst_shortfall: ["Worst shortfall", "quantity", 39941, "higher_is_worse", "fact_stock_balance", "5ml syringes (sample)"],
+  stock_lines_promised: ["Lines promised", "count", 771, "neutral", "fact_stock_balance", "with stock reserved against them"],
+  tasks_longest_wait: ["Longest wait", "days", 850, "higher_is_worse", "fact_task", "Samkwarth lab setup (sample)"],
+  engineers: ["Engineers", "count", 3, "neutral", "fact_person", "active, by job title"],
+  people_left: ["Left", "count", 8, "higher_is_worse", "fact_person", "average stay 213 days"],
+  cases_closed: ["Closed", "count", 2, "higher_is_better", "fact_case", "resolved and closed"],
+  cases_avg_wait: ["Average wait", "days", 12, "higher_is_worse", "fact_case", "on 39 open cases"],
 };
 
 function figure(key) {
   const k = KPIS[key];
   if (!k) return null;
-  const [label, unit, value, direction, fact] = k;
+  const [label, unit, value, direction, fact, note] = k;
   return {
     key,
     label,
     value,
+    note: note || "",
     unit,
     direction,
     currency: unit === "currency" ? "GHS" : null,

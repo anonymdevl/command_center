@@ -9,7 +9,7 @@ and cannot forget to.
 from __future__ import annotations
 
 import frappe
-from frappe.query_builder.functions import Count, Sum
+from frappe.query_builder.functions import Avg, Count, Max, Sum
 
 from command_center.api.businesses import currency_for
 from command_center.facts.schema import FACTS, condition
@@ -23,8 +23,25 @@ def evaluate(key: str, business_code: str | None = None) -> dict:
 
 
 def _evaluate_one(kpi: Kpi, business_code, resolved: dict) -> dict:
-    value = (_ratio(kpi, resolved) if kpi.agg == "ratio"
-             else _aggregate(kpi, business_code))
+    period = _period(kpi, business_code)
+    filters = dict(kpi.filters or {})
+    drill = dict(kpi.drill_filters or {})
+    if period:
+        span = ["between", [period["from"], period["to"]]]
+        filters[period["field"]] = span
+        drill[period["field"]] = span
+
+    group = None
+    if kpi.agg == "ratio":
+        value = _ratio(kpi, resolved)
+    elif period and not period["from"]:
+        value = None              # no dated rows at all: nothing to measure, not zero
+    elif kpi.agg == "top":
+        value, group = _top(kpi, business_code, filters)
+        if group and group.get("drill"):
+            drill.update(group.pop("drill"))
+    else:
+        value = _aggregate(kpi, business_code, filters)
     state = _load_state(kpi.fact, business_code)
     currency = currency_for(business_code) if kpi.unit == "currency" else None
 
@@ -41,8 +58,10 @@ def _evaluate_one(kpi: Kpi, business_code, resolved: dict) -> dict:
         "as_of": _as_of(kpi, state),
         "basis": kpi.subset_of,
         "drill": ({"kpis": [kpi.numerator, kpi.denominator]} if kpi.agg == "ratio"
-                  else {"fact": kpi.fact, "filters": kpi.drill_filters}),
+                  else {"fact": kpi.fact, "filters": drill}),
         "data_status": _status(state),
+        "period": period,
+        "group": group,
     }
 
 
@@ -124,28 +143,129 @@ def _in_dependency_order(keys: set) -> list:
     return ordered
 
 
-def _aggregate(kpi: Kpi, business_code: str | None):
+def _table(kpi: Kpi):
     target = FACTS.get(kpi.fact)
     if not target:
         frappe.throw(f"KPI {kpi.key}: unknown fact {kpi.fact!r}")
+    return frappe.qb.DocType(target)
 
-    t = frappe.qb.DocType(target)
+
+def _scoped(q, t, business_code, filters):
+    if business_code and business_code != "__all__":
+        q = q.where(t.business_code == business_code)
+    for field, rule in (filters or {}).items():
+        q = q.where(condition(t[field], rule))
+    return q
+
+
+def _aggregate(kpi: Kpi, business_code: str | None, filters: dict):
+    t = _table(kpi)
     q = frappe.qb.from_(t)
     if kpi.agg == "count":
         q = q.select(Count(t.name))
     elif kpi.agg == "count_distinct":
         q = q.select(Count(t[kpi.distinct_on]).distinct())
+    elif kpi.agg == "avg":
+        q = q.select(Avg(t[kpi.measure]))
+    elif kpi.agg == "max":
+        q = q.select(Max(t[kpi.measure]))
     else:
         q = q.select(Sum(t[kpi.measure]))
 
-    if business_code and business_code != "__all__":
-        q = q.where(t.business_code == business_code)
+    row = _scoped(q, t, business_code, filters).run()
+    value = row[0][0] if row and row[0] else None
+    # An average or a maximum of nothing is unknown; a sum or a count of nothing is 0.
+    if kpi.agg in ("avg", "max"):
+        return None if value is None else round(float(value), 4)
+    return value or 0
 
-    for field, rule in (kpi.filters or {}).items():
-        q = q.where(condition(t[field], rule))
 
-    row = q.run()
-    return (row[0][0] or 0) if row and row[0] else 0
+def _top(kpi: Kpi, business_code: str | None, filters: dict):
+    """The leading group or groups: "Best month", "Top supplier", "Worst shortfall".
+
+    Totals per group come from the database; months are formed here from per-day
+    totals, so nothing depends on a date function that MariaDB and Postgres spell
+    differently. Returns the value and the group -- its label, and the filter that
+    narrows the drill to it, so "Best month" opens June's invoices and not all of them.
+    """
+    t = _table(kpi)
+    by_month = kpi.group_by.startswith("month:")
+    col = kpi.group_by[6:] if by_month else kpi.group_by
+    inner = {"sum": lambda: Sum(t[kpi.measure]), "max": lambda: Max(t[kpi.measure]),
+             "count": lambda: Count(t.name)}[kpi.group_agg]()
+    q = frappe.qb.from_(t).select(t[col], inner).groupby(t[col])
+    rows = _scoped(q, t, business_code, filters).run()
+
+    totals: dict = {}
+    for key, total in rows:
+        if key in (None, ""):
+            continue
+        if by_month:
+            d = frappe.utils.getdate(key)
+            key = (d.year, d.month)
+        total = float(total or 0)
+        if key in totals and kpi.group_agg == "max":
+            totals[key] = max(totals[key], total)
+        else:
+            totals[key] = totals.get(key, 0) + total
+    if not totals:
+        return None, None
+
+    ranked = sorted(totals.items(), key=lambda kv: kv[1], reverse=kpi.order == "desc")
+    lead = ranked[: kpi.top_n]
+    value = sum(v for _, v in lead)
+    if kpi.as_share:
+        whole = sum(totals.values())
+        value = round(value / whole * 100, 4) if whole else None
+    elif kpi.negate:
+        value = -value
+
+    if by_month:
+        y, m = lead[0][0]
+        first = frappe.utils.getdate(f"{y}-{m:02d}-01")
+        label = first.strftime("%B %Y")
+        span = ["between", [str(first), str(frappe.utils.get_last_day(first))]]
+        narrow = {col: span}
+    else:
+        names = [str(k) for k, _ in lead]
+        label = " and ".join(names)
+        narrow = {col: names[0] if len(names) == 1 else ["in", names]}
+    return value, {"label": label, "drill": narrow}
+
+
+def _period(kpi: Kpi, business_code: str | None) -> dict | None:
+    """The window a dated KPI covers, counted back from the last date in its own data.
+
+    Not from today: this dataset ends in 2025, and a month measured from today is a
+    month with nothing in it. "Last full month" is the latest calendar month the data
+    covers to its final day -- if the data stops on 12 August, that is July.
+    """
+    if not kpi.period:
+        return None
+    field, window = kpi.period["field"], kpi.period["window"]
+    t = _table(kpi)
+    q = frappe.qb.from_(t).select(Max(t[field]))
+    row = _scoped(q, t, business_code, kpi.filters).run()
+    horizon = row[0][0] if row and row[0] else None
+    if not horizon:
+        return {"field": field, "from": None, "to": None, "label": "no dated records"}
+
+    u = frappe.utils
+    horizon = u.getdate(horizon)
+    if window.startswith("last_days_"):
+        n = int(window.rsplit("_", 1)[1])
+        start, end = u.add_days(horizon, -(n - 1)), horizon
+        label = f"the {n} days to {horizon.day} {horizon:%b %Y}"
+    else:
+        n = 1 if window == "last_full_month" else int(window.rsplit("_", 1)[1])
+        end = (horizon if horizon == u.getdate(u.get_last_day(horizon))
+               else u.getdate(u.add_days(u.get_first_day(horizon), -1)))
+        start = u.getdate(u.get_first_day(u.add_months(end, -(n - 1))))
+        label = (f"{end:%B %Y}" if n == 1 else
+                 f"{start:%b} – {end:%b %Y}" if start.year == end.year else
+                 f"{start:%b %Y} – {end:%b %Y}")
+    return {"field": field, "from": str(u.getdate(start)), "to": str(u.getdate(end)),
+            "label": label}
 
 
 
@@ -204,7 +324,12 @@ def _render_note(kpi: Kpi, values: dict, results: dict) -> str:
     import re
 
     def substitute(match):
-        referenced, wants_share = _resolve_token(match.group(1))
+        token = match.group(1)
+        if token == "period":
+            return (results.get(kpi.key, {}).get("period") or {}).get("label") or "—"
+        if token == "group":
+            return (results.get(kpi.key, {}).get("group") or {}).get("label") or "—"
+        referenced, wants_share = _resolve_token(token)
         if referenced not in results:
             return match.group(0)
         if not wants_share:
@@ -236,4 +361,6 @@ def _plain(result: dict) -> str:
         return f"{int(value):,}"
     if result["unit"] == "quantity":
         return f"{value:,.0f}" if float(value).is_integer() else f"{value:,.2f}"
+    if result["unit"] == "days":
+        return f"{value:,.0f} days"
     return str(value)

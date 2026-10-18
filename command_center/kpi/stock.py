@@ -106,4 +106,39 @@ register(
         subset_of="all stock on hand",
         share_of="stock_value",
     ),
+
+    # 18 Oct 2026.
+    Kpi(
+        key="stock_worst_shortfall",
+        label="Worst shortfall",
+        fact="fact_stock_balance",
+        measure="available_qty",
+        agg="top",
+        group_by="item_code",
+        order="asc",
+        negate=True,
+        unit="quantity",
+        direction="higher_is_worse",
+        # Available is on hand less reserved, so a negative figure is promised stock
+        # that is not there. The item with the most negative total, written as the
+        # positive number short.
+        filters={"available_qty": ["<", 0]},
+        note="{group}",
+        drill_filters={"available_qty": ["<", 0]},
+        as_of_basis="data_horizon",
+        subset_of="one product, across warehouses",
+    ),
+    Kpi(
+        key="stock_lines_promised",
+        label="Lines promised",
+        fact="fact_stock_balance",
+        measure="*",
+        agg="count",
+        unit="count",
+        direction="neutral",
+        filters={"reserved_qty": [">", 0]},
+        note="with stock reserved against them",
+        drill_filters={"reserved_qty": [">", 0]},
+        as_of_basis="data_horizon",
+    ),
 )

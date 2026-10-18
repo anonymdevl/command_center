@@ -42,8 +42,33 @@ class Kpi:
     unit: str
     direction: str = "neutral"
 
-    agg: str = "sum"                  # sum | count | count_distinct | ratio
+    agg: str = "sum"                  # sum | count | count_distinct | avg | max | top | ratio
     filters: dict = field(default_factory=dict)
+
+    # A window of time, measured back from where the data ends rather than from today.
+    # {"field": "posting_date", "window": "last_full_month"}; windows are
+    # last_full_month, last_full_months_<n> and last_days_<n>. On a dataset that stops
+    # in August 2025, "last month" measured from today is an empty month, and a card
+    # reading GHS 0 under "Money in, month" says the business took no money -- which is
+    # what the Home card said until 18 Oct 2026. The window is resolved per business,
+    # written into the drill filters so the records match the figure, and named in the
+    # note as {period}.
+    period: dict | None = None
+
+    # For agg="top": the best (or worst) of a set of groups -- "Best month", "Top
+    # supplier", "Worst shortfall". group_by names a dimension, or "month:<date field>"
+    # for calendar months. group_agg is how each group is totalled (sum | count | max);
+    # top_n how many of the leading groups are added together ("Top 2 suppliers");
+    # order "desc" for the largest, "asc" for the smallest. as_share turns the result
+    # into a percentage of every group together, so "57%" says of what. negate writes a
+    # shortfall (a negative available quantity) as the positive number short. The
+    # winning group is named in the note as {group}.
+    group_by: str | None = None
+    group_agg: str = "sum"
+    top_n: int = 1
+    order: str = "desc"
+    as_share: bool = False
+    negate: bool = False
 
     # For count_distinct: which column's distinct values to count. "How many
     # departments" is a count of distinct departments among people, not a count of
@@ -87,10 +112,11 @@ class Kpi:
             problems.append(f"{self.key}: unit {self.unit!r} is not one of {UNITS}")
         if self.direction not in DIRECTIONS:
             problems.append(f"{self.key}: direction {self.direction!r} is unknown")
-        if self.agg not in ("sum", "count", "count_distinct", "ratio"):
-            problems.append(
-                f"{self.key}: agg {self.agg!r} is not sum, count, count_distinct "
-                f"or ratio")
+        if self.agg not in AGGS:
+            problems.append(f"{self.key}: agg {self.agg!r} is not one of {AGGS}")
+        if self.agg in ("avg", "max") and self.measure == "*":
+            problems.append(f"{self.key}: cannot take the {self.agg} of '*'")
+        problems += self._validate_period() + self._validate_top()
         if self.agg == "count_distinct" and not self.distinct_on:
             problems.append(
                 f"{self.key}: count_distinct needs distinct_on to say which column's "
@@ -126,6 +152,68 @@ class Kpi:
                 f"{self.key}: no drill_filters. Every figure opens to its records; "
                 f"a KPI that cannot be opened breaks the card contract.")
         return problems
+
+    def _validate_period(self) -> list[str]:
+        if self.period is None:
+            return []
+        from command_center.facts.schema import DATE_FIELDS
+        p = self.period
+        out = []
+        if p.get("field") not in DATE_FIELDS.get(self.fact, ()):
+            out.append(f"{self.key}: period field {p.get('field')!r} is not a date on "
+                       f"{self.fact}")
+        if not _WINDOW.match(str(p.get("window", ""))):
+            out.append(f"{self.key}: period window {p.get('window')!r} is not "
+                       f"last_full_month, last_full_months_<n> or last_days_<n>")
+        if self.agg == "ratio":
+            out.append(f"{self.key}: a ratio takes its window from its parts; give the "
+                       f"numerator and denominator the period instead")
+        return out
+
+    def _validate_top(self) -> list[str]:
+        if self.agg != "top":
+            if self.group_by or self.as_share or self.negate or self.top_n != 1:
+                return [f"{self.key}: group_by, top_n, as_share and negate only mean "
+                        f"something for agg='top'"]
+            return []
+        from command_center.facts.schema import DATE_FIELDS, DIMENSIONS
+        out = []
+        g = self.group_by or ""
+        if g.startswith("month:"):
+            if g[6:] not in DATE_FIELDS.get(self.fact, ()):
+                out.append(f"{self.key}: {g!r} groups by a field that is not a date on "
+                           f"{self.fact}")
+        elif g not in DIMENSIONS.get(self.fact, ()):
+            out.append(f"{self.key}: group_by {g!r} is not a dimension of {self.fact}")
+        if self.group_agg not in ("sum", "count", "max"):
+            out.append(f"{self.key}: group_agg {self.group_agg!r} is not sum, count or max")
+        if self.group_agg != "count" and self.measure == "*":
+            out.append(f"{self.key}: a {self.group_agg} over groups needs a measure")
+        if self.order not in ("desc", "asc"):
+            out.append(f"{self.key}: order {self.order!r} is not desc or asc")
+        if self.top_n < 1:
+            out.append(f"{self.key}: top_n must be at least 1")
+        if g.startswith("month:") and self.top_n != 1:
+            out.append(f"{self.key}: the top few months together is not one month")
+        if self.group_agg == "max" and self.top_n != 1:
+            out.append(f"{self.key}: adding up the maxima of several groups means nothing")
+        if self.as_share and (self.unit != "percent" or self.group_agg == "max"):
+            out.append(f"{self.key}: as_share is a percentage of a total, so it needs "
+                       f"unit='percent' and a sum or count")
+        if "{group}" not in self.note:
+            out.append(f"{self.key}: a top figure must name its group in the note "
+                       f"({{group}}), or '57%' is a share of nobody in particular")
+        return out
+
+
+AGGS = ("sum", "count", "count_distinct", "avg", "max", "top", "ratio")
+
+# Tokens a note may use that are not KPI keys: the KPI's own window and winning group.
+RESERVED_TOKENS = ("period", "group")
+
+import re as _re
+_WINDOW = _re.compile(r"^(last_full_month|last_full_months_([2-9]|1[0-9]|2[0-4])|"
+                      r"last_days_([1-9][0-9]{0,2}))$")
 
 
 REGISTRY: dict[str, Kpi] = {}
@@ -178,6 +266,11 @@ def validate_registry() -> list[str]:
             problems.append(
                 f"{k.key}: share_of {k.share_of!r} is not a registered KPI")
         for token in _tokens(k.note):
+            if token in RESERVED_TOKENS:
+                if token == "period" and not k.period:
+                    problems.append(f"{k.key}: the note names {{period}} but the KPI "
+                                    f"has no period")
+                continue
             referenced, wants_share = _resolve_token(token)
             if referenced not in REGISTRY:
                 problems.append(
@@ -234,6 +327,8 @@ def dependencies(key: str) -> set[str]:
     if kpi.share_of:
         needed.add(kpi.share_of)
     for token in _tokens(kpi.note):
+        if token in RESERVED_TOKENS:
+            continue
         referenced, wants_share = _resolve_token(token)
         needed.add(referenced)
         if wants_share and referenced in REGISTRY:

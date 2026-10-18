@@ -317,7 +317,7 @@ something real before any new intelligence is added. Tracked as tasks 20-31, the
 
 | | |
 |---|---|
-| Designed KPI cards | 68, of which **14 are live** |
+| Designed KPI cards | 68, of which **37 are live** (18 Oct 2026) |
 | `.bk` tiles | 34, of which **6 are live** — all six on Business Overview |
 | Static drawers / explainers | 78 (48 explainers, 7 drawers, 6 drill panels) |
 | Explicit `unwired` placeholders | 4 (Home 2, Internal Audit 2) |
@@ -331,9 +331,12 @@ Order of work:
    approval engine, Risk needs a compliance register, Business Health's are composite
    scores, and the six "Awaiting …" tiles on Sales need a pipeline fact that separates
    the stages.
-2. **Relative date filters** against the data horizon — blocks every month-over-month card.
-3. **Max-over-groups aggregate** — blocks "Best month", "Top supplier", "Longest wait",
-   "Worst shortfall".
+2. ~~**Relative date filters**~~ Done: `Kpi.period` (last_full_month, last_full_months_n,
+   last_days_n), measured back from the last date in the KPI's own fact and written into
+   its drill filters. ~~**Max-over-groups**~~ Done: `agg="top"` with `group_by` (a
+   dimension or `month:<date>`), `top_n`, `order`, `as_share`, `negate`; also `avg` and
+   `max`. Notes may say `{period}` and `{group}`. Tested offline by
+   `scripts/test_kpi.py` (in preflight). 23 cards wired with them on 18 Oct 2026.
 4. **Two more facts**: purchase orders (235 on the site) and stock movements.
 5. **Fill the 54 illustrative cards**, money screens first, then operational.
 6. **The 78 static drawers** — decide prose-or-live for each, and record the decision.

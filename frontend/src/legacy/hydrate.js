@@ -32,31 +32,57 @@ import { money, count, exact } from "../format.js";
  * the wrong words.
  */
 export const CARD_KPIS = {
+  // Home. "Money in, month" read GHS 0 because it was a month measured from today on a
+  // dataset that ends in 2025; it is now the last full month the data covers, named.
+  command: {
+    "Money in, month": "cash_in_month",
+    "Owed to us": "ar_total",
+    "Days to get paid": "days_to_pay",
+    Waiting: "order_book_count",
+    "Past due": "order_book_late",
+    "Stock we hold": "stock_value",
+  },
   sales: {
     "Owed to us": "ar_total",
     "Unpaid invoices": "ar_count",
     "Not despatched": "order_book",
+    "Last full month": "revenue_last_month",
+    "Best month": "revenue_best_month",
+    "Never issued": "invoices_draft",
   },
   fin: {
     "Owed to us": "ar_total",
     "Unpaid invoices": "ar_count",
+    "Last full month": "revenue_last_month",
+    "Best month": "revenue_best_month",
+    "Never issued": "invoices_draft",
   },
   // Nothing on Buying yet. "Purchase orders" is a count of orders and the nearest
   // figure I have is unpaid supplier invoices; "Spend, top 14" is a subset and
   // spend_total is all of it. Either mapping would have put a figure under a label that
   // does not describe it, which is worse than leaving the card illustrative -- a wrong
   // number that reads as right is the one kind of error this platform cannot afford.
-  proc: {},
+  //
+  // The two concentration cards are now shares of all submitted supplier spend, which
+  // is what their labels say; "Spend, top 14" stays illustrative for the reason above.
+  proc: {
+    "Top supplier": "supplier_top_share",
+    "Top 2 suppliers": "supplier_top2_share",
+  },
   inv: {
     "Stock we hold": "stock_value",
     "Reserved, unavail.": "stock_reserved_qty",
     // "Lines promised" means lines with something reserved against them, not every
-    // stock line, so stock_lines is not that figure.
+    // stock line, so stock_lines is not that figure -- stock_lines_promised is.
+    "Lines promised": "stock_lines_promised",
+    "Worst shortfall": "stock_worst_shortfall",
   },
   eng: {
     "Money held up": "order_book",
     "Past due date": "order_book_late",
     "Jobs open": "tasks_open",
+    "Longest wait": "tasks_longest_wait",
+    Engineers: "engineers",
   },
   hr: {
     // Two different cards, two different figures. Both were mapped to headcount, which
@@ -64,11 +90,19 @@ export const CARD_KPIS = {
     "On the books": "people_total",
     Active: "headcount",
     Departments: "departments",
+    Left: "people_left",
+    Engineers: "engineers",
   },
   cx: {
     Open: "cases_open",
+    Closed: "cases_closed",
+    "Average wait": "cases_avg_wait",
     // "Past due time" is about the response-time commitment, which this platform does
     // not read. Waiting over a month is a different statement.
+  },
+  aud: {
+    // "Unsupported" on Internal Audit is the invoices never issued, as its footnote says.
+    Unsupported: "invoices_draft",
   },
 };
 
@@ -258,6 +292,13 @@ function renderFigure(target, figure, unit) {
     target.textContent = "";
     target.append(document.createTextNode(Number(figure.value).toFixed(1)),
                   el("span", "cur", "%"));
+    return;
+  }
+
+  if (figure.unit === "days") {
+    // Whole days, with the unit the designed card wrote beside it.
+    target.textContent = count(Math.round(Number(figure.value)));
+    target.append(document.createTextNode(" "), el("span", "cur", "days"));
     return;
   }
 

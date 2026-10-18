@@ -44,7 +44,7 @@ DIMENSIONS = {
     "fact_stock_balance": ["warehouse", "item_code", "item_group", "business_code"],
     "fact_sales_order": ["customer", "customer_group", "territory", "status",
                          "lateness_bucket", "transaction_date", "business_code"],
-    "fact_task": ["project", "assigned_to", "status", "priority",
+    "fact_task": ["project", "project_name", "assigned_to", "status", "priority",
                   "lateness_bucket", "exp_end_date", "business_code"],
     "fact_person": ["department", "designation", "branch", "employment_type",
                     "status", "business_code"],
@@ -68,6 +68,19 @@ MEASURES = {
     "fact_case": ["days_open"],
 }
 
+# The dates each fact can be windowed or grouped by month on (Kpi.period, "month:").
+DATE_FIELDS = {
+    "fact_sales_invoice": ["posting_date", "due_date"],
+    "fact_sales_invoice_line": ["posting_date"],
+    "fact_payment_allocation": ["posting_date"],
+    "fact_purchase_invoice": ["posting_date", "due_date"],
+    "fact_purchase_invoice_line": ["posting_date"],
+    "fact_sales_order": ["transaction_date", "delivery_date"],
+    "fact_task": ["exp_end_date", "completed_on"],
+    "fact_person": ["date_of_joining", "relieving_date"],
+    "fact_case": ["opening_date", "resolution_date"],
+}
+
 # Columns every fact carries, which a filter may name even though they are neither
 # a dimension to group by nor a measure to add up.
 LINEAGE = ["src_doctype", "src_name", "src_row_name", "src_docstatus",
@@ -78,7 +91,7 @@ FLAGS = ["ageing_bucket", "has_cost", "has_valuation", "src_docstatus",
          "lateness_bucket", "wait_bucket", "is_open", "is_assigned", "is_active",
          "has_user", "days_late", "days_open", "days_overdue", "tenure_days"]
 
-OPERATORS = (">", ">=", "<", "<=", "=", "!=", "in", "not in", "like")
+OPERATORS = (">", ">=", "<", "<=", "=", "!=", "in", "not in", "like", "between")
 
 
 def doctype(fact: str) -> str | None:
@@ -86,7 +99,8 @@ def doctype(fact: str) -> str | None:
 
 
 def filterable(fact: str) -> list[str]:
-    return DIMENSIONS.get(fact, []) + MEASURES.get(fact, []) + LINEAGE + FLAGS
+    return (DIMENSIONS.get(fact, []) + MEASURES.get(fact, []) + DATE_FIELDS.get(fact, [])
+            + LINEAGE + FLAGS)
 
 
 def condition(column, value):
@@ -107,6 +121,11 @@ def condition(column, value):
             return column.isin(values) if op == "in" else column.notin(values)
         if op == "like":
             return column.like(val)
+        if op == "between":
+            if not (isinstance(val, (list, tuple)) and len(val) == 2):
+                raise ValueError("between takes [from, to]")
+            low, high = val
+            return (column >= low) & (column <= high)
         return {">": lambda: column > val, ">=": lambda: column >= val,
                 "<": lambda: column < val, "<=": lambda: column <= val,
                 "=": lambda: column == val, "!=": lambda: column != val}[op]()

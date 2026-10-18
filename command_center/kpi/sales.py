@@ -9,6 +9,8 @@ from command_center.kpi.registry import Kpi, register
 
 UNPAID = {"outstanding_amount": [">", 0], "src_docstatus": 1}
 SUBMITTED = {"src_docstatus": 1}
+DRAFT = {"src_docstatus": 0}
+RECEIVED = {"payment_type": "Receive", "against_doctype": "Sales Invoice"}
 
 register(
     Kpi(
@@ -179,5 +181,106 @@ register(
         note="of {ar_total} owed",
         as_of_basis="data_horizon",
         subset_of="everything owed",
+    ),
+
+    # ------------------------------------------------- windows and leaders (18 Oct 2026)
+    # Measured back from the last date in the data, not from today. See Kpi.period.
+    Kpi(
+        key="cash_in_month",
+        label="Money in, last full month",
+        fact="fact_payment_allocation",
+        measure="allocated_amount",
+        unit="currency",
+        direction="higher_is_better",
+        filters=RECEIVED,
+        note="{period}, matched to invoices",
+        drill_filters=RECEIVED,
+        period={"field": "posting_date", "window": "last_full_month"},
+        as_of_basis="data_horizon",
+    ),
+    Kpi(
+        key="days_to_pay",
+        label="Days paid after the due date",
+        fact="fact_payment_allocation",
+        measure="days_to_pay",
+        agg="avg",
+        unit="days",
+        direction="higher_is_worse",
+        # Payment date less the invoice's due date, per allocation: how late customers
+        # pay, not how long credit runs. The note says so, so the figure is not read
+        # as days-sales-outstanding.
+        filters=RECEIVED,
+        note="after the due date, on average, {period}",
+        drill_filters=RECEIVED,
+        period={"field": "posting_date", "window": "last_full_months_3"},
+        as_of_basis="data_horizon",
+    ),
+    Kpi(
+        key="revenue_last_month",
+        label="Invoiced, last full month",
+        fact="fact_sales_invoice_line",
+        measure="base_net_amount",
+        unit="currency",
+        direction="higher_is_better",
+        filters=SUBMITTED,
+        note="{period}",
+        drill_filters=SUBMITTED,
+        period={"field": "posting_date", "window": "last_full_month"},
+        as_of_basis="data_horizon",
+    ),
+    Kpi(
+        key="revenue_best_month",
+        label="Best month invoiced",
+        fact="fact_sales_invoice_line",
+        measure="base_net_amount",
+        agg="top",
+        group_by="month:posting_date",
+        unit="currency",
+        direction="higher_is_better",
+        filters=SUBMITTED,
+        note="{group}",
+        drill_filters=SUBMITTED,
+        as_of_basis="data_horizon",
+        subset_of="one calendar month of invoiced revenue",
+    ),
+    Kpi(
+        key="largest_debt",
+        label="Largest debt",
+        fact="fact_sales_invoice",
+        measure="outstanding_amount",
+        agg="top",
+        group_by="customer",
+        unit="currency",
+        direction="higher_is_worse",
+        filters=UNPAID,
+        note="{group}",
+        drill_filters=UNPAID,
+        as_of_basis="data_horizon",
+        subset_of="everything owed, one customer",
+    ),
+    Kpi(
+        key="invoices_draft",
+        label="Invoices never issued",
+        fact="fact_sales_invoice",
+        measure="*",
+        agg="count",
+        unit="count",
+        direction="higher_is_worse",
+        filters=DRAFT,
+        note="worth {invoices_draft_value}, in no total",
+        drill_filters=DRAFT,
+        as_of_basis="data_horizon",
+    ),
+    Kpi(
+        key="invoices_draft_value",
+        label="Value of invoices never issued",
+        fact="fact_sales_invoice",
+        measure="base_grand_total",
+        unit="currency",
+        direction="higher_is_worse",
+        filters=DRAFT,
+        note="{invoices_draft} drafts",
+        drill_filters=DRAFT,
+        as_of_basis="data_horizon",
     ),
 )
