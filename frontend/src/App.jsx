@@ -5,6 +5,7 @@ import Topbar from "./components/Topbar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import Drawer from "./components/Drawer.jsx";
 import LegacyView from "./components/LegacyView.jsx";
+import ViewTools from "./components/ViewTools.jsx";
 import nav from "./legacy/nav.json";
 
 /**
@@ -75,6 +76,7 @@ export default function App() {
       <div className="col">
         <Topbar scope={scope} openDrawer={setDrawer} onMenu={() => setNavOpen((o) => !o)} />
         <main className="main" id="cc-main">
+          <ViewTools caption={captionOf(view)} scope={scope} />
           {showBanner ? <IllustrativeNotice /> : null}
           {Ported ? <Ported {...ctx} /> : <LegacyView viewKey={view} {...ctx} />}
         </main>
@@ -82,6 +84,14 @@ export default function App() {
       <Drawer content={drawer} onClose={() => setDrawer(null)} />
     </div>
   );
+}
+
+function captionOf(key) {
+  for (const g of nav.groups) {
+    const it = g.items.find((i) => i.key === key);
+    if (it) return it.label;
+  }
+  return "Command Center";
 }
 
 /**

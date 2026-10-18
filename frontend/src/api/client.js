@@ -73,6 +73,46 @@ export async function call(method, args = {}, { signal } = {}) {
 }
 
 /**
+ * Call a whitelisted method that answers with a file, and save it.
+ *
+ * Same session and CSRF token as call(). The file name comes from the server's
+ * Content-Disposition, so it says what is in it and when.
+ */
+export async function download(method, args = {}, fallbackName = "export") {
+  const res = await fetch(`/api/method/${method}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+      ...(CSRF ? { "X-Frappe-CSRF-Token": CSRF } : {}),
+    },
+    body: JSON.stringify(args),
+  });
+  if (!res.ok) {
+    let msg = `Export failed (${res.status}).`;
+    try {
+      msg = serverMessage(await res.json()) || msg;
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(msg, { status: res.status, method });
+  }
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  const name = m ? decodeURIComponent(m[1]) : fallbackName;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return name;
+}
+
+/**
  * Frappe reports errors in several shapes depending on how they were raised.
  * Pulling the human sentence out of them is worth doing once, here, rather than
  * letting a raw traceback reach a manager's screen.
@@ -136,6 +176,11 @@ export const api = {
   ask: ({ question, business_code, history }, opts) =>
     call("command_center.api.ask.answer", { question, business_code, history }, opts),
   answerable: () => call("command_center.api.ask.answerable"),
+
+  /* Downloads. Reads only: nothing is written to the site, not even a File. */
+  answerPdf: (args) => download("command_center.api.export.answer_pdf", args, "answer.pdf"),
+  tablesXlsx: (args) => download("command_center.api.export.tables_xlsx", args, "tables.xlsx"),
+  recordsXlsx: (args) => download("command_center.api.export.records_xlsx", args, "records.xlsx"),
 
   ingestStatus: () => call("command_center.api.ingest.status"),
   reconcile: (business_code) =>

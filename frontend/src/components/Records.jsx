@@ -2,6 +2,7 @@ import React from "react";
 import { api } from "../api/client.js";
 import { useApi } from "../useApi.js";
 import DataTable from "./DataTable.jsx";
+import ExportButton from "./ExportButton.jsx";
 import { Loading, Failed, Empty } from "./States.jsx";
 import { exact, count, shortDate } from "../format.js";
 
@@ -37,6 +38,14 @@ export default function Records({ scope, title, fact, filters, subset, openDrawe
           <h4>{title}</h4>
           {subset ? <div className="when">a subset of {subset}</div> : null}
         </div>
+        {data && data.summary.count > 0 ? (
+          // Every matching record, not just the hundred shown here.
+          <ExportButton
+            label={`Excel · all ${count(data.summary.count)}`}
+            title="Download every record behind this figure as an Excel sheet"
+            run={() => api.recordsXlsx({ fact, filters, business_code: scope, title })}
+          />
+        ) : null}
       </div>
 
       {loading ? <Loading what="Reading the records" /> : null}

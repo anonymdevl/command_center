@@ -72,6 +72,14 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
         });
         remember(scopeRef.current, q, payload);
         renderAnswer(out, payload, {
+          onPdf: (res) =>
+            api.answerPdf({
+              question: q,
+              answer: res.answer,
+              checked: res.checked,
+              business_code: scopeRef.current,
+              model: res.model,
+            }),
           onOpen: (records, title) =>
             openDrawer(
               <Records

@@ -796,6 +796,29 @@ table.dt tr:hover td{background:var(--hover)}
 
 @media(prefers-reduced-motion:reduce){.asof .dot,.ap-spin{animation:none}}
 
+/* ---- export controls on every screen (ViewTools.jsx) ---- */
+.vtools{display:flex;justify-content:flex-end;gap:8px;margin:-10px 0 12px}
+.ap-act.failed{border-color:var(--crit-line);color:var(--crit)}
+.ap-act:disabled{opacity:.7;cursor:default}
+.dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.print-head{display:none}
+
+/* ---- paper: a screen printed or saved as PDF ---- */
+@media print{
+ @page{size:A4 landscape;margin:12mm}
+ html,body{height:auto;overflow:visible;background:#fff}
+ .shell{display:block;height:auto;padding:0;background:#fff}
+ .side,.topnav,.vtools,.askpop,.drawer,.scrim-nav,.cc-preview-tag,.dnote{display:none!important}
+ .col{display:block}
+ .main{overflow:visible;box-shadow:none;border-radius:0;padding:0;background:#fff}
+ .print-head{display:block;font-size:var(--fs-xs);color:var(--mut);border-bottom:1px solid var(--line2);
+  padding-bottom:6px;margin-bottom:14px}
+ .kpi,.bk,.panel,.alert,.note,.chartwrap,table.dt tr{break-inside:avoid}
+ .kpi:hover,.bk:hover{transform:none;box-shadow:none}
+ .tabpane:not(.on){display:none!important}
+ a{color:inherit;text-decoration:none}
+}
+
 /* ---- narrower screens ---- */
 @media(max-width:1180px){
  .shell{grid-template-columns:228px minmax(0,1fr)}

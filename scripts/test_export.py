@@ -1,0 +1,99 @@
+"""The exports, tested without a site.
+
+    python3 scripts/test_export.py
+
+Frappe is stood in for, so what is under test is api/export.py's own work: that a
+workbook opens, has one sheet per table with unique, legal names, carries the header
+block, and gives Excel numbers rather than text for figures; that the PDF template
+fills without a stray brace and escapes the question; and that the model's markdown is
+sanitised before it reaches the PDF. Frappe's own PDF engine and md_to_html are the
+site's, and are exercised there.
+"""
+
+from __future__ import annotations
+
+import io
+import os
+import sys
+import types
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+frappe = types.ModuleType("frappe")
+frappe.local = types.SimpleNamespace(response=types.SimpleNamespace())
+frappe.session = types.SimpleNamespace(user="kofi@gigmann.test")
+frappe.whitelist = lambda **k: (lambda f: f)
+frappe.parse_json = lambda s: __import__("json").loads(s)
+frappe.db = types.SimpleNamespace(get_value=lambda *a, **k: "Gigmann Medical Supplies Ltd")
+frappe.utils = types.SimpleNamespace(
+    today=lambda: "2026-10-18", get_fullname=lambda u: "Kofi Mensah",
+    now_datetime=lambda: None, format_datetime=lambda d, f=None: "18 Oct 2026, 09:00",
+    escape_html=lambda s: s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"),
+    md_to_html=lambda md: f"<p>{md}</p><script>alert(1)</script>")
+sys.modules["frappe"] = frappe
+sys.modules["frappe.utils"] = frappe.utils
+html_utils = types.ModuleType("frappe.utils.html_utils")
+html_utils.sanitize_html = lambda h: h.replace("<script>alert(1)</script>", "")
+sys.modules["frappe.utils.html_utils"] = html_utils
+pdf = types.ModuleType("frappe.utils.pdf")
+pdf.get_pdf = lambda html, options=None: html.encode()
+sys.modules["frappe.utils.pdf"] = pdf
+biz = types.ModuleType("command_center.api.businesses")
+biz.require_manager = lambda: None
+sys.modules["command_center.api.businesses"] = biz
+www = types.ModuleType("command_center.www.command_center")
+www._as_of = lambda: {"date": "2025-08-19"}
+sys.modules["command_center.www.command_center"] = www
+
+from openpyxl import load_workbook  # noqa: E402
+
+from command_center.api import export  # noqa: E402
+
+passed = failed = 0
+
+
+def check(ok, what):
+    global passed, failed
+    passed += bool(ok)
+    failed += not ok
+    if not ok:
+        print("FAIL:", what)
+
+
+# Tables to Excel
+export.tables_xlsx("Who owes us", [
+    {"name": "Largest balances", "columns": ["Customer", "Owed (GHS)", "Share"],
+     "rows": [["UBUNTU", "GHS 636,675.00", "6.9%"], ["A.S Hospitex", "541,841", "5.9%"]]},
+    {"name": "Largest balances", "columns": ["A"], "rows": [["x"]]},
+    {"name": "Bad/name:[x]?", "columns": ["A"], "rows": [["y"]]},
+], "GIGMANN")
+r = frappe.local.response
+wb = load_workbook(io.BytesIO(r.filecontent))
+check(r.type == "binary" and r.filename.endswith(".xlsx"), "an xlsx download")
+check(len(wb.sheetnames) == 3 and len(set(wb.sheetnames)) == 3, "one sheet per table, names unique")
+check(all(not set(n) & set("[]*?/\\:") for n in wb.sheetnames), "sheet names are legal")
+ws = wb[wb.sheetnames[0]]
+check(ws["A1"].value == "Who owes us" and "figures as at 2025-08-19" in ws["A2"].value,
+      "title and the as-of header block")
+check(ws["B5"].value == 636675.0 and abs(ws["C5"].value - 0.069) < 1e-9,
+      "figures arrive as numbers, percentages as fractions")
+check(ws["A5"].value == "UBUNTU", "text stays text")
+
+# Answer to PDF
+export.answer_pdf("Who owes <us>?", "**GHS 9.18M** owed", ["get_figures({})"], "GIGMANN",
+                  "gemini-2.5-flash")
+r = frappe.local.response
+html = r.filecontent.decode()
+check(r.type == "pdf" and r.filename.endswith(".pdf"), "a pdf download")
+check("Who owes &lt;us&gt;?" in html, "the question is escaped")
+check("<script>" not in html, "the model's markdown is sanitised")
+check("Figures as at 2025-08-19" in html and "Kofi Mensah" in html, "the header says as-of and who")
+check("get_figures" in html and "cannot change anything" in html, "what it checked, and the boundary")
+
+# _cell
+check(export._cell("GHS 1,234.50") == 1234.5 and export._cell("12%") == 0.12, "figure parsing")
+check(export._cell("Q3 2025") == "Q3 2025" and export._cell(None) == "", "non-figures untouched")
+
+print(f"export: {passed} passed, {failed} failed")
+sys.exit(1 if failed else 0)

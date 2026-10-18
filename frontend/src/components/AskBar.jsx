@@ -4,6 +4,8 @@ import { historyFor, recentQuestions, remember } from "../askHistory.js";
 import { renderAnswer } from "../legacy/answer.js";
 import { renderMarkdown } from "../legacy/markdown.js";
 import Icon from "./Icon.jsx";
+import ExportButton from "./ExportButton.jsx";
+import { tablesFrom } from "../exportTables.js";
 import Records from "./Records.jsx";
 
 /**
@@ -270,6 +272,7 @@ function Suggestions({ choices, recentCount, hi, onPick }) {
 function Answer({ asked, result, scope, openDrawer, onReset }) {
   const body = useRef(null);
   const [copied, setCopied] = useState(false);
+  const [hasTables, setHasTables] = useState(false);
   const markdown = result.format === "markdown";
 
   // The analyst's markdown is rendered compactly here; a pattern answer has its own
@@ -283,6 +286,7 @@ function Answer({ asked, result, scope, openDrawer, onReset }) {
       renderAnswer(el, result, {
         onOpen: (records, title) => openRecords(openDrawer, scope, records, title),
       });
+    setHasTables(!!el.querySelector("table.dt tbody tr"));
   }, [result, markdown, openDrawer, scope]);
 
   const copy = async () => {
@@ -328,8 +332,30 @@ function Answer({ asked, result, scope, openDrawer, onReset }) {
             <Icon name="arrow" size={14} />
           </button>
         ) : null}
+        <ExportButton
+          label="PDF"
+          title="Download this answer as a PDF"
+          run={() =>
+            api.answerPdf({
+              question: asked,
+              answer: result.answer,
+              checked: result.checked,
+              business_code: scope,
+              model: result.model,
+            })
+          }
+        />
+        {hasTables ? (
+          <ExportButton
+            label="Excel"
+            title="Download the tables in this answer as an Excel file"
+            run={() =>
+              api.tablesXlsx({ title: asked, tables: tablesFrom(body.current), business_code: scope })
+            }
+          />
+        ) : null}
         <button className="ap-act" type="button" onClick={copy}>
-          {copied ? "Copied" : "Copy answer"}
+          {copied ? "Copied" : "Copy"}
         </button>
         <span className="ap-gap" />
         <button className="ap-act" type="button" onClick={onReset}>

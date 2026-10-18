@@ -79,6 +79,12 @@ def query(fact: str, measures=None, group_by=None, filters=None,
 
 @frappe.whitelist()
 def records(fact: str, filters=None, business_code: str = None, limit: int = 100):
+    """The records behind a figure, at most 500 of them -- see _records."""
+    return _records(fact, filters, business_code, limit, cap=500)
+
+
+def _records(fact: str, filters=None, business_code: str = None, limit: int = 100,
+             cap: int = 500):
     """The records behind a figure, as something to decide on.
 
     Three things come back, and the first two are the point:
@@ -139,7 +145,9 @@ def records(fact: str, filters=None, business_code: str = None, limit: int = 100
         target, filters=filters,
         fields=presentation.select_fields(fact),
         order_by=f"{spec['order_by']} desc",
-        limit=min(int(limit), 500))
+        # The cap is not an argument of the endpoint, so a request cannot raise it.
+        # The drawer gets 500; an export (api/export.py) gets more.
+        limit=min(int(limit), cap))
 
     sites = _site_urls()
     for row in rows:

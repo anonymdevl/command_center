@@ -17,11 +17,11 @@
 import { exact, count, shortDate } from "../format.js";
 import { renderMarkdown } from "./markdown.js";
 
-export function renderAnswer(container, payload, { onOpen } = {}) {
+export function renderAnswer(container, payload, { onOpen, onPdf } = {}) {
   container.textContent = "";
   if (!payload) return;
 
-  container.append(block(payload, onOpen));
+  container.append(block(payload, onOpen, onPdf));
 }
 
 export function renderThinking(container, question) {
@@ -40,7 +40,7 @@ export function renderFailure(container, message) {
 
 /* ------------------------------------------------------------------------- */
 
-function block(p, onOpen) {
+function block(p, onOpen, onPdf) {
   const wrap = div("panel");
   wrap.style.margin = "0 0 16px";
 
@@ -68,16 +68,34 @@ function block(p, onOpen) {
   if (p.table?.rows?.length) wrap.append(table(p.table));
   if (p.suggestions?.length) wrap.append(suggestions(p.suggestions));
 
+  const acts = div("acts");
+  acts.style.margin = "12px 14px 14px";
   if (p.records?.fact && onOpen) {
-    const acts = div("acts");
-    acts.style.margin = "12px 14px 14px";
     const b = document.createElement("button");
     b.className = "btn";
     b.textContent = "Open the records behind this";
     b.onclick = () => onOpen(p.records, p.answer);
     acts.append(b);
-    wrap.append(acts);
   }
+  if (p.answered && p.answer && onPdf) {
+    const b = document.createElement("button");
+    b.className = "btn";
+    b.textContent = "Download PDF";
+    b.onclick = async () => {
+      b.disabled = true;
+      b.textContent = "Preparing…";
+      try {
+        await onPdf(p);
+        b.textContent = "Downloaded";
+      } catch (e) {
+        b.textContent = "Export failed";
+        b.title = e?.message || "";
+      }
+      setTimeout(() => { b.disabled = false; b.textContent = "Download PDF"; }, 2500);
+    };
+    acts.append(b);
+  }
+  if (acts.childNodes.length) wrap.append(acts);
 
   return wrap;
 }
