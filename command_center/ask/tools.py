@@ -396,7 +396,7 @@ MAX_REPORT_ROWS = 80
 
 def _company(business_code) -> str | None:
     if business_code and business_code != "__all__":
-        c = frappe.db.get_value("Connected Business", business_code, "erpnext_company")
+        c = frappe.db.get_value("Connected Business", {"business_code": business_code}, "erpnext_company")
         if c:
             return c
     return frappe.defaults.get_user_default("Company")

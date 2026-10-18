@@ -110,11 +110,13 @@ check(doc.count("<svg") == 2 and "polyline" in doc and "<path" in doc, "line and
 check("not json" not in doc and "```" not in doc and "CCBLOCK" not in doc,
       "a block that does not parse is dropped, not printed raw")
 check("Next?" not in doc, "follow-up suggestions are left off paper")
-_pol = export._polish('<p>Lead</p><p>More</p><table><tr><td>UBUNTU</td><td>636,675</td><td>GHS 9.18M</td>'
-                      '<td>73.8%</td></tr></table><ul><li><strong>Recommendation:</strong> Call.</li></ul>')
-check('<td class="n">636,675</td>' in _pol and '<td class="n">GHS 9.18M</td>' in _pol
-      and '<td class="n">73.8%</td>' in _pol and "<td>UBUNTU</td>" in _pol,
-      "numbers in tables line up on the right, words do not")
+_pol = export._polish('<p>Lead</p><p>More</p><table><thead><tr><th>Who</th><th>Owed</th><th>Band</th>'
+                      '<th>Share</th></tr></thead><tbody><tr><td>UBUNTU</td><td>636,675</td><td>GHS 9.18M</td>'
+                      '<td>73.8%</td></tr><tr><td>HAIRASH</td><td>—</td><td>GHS 0.74M</td><td>8.0%</td></tr>'
+                      '</tbody></table><ul><li><strong>Recommendation:</strong> Call.</li></ul>')
+check('<td class="n">636,675</td>' in _pol and '<td class="n">—</td>' in _pol
+      and '<th class="n">Owed</th>' in _pol and "<td>UBUNTU</td>" in _pol and "<th>Who</th>" in _pol,
+      "a column of numbers lines up on the right, heading and dashes included; words do not")
 check('<li class="rec">' in _pol and _pol.count('class="lead"') == 1,
       "recommendations stand out; only the first paragraph is the lead")
 check("<script" not in export.pdf_blocks.figures([{"label": "<script>x</script>", "value": "1"}]),

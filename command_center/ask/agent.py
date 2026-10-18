@@ -322,7 +322,7 @@ def _as_of(business_code):
 
 def _business_name(business_code) -> str:
     if business_code and business_code != "__all__":
-        return frappe.db.get_value("Connected Business", business_code, "business_name") or business_code
+        return frappe.db.get_value("Connected Business", {"business_code": business_code}, "business_name") or business_code
     return "all connected businesses"
 
 
@@ -375,6 +375,12 @@ cancelled documents, filter src_docstatus yourself (0 draft, 2 cancelled).
 
 HOW TO WORK
 - Look before you answer.
+- Check your totals before you answer. A table's total, or a count beside a defined \
+figure, must equal that figure: invoices behind GHS 9.18M owed are the unpaid ones \
+(ar_count), not every invoice. If they differ, your query is missing one of the \
+figure's rules -- fix it and look again rather than print both.
+- Never show a field, column, table or tool name (base_discount_amount, src_docstatus, \
+fact_sales_invoice, query_data). Say what it means in plain words.
 - Answer the question that was asked. Do not widen it to other areas (supplier bills \
 when asked about invoices, say); offer those as follow-up questions instead.
 - Every figure you state must come from a tool result, or be calculated from tool results \

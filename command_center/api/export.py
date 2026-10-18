@@ -38,7 +38,7 @@ def _name(title: str, ext: str) -> str:
 
 def _business(business_code) -> str:
     if business_code and business_code != "__all__":
-        return frappe.db.get_value("Connected Business", business_code, "business_name") or business_code
+        return frappe.db.get_value("Connected Business", {"business_code": business_code}, "business_name") or business_code
     return "All businesses"
 
 
@@ -107,13 +107,42 @@ _NUMBER = re.compile(r"^\s*(?:<strong>)?\s*[-+(]?(?:GHS|USD|\$|€|£)?\s*[-+]?[
                      r"(?:%|[kKMB]|days?|months?)?\)?\s*(?:</strong>)?\s*$")
 
 
+_BLANK = re.compile(r"^\s*(?:—|–|-|n/a|N/A)?\s*$")
+
+
+def _align(table: str) -> str:
+    """A column whose every value is a number (or a dash) is right-aligned, heading
+    included, so a heading sits over its figures rather than across the page from them."""
+    rows = re.findall(r"<tr>(.*?)</tr>", table, flags=re.S)
+    cells = [re.findall(r"<t([hd])([^>]*)>(.*?)</t[hd]>", r, flags=re.S) for r in rows]
+    width = max((len(c) for c in cells), default=0)
+    numeric = []
+    for i in range(width):
+        vals = [c[i][2] for c in cells if len(c) > i and c[i][0] == "d"]
+        filled = [v for v in vals if not _BLANK.match(re.sub(r"<[^>]+>", "", v))]
+        numeric.append(bool(filled) and all(_NUMBER.match(v) or _BLANK.match(re.sub(r"<[^>]+>", "", v))
+                                            for v in vals))
+
+    def row(r):
+        i = -1
+
+        def cell(m):
+            nonlocal i
+            i += 1
+            tag, attrs, text = m.group(1), m.group(2), m.group(3)
+            if i < len(numeric) and numeric[i]:
+                attrs = re.sub(r'\s*style="[^"]*"', "", attrs) + ' class="n"'
+            return f"<t{tag}{attrs}>{text}</t{tag}>"
+        return "<tr>" + re.sub(r"<t([hd])([^>]*)>(.*?)</t[hd]>", cell, r, flags=re.S) + "</tr>"
+
+    return re.sub(r"<tr>(.*?)</tr>", lambda m: row(m.group(1)), table, flags=re.S)
+
+
 def _polish(body: str) -> str:
     """Small things a well-made document does: the first paragraph is the lead, numbers
     in tables line up on the right, and each recommendation stands out."""
     body = re.sub(r"<p>", '<p class="lead">', body, count=1)
-    body = re.sub(r"<td>(.*?)</td>",
-                  lambda m: f'<td class="n">{m.group(1)}</td>' if _NUMBER.match(m.group(1)) else m.group(0),
-                  body, flags=re.S)
+    body = re.sub(r"<table>(.*?)</table>", lambda m: f"<table>{_align(m.group(1))}</table>", body, flags=re.S)
     body = re.sub(r"<li>(\s*(?:<strong>)?\s*Recommendation)", r'<li class="rec">\1', body)
     body = re.sub(r"<p>(\s*(?:<strong>)?\s*Projection)", r'<p class="proj">\1', body)
     return body
@@ -219,7 +248,8 @@ def _send_xlsx(title: str, sheets: list, business_code, note: str | None = None)
 
 PDF_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><style>
 @page{{size:A4}}
-body{{font-family:'Helvetica Neue',Helvetica,Arial,'Liberation Sans',sans-serif;color:#111317;font-size:10.5pt;
+body{{font-family:'Helvetica Neue',Helvetica,Arial,'Liberation Sans','Nimbus Sans','Nimbus Sans L',sans-serif;
+ color:#111317;font-size:10.5pt;
  line-height:1.55;margin:0}}
 .hd{{border-bottom:1px solid #e3e5ea;padding-bottom:10px;margin-bottom:20px}}
 .hd td{{border:0;padding:0;vertical-align:bottom;background:none}}
@@ -241,9 +271,11 @@ p.proj{{padding:8px 12px;border-left:3px solid #a85a0a;background:#fbf5ec;border
 strong{{font-weight:700}}
 table{{border-collapse:collapse;width:100%;margin:10px 0 14px;font-size:9pt;page-break-inside:auto}}
 tr{{page-break-inside:avoid}}
-th{{text-align:left;color:#3b3f47;font-weight:700;background:#f2f3f5;border-bottom:1px solid #d9dce2;padding:7px 9px}}
+th{{text-align:left;color:#3b3f47;font-weight:700;background:#f2f3f5;border-bottom:1px solid #d9dce2;padding:7px 8px;
+ font-size:8.5pt}}
 td{{border-bottom:1px solid #eceef1;padding:6px 9px;vertical-align:top}}
-td.n{{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}}
+td.n,th.n{{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}}
+th.n{{white-space:normal}}
 tbody tr:nth-child(even) td{{background:#fafbfc}}
 code{{font-family:Menlo,Consolas,monospace;font-size:9pt}}
 .ft{{margin-top:28px;border-top:1px solid #e3e5ea;padding-top:9px;font-size:8pt;color:#8a8f99;line-height:1.5}}
