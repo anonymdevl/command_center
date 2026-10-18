@@ -159,7 +159,7 @@ const REPORT_TITLES = { rp01: "Executive Summary", rp02: "Weekly management repo
   rp03: "Monthly report", rp04: "Board report", rp05: "Sales and Payments",
   rp06: "Buying and stock", rp07: "Engineering", rp08: "People", rp09: "Compliance and audit" };
 const reportPolls = {};
-const askJobs = { n: 0 };
+const askStarted = {};
 
 // A lookup is answered in its own shape: a sentence and a table, no cards or charts.
 const LOOKUP_SAMPLE = (question) => ({
@@ -248,22 +248,14 @@ const HANDLERS = {
   }),
   // The same list engine.ANALYST_EXAMPLES serves on the site (copied: there is no
   // server here to ask).
-  // Ask with live steps: a few steps appear over successive polls, then the answer.
-  "command_center.api.ask.start": ({ question }) => {
-    askJobs.n += 1;
-    const id = `ask-${askJobs.n}`;
-    askJobs[id] = { question, polls: 0 };
-    return { ask_id: id };
-  },
+  // Live steps, as on the site: the answer request is still working while poll() reads
+  // the steps recorded under its ask_id.
   "command_center.api.ask.poll": ({ ask_id }) => {
-    const job = askJobs[ask_id];
-    if (!job) return { state: "unknown", steps: [] };
-    job.polls += 1;
-    const steps = ["Reading the headline figures", "Adding up sales invoices by customer",
-      "Working out the trend in customer payments"].slice(0, job.polls);
-    if (job.polls <= 3) return { state: "running", steps };
-    return { state: "done", steps,
-      result: HANDLERS["command_center.api.ask.answer"]({ question: job.question }) };
+    const t0 = askStarted[ask_id];
+    if (!t0) return { state: "unknown", steps: [] };
+    const n = Math.min(3, 1 + Math.floor((Date.now() - t0) / 700));
+    return { state: "running", steps: ["Reading the headline figures",
+      "Adding up sales invoices by customer", "Working out the trend in customer payments"].slice(0, n) };
   },
   // Reports: a job that is "done" on the second poll, with the sample answer as its text.
   "command_center.api.reports.generate": ({ code }) => {
@@ -314,10 +306,13 @@ window.fetch = async (input, init = {}) => {
       headers: { "Content-Type": "application/json" },
     });
 
-  // A short delay so loading states are visible, as they are on the real site.
-  // ?slow=N holds answers for N seconds, to look at the analyst's waiting state.
+  // A short delay so loading states are visible, as they are on the real site. An ask
+  // with an ask_id takes a couple of seconds, long enough for its steps to show;
+  // ?slow=N holds it for N.
   const slow = Number(new URLSearchParams(window.location.search).get("slow") || 0);
-  await new Promise((r) => setTimeout(r, method.endsWith("ask.answer") && slow ? slow * 1000 : 120));
+  if (method.endsWith("ask.answer") && args.ask_id) askStarted[args.ask_id] = Date.now();
+  const askWait = method.endsWith("ask.answer") ? (slow ? slow * 1000 : args.ask_id ? 2400 : 120) : 120;
+  await new Promise((r) => setTimeout(r, askWait));
   if (init.signal?.aborted) throw new DOMException("aborted", "AbortError");
 
   if (!handler) {

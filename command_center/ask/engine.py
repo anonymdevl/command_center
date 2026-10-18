@@ -152,6 +152,17 @@ def answer(question: str, business_code: str | None = None, history=None, on_ste
         # Said on the answer: a fallback that looks like the analyst is how a broken
         # analyst went unnoticed on the live site.
         fallback["analyst_error"] = analyst_error
+        if not fallback.get("answered"):
+            # The basic engine knows six kinds of question. Its "I recognise GHANA WATER
+            # COMPANY but not what you are asking" in reply to a growth forecast reads
+            # as the analyst being foolish; say plainly what happened instead.
+            fallback.update({
+                "answer": "I could not finish working that out this time. Ask again in a "
+                          "moment -- if it keeps happening, the reason below is the thing "
+                          "to look at.",
+                "suggestions": [], "entities": [],
+                "checked": ["the analyst stopped before it could answer"],
+            })
     return fallback
 
 

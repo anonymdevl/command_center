@@ -168,8 +168,15 @@ def chat(contents: list, tools: list, system: str, timeout: int = 40, mode: str 
             reason = (candidates[0].get("finishReason") if candidates else None) or "no candidates"
             return None, f"Gemini returned no content ({reason}): {json.dumps(payload)[:700]}"
         return candidates[0]["content"], None
-    except Exception:
-        return None, f"Gemini unreachable: {frappe.get_traceback()[:1500]}"
+    except Exception as e:
+        # In words: a cut-off traceback told the person nothing and hid the cause.
+        import requests
+        exc = getattr(requests, "exceptions", None)
+        if exc and isinstance(e, exc.Timeout):
+            return None, f"Gemini took longer than {timeout} seconds to reply."
+        if exc and isinstance(e, exc.ConnectionError):
+            return None, "Gemini could not be reached from the server (a network problem)."
+        return None, f"Gemini could not be reached ({type(e).__name__}: {str(e)[:200]})."
 
 
 def ask_json(prompt: str, schema: dict) -> dict | None:

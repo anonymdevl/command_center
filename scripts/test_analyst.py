@@ -318,5 +318,41 @@ check(err is None and sent[0].get("thinkingConfig") == {"thinkingLevel": "low"}
       and "thinkingConfig" not in sent[1] and "temperature" not in sent[0],
       f"low thinking, no temperature, and a retry without thinking on refusal: {sent}")
 
+# 14. The time budget: with little left, the analyst answers instead of looking further.
+calls_seen = []
+_saved = gemini.chat
+
+
+def _chat_budget(contents, decls, system, timeout=40, mode="AUTO"):
+    calls_seen.append({"tools": decls is not None, "timeout": timeout})
+    if decls is None:
+        return {"role": "model", "parts": [{"text": "From what I have so far."}]}, None
+    return {"role": "model", "parts": [{"functionCall": {"name": "find", "args": {"text": "x"}}}]}, None
+
+
+gemini.chat = _chat_budget
+reset()
+r = agent.answer("Q", "GIGMANN", deadline=29)
+check(r and r["answered"] and calls_seen[0]["tools"] and not calls_seen[1]["tools"],
+      f"a spent budget ends in an answer, not a timeout: {calls_seen}")
+check(calls_seen[0]["timeout"] in (23, 24), f"each call gets what is left: {calls_seen[0]['timeout']}")
+gemini.chat = _saved
+
+
+# 15. A timeout says so in words, not a traceback.
+class _Timeout(Exception):
+    pass
+
+
+def _post_slow(*a, **k):
+    raise _Timeout("read timed out")
+
+
+sys.modules["requests"] = _t.SimpleNamespace(
+    post=_post_slow, get=lambda *a, **k: _R(200, {"models": listed}),
+    exceptions=_t.SimpleNamespace(Timeout=_Timeout, ConnectionError=ConnectionError))
+content, err = REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S", timeout=40)
+check(content is None and err == "Gemini took longer than 40 seconds to reply.", f"timeout message: {err}")
+
 print(f"analyst: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

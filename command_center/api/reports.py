@@ -115,7 +115,8 @@ def _run(report_id: str, code: str, business_code: str | None, user: str):
     try:
         brief = BRIEF.format(title=title, business=_business(business_code),
                              sections=sections, as_of=_as_of())
-        result = agent.answer(brief, business_code, max_steps=REPORT_STEPS)
+        # A job, not a web request: room for a report's sixteen rounds.
+        result = agent.answer(brief, business_code, max_steps=REPORT_STEPS, deadline=600)
         if not result:
             raise RuntimeError("the analyst could not be reached or returned nothing")
         result.update({"title": title, "code": code,

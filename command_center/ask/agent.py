@@ -29,10 +29,16 @@ from command_center.ask import gemini, tools
 MAX_STEPS = 8            # rounds of tool use before the model must answer
 MAX_CALLS_PER_STEP = 6   # parallel tool calls honoured in one round
 MAX_RESULT_CHARS = 24000 # one tool result, as sent back to the model
+# A question runs inside the web request, which the server ends at 120 seconds. The
+# analyst keeps inside 100: each Gemini call gets what is left (at most 60), and with
+# 30 seconds to go it stops looking things up and answers from what it has, so a
+# question ends in an answer rather than a timeout.
+DEADLINE = 100
+WRAP_UP_AT = 30
 
 
 def answer(question: str, business_code: str | None = None, history=None,
-           max_steps: int = MAX_STEPS, on_step=None) -> dict | None:
+           max_steps: int = MAX_STEPS, on_step=None, deadline: int = DEADLINE) -> dict | None:
     """max_steps: rounds of tool use. A question gets eight; a report (api/reports.py)
     gathers across every area and gets more. on_step(text) is told each lookup, in plain
     words, as it starts -- the live "what it is doing" under the question bar."""
@@ -41,9 +47,12 @@ def answer(question: str, business_code: str | None = None, history=None,
     checked, errors, drill = [], [], None
     text, steps = None, 0
     writes_before = _writes()
+    import time
+    started = time.monotonic()
 
     for steps in range(1, max_steps + 2):
-        final = steps > max_steps
+        left = deadline - (time.monotonic() - started)
+        final = steps > max_steps or (steps > 1 and left < WRAP_UP_AT)
         if final:
             # Out of budget: answer from what has been gathered, and say if incomplete.
             contents.append({"role": "user", "parts": [{"text": (
@@ -52,6 +61,7 @@ def answer(question: str, business_code: str | None = None, history=None,
         # The first round must look something up: an answer is only as good as what it
         # read, and a model left free to answer at once can answer from memory.
         content, err = gemini.chat(contents, None if final else tools.declarations(), system,
+                                   timeout=int(max(15, min(60, left - 5))),
                                    mode="ANY" if steps == 1 else "AUTO")
         if err:
             errors.append(err)
