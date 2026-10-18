@@ -1035,6 +1035,78 @@ check("--ff-only" in _deploy,
       "silently instead of stopping.")
 
 # --------------------------------------------------------------------------
+# The design foundations of the restyle (17 Oct 2026)
+# --------------------------------------------------------------------------
+# The first design drifted into looking generated partly because nothing held it to
+# one system: twenty-five font sizes, sixteen accents, colours typed into rules.
+# These hold the foundations in place.
+if os.path.exists(CSS_FILE):
+    _css = open(CSS_FILE).read()
+
+    def _first(sel):
+        m = re.search(r"(?:^|\}|\*/)\s*" + sel + r"\{([^}]*)\}", _css)
+        return m.group(1) if m else ""
+
+    _dark, _light = _first(r":root"), _first(r'\[data-theme="light"\]')
+    _colour = lambda v: v.startswith(("#", "rgb", "linear-gradient"))
+    _dtok = {k for k, v in re.findall(r"(--[\w-]+):\s*([^;]+)", _dark) if _colour(v.strip())}
+    _ltok = {k for k, v in re.findall(r"(--[\w-]+):\s*([^;]+)", _light)}
+    _missing = sorted(_dtok - _ltok)
+    check(bool(_dtok) and not _missing,
+          "the light theme does not define " + ", ".join(_missing or ["any colour token"])
+          + ". A colour defined only for dark shows its dark value in light mode.")
+
+    # One type scale. A px font size outside the token definitions is a size nobody
+    # chose from the scale -- the drift this replaces.
+    _rules = re.sub(r"(?:^|\}|\*/)\s*(?::root|\[data-theme=\"light\"\])\{[^}]*\}", "}", _css)
+    _loose = sorted(set(re.findall(r"font(?:-size)?:\s*(?:\d{3}\s+)?(\d+(?:\.\d+)?px)", _rules)))
+    check(not _loose,
+          "the stylesheet sets font sizes off the type scale: " + ", ".join(_loose)
+          + ". Use var(--fs-...) from p1.py.")
+    _wloose = sorted(set(re.findall(r"font(?:-weight)?:\s*(\d{3})\b", _rules)))
+    check(not _wloose,
+          "the stylesheet sets font weights off the four-weight scale: " + ", ".join(_wloose)
+          + ". Use var(--fw-regular|medium|semibold|bold) from p1.py.")
+
+    # The font ships with the app. A web-font URL would make every page load ask a
+    # third party for the typeface -- and fail offline.
+    for _f in (CSS_FILE, os.path.join(ROOT, "frontend", "index.html"),
+               os.path.join(APP, "www", "command-center.html")):
+        _t = open(_f).read()
+        for _host in ("fonts.googleapis.com", "fonts.gstatic.com", "use.typekit.net"):
+            check(_host not in _t,
+                  f"{os.path.basename(_f)} loads a font from {_host}. Fonts are bundled "
+                  f"(@fontsource-variable/manrope); nothing may fetch one at runtime.")
+    check(re.search(r"--sans:\s*'Manrope Variable'", _dark) is not None,
+          "--sans does not start with 'Manrope Variable', so the bundled font is "
+          "not the one the interface uses.")
+    if os.path.isdir(DIST):
+        check(any(f.startswith("manrope-latin-wght") and f.endswith(".woff2")
+                  for f in os.listdir(DIST)),
+              "the bundle has no Manrope latin woff2, so the font would fall back to "
+              "the system face. Run: cd frontend && npm run build")
+
+    # Every accent the picker offers has CSS in both themes, and the default is one
+    # of them. An accent without rules silently shows the base colour.
+    _extras = json.load(open(os.path.join(ROOT, "frontend", "src", "legacy", "extras.json")))
+    _acc = [a["key"] for a in _extras.get("accents", [])]
+    check(bool(_acc), "extras.json lists no accents")
+    for _a in _acc:
+        check(f'[data-accent="{_a}"]{{' in _css and f'[data-theme="light"][data-accent="{_a}"]{{' in _css,
+              f"accent {_a!r} is offered by the picker but has no CSS for both themes")
+    _app = open(os.path.join(ROOT, "frontend", "src", "appearance.js")).read()
+    _dm = re.search(r'accent:\s*"(\w+)"', _app)
+    check(bool(_dm) and _dm.group(1) in _acc,
+          f"appearance.js defaults to accent {(_dm.group(1) if _dm else None)!r}, "
+          f"which is not one of {_acc}")
+    for _f in (os.path.join(ROOT, "frontend", "index.html"),
+               os.path.join(APP, "www", "command-center.html")):
+        _m = re.search(r'data-accent="(\w+)"', open(_f).read())
+        check(bool(_m) and _m.group(1) in _acc,
+              f"{os.path.basename(_f)} starts on accent {(_m.group(1) if _m else None)!r}, "
+              f"which has no CSS")
+
+# --------------------------------------------------------------------------
 print(f"preflight: {checks} checks")
 if problems:
     print(f"\n{len(problems)} problem(s):\n")

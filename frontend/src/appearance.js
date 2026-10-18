@@ -8,8 +8,16 @@
  * Stored per browser. It is a preference, not a setting: two managers looking at
  * the same business should be able to disagree about dark mode.
  */
+import extras from "./legacy/extras.json";
+
 const KEYS = { theme: "icc-theme", accent: "icc-accent", signal: "icc-signal" };
-const DEFAULTS = { theme: null, accent: "petrol", signal: "muted" };
+const DEFAULTS = { theme: null, accent: "cobalt", signal: "muted" };
+
+// The accents that exist, from interface/accents.py via extras.json -- one definition.
+// A browser that saved one of the sixteen retired with the restyle ("petrol", "gold"
+// ...) would otherwise keep an accent with no CSS behind it, and every accent-coloured
+// element would fall back to the base token silently.
+const ACCENTS = new Set((extras.accents || []).map((a) => a.key));
 
 function read(key, fallback) {
   try {
@@ -29,7 +37,8 @@ function write(key, value) {
 
 export function initAppearance() {
   const el = document.documentElement;
-  el.setAttribute("data-accent", read(KEYS.accent, DEFAULTS.accent));
+  const accent = read(KEYS.accent, DEFAULTS.accent);
+  el.setAttribute("data-accent", ACCENTS.has(accent) ? accent : DEFAULTS.accent);
   el.setAttribute("data-signal", read(KEYS.signal, DEFAULTS.signal));
   const stored = read(KEYS.theme, null);
   const preferred =

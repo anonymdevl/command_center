@@ -52,8 +52,9 @@ LEVELS = {
 }
 
 BASE = {
-    "dark": {"crit": "#f4726e", "high": "#f5a15c", "med": "#f2cc6b", "ok": "#5ed6a4"},
-    "light": {"crit": "#b8382f", "high": "#a45a0e", "med": "#87630a", "ok": "#0c6a4d"},
+    # The vivid level is the base palette in p1.py; these must stay equal to it.
+    "dark": {"crit": "#f0695e", "high": "#e8994a", "med": "#e3c063", "ok": "#3fc48e"},
+    "light": {"crit": "#c2392f", "high": "#a85a0a", "med": "#856307", "ok": "#127a55"},
 }
 # No lift. Raising lightness as chroma comes out was meant to keep quiet colours
 # legible, but on a pale surface lighter means *less* contrast -- it pushed the
@@ -89,7 +90,7 @@ SIGNAL_CSS = "\n".join([
    neutral chip with a single coloured dot, so colour marks the row without
    filling it. */
 [data-signal="quiet"] .tag{background:var(--raised);color:var(--mut);border:1px solid var(--line2);
- display:inline-flex;align-items:center;gap:7px;font-weight:560}
+ display:inline-flex;align-items:center;gap:7px;font-weight:var(--fw-semibold)}
 [data-signal="quiet"] .tag::before{content:"";width:6px;height:6px;border-radius:50%;flex:none}
 [data-signal="quiet"] .t-od::before{background:var(--crit)}
 [data-signal="quiet"] .t-wt::before{background:var(--high)}
@@ -98,7 +99,7 @@ SIGNAL_CSS = "\n".join([
 [data-signal="quiet"] .kpi .flag{background:var(--raised);color:var(--mut);border-color:var(--line2)}
 [data-signal="quiet"] .asw{color:var(--mut)}
 [data-signal="quiet"] .alert{border-left-width:2px}
-[data-signal="quiet"] .num[style*="--crit"]{font-weight:650}
+[data-signal="quiet"] .num[style*="--crit"]{font-weight:var(--fw-bold)}
 """
 
 SIGNAL_OPTIONS = ('<option value="vivid">Vivid</option>'
@@ -111,20 +112,20 @@ APPEAR_CSS = """
  border:1px solid var(--line2);border-radius:var(--r2);padding:15px 16px;z-index:60;
  box-shadow:var(--shadow2);display:none}
 .appearmenu.on{display:block}
-.amsec{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
- font-weight:700;margin:0 0 9px}
+.amsec{font-size:var(--fs-3xs);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
+ font-weight:var(--fw-bold);margin:0 0 9px}
 .amsec:not(:first-child){margin-top:17px}
-.seg{display:flex;background:var(--raised);border:1px solid var(--line);border-radius:999px;padding:3px}
-.seg button{flex:1;background:none;border:none;color:var(--mut);font:540 11.5px var(--sans);
- padding:6px 4px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:.14s}
+.seg{display:flex;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-pill);padding:3px}
+.seg button{flex:1;background:none;border:none;color:var(--mut);font:var(--fw-semibold) var(--fs-xs) var(--sans);
+ padding:6px 4px;border-radius:var(--r-pill);cursor:pointer;white-space:nowrap;transition:.14s}
 .seg button:hover{color:var(--ink)}
 .seg button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
-.swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:7px}
-.sw{width:100%;aspect-ratio:1;border-radius:999px;border:1px solid var(--line2);cursor:pointer;
+.swatches{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.sw{width:100%;aspect-ratio:1;border-radius:var(--r-pill);border:1px solid var(--line2);cursor:pointer;
  padding:0;position:relative;transition:transform .12s}
 .sw:hover{transform:scale(1.13)}
 .sw.on{box-shadow:0 0 0 2px var(--panel),0 0 0 3.5px var(--ink)}
-.swname{font-size:11px;color:var(--mut);margin-top:9px;text-align:center;min-height:14px}
+.swname{font-size:var(--fs-2xs);color:var(--mut);margin-top:9px;text-align:center;min-height:14px}
 """
 
 def swatches(ACC):

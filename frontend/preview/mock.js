@@ -20,6 +20,22 @@
 
 export const PREVIEW_MARKER = "CC_PREVIEW_MOCK";
 
+// ?theme=light&accent=cobalt -- so a screenshot run can pin the look without clicking.
+// Written where appearance.js reads it, before the app starts.
+{
+  const q = new URLSearchParams(window.location.search);
+  for (const [param, key] of [["theme", "icc-theme"], ["accent", "icc-accent"], ["signal", "icc-signal"]]) {
+    const v = q.get(param);
+    if (v) {
+      try {
+        localStorage.setItem(key, v);
+      } catch {
+        /* private window: the default applies */
+      }
+    }
+  }
+}
+
 const AS_OF = { date: "2025-08-19", basis: "data_horizon" };
 const BUSINESS = "GIGMANN";
 
@@ -192,3 +208,46 @@ window.fetch = async (input, init = {}) => {
 };
 
 console.info(`[preview] ${PREVIEW_MARKER}: sample API active, nothing reaches a server`);
+
+/**
+ * ?audit=1 -- walk every screen and record what does not fit.
+ *
+ * "Text spilling out of a card" was the most repeated complaint of the first build,
+ * and it is only ever found by looking. This finds it by measuring: any card, tile,
+ * label, tag or footnote whose content is wider than its box, and any screen that
+ * scrolls sideways. The result is written into <pre id="cc-audit"> so a headless
+ * browser can read it with --dump-dom.
+ */
+if (new URLSearchParams(window.location.search).get("audit")) {
+  const VIEWS = ["command", "brief", "myday", "ops", "health", "risk", "approvals",
+    "delegation", "ask", "reports", "sales", "proc", "inv", "eng", "cx", "fin", "hr", "it", "aud"];
+  const SEL = ".kpis,.kpi,.khead,.lab,.val,.delta,.bk,.l,.n,.v,.flag,.panel,.ph,.tag,.chip,.btn,.navi";
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const describe = (el) =>
+    `${el.className.toString().split(" ")[0]} "${(el.textContent || "").trim().slice(0, 40)}"`;
+
+  window.addEventListener("load", async () => {
+    await wait(600);
+    const report = {};
+    for (const v of VIEWS) {
+      window.location.hash = v;
+      await wait(500);
+      const main = document.getElementById("cc-main");
+      const over = [];
+      main?.querySelectorAll(SEL).forEach((el) => {
+        // Ellipsis is a deliberate choice of the design; a clipped box that says so
+        // is not a spill. Everything else wider than itself is.
+        const cs = getComputedStyle(el);
+        if (cs.textOverflow === "ellipsis") return;
+        if (el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0)
+          over.push(`${describe(el)} ${el.scrollWidth}>${el.clientWidth}`);
+      });
+      const sideways = main && main.scrollWidth > main.clientWidth + 1;
+      if (over.length || sideways) report[v] = { sideways, over: over.slice(0, 12), count: over.length };
+    }
+    const pre = document.createElement("pre");
+    pre.id = "cc-audit";
+    pre.textContent = JSON.stringify({ width: window.innerWidth, report });
+    document.body.append(pre);
+  });
+}

@@ -149,6 +149,16 @@ browser from the verified figures above, so every visual change can be checked o
 nineteen screens without a push. It is dev-only: vite builds index.html alone, and
 preflight fails if the preview's marker ever appears in the bundle.
 
+**The design system is tokens, and preflight holds it.** Every colour, font size, weight
+and corner in the stylesheet is a token from `interface/p1.py` (`--fs-*`, `--fw-*`,
+`--r-*`, `--sp-*`, the palette), in both themes. Accents come from `interface/accents.py`
+only -- five of them, Cobalt the default. The font is Manrope, bundled from
+`@fontsource-variable/manrope`; nothing fetches a font at runtime. Preflight fails an
+off-scale size or weight, a colour defined for one theme only, an accent without CSS, or a
+web-font URL. The screens' own `style="..."` attributes are not yet on the scale (phase 5).
+`preview.html?theme=light&accent=cobalt&audit=1` walks all nineteen screens and lists
+anything wider than its box.
+
 **Say what is not done.** List the screens still illustrative and why. Do not let silence
 imply completeness.
 

@@ -1,9 +1,16 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-accent="petrol" data-signal="muted">
+<html lang="en" data-theme="dark" data-accent="cobalt" data-signal="muted">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Intelligent Command Center</title>
+<script>
+/* Theme before first paint: the saved choice, else the computer's setting. Without
+   this every page load painted dark and then switched, for everyone in light mode. */
+(function(){var d=document.documentElement,t=null;try{t=localStorage.getItem('icc-theme')}catch(e){}
+if(t!=='light'&&t!=='dark')t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';
+d.setAttribute('data-theme',t)})();
+</script>
   </head>
   <body>
     <div id="cc-root"></div>

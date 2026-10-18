@@ -77,13 +77,13 @@ def depth_rows():
 AUDIT_CSS="""
 .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
 .filters input{background:var(--surface);border:1px solid var(--line2);color:var(--ink);
- border-radius:7px;padding:6px 11px;font:13px var(--sans);min-width:230px;outline:none}
+ border-radius:var(--r-xs);padding:6px 11px;font:var(--fs-sm) var(--sans);min-width:230px;outline:none}
 .filters input:focus{border-color:var(--accent)}
 .filters select{background:var(--surface);border:1px solid var(--line2);color:var(--ink);
- border-radius:7px;padding:6px 9px;font:12px var(--sans);cursor:pointer}
-.tcount{font-size:11.5px;color:var(--dim);margin-left:auto}
+ border-radius:var(--r-xs);padding:6px 9px;font:var(--fs-xs) var(--sans);cursor:pointer}
+.tcount{font-size:var(--fs-xs);color:var(--dim);margin-left:auto}
 .immut{display:inline-flex;align-items:center;gap:6px;background:var(--ok-bg);
- border:1px solid var(--ok-line);color:var(--ok);border-radius:6px;padding:3px 9px;font-size:11px}
+ border:1px solid var(--ok-line);color:var(--ok);border-radius:var(--r-xs);padding:3px 9px;font-size:var(--fs-2xs)}
 """
 
 # ---- field-level drill, from the real change records ----

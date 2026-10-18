@@ -34,26 +34,26 @@ EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + """
 @keyframes todtwinkle{0%,100%{opacity:.25}50%{opacity:1}}
 
 .live{display:inline-flex;align-items:center;gap:7px;background:var(--ok-bg);
- border:1px solid var(--ok-line);border-radius:7px;padding:4px 10px;font-size:11px;
- color:var(--ok);font-weight:550;white-space:nowrap}
+ border:1px solid var(--ok-line);border-radius:var(--r-xs);padding:4px 10px;font-size:var(--fs-2xs);
+ color:var(--ok);font-weight:var(--fw-semibold);white-space:nowrap}
 .live .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none;
  animation:blink 1.6s ease-in-out infinite;box-shadow:0 0 0 0 var(--ok-glow)}
 @keyframes blink{0%,100%{opacity:1;box-shadow:0 0 0 0 var(--ok-glow)}
  70%{opacity:.85;box-shadow:0 0 0 6px transparent}}
-.live small{color:var(--dim);font-weight:400;font-size:10px}
+.live small{color:var(--dim);font-weight:var(--fw-regular);font-size:var(--fs-3xs)}
 @media(prefers-reduced-motion:reduce){
  .todray,.todcore,.todrise,.todglow,.todstar,.live .dot{animation:none}}
 .who{display:flex;align-items:center;gap:8px;padding-left:12px;border-left:1px solid var(--line)}
-.av{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#4c8dff,#8b5cf6);
- display:grid;place-items:center;font:600 11.5px var(--sans);color:#fff;flex:none}
-.whosel{background:none;border:none;color:var(--ink);font:600 12px var(--sans);
+.av{width:30px;height:30px;border-radius:50%;background:var(--accent);
+ display:grid;place-items:center;font:var(--fw-semibold) var(--fs-xs) var(--sans);color:var(--on-accent);flex:none}
+.whosel{background:none;border:none;color:var(--ink);font:var(--fw-semibold) var(--fs-xs) var(--sans);
  padding:0 15px 0 0;margin:0;cursor:pointer;outline:none;-webkit-appearance:none;appearance:none;
  line-height:1.25;display:block;max-width:180px;text-overflow:ellipsis;white-space:nowrap}
 .whosel:hover{color:var(--accent)}
-.whosel option{background:var(--raised);color:#e8edf6;font-weight:400}
+.whosel option{background:var(--raised);color:var(--ink);font-weight:var(--fw-regular)}
 .who{position:relative;cursor:pointer}
-.who::after{content:"\\25BE";position:absolute;right:0;top:8px;font-size:9px;color:var(--dim);pointer-events:none}
-.whotxt span{font-size:10px;color:var(--dim);display:block;line-height:1.2}
+.who::after{content:"\\25BE";position:absolute;right:0;top:8px;font-size:var(--fs-3xs);color:var(--dim);pointer-events:none}
+.whotxt span{font-size:var(--fs-3xs);color:var(--dim);display:block;line-height:1.2}
 
 @media(max-width:900px){.who .whotxt{display:none}}
 
@@ -61,38 +61,38 @@ EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + """
 .kpi.clickable:hover{border-color:var(--accent);cursor:pointer}
 .panel{background:transparent;margin-bottom:16px}
 .ph{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
-.ph b{font-size:13px;font-weight:600}
-.ph span{font-size:11px;color:var(--dim);margin-left:9px}
+.ph b{font-size:var(--fs-sm);font-weight:var(--fw-semibold)}
+.ph span{font-size:var(--fs-2xs);color:var(--dim);margin-left:9px}
 .ph.clickable{cursor:pointer}
 .ph.clickable:hover b{color:var(--accent)}
-.pmore{font-size:10.5px;color:var(--accent);white-space:nowrap}
+.pmore{font-size:var(--fs-2xs);color:var(--accent);white-space:nowrap}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .grid.six{display:grid;grid-template-columns:repeat(6,1fr);gap:9px}
-.bul{margin-left:17px;font-size:12.5px;color:var(--mut)}
+.bul{margin-left:17px;font-size:var(--fs-sm);color:var(--mut)}
 .bul li{margin:5px 0}.bul b{color:var(--ink)}
 .sugg{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
 /* The answer, and what it was checked against. One screen asks the questions now:
    "Find anything" and "Ask the business" were two doors to one room, and the designed
    placeholder on Find anything was already a question rather than a keyword. */
-.askans{padding:14px 16px 4px;font-size:14px;line-height:1.62}
+.askans{padding:14px 16px 4px;font-size:var(--fs-md);line-height:1.62}
 .askchecked{padding:10px 16px 14px;border-top:1px solid var(--line);margin-top:10px}
-.askchecked-t{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
-color:var(--accent);font-weight:650;margin-bottom:6px}
+.askchecked-t{display:block;font-size:var(--fs-2xs);letter-spacing:.06em;text-transform:uppercase;
+color:var(--accent);font-weight:var(--fw-bold);margin-bottom:6px}
 .askchecked ul{margin:0;padding-left:16px}
-.askchecked ul li{font-size:12px;color:var(--mut);line-height:1.66}
+.askchecked ul li{font-size:var(--fs-xs);color:var(--mut);line-height:1.66}
 .askchecked .sugg{margin:8px 0 0}
-.step{display:flex;gap:9px;align-items:center;font-size:12px;color:var(--mut);padding:4px 0}
+.step{display:flex;gap:9px;align-items:center;font-size:var(--fs-xs);color:var(--mut);padding:4px 0}
 .spin{width:11px;height:11px;border:1.5px solid var(--line2);border-top-color:var(--accent);
  border-radius:50%;animation:sp .7s linear infinite;flex:none}
 .step.done .spin{border:none;width:11px;height:11px}
-.step.done .spin::before{content:"✓";color:var(--ok);font-size:11px}
+.step.done .spin::before{content:"✓";color:var(--ok);font-size:var(--fs-2xs)}
 @keyframes sp{to{transform:rotate(360deg)}}
 .drawer{width:640px}
-.drt{font-size:11.5px}
-.drt th{font-size:9.5px;white-space:normal}
+.drt{font-size:var(--fs-xs)}
+.drt th{font-size:var(--fs-3xs);white-space:normal}
 .drt td{padding:6px 8px}
-.drfoot{font-size:11.5px;color:var(--mut);margin-top:8px;line-height:1.5}
-.exbox{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:10px 0}
+.drfoot{font-size:var(--fs-xs);color:var(--mut);margin-top:8px;line-height:1.5}
+.exbox{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-xs);padding:12px 14px;margin:10px 0}
 @media(max-width:1100px){.kpis.six{grid-template-columns:repeat(3,1fr)}.two{grid-template-columns:1fr}
  .grid.six{grid-template-columns:repeat(3,1fr)}}
 """
@@ -359,7 +359,7 @@ function toggleAppear(e){{
 }}
 function syncAppear(){{
   const d=document.documentElement;
-  const t=d.getAttribute('data-theme')||'dark', a=d.getAttribute('data-accent')||'petrol',
+  const t=d.getAttribute('data-theme')||'dark', a=d.getAttribute('data-accent')||'cobalt',
         g=d.getAttribute('data-signal')||'muted';
   document.querySelectorAll('#segtheme button').forEach(b=>b.classList.toggle('on',b.dataset.v===t));
   document.querySelectorAll('#segsig button').forEach(b=>b.classList.toggle('on',b.dataset.v===g));
@@ -385,8 +385,8 @@ function applyTheme(t){{
 }}
 
 (function(){{
-  let a='petrol';
-  try{{ a=localStorage.getItem('icc-accent')||'petrol'; }}catch(e){{}}
+  let a='cobalt';
+  try{{ a=localStorage.getItem('icc-accent')||'cobalt'; }}catch(e){{}}
   document.documentElement.setAttribute('data-accent',a);
 
   let g='muted';
@@ -424,11 +424,11 @@ BOOT_CSS = """
 /* ============ LIVE vs DEMO ============ */
 .dnote{display:flex;align-items:flex-start;gap:9px;background:var(--med-bg);
  border:1px solid var(--med-line);border-left:3px solid var(--med);border-radius:var(--r);
- padding:10px 13px;margin-bottom:14px;font-size:11.5px;color:var(--mut);line-height:1.45}
-.dnote b{color:var(--stale);font-weight:650}
-.dnote .dn-i{flex:none;font-size:12px;color:var(--stale);line-height:1.3}
-.livechip{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:650;
- padding:3px 9px;border-radius:999px;white-space:nowrap;
+ padding:10px 13px;margin-bottom:14px;font-size:var(--fs-xs);color:var(--mut);line-height:1.45}
+.dnote b{color:var(--stale);font-weight:var(--fw-bold)}
+.dnote .dn-i{flex:none;font-size:var(--fs-xs);color:var(--stale);line-height:1.3}
+.livechip{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-2xs);font-weight:var(--fw-bold);
+ padding:3px 9px;border-radius:var(--r-pill);white-space:nowrap;
  background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
 .livechip.stale{background:var(--med-bg);color:var(--stale);border-color:var(--med-line)}
 /* A tile has no flag slot: only the Business Overview tiles were designed with a
@@ -452,7 +452,7 @@ BOOT_CSS = """
      as U+0203 followed by a stray "a", which rendered as a missing-glyph box
      and the letter a on every card. */
   content:"›";position:absolute;bottom:16px;right:12px;
-  color:var(--dim);font-size:13px;line-height:1;pointer-events:none}
+  color:var(--dim);font-size:var(--fs-sm);line-height:1;pointer-events:none}
 /* .bk already uses ::after for the hairline on tiles with no footnote, so the
    chevron goes on ::before there. */
 .bk.clickable{position:relative}
@@ -486,9 +486,9 @@ BOOT_CSS = """
 .navi > span:first-of-type{flex:1;min-width:0;overflow:hidden;
  text-overflow:ellipsis;white-space:nowrap}
 .navi.sub::before{flex:none}
-.bdg{flex:none;min-width:19px;height:18px;padding:0 6px;border-radius:999px;
+.bdg{flex:none;min-width:19px;height:18px;padding:0 6px;border-radius:var(--r-pill);
  background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-dim);
- font-size:10px;font-weight:700;line-height:1;display:inline-flex;
+ font-size:var(--fs-3xs);font-weight:var(--fw-bold);line-height:1;display:inline-flex;
  align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
 .navi.on .bdg{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 """

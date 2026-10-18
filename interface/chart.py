@@ -61,26 +61,26 @@ def funnel(stages):
 
 CHART_CSS = """
 .chartwrap{position:relative;background:var(--surface);border:1px solid var(--line);
- border-radius:9px;padding:12px 12px 6px}
+ border-radius:var(--r-xs);padding:12px 12px 6px}
 .chartwrap svg{overflow:visible}
-.xlab{display:flex;margin-top:6px;font-size:9px;color:var(--dim)}
-.ymax{position:absolute;top:8px;right:12px;font-size:10px;color:var(--dim)}
+.xlab{display:flex;margin-top:6px;font-size:var(--fs-3xs);color:var(--dim)}
+.ymax{position:absolute;top:8px;right:12px;font-size:var(--fs-3xs);color:var(--dim)}
 .bars{display:flex;flex-direction:column;gap:6px}
-.barrow{display:grid;grid-template-columns:1fr 3fr auto;gap:10px;align-items:center;font-size:12px}
+.barrow{display:grid;grid-template-columns:1fr 3fr auto;gap:10px;align-items:center;font-size:var(--fs-xs)}
 .barlab{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bartrack{background:var(--raised);border-radius:4px;height:16px;overflow:hidden}
 .barfill{height:100%;border-radius:4px}
-.barval{font-variant-numeric:tabular-nums;font-weight:550;white-space:nowrap;font-size:11.5px}
-.barnote{color:var(--dim);font-weight:400;margin-left:6px;font-size:10.5px}
+.barval{font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);white-space:nowrap;font-size:var(--fs-xs)}
+.barnote{color:var(--dim);font-weight:var(--fw-regular);margin-left:6px;font-size:var(--fs-2xs)}
 .stack{display:flex;border-radius:5px;overflow:hidden;margin:4px 0 8px}
-.stackkey{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--mut);align-items:center}
+.stackkey{display:flex;gap:14px;flex-wrap:wrap;font-size:var(--fs-2xs);color:var(--mut);align-items:center}
 .kdot{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px}
 .funnel{display:flex;flex-direction:column;gap:7px}
-.fstage{position:relative;background:var(--raised);border-radius:6px;padding:9px 12px;overflow:hidden}
+.fstage{position:relative;background:var(--raised);border-radius:var(--r-xs);padding:9px 12px;overflow:hidden}
 .fbar{position:absolute;inset:0;background:var(--accent);opacity:.17}
-.ftxt{position:relative;font-size:12.5px}
-.fnote{position:relative;font-size:10.5px;color:var(--mut);margin-top:2px}
-.thin{background:var(--thin-bg);border:1px dashed var(--line2);border-radius:8px;
- padding:11px 13px;font-size:11.5px;color:var(--dim);line-height:1.5}
+.ftxt{position:relative;font-size:var(--fs-sm)}
+.fnote{position:relative;font-size:var(--fs-2xs);color:var(--mut);margin-top:2px}
+.thin{background:var(--thin-bg);border:1px dashed var(--line2);border-radius:var(--r-xs);
+ padding:11px 13px;font-size:var(--fs-xs);color:var(--dim);line-height:1.5}
 .thin b{color:var(--mut)}
 """

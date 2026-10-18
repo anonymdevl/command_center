@@ -77,7 +77,7 @@ def tabify(view_html, tabs=("Overview","Detail","Not yet measured"), ov_count=3)
 
 TIDY_CSS = """
 [data-theme="light"] .kpi:hover,[data-theme="light"] .bk:hover{border-color:var(--accent);
- box-shadow:0 3px 8px rgba(28,24,16,.09),0 12px 26px rgba(28,24,16,.10)}
+ box-shadow:var(--shadow-hover)}
 
 .scrollbox{max-height:330px;overflow-y:auto;border:1px solid var(--line);border-radius:var(--r)}
 .scrollbox table.dt th{position:sticky;top:0;background:var(--surface);z-index:1}
@@ -90,27 +90,27 @@ TIDY_CSS = """
 .bars{margin-bottom:2px}
 .panel table.dt{margin-bottom:0}
 /* wide tables inside half-width panels get room rather than wrapping */
-.two .panel table.dt{font-size:12px}
+.two .panel table.dt{font-size:var(--fs-xs)}
 .two .panel table.dt th,.two .panel table.dt td{padding:7px 7px}
 .wide{grid-column:1/-1}
 .panel.full table.dt th{white-space:nowrap}
 
 .tabbar{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:18px 0 16px}
 .tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--mut);
- padding:9px 15px;font-size:12.5px;font-weight:540;cursor:pointer;margin-bottom:-1px;white-space:nowrap}
+ padding:9px 15px;font-size:var(--fs-sm);font-weight:var(--fw-semibold);cursor:pointer;margin-bottom:-1px;white-space:nowrap}
 .tab:hover{color:var(--ink)}
 .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
 .tabpane{display:none}.tabpane.on{display:block}
 /* --- left nav hierarchy --- */
 .side{padding:14px 9px}
 .navgrp{margin-bottom:4px}
-.navsec{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);
- padding:14px 10px 6px;font-weight:700;display:flex;align-items:center;gap:7px}
+.navsec{font-size:var(--fs-3xs);letter-spacing:.12em;text-transform:uppercase;color:var(--dim);
+ padding:14px 10px 6px;font-weight:var(--fw-bold);display:flex;align-items:center;gap:7px}
 .navsec::after{content:"";flex:1;height:1px;background:var(--line)}
-.navi{padding:7px 10px;border-radius:7px;font-size:12.5px;margin:1px 0}
+.navi{padding:7px 10px;border-radius:var(--r-xs);font-size:var(--fs-sm);margin:1px 0}
 .navi.on{background:linear-gradient(90deg,var(--accent-bg2),transparent);
- color:var(--ink);font-weight:600;box-shadow:inset 2px 0 0 var(--accent)}
-.navi.sub{padding-left:20px;font-size:12px}
+ color:var(--ink);font-weight:var(--fw-semibold);box-shadow:inset 2px 0 0 var(--accent)}
+.navi.sub{padding-left:20px;font-size:var(--fs-xs)}
 .navi.sub::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--line2);
  position:absolute;margin-left:-12px;margin-top:6px}
 .navi{position:relative}
@@ -118,15 +118,15 @@ TIDY_CSS = """
 /* --- alert actions: one primary + overflow --- */
 .acts{gap:6px;align-items:center}
 .more{position:relative}
-.morebtn{background:none;border:1px solid var(--line2);color:var(--mut);border-radius:999px;
- padding:6px 11px;font-size:12px;cursor:pointer;line-height:1;white-space:nowrap}
+.morebtn{background:none;border:1px solid var(--line2);color:var(--mut);border-radius:var(--r-pill);
+ padding:6px 11px;font-size:var(--fs-xs);cursor:pointer;line-height:1;white-space:nowrap}
 .morebtn:hover{color:var(--ink)}
 .moremenu{position:absolute;bottom:calc(100% + 6px);left:0;background:var(--raised);
- border:1px solid var(--line2);border-radius:8px;padding:5px;display:none;z-index:20;
+ border:1px solid var(--line2);border-radius:var(--r-xs);padding:5px;display:none;z-index:20;
  box-shadow:0 10px 30px var(--shadow2);min-width:168px}
 .moremenu.on{display:block}
 .moremenu button{display:block;width:100%;text-align:left;background:none;border:none;
- color:var(--mut);padding:7px 11px;font-size:12px;border-radius:7px;cursor:pointer;white-space:nowrap}
+ color:var(--mut);padding:7px 11px;font-size:var(--fs-xs);border-radius:var(--r-xs);cursor:pointer;white-space:nowrap}
 .moremenu button:hover{background:var(--hover);color:var(--ink)}
 .moremenu button.dgr{color:var(--crit)}
 """

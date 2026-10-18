@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-def hx(h): 
+def hx(h):
     h=h.lstrip('#'); return tuple(int(h[i:i+2],16) for i in (0,2,4))
 def to(rgb): return '#%02x%02x%02x'%tuple(max(0,min(255,round(c))) for c in rgb)
 def mix(a,b,t):
@@ -13,26 +13,32 @@ def lum(h):
 def ratio(a,b):
     la,lb=lum(a),lum(b); hi,lo=max(la,lb),min(la,lb); return (hi+.05)/(lo+.05)
 
+# The five accents approved with the restyle mockup (17 Oct 2026). They replace the
+# sixteen of the first design, gold included: a long menu of near-neighbours was part
+# of what made the interface read as generated rather than designed.
+#
 # (key, label, group, light accent, dark accent, note)
+# Each dark variant was picked to clear 4.5:1 against the dark surface, and Amber's
+# light variant was deepened from the mockup's #B5650B, which reads 4.35:1 on white.
 ACCENTS=[
- ("gold","Gold","Golds and browns","#8c6108","#e3b95e","the original — classic with cream"),
- ("brass","Brass","Golds and browns","#786012","#d9c069","softer, more antique than gold"),
- ("bronze","Bronze","Golds and browns","#7d5626","#d0a071","browner, less yellow"),
- ("copper","Copper","Golds and browns","#9c4f24","#e09062","warm and strong — sits near the warning orange"),
- ("coffee","Coffee","Golds and browns","#584234","#c0a89a","deep espresso brown, very quiet"),
- ("petrol","Petrol","Blues and teals","#0d5c6b","#7fd4dd","deep teal-cyan — the classic cream partner"),
- ("teal","Teal","Blues and teals","#126b63","#68cfc2","greener than petrol"),
- ("ink","Ink","Blues and teals","#1f3d63","#8fb4f0","deep navy — quiet and institutional"),
- ("steel","Steel","Blues and teals","#2c5773","#8cb8d6","mid blue, a little softer than ink"),
- ("slate","Slate","Blues and teals","#3f4f63","#a3b4c9","blue-grey, deliberately recessive"),
- ("plum","Plum","Purples and reds","#5e2d54","#d49ccd","aubergine — editorial, warm-leaning"),
- ("wine","Wine","Purples and reds","#6d2739","#d69aa6","oxblood — rich, sits near the critical red"),
- ("violet","Violet","Purples and reds","#5348c7","#9aa0f5","the indigo you had before"),
- ("olive","Olive","Greens","#55601f","#bcc77a","earthy and dry"),
- ("sage","Sage","Greens","#44604f","#9dc2ac","muted green — sits near the success green"),
- ("charcoal","Charcoal","Neutral","#33343a","#a8aab4","no colour at all; the numbers carry it"),
+ ("cobalt","Cobalt","Accents","#2443e8","#6a7fef","the default — clear, confident blue"),
+ ("emerald","Emerald","Accents","#0c7a62","#5aa594","deep green, calm and medical"),
+ ("ink","Ink","Accents","#1b1e24","#e4e6ea","no colour at all; the numbers carry it"),
+ ("amber","Amber","Accents","#a85e09","#cd9659","warm, sits near the warning colour"),
+ ("plum","Plum","Accents","#6a3d9e","#9a7bbd","quiet purple, editorial"),
 ]
-# fix the two placeholder typos deterministically
+DEFAULT_ACCENT="cobalt"
+
+# Surfaces the accents are judged against -- the --surface of each theme in p1.py.
+SURFACE={"light":"#ffffff","dark":"#141518"}
+
+def on(c):
+    """Text on an accent fill: whichever of white or ink reads better.
+
+    A fixed white failed the moment an accent was pale, which every dark-theme
+    variant is -- white on #6a7fef is 3.3:1.
+    """
+    return "#ffffff" if ratio("#ffffff",c)>=ratio("#111317",c) else "#111317"
 
 def css():
     out=[]
@@ -40,22 +46,22 @@ def css():
         out.append(f'/* {lab} — {note} */')
         out.append(
           f'[data-accent="{k}"]{{--accent:{dk};--accent-ink:{mix(dk,"#ffffff",.35)};'
-          f'--accent-dim:{mix(dk,"#0a0c11",.72)};'
+          f'--accent-dim:{mix(dk,SURFACE["dark"],.72)};'
           f'--accent-bg:{rgba(dk,".10")};--accent-bg2:{rgba(dk,".17")};'
           f'--info:{dk};--star:{mix(dk,"#ffffff",.45)};--moon:{dk};--solid:{dk};'
-          f'--grad:linear-gradient(135deg,{dk},{mix(dk,"#0a0c11",.28)})}}')
+          f'--on-accent:{on(dk)};--grad:linear-gradient({dk},{dk})}}')
         out.append(
           f'[data-theme="light"][data-accent="{k}"]{{--accent:{li};--accent-ink:{mix(li,"#000000",.22)};'
           f'--accent-dim:{mix(li,"#ffffff",.76)};'
-          f'--accent-bg:{rgba(li,".08")};--accent-bg2:{rgba(li,".15")};'
-          f'--info:{li};--star:{li};--moon:{li};--solid:#1a1a20;'
-          f'--grad:linear-gradient(135deg,{li},{mix(li,"#ffffff",.22)})}}')
+          f'--accent-bg:{rgba(li,".08")};--accent-bg2:{rgba(li,".14")};'
+          f'--info:{li};--star:{li};--moon:{li};--solid:{li};'
+          f'--on-accent:{on(li)};--grad:linear-gradient({li},{li})}}')
     return "\n".join(out)
 
 def options():
     out=[];seen=[]
     for k,lab,grp,li,dk,note in ACCENTS:
-        if grp not in seen: 
+        if grp not in seen:
             if seen: out.append('</optgroup>')
             out.append(f'<optgroup label="{grp}">'); seen.append(grp)
         out.append(f'<option value="{k}">{lab}</option>')
