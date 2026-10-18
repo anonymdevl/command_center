@@ -236,8 +236,8 @@ table.dt tr:hover td{background:var(--hover)}
 .md-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:var(--fs-xs);color:var(--mut);margin-top:10px}
 .md-legend span{display:inline-flex;align-items:center;gap:7px}
 .md-legend i{width:9px;height:9px;border-radius:3px;flex:none}
-.md-legend.col{flex-direction:column;gap:9px;margin:0;flex:1;min-width:180px}
-.md-legend.col b{margin-left:auto;color:var(--ink);font-variant-numeric:tabular-nums}
+.md-legend.stack{flex-direction:column;gap:9px;margin:0;flex:1;min-width:180px}
+.md-legend.stack b{margin-left:auto;color:var(--ink);font-variant-numeric:tabular-nums}
 
 /* ---- the last small-capital labels, in plain words like the rest ---- */
 .eyebrow,.dhead .dt,.askchecked-t{text-transform:none;letter-spacing:0;font-size:var(--fs-xs);

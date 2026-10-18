@@ -153,7 +153,7 @@ function donut(labels, values, unit) {
     u.textContent = unit;
     svg.append(u);
   }
-  const leg = el("div", "md-legend col");
+  const leg = el("div", "md-legend stack");
   labels.forEach((l, i) => {
     const item = el("span", "");
     item.append(el("i", `c${i}`), el("span", "", l),
