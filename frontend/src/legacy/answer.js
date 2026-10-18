@@ -129,8 +129,13 @@ function block(p, onOpen, onPdf, onFollowup, inThread) {
 }
 
 function checkedList(items, p) {
-  const wrap = div("askchecked");
-  wrap.append(span("askchecked-t", "What it checked"));
+  // Closed until asked for, as under the bar: the answer leads; the lookups are there
+  // for whoever wants to see what it rests on.
+  const wrap = document.createElement("details");
+  wrap.className = "ap-checked";
+  const sum = document.createElement("summary");
+  sum.textContent = `What it checked (${items.length})`;
+  wrap.append(sum);
   const ul = document.createElement("ul");
   items.forEach((i) => {
     const li = document.createElement("li");

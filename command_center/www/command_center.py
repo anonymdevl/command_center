@@ -32,9 +32,9 @@ no_cache = 1
 def get_context(context):
     user = frappe.session.user
 
-    # Not signed in: log in first, then come back here.
+    # Not signed in: the Command Center's own sign-in, which comes back here.
     if user == "Guest":
-        frappe.local.flags.redirect_location = "/login?redirect-to=/command-center"
+        frappe.local.flags.redirect_location = "/command-center-login"
         raise frappe.Redirect
 
     if not ALLOWED_ROLES.intersection(frappe.get_roles(user)):
