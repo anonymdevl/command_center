@@ -480,15 +480,16 @@ color:var(--accent);font-weight:var(--fw-bold);margin-bottom:6px}
 .bk.clickable{cursor:pointer}
 
 /* ============ THE GREETING ============ */
-/* #greet is an <h3>, so the icon is a flex child of a heading: a long name
-   pushed it onto its own line. Pinned so it cannot wrap and centred so it spans
-   both lines of text rather than sitting against one of them. */
+/* #greet is an <h3>. The icon sits inside the greeting's own line (greeting.js),
+   centred on it and sized in em, so it can neither wrap under a long name nor drift
+   down between the greeting and the date. A long name truncates; the icon stays. */
 .hello{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;margin-bottom:4px}
 .hello > .greet-text{flex:1 1 auto;min-width:0}
-.hello > .greet-text > .greet-line{white-space:nowrap;overflow:hidden;
- text-overflow:ellipsis}
-.hello .tod{flex:0 0 38px;width:38px;height:38px;align-self:center}
-@media(max-width:700px){.hello .tod{flex-basis:32px;width:32px;height:32px}}
+.hello > .greet-text > .greet-line{display:flex;align-items:center;gap:.4em;white-space:nowrap;min-width:0}
+.greet-line > .greet-words{min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* Sized to the heading, on its line: the icon is part of the greeting, not beside the
+   greeting and the date. */
+.hello .tod{flex:none;width:1.1em;height:1.1em}
 
 /* ============ SPACING ============ */
 /* The illustrative banner sat directly on the greeting. */

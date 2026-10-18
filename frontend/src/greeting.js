@@ -61,7 +61,13 @@ export function renderGreeting(el, user) {
   const line = document.createElement("div");
   line.className = "greet-line";
   // textContent, not innerHTML: the name comes from the session.
-  line.textContent = `${word}, ${user?.name || "there"}`;
+  const words = document.createElement("span");
+  words.className = "greet-words";
+  words.textContent = `${word}, ${user?.name || "there"}`;
+  // The icon belongs to the greeting, so it sits on the greeting's own line. Beside
+  // the whole block it was centred between the greeting and the date, and read as
+  // dropped below the line it belongs to.
+  line.append(words, buildIcon(icon));
   const when = document.createElement("div");
   when.className = "when";
   when.style.fontWeight = "400";
@@ -73,5 +79,5 @@ export function renderGreeting(el, user) {
     })} · ${now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
   text.append(line, when);
 
-  el.append(text, buildIcon(icon));
+  el.append(text);
 }
