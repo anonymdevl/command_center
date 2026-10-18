@@ -644,6 +644,15 @@ table.dt tr:hover td{background:var(--hover)}
  color:var(--surface);display:grid;place-items:center;transition:transform .2s;pointer-events:none}
 .bk.sig:hover .sig-go{transform:rotate(45deg)}
 
+/* ---- a written report, under the Reports table (legacy/reports.js) ---- */
+.rp{margin-top:18px}
+.rp-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.rp-head b{font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em}
+.rp-sub{font-size:var(--fs-xs);color:var(--mut)}
+.rp-acts{margin-left:auto;display:flex;gap:8px}
+.rp-body{font-size:var(--fs-md);line-height:1.62;color:var(--ink2)}
+.rp-body b{color:var(--ink)}
+
 /* ---- the records drawer ---- */
 .drawer{border-left:0;border-radius:24px 0 0 24px;box-shadow:var(--shadow2)}
 

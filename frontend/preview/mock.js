@@ -155,6 +155,11 @@ function records(fact) {
   };
 }
 
+const REPORT_TITLES = { rp01: "Executive Summary", rp02: "Weekly management report",
+  rp03: "Monthly report", rp04: "Board report", rp05: "Sales and Payments",
+  rp06: "Buying and stock", rp07: "Engineering", rp08: "People", rp09: "Compliance and audit" };
+const reportPolls = {};
+
 const HANDLERS = {
   "command_center.api.kpi.get": ({ keys }) =>
     Object.fromEntries((keys || []).map((k) => [k, figure(k)]).filter(([, f]) => f)),
@@ -198,6 +203,18 @@ const HANDLERS = {
   }),
   // The same list engine.ANALYST_EXAMPLES serves on the site (copied: there is no
   // server here to ask).
+  // Reports: a job that is "done" on the second poll, with the sample answer as its text.
+  "command_center.api.reports.generate": ({ code }) => {
+    reportPolls[code] = 0;
+    return { job_id: `preview-${code}`, title: REPORT_TITLES[code] || code };
+  },
+  "command_center.api.reports.status": ({ job_id }) => {
+    const code = job_id.replace("preview-", "");
+    if ((reportPolls[code] = (reportPolls[code] || 0) + 1) < 2) return { state: "running" };
+    const r = HANDLERS["command_center.api.ask.answer"]({ question: REPORT_TITLES[code] });
+    return { state: "done", report: { ...r, title: REPORT_TITLES[code], code,
+      generated: new Date().toISOString() } };
+  },
   "command_center.api.ask.answerable": () => ({
     mode: "analyst",
     examples: [

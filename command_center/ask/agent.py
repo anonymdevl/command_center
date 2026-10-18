@@ -31,15 +31,18 @@ MAX_CALLS_PER_STEP = 6   # parallel tool calls honoured in one round
 MAX_RESULT_CHARS = 24000 # one tool result, as sent back to the model
 
 
-def answer(question: str, business_code: str | None = None, history=None) -> dict | None:
+def answer(question: str, business_code: str | None = None, history=None,
+           max_steps: int = MAX_STEPS) -> dict | None:
+    """max_steps: rounds of tool use. A question gets eight; a report (api/reports.py)
+    gathers across every area and gets more."""
     system = _system(business_code)
     contents = _history(history) + [{"role": "user", "parts": [{"text": question}]}]
     checked, errors, drill = [], [], None
     text, steps = None, 0
     writes_before = _writes()
 
-    for steps in range(1, MAX_STEPS + 2):
-        final = steps > MAX_STEPS
+    for steps in range(1, max_steps + 2):
+        final = steps > max_steps
         if final:
             # Out of budget: answer from what has been gathered, and say if incomplete.
             contents.append({"role": "user", "parts": [{"text": (

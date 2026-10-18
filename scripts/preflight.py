@@ -1182,6 +1182,14 @@ check("tools.run(" in _agent_src and "frappe.get_attr" not in _agent_src
       "ask/agent.py calls tools other than through tools.run, which is the only way a "
       "model's function call may be honoured.")
 
+# Every Run button on the Reports screen names a report the server can write.
+_rv = json.load(open(os.path.join(ROOT, "frontend", "src", "legacy", "views.json"))).get("reports", "")
+_codes = set(re.findall(r'data-report="(\w+)"', _rv))
+_server = set(re.findall(r'^    "(rp\d\d)": \(', open(os.path.join(APP, "api", "reports.py")).read(), re.M))
+check(len(_codes) == 9 and _codes == _server,
+      f"the Reports screen's Run buttons ({sorted(_codes)}) and api/reports.REPORTS "
+      f"({sorted(_server)}) disagree, so a Run button would start a report that does not exist.")
+
 # The analyst's loop -- dispatch, scope, budget, the write guard -- tested offline.
 import subprocess as _sp
 _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_analyst.py")],

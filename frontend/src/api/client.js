@@ -182,6 +182,11 @@ export const api = {
   tablesXlsx: (args) => download("command_center.api.export.tables_xlsx", args, "tables.xlsx"),
   recordsXlsx: (args) => download("command_center.api.export.records_xlsx", args, "records.xlsx"),
 
+  /* The nine management reports: started as a job, polled until written. */
+  reportGenerate: ({ code, business_code }) =>
+    call("command_center.api.reports.generate", { code, business_code }),
+  reportStatus: (job_id) => call("command_center.api.reports.status", { job_id }),
+
   ingestStatus: () => call("command_center.api.ingest.status"),
   reconcile: (business_code) =>
     call("command_center.api.ingest.reconcile", { business_code }),

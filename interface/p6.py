@@ -28,34 +28,39 @@ V_MYDAY=f'''<div class="topbar"><div><h3>Today</h3>
 
 V_REPORTS=f'''<div class="topbar"><div><h3>Reports</h3>
 <div class="when">Nine reports · built from the records, never typed up by hand</div></div></div>
-<table class="dt"><thead><tr><th>Report</th><th>Checked against</th><th>When it runs</th><th>Last run</th><th></th></tr></thead><tbody>
+<table class="dt"><thead><tr><th>Report</th><th>Checked against</th><th>Planned schedule</th><th>Last run</th><th></th></tr></thead><tbody>
 <tr><td><b>Executive Summary</b><div style="font-size:var(--fs-2xs);color:var(--mut)">What moved, what is wrong, what needs deciding</div></td>
 <td style="color:var(--mut)">The alert and task records</td><td style="color:var(--mut)">06:00 every day</td>
-<td><span class="tag t-ok">✓ Agrees</span></td><td><button class="btn">Run</button></td></tr>
+<td><span class="tag t-dr" data-last="rp01">Not run yet</span></td><td><button class="btn" data-report="rp01" onclick="runReport(&#39;rp01&#39;)">Run</button></td></tr>
 <tr><td><b>Sales and Payments</b><div style="font-size:var(--fs-2xs);color:var(--mut)">Orders, invoicing, collections, who owes what, discounts, biggest customers</div></td>
 <td style="color:var(--mut)">Customer account balances</td><td style="color:var(--mut)">Monday 07:00</td>
-<td><span class="tag t-ok">✓ Agrees</span></td><td><button class="btn">Run</button></td></tr>
+<td><span class="tag t-dr" data-last="rp05">Not run yet</span></td><td><button class="btn" data-report="rp05" onclick="runReport(&#39;rp05&#39;)">Run</button></td></tr>
 <tr><td><b>Buying and stock</b><div style="font-size:var(--fs-2xs);color:var(--mut)">Open orders, suppliers, availability, ageing, money tied up</div></td>
 <td style="color:var(--mut)">Stock and supplier balances</td><td style="color:var(--mut)">Weekly</td>
-<td><span class="tag t-wt">! 3 differences</span></td><td><button class="btn">Run</button></td></tr>
+<td><span class="tag t-dr" data-last="rp06">Not run yet</span></td><td><button class="btn" data-report="rp06" onclick="runReport(&#39;rp06&#39;)">Run</button></td></tr>
 <tr><td><b>Weekly management report</b></td><td style="color:var(--mut)">Each area's own numbers</td>
-<td style="color:var(--mut)">Monday 07:00</td><td><span class="tag t-ok">✓ Agrees</span></td><td><button class="btn">Run</button></td></tr>
+<td style="color:var(--mut)">Monday 07:00</td><td><span class="tag t-dr" data-last="rp02">Not run yet</span></td><td><button class="btn" data-report="rp02" onclick="runReport(&#39;rp02&#39;)">Run</button></td></tr>
 <tr><td><b>Monthly report</b></td><td style="color:var(--mut)">The accounts</td><td style="color:var(--mut)">1st working day</td>
-<td><span class="tag t-ok">✓ Agrees</span></td><td><button class="btn">Run</button></td></tr>
+<td><span class="tag t-dr" data-last="rp03">Not run yet</span></td><td><button class="btn" data-report="rp03" onclick="runReport(&#39;rp03&#39;)">Run</button></td></tr>
 <tr><td><b>Engineering</b></td><td style="color:var(--mut)">Job costs against the accounts</td>
-<td style="color:var(--mut)">Weekly</td><td><span class="tag t-wt">! Costs not linked</span></td><td><button class="btn">Run</button></td></tr>
+<td style="color:var(--mut)">Weekly</td><td><span class="tag t-dr" data-last="rp07">Not run yet</span></td><td><button class="btn" data-report="rp07" onclick="runReport(&#39;rp07&#39;)">Run</button></td></tr>
 <tr><td><b>People</b><div style="font-size:var(--fs-2xs);color:var(--mut)">Headcount, recruitment, attendance, payroll status</div></td>
 <td style="color:var(--mut)">The HR records</td><td style="color:var(--mut)">Monthly</td>
-<td><span class="tag t-ok">✓ Names hidden</span></td><td><button class="btn">Run</button></td></tr>
+<td><span class="tag t-dr" data-last="rp08">Not run yet</span></td><td><button class="btn" data-report="rp08" onclick="runReport(&#39;rp08&#39;)">Run</button></td></tr>
 <tr><td><b>Compliance and audit</b></td><td style="color:var(--mut)">The compliance records</td>
-<td style="color:var(--mut)">Monthly</td><td><span class="tag t-dr">– Arrives with the platform</span></td><td><button class="btn">Run</button></td></tr>
+<td style="color:var(--mut)">Monthly</td><td><span class="tag t-dr" data-last="rp09">Not run yet</span></td><td><button class="btn" data-report="rp09" onclick="runReport(&#39;rp09&#39;)">Run</button></td></tr>
 <tr><td><b>Board report</b></td><td style="color:var(--mut)">The accounts and the risk records</td>
-<td style="color:var(--mut)">On request</td><td><span class="tag t-od">⛔ Needs approval to send</span></td><td><button class="btn">Run</button></td></tr>
+<td style="color:var(--mut)">On request</td><td><span class="tag t-dr" data-last="rp04">Not run yet</span></td><td><button class="btn" data-report="rp04" onclick="runReport(&#39;rp04&#39;)">Run</button></td></tr>
 </tbody></table>
-<div class="note"><h4>Why each report says what it was checked against</h4><ul>
-<li>Every report is compared against the figures in ERPNext before it is published. If it does not agree,
-it still comes out — <b>marked as not agreeing, with the difference shown</b>. It is never quietly presented as correct.</li>
-<li>The board report cannot be sent outside the company without an approval.</li></ul></div>'''
+<div id="rpout"></div>
+<div class="note"><h4>How these reports are written</h4><ul>
+<li>Each report is written from current data when you run it: every figure comes from the loaded records or
+from ERPNext's own reports, and the report lists <b>what it checked</b>. Where the records do not hold
+something a report should cover, it says so rather than leaving it out.</li>
+<li>Projections and recommendations are labelled as such. Nothing is sent anywhere: a report is downloaded
+by the person who ran it, and the board report is not released outside the company without an approval.</li>
+<li>The schedule column is the plan agreed for each report. Running on that schedule and emailing a
+distribution list are <b>not switched on yet</b>; today a report is written when you press Run.</li></ul></div>'''
 
 V_SEARCH=f'''<div class="topbar"><div><h3>Find anything</h3>
 <div class="when">Records and documents · you only ever see what you are allowed to see</div></div></div>

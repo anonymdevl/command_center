@@ -9,6 +9,7 @@ import Records from "./Records.jsx";
 import { hydrateCards, hydrateTiles, keysFor } from "../legacy/hydrate.js";
 import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js";
 import { historyFor, remember } from "../askHistory.js";
+import { runReport } from "../legacy/reports.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -96,7 +97,11 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
       }
     };
 
+    // The designed Reports screen's Run buttons call runReport(code).
+    window.runReport = (code) => runReport(code, scopeRef.current);
+
     return () => {
+      delete window.runReport;
       delete window.openDrawer;
       delete window.explain;
       delete window.drill;
