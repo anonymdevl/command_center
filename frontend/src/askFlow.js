@@ -12,12 +12,35 @@ import { api } from "./api/client.js";
  * The steps are a courtesy: a poll that fails is ignored, and the answer is whatever
  * the question request returns.
  */
+// The page never waits longer than this for an answer. The server stops itself well
+// before (agent.py's deadline); this is the backstop if the connection itself hangs --
+// on 18 Oct 2026 a question sat at "thinking" for eleven minutes.
+const ANSWER_LIMIT_MS = 150 * 1000;
+
 export async function withSteps(args, signal, onSteps) {
   const askId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   let done = false;
-  const answer = api.ask({ ...args, ask_id: askId }, { signal }).finally(() => {
-    done = true;
-  });
+  let timedOut = false;
+  const ctrl = new AbortController();
+  const passOn = () => ctrl.abort();
+  signal.addEventListener("abort", passOn, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctrl.abort();
+  }, ANSWER_LIMIT_MS);
+  const answer = api.ask({ ...args, ask_id: askId }, { signal: ctrl.signal })
+    .catch((e) => {
+      if (!timedOut) throw e;
+      const err = new Error("This took longer than two and a half minutes, so it was stopped. "
+        + "Ask again, or ask for less at once.");
+      err.name = "TimeoutError";
+      throw err;
+    })
+    .finally(() => {
+      done = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", passOn);
+    });
 
   (async () => {
     for (let n = 0; !done && !signal.aborted; n++) {

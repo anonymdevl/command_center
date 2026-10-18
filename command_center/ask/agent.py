@@ -60,10 +60,23 @@ def answer(question: str, business_code: str | None = None, history=None,
     writes_before = _writes()
     import time
     started = time.monotonic()
+    # One deadline for the whole question, which gemini.py and the lookups below also
+    # read: the budget used to be checked only between rounds, so a slow reply, a run of
+    # retries or a heavy report inside one round could take minutes. On 18 Oct 2026 a
+    # question ran for eleven minutes until the connection dropped.
+    frappe.local.cc_deadline = started + deadline
+
+    def left():
+        return deadline - (time.monotonic() - started)
 
     for steps in range(1, max_steps + 2):
-        left = deadline - (time.monotonic() - started)
-        out_of_time = steps > 1 and left < WRAP_UP_AT and steps <= max_steps
+        remaining = left()
+        if remaining < 8:
+            # Not even time to ask for an answer: stop, and say so.
+            errors.append("it ran out of time before it could answer")
+            cut_short = cut_short or bool(checked)
+            break
+        out_of_time = steps > 1 and remaining < WRAP_UP_AT and steps <= max_steps
         final = steps > max_steps or out_of_time
         if out_of_time and not cut_short:
             # Where it got to, before being told to answer -- a deeper look resumes here.
@@ -76,7 +89,7 @@ def answer(question: str, business_code: str | None = None, history=None,
         # The first round must look something up: an answer is only as good as what it
         # read, and a model left free to answer at once can answer from memory.
         content, err = gemini.chat(contents, None if final else tools.declarations(), system,
-                                   timeout=int(max(15, min(60, left - 5))),
+                                   timeout=int(max(5, min(60, left() - 3))),
                                    mode="ANY" if steps == 1 and not resume else "AUTO")
         if err:
             errors.append(err)
@@ -88,7 +101,7 @@ def answer(question: str, business_code: str | None = None, history=None,
                     "Answer now from what you have gathered. If it is incomplete, say "
                     "what you could not check.")}]})
                 content, err2 = gemini.chat(contents, None, system,
-                                            timeout=int(max(15, min(60, left - 5))))
+                                            timeout=int(max(5, min(60, left() - 3))))
                 if not err2 and content:
                     contents.append(content)
                     text = "".join(p.get("text", "") for p in (content.get("parts") or [])
@@ -111,13 +124,22 @@ def answer(question: str, business_code: str | None = None, history=None,
                     "error": f"Only {MAX_CALLS_PER_STEP} lookups run at once. Ask for this "
                              f"one again in the next round."}}}})
                 continue
+            # A lookup started with too little time left would run past the deadline, and
+            # an ERPNext report can take a minute on its own.
+            need = 45 if name == "run_report" else 12
+            if left() < need:
+                responses.append({"functionResponse": {"name": name, "response": {"result": {
+                    "error": "Out of time for more lookups. Answer from what you have, and "
+                             "say what you could not check."}}}})
+                continue
             if on_step:
                 try:
                     on_step(tools.describe(name, args))
                 except Exception:
                     pass  # progress is a courtesy; it never stops an answer
             try:
-                result = tools.run(name, args, business_code)
+                with _statement_limit(max(3, min(25, int(left() - 8)))):
+                    result = tools.run(name, args, business_code)
                 checked.append(tools.summary(name, args))
                 if name in ("query_data", "list_records") and isinstance(result, dict):
                     drill = {"fact": result.get("data_set"), "filters": result.get("filters")}
@@ -133,6 +155,7 @@ def answer(question: str, business_code: str | None = None, history=None,
                                                    "response": {"result": _fit(result)}}})
         contents.append({"role": "user", "parts": responses})
 
+    frappe.local.cc_deadline = None
     # The guard. Nothing above can write -- tools.py has no write path and preflight
     # holds it that way -- so a write here means something changed underneath us, and
     # it is undone before anyone can rely on it.
@@ -164,6 +187,34 @@ def answer(question: str, business_code: str | None = None, history=None,
         "cut_short": cut_short,
         "_resume": {"contents": snapshot, "checked": checked} if cut_short else None,
     }
+
+
+class _statement_limit:
+    """Stop any single database query a lookup runs after `seconds` (MariaDB's
+    max_statement_time, for this connection only, put back afterwards). A query that
+    would run on past the question's deadline is ended by the database, and the lookup
+    returns an error the model can work around."""
+
+    def __init__(self, seconds):
+        self.seconds = seconds
+        self.on = False
+
+    def __enter__(self):
+        try:
+            if getattr(frappe.db, "db_type", "mariadb") == "mariadb":
+                frappe.db.sql("SET SESSION max_statement_time = %s", (self.seconds,))
+                self.on = True
+        except Exception:
+            self.on = False
+        return self
+
+    def __exit__(self, *exc):
+        if self.on:
+            try:
+                frappe.db.sql("SET SESSION max_statement_time = 0")
+            except Exception:
+                pass
+        return False
 
 
 def _writes() -> int:

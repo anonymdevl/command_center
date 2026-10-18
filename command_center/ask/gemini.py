@@ -218,9 +218,16 @@ def _post(kind: str, body: dict, timeout: int):
 
     import requests
 
+    # The question's own deadline (agent.py), so retries and model switches cannot carry
+    # one call past it. None outside a question (the router, a report's setup).
+    end = getattr(frappe.local, "cc_deadline", None)
+
+    def remaining():
+        return (end - time.monotonic()) if end else 1e9
+
     def send(model):
         return requests.post(ENDPOINT.format(model=model), params={"key": _key()}, json=body,
-                             timeout=timeout)
+                             timeout=max(3, min(timeout, remaining() - 1)))
 
     model = model_for(kind)
     if is_out(model):
@@ -229,19 +236,19 @@ def _post(kind: str, body: dict, timeout: int):
     while model and len(tried) < 6:
         tried.append(model)
         r = send(model)
-        if r.status_code in (500, 502, 503, 504):
+        if r.status_code in (500, 502, 503, 504) and remaining() > 12:
             time.sleep(1.5)
             r = send(model)
         if r.status_code == 429:
             wait = retry_after(r.text)
-            if 0 < wait <= 8:  # a per-minute limit: worth waiting for
+            if 0 < wait <= 8 and remaining() > wait + 10:  # a per-minute limit: wait it out
                 time.sleep(wait)
                 r = send(model)
         if r.status_code == 429:
             wait = retry_after(r.text)
             _mark_out(model, wait, r.text)
             frappe.local.cc_gemini_quota = _quota_words(model, r.text, wait)
-            model = _next_model(kind, tried)
+            model = _next_model(kind, tried) if remaining() > 10 else None
             continue
         if r.status_code == 404 and not frappe.conf.get(CONF_KEY[kind]):
             frappe.cache().delete_value(f"cc_gemini_model::{_kid()}::{kind}")

@@ -110,9 +110,20 @@ def _filters(fact: str, filters) -> dict:
     return out
 
 
+# Facts that hold submittable documents. Their drafts and cancelled rows are loaded too
+# (so "invoices never issued" can be answered), but every figure on the screens counts
+# submitted documents only -- and a model that forgot that filter produced a table of 888
+# unpaid invoices under a headline of 806 (18 Oct 2026). Submitted is the default here
+# as well; asking about drafts means filtering src_docstatus explicitly.
+SUBMITTABLE = {"fact_sales_invoice", "fact_sales_invoice_line", "fact_purchase_invoice",
+               "fact_purchase_invoice_line", "fact_sales_order", "fact_payment_allocation"}
+
+
 def _scope(fact: str, filters: dict, business_code) -> dict:
     if business_code and business_code != "__all__" and "business_code" in _columns(FACTS[fact]):
         filters = {**filters, "business_code": business_code}
+    if fact in SUBMITTABLE and "src_docstatus" not in filters:
+        filters = {**filters, "src_docstatus": ["=", 1]}
     return filters
 
 
@@ -604,9 +615,14 @@ def run(name: str, args: dict, business_code=None):
     if not entry:
         raise ToolError(f"There is no tool called {name!r}.")
     fn, _ = entry
+    import inspect
+    accepted = set(inspect.signature(fn).parameters)
     args = dict(args or {})
     args.pop("business_code", None)  # scope comes from the session, never from the model
-    if name not in ("erpnext_fields", "erpnext_list", "erpnext_count", "erpnext_document"):
+    # Only the arguments the tool takes. A model sometimes adds one of its own ("question"
+    # on erpnext_count, 18 Oct 2026), and passing it on failed the lookup every time.
+    args = {k: v for k, v in args.items() if k in accepted}
+    if "business_code" in accepted:
         args["business_code"] = business_code
     return fn(**args)
 

@@ -351,6 +351,41 @@ check(content is None and err and "allowance" in err and "9h 41m" in err and "bi
       f"every model out: said in words, with when it is back: {err}")
 _cache.d.clear()
 
+# 12c. Plain figure questions are answered from the KPI engine, never sent to the model;
+# anything asking for analysis is left to the analyst (ask/quick.py).
+from command_center.ask import quick as _quick
+for _q, _want in {
+    "How many unpaid invoices do we have?": "ar_count",
+    "How many unpaid supplier invoices are there?": "ap_count",
+    "How much do we owe suppliers?": "ap_total",
+    "How much are we owed?": "ar_total",
+    "What is our stock worth?": "stock_value",
+    "How many open sales orders do we have?": "order_book_count",
+    "How many employees do we have?": "headcount",
+    "Who owes us the most?": None,
+    "How did unpaid invoices change over the last 6 months?": None,
+    "Why are so many invoices unpaid?": None,
+    "Show me unpaid invoices by customer": None,
+}.items():
+    _m = _quick.match(_q)
+    check((_m[0][0] if _m else None) == _want, f"quick.match({_q!r}) gave {_m and _m[0][0]}, wanted {_want}")
+
+# 12d. A tool is given only the arguments it takes: a model's extra one ("question")
+# failed erpnext_count every time.
+_seen_args = {}
+
+
+def _probe(doctype, filters=None):
+    _seen_args.update(doctype=doctype, filters=filters)
+    return {"ok": True}
+
+
+tools.TOOLS["_probe"] = (_probe, {})
+tools.run("_probe", {"doctype": "Sales Invoice", "question": "how many?", "business_code": "X"}, "GIG")
+check(_seen_args == {"doctype": "Sales Invoice", "filters": None},
+      f"tools.run passed arguments the tool does not take: {_seen_args}")
+tools.TOOLS.pop("_probe")
+
 # 13. Thinking is asked for low; a model that refuses the setting is asked again without it.
 sent = []
 
@@ -386,7 +421,7 @@ reset()
 r = agent.answer("Q", "GIGMANN", deadline=29)
 check(r and r["answered"] and calls_seen[0]["tools"] and not calls_seen[1]["tools"],
       f"a spent budget ends in an answer, not a timeout: {calls_seen}")
-check(calls_seen[0]["timeout"] in (23, 24), f"each call gets what is left: {calls_seen[0]['timeout']}")
+check(calls_seen[0]["timeout"] in (25, 26), f"each call gets what is left: {calls_seen[0]['timeout']}")
 check(r.get("cut_short") and r.get("_resume") and "functionResponse" in
       r["_resume"]["contents"][-1]["parts"][0],
       "a cut-short answer says so, and keeps the conversation up to the last lookup's result")

@@ -1164,10 +1164,16 @@ _READ_PATH = [os.path.join(APP, "ask", f) for f in sorted(os.listdir(os.path.joi
               if f.endswith(".py")] + [os.path.join(APP, "kpi", "engine.py"),
                                        os.path.join(APP, "kpi", "registry.py"),
                                        os.path.join(APP, "facts", "schema.py")]
+# One statement is allowed by name: agent.py's time limit on a lookup's queries
+# ("SET SESSION max_statement_time"), which changes how long a query may run on this
+# connection and nothing in the database. Nothing else that runs SQL is.
+_ALLOWED_SQL = re.compile(r'frappe\.db\.sql\("SET SESSION max_statement_time = (%s|0)"')
 for _f in _READ_PATH:
     _src = open(_f).read()
     for _m in _WRITE.finditer(_src):
         _line = _src[:_m.start()].count("\n") + 1
+        if _ALLOWED_SQL.match(_src[_m.start():_m.start() + 80]):
+            continue
         check(False, f"{os.path.relpath(_f, ROOT)}:{_line} has a write ({_m.group(0)}) on the "
                      f"question path. The analyst is read-only: no code it can reach may "
                      f"create, change or delete a record.")

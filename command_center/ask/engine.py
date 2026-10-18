@@ -136,6 +136,17 @@ def answer(question: str, business_code: str | None = None, history=None, on_ste
     if not question:
         return _cannot("Ask a question and I will look it up.", [])
 
+    # A plain question about a figure the platform defines is answered from that figure:
+    # the card's own number, at once, with no model call (ask/quick.py).
+    try:
+        from command_center.ask import quick
+        fast = quick.answer(question, business_code)
+    except Exception:
+        frappe.log_error(title="Command Center quick answer", message=frappe.get_traceback())
+        fast = None
+    if fast:
+        return fast
+
     analyst_error = None
     if analyst_enabled():
         try:

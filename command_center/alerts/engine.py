@@ -80,6 +80,13 @@ def evaluate(business_code: str) -> dict:
 def ensure_fresh(business_code: str):
     if frappe.cache().get_value(f"cc:alerts:evaluated:{business_code}"):
         return
+    # Home and the bell read the alerts at the same moment; two passes at once both
+    # saved the same alert and the second failed ("modified after you have opened it").
+    # One pass at a time per business: a request that finds one running reads what is
+    # there rather than waiting for it.
+    lock = frappe.cache().lock(f"cc:alerts:evaluating:{business_code}", timeout=120)
+    if not lock.acquire(blocking=False):
+        return
     try:
         evaluate(business_code)
         frappe.db.commit()
@@ -87,18 +94,19 @@ def ensure_fresh(business_code: str):
         frappe.db.rollback()
         frappe.log_error(title="Command Center: alert evaluation failed",
                          message=frappe.get_traceback())
+    finally:
+        try:
+            lock.release()
+        except Exception:
+            pass
 
 
 def scheduled():
     for code in frappe.get_all("Connected Business", filters={"is_local": 1},
                                pluck="business_code"):
-        try:
-            evaluate(code)
-            frappe.db.commit()
-        except Exception:
-            frappe.db.rollback()
-            frappe.log_error(title=f"Command Center: alert evaluation failed for {code}",
-                             message=frappe.get_traceback())
+        # Through the same lock as a read, so the hourly pass cannot collide with one.
+        frappe.cache().delete_value(f"cc:alerts:evaluated:{code}")
+        ensure_fresh(code)
 
 
 # ---------------------------------------------------------------------------
