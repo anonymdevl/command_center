@@ -39,6 +39,24 @@ frappe.logged = []
 frappe.log_error = lambda title=None, message=None: frappe.logged.append(
     (title, message, frappe.db.rolled_back))
 frappe.get_traceback = lambda: "Traceback: boom"
+
+
+class _Cache:
+    def __init__(self):
+        self.d = {}
+
+    def get_value(self, k):
+        return self.d.get(k)
+
+    def set_value(self, k, v, expires_in_sec=None):
+        self.d[k] = v
+
+    def delete_value(self, k):
+        self.d.pop(k, None)
+
+
+_cache = _Cache()
+frappe.cache = lambda: _cache
 frappe.utils = types.SimpleNamespace(today=lambda: "2026-10-18",
                                      get_url_to_form=lambda d, n: f"/app/{d}/{n}")
 sys.modules["frappe"] = frappe
@@ -54,6 +72,8 @@ pypika.Order = types.SimpleNamespace(asc="asc", desc="desc")
 sys.modules["pypika"] = pypika
 
 from command_center.ask import agent, gemini, tools  # noqa: E402
+
+REAL_CHAT = gemini.chat  # the scripted tests replace it; the model tests need the real one
 
 agent._system = lambda business_code: "SYSTEM"
 seen = {}
@@ -233,6 +253,52 @@ try:
     check(False, "an unlisted report is refused")
 except tools.ToolError:
     check(True, "an unlisted report is refused")
+
+# 11. Model choice when Google retires one (18 Oct 2026: 2.5 Flash 404'd for new keys).
+listed = [{"name": f"models/{n}", "supportedGenerationMethods": m} for n, m in [
+    ("gemini-2.5-flash", ["generateContent"]), ("gemini-3.8-flash", ["generateContent"]),
+    ("gemini-3.8-flash-lite", ["generateContent"]), ("gemini-3.9-flash-preview", ["generateContent"]),
+    ("gemini-3.8-flash-image", ["generateContent"]), ("gemini-flash-latest", ["generateContent"]),
+    ("gemini-3.8-pro", ["generateContent"]), ("text-embedding-9", ["embedContent"])]]
+check(gemini.choose_model(listed, "analyst") == "gemini-3.8-flash",
+      f"the analyst takes the newest stable Flash: {gemini.choose_model(listed, 'analyst')}")
+check(gemini.choose_model(listed, "router") == "gemini-3.8-flash-lite",
+      f"the router prefers lite: {gemini.choose_model(listed, 'router')}")
+check(gemini.choose_model([], "analyst") is None, "nothing suitable gives None")
+
+# 12. A retired model: one re-choice from Google's list, one retry, remembered.
+import types as _t
+posted = []
+
+
+class _R:
+    def __init__(self, code, body):
+        self.status_code, self._b, self.text = code, body, str(body)
+
+    def json(self):
+        return self._b
+
+
+def _post(url, params=None, json=None, timeout=None):
+    posted.append(url.split("/models/")[1].split(":")[0])
+    if "gemini-3.8-flash:" in url:
+        return _R(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": "OK"}]}}]})
+    return _R(404, {"error": {"message": "no longer available"}})
+
+
+sys.modules["requests"] = _t.SimpleNamespace(post=_post, get=lambda *a, **k: _R(200, {"models": listed}))
+_cache.d.clear()
+frappe.conf.pop("command_center_analyst_model", None)
+gemini.PREFERRED["analyst"] = "gemini-2.5-flash"
+content, err = REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S")
+check(err is None and posted == ["gemini-2.5-flash", "gemini-3.8-flash"],
+      f"404 -> re-choose -> retry once: {posted}, {err}")
+check(gemini.analyst_model() == "gemini-3.8-flash", "the working model is remembered")
+posted.clear()
+frappe.conf["command_center_analyst_model"] = "gemini-2.5-flash"
+REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S")
+check(posted == ["gemini-2.5-flash"], "a model named in site_config is never second-guessed")
+frappe.conf.pop("command_center_analyst_model", None)
 
 print(f"analyst: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

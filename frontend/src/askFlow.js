@@ -19,7 +19,15 @@ export async function withSteps(args, signal, onSteps) {
   for (;;) {
     await new Promise((r) => setTimeout(r, 900));
     if (signal.aborted) throw new DOMException("aborted", "AbortError");
-    const st = await api.askPoll(started.ask_id, { signal });
+    let st;
+    try {
+      st = await api.askPoll(started.ask_id, { signal });
+    } catch (e) {
+      if (e?.name === "AbortError") throw e;
+      // The progress check failed -- on 18 Oct a half-restarted server knew start but
+      // not poll. The question still gets answered, directly.
+      return api.ask(args, { signal });
+    }
     if (st?.steps) onSteps(st.steps);
     if (st?.state === "done") return st.result;
     if (st?.state === "failed") throw new Error(st.error || "The question could not be answered.");

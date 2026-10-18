@@ -226,8 +226,10 @@ and records a question needs, reasons over them, explains, compares, projects an
 recommends -- and it may never create, edit, submit, cancel or delete anything in
 ERPNext, with or without anyone's approval.
 
-**The analyst** (`ask/agent.py`) runs Gemini (`gemini-2.5-flash`, pinned; override with
-`command_center_analyst_model`) with the read-only tools in `ask/tools.py`: query any
+**The analyst** (`ask/agent.py`) runs Gemini (`gemini-3.8-flash` by default -- Google retired
+2.5 Flash for new keys on 18 Oct 2026; on a 404 `gemini.py` asks Google for the newest stable
+Flash, retries once and remembers it for a day; a model named in `command_center_analyst_model`
+is never second-guessed) with the read-only tools in `ask/tools.py`: query any
 loaded fact (totals, breakdowns, periods, filters), list records, the KPI figures, name
 lookup, trend + straight-line projection, the six original analyses, and any ERPNext
 doctype through `frappe.client.get / get_list / get_count` -- Frappe's own
