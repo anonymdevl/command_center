@@ -71,13 +71,13 @@ window.CC_BOOT = {
 
 /* key: [label, unit, value, direction, fact] -- values from CLAUDE.md, verified live. */
 const KPIS = {
-  ar_total: ["Owed to us", "currency", 9177568.91, "higher_is_worse", "fact_sales_invoice"],
+  ar_total: ["Owed to us", "currency", 9177568.91, "higher_is_worse", "fact_sales_invoice", "806 unpaid invoices"],
   ar_count: ["Unpaid invoices", "count", 806, "neutral", "fact_sales_invoice"],
   order_book: ["Promised, not delivered", "currency", 9131894.14, "neutral", "fact_sales_order"],
   order_book_late: ["Open orders", "count", null, "higher_is_worse", "fact_sales_order"],
-  stock_value: ["Stock on hand", "currency", 3769970.49, "neutral", "fact_stock_balance"],
+  stock_value: ["Stock on hand", "currency", 3769970.49, "neutral", "fact_stock_balance", "across 2,375 item and warehouse combinations"],
   stock_reserved_qty: ["Reserved against orders", "quantity", null, "neutral", "fact_stock_balance"],
-  ap_total: ["We owe suppliers", "currency", 5645271.09, "higher_is_worse", "fact_purchase_invoice"],
+  ap_total: ["We owe suppliers", "currency", 5645271.09, "higher_is_worse", "fact_purchase_invoice", "122 invoices unpaid"],
   tasks_open: ["Work in flight", "count", 57, "neutral", "fact_task"],
   cases_open: ["Open complaints", "count", 39, "higher_is_worse", "fact_case"],
   people_total: ["On the books", "count", 35, "neutral", "fact_person"],
@@ -100,6 +100,10 @@ const KPIS = {
   people_left: ["Left", "count", 8, "higher_is_worse", "fact_person", "average stay 213 days"],
   cases_closed: ["Closed", "count", 2, "higher_is_better", "fact_case", "resolved and closed"],
   cases_avg_wait: ["Average wait", "days", 12, "higher_is_worse", "fact_case", "on 39 open cases"],
+  tasks_overdue: ["Past due", "count", 24, "higher_is_worse", "fact_task", "of work in flight"],
+  score_paid: ["Are we getting paid?", "percent", 26.2, "higher_is_better", "fact_sales_invoice", "of the GHS 9,177,568.91 owed is inside three months"],
+  score_deliver: ["Can we deliver what we sold?", "percent", 36.4, "higher_is_better", "fact_stock_balance", "of 771 promised stock lines have the stock behind them"],
+  score_paperwork: ["Is the paperwork finished?", "percent", 98.9, "higher_is_better", "fact_sales_invoice", "of 7,853 invoices written were issued; 88 never were"],
 };
 
 function figure(key) {
@@ -393,6 +397,27 @@ const HANDLERS = {
     ],
   }),
   "command_center.api.alerts.act": ({ name, action }) => ({ name, status: action }),
+  // Home's two lists. Sample customers, marked so; the live site reads the facts.
+  "command_center.api.home.debtors": ({ mode }) => {
+    const all = [
+      ["Northbridge Clinic (sample)", 6, 418950, 642300, 118, "2025-06-14"],
+      ["Akwaaba Medical Centre (sample)", 4, 301600, 388140, 47, "2025-09-02"],
+      ["Coastline Diagnostics (sample)", 3, 276500, 276500, 96, "2025-05-30"],
+      ["St. Anne's Hospital (sample)", 2, 97410, 194820, 12, "2025-10-09"],
+    ].filter((r) => mode === "all" || (mode === "overdue" ? r[4] > 0 : r[4] > 90));
+    return { mode, currency: "GHS", invoices: mode === "all" ? 806 : mode === "overdue" ? 702 : 647,
+      owed: 9177568.91, customers: 120,
+      rows: all.map(([customer, invoices, owed, invoiced, days, last]) => ({
+        customer, invoices, owed, invoiced, days, last_paid: last,
+        drill: { fact: "fact_sales_invoice", filters: { customer } } })) };
+  },
+  "command_center.api.home.top_customers": () => ({
+    currency: "GHS", total: 12400000, period: { label: "Aug 2024 – Jul 2025" },
+    rows: [["Northbridge Clinic (sample)", 18.2], ["Akwaaba Medical Centre (sample)", 14.1],
+           ["Coastline Diagnostics (sample)", 11.3], ["St. Anne's Hospital (sample)", 7.9],
+           ["Ridge Pharmacy (sample)", 5.4]].map(([customer, share]) => ({
+      customer, share, sold: share * 124000, drill: { fact: "fact_sales_invoice_line", filters: { customer } } })),
+  }),
   "command_center.api.ingest.status": () => [],
 };
 

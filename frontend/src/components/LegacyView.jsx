@@ -14,6 +14,7 @@ import { runReport } from "../legacy/reports.js";
 import { wireActions } from "../legacy/actions.js";
 import { WORK_VIEWS, renderWork } from "../legacy/work.js";
 import { ALERT_VIEWS, renderAlerts } from "../legacy/alerts.js";
+import { renderHealthTiles, renderHome } from "../legacy/home.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -311,6 +312,10 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
       hydrateTiles(root, viewKey, figures.data, opts) +
       (isWork ? renderWork(root, viewKey, work.data, opts) : 0));
     if (hasAlerts) renderAlerts(root, viewKey, alerts.data, opts);
+    if (viewKey === "command") {
+      renderHome(root, { figures: figures.data, alerts: alerts.data, scope, onOpen: opts.onOpen });
+    }
+    if (viewKey === "health") renderHealthTiles(root, figures.data);
     // An alert drawn by the generator is a designed sample until something live replaces
     // it, and the screen's "still illustrative" line must keep saying so.
     root.querySelectorAll(".alert:not([data-live])").forEach((a) => {

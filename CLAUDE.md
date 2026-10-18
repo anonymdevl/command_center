@@ -279,6 +279,19 @@ The analyst reaches the ledger, purchase orders and stock movements through
 `run_report` -- 23 allowlisted standard ERPNext reports, run with the asker's
 permissions -- rather than new facts.
 
+## Home and the health score
+
+Home follows the approved mockup (`gigmann-redesign/home.html`, 18 Oct 2026): three hero
+tiles (TILE_KPIS.command), the morning brief (the alert engine's top three), largest
+amounts owed (`api/home.debtors`, All / Overdue / Over 90 days), two counts, the business
+health gauge and top customers (`api/home.top_customers`, last twelve full months), then
+the six cards and the alerts. `legacy/home.js` fills it. The health figure is the plain
+average of three stated ratios -- `score_paid` (owed inside 90 days / owed),
+`score_deliver` (promised stock lines covered / promised), `score_paperwork` (invoices
+issued / written) -- and "How it is scored" lists each with its note. The same three
+draw Business Health's first three tiles. Approvals, record quality and access are not
+scored until their data exists; never fill them with a number.
+
 ## Buttons on the designed screens
 
 `frontend/src/legacy/actions.js` gives every designed button a handler after each render

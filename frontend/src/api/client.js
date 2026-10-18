@@ -187,6 +187,10 @@ export const api = {
       { business_code, subject, description, allocated_to, due_date, priority,
         reference_type, reference_name }),
 
+  /* Home's two lists (api/home.py). */
+  homeDebtors: ({ business_code, mode }) => call("command_center.api.home.debtors", { business_code, mode }),
+  topCustomers: ({ business_code }) => call("command_center.api.home.top_customers", { business_code }),
+
   /* Alerts (api/alerts.py): read, and what the manager decided about one. */
   alerts: (business_code) => call("command_center.api.alerts.open_alerts", { business_code }),
   alertAct: ({ name, action, reason, until, todo }) =>

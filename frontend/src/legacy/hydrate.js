@@ -144,9 +144,17 @@ export const TILE_KPIS = {
     // "Systems & access" and "Internal Audit" say on themselves that ERPNext holds no
     // record of either; both are flagged "Not yet" as designed.
   },
+  // Home's three hero tiles (the approved mockup's layout, 18 Oct 2026).
+  command: {
+    "Sales & money owed": { key: "ar_total" },
+    "Buying & suppliers": { key: "ap_total" },
+    "Stock & warehouses": { key: "stock_value" },
+  },
   myday: {},
   delegation: {},
   risk: {},
+  // Three of the six questions are now one stated ratio each (kpi score_*); legacy/
+  // home.js draws their score, bar and flag. The other three still need a source.
   health: {},
   sales: {},
 };
@@ -156,10 +164,17 @@ export function hasLiveFigures(viewKey) {
   return keysFor(viewKey).length > 0;
 }
 
+/** Figures a screen needs beyond its cards and tiles: Home's counts and health gauge,
+ *  and Business Health's three scored questions (legacy/home.js draws both). */
+export const EXTRA_KPIS = {
+  command: ["cases_open", "tasks_overdue", "score_paid", "score_deliver", "score_paperwork"],
+  health: ["score_paid", "score_deliver", "score_paperwork"],
+};
+
 export function keysFor(viewKey) {
   const cards = Object.values(CARD_KPIS[viewKey] || {});
   const tiles = Object.values(TILE_KPIS[viewKey] || {}).map((spec) => spec.key);
-  return [...new Set([...cards, ...tiles])];
+  return [...new Set([...cards, ...tiles, ...(EXTRA_KPIS[viewKey] || [])])];
 }
 
 /**

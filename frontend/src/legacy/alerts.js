@@ -33,8 +33,9 @@ export function renderAlerts(root, view, data, { onOpen } = {}) {
   if (view === "command") {
     const head = Array.from(root.querySelectorAll(".sect"))
       .find((s) => /needs your attention/i.test(s.textContent));
-    const label = head?.firstChild?.nodeType === 3 ? head.firstChild : null;
-    if (label) label.textContent = `Needs your attention — ${alerts.length} item${alerts.length === 1 ? "" : "s"} `;
+    // The heading's words are in its first span (or, in an older build, a bare text node).
+    const label = head?.querySelector(":scope > span") || (head?.firstChild?.nodeType === 3 ? head.firstChild : null);
+    if (label) label.textContent = `Needs your attention — ${alerts.length} item${alerts.length === 1 ? "" : "s"}`;
   }
 
   // Later passes (new figures, an action taken) replace the list where it already is.

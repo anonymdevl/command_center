@@ -210,7 +210,7 @@ function tasksTable(rows, { withPriority = false, empty: none } = {}) {
     e.classList.add("work-table");
     return e;
   }
-  const table = el("table", "dt work-table");
+  const table = el("table", "dt");
   const head = el("tr");
   ["What", "Given to", "By when", "Late by", ...(withPriority ? ["Priority"] : []), ""].forEach((h) => head.append(el("th", null, h)));
   const thead = el("thead");
@@ -233,7 +233,10 @@ function tasksTable(rows, { withPriority = false, empty: none } = {}) {
     tbody.append(tr);
   });
   table.append(thead, tbody);
-  return table;
+  // In a scroller, so a phone scrolls the table rather than the whole screen.
+  const wrap = el("div", "work-table");
+  wrap.append(table);
+  return wrap;
 }
 
 /* ------------------------------------------------------------------ helpers */

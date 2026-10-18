@@ -1198,10 +1198,23 @@ check(len(_codes) == 9 and _codes == _server,
 _act = open(os.path.join(ROOT, "frontend", "src", "legacy", "actions.js")).read()
 _known = set(re.findall(r'"([a-z][a-z ]+)"', _act[_act.index("const TO_DIALOG"):_act.index("export function")]))
 _known |= {"open the pack", "load older", "defer", "dismiss"}  # handled by name in handlerFor
+# A button a screen script wires by its id or its data-mode (legacy/home.js) counts as
+# wired only if a script under legacy/ really names that id or that control.
+_legacy_js = "".join(open(_p).read() for _p in glob.glob(os.path.join(ROOT, "frontend", "src", "legacy", "*.js")))
+
+
+def _scripted(attrs):
+    _id = re.search(r'\bid="([\w-]+)"', attrs)
+    if _id and f"#{_id.group(1)}" in _legacy_js:
+        return True
+    return "data-mode=" in attrs and ".segc button" in _legacy_js
+
+
 _dead = sorted({re.sub(r"<[^>]+>", "", m.group(2)).strip()
                 for h in _views.values()
                 for m in re.finditer(r"<button([^>]*)>(.*?)</button>", h, re.S)
                 if "onclick" not in m.group(1) and 'class="tab' not in m.group(1)
+                and not _scripted(m.group(1))
                 and re.sub(r"<[^>]+>", "", m.group(2)).strip().lower() not in _known})
 check(not _dead,
       f"button(s) {', '.join(map(repr, _dead))} have no onclick and legacy/actions.js does "
@@ -1211,6 +1224,13 @@ check("<ActionDialog" in open(os.path.join(ROOT, "frontend", "src", "App.jsx")).
                                                          "LegacyView.jsx")).read(),
       "the action dialog is not mounted or the screens' buttons are not wired, so Assign, "
       "Escalate and the alert menus do nothing.")
+
+# The extra figures Home and Business Health ask for must exist.
+_extra = re.search(r"export const EXTRA_KPIS = \{(.*?)\n\};",
+                   open(os.path.join(ROOT, "frontend", "src", "legacy", "hydrate.js")).read(), re.S)
+for _key in re.findall(r'"([a-z][a-z0-9_]+)"', _extra.group(1) if _extra else ""):
+    check(_key in REGISTRY, f"hydrate.js EXTRA_KPIS names {_key!r}, which is not registered")
+check(bool(_extra), "hydrate.js has no EXTRA_KPIS, so Home's gauge and counts have no figures")
 
 # Today and Outstanding Tasks hydrate from the work queue (api/work.py). Each tile the
 # map names must be on its screen, and each key must be a figure the server returns.
