@@ -96,7 +96,7 @@ export default function ActionDialog({ scope }) {
     setState("saving");
     setError("");
     try {
-      const subject = `${k.lead}${req.title || "From the Command Center"}`.slice(0, 140);
+      const subject = `${k.lead}${req.title || "From AI Business Intelligence"}`.slice(0, 140);
       const res = await api.createTask({
         business_code: scope,
         subject,

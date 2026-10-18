@@ -19,8 +19,8 @@ export default function Sidebar({ nav, current, onGo, scope, onScope }) {
           <i />
         </div>
         <div className="brand-t">
-          <b>Command Center</b>
-          <span>Intelligent executive platform</span>
+          <b>AI Business Intelligence</b>
+          <span>Executive Intelligence Platform</span>
         </div>
       </div>
 

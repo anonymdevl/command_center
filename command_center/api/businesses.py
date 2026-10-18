@@ -39,7 +39,7 @@ def require_manager():
     window into the business is ERPNext itself.
     """
     if not ALLOWED_ROLES.intersection(frappe.get_roles()):
-        frappe.throw("The Command Center is available to management only.",
+        frappe.throw("AI Business Intelligence is available to management only.",
                      frappe.PermissionError)
 
 

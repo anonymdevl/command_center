@@ -65,7 +65,9 @@ function ThemeToggle() {
 
 function Who() {
   const u = boot.user || {};
-  const roles = (u.roles || []).join(" · ") || "Management";
+  // The role keeps its ERPNext name ("Command Center Manager"); people see what it means.
+  const SHOWN = { "Command Center Manager": "Management" };
+  const roles = [...new Set((u.roles || []).map((r) => SHOWN[r] || r))].join(" · ") || "Management";
   return (
     // The person is read from the ERPNext session, never chosen: with a real session
     // the only person it can be is the one signed in.

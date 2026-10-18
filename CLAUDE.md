@@ -279,6 +279,14 @@ The analyst reaches the ledger, purchase orders and stock movements through
 `run_report` -- 23 allowlisted standard ERPNext reports, run with the asker's
 permissions -- rather than new facts.
 
+## The product's name
+
+Shown everywhere people look as **AI Business Intelligence**, with the line **Executive
+Intelligence Platform** under it (Michael, 18 Oct 2026: "Command Center" read as an
+aviation term). Internal names stay: the app `command_center`, the `/command-center`
+address, the doctypes, error-log titles and the `Command Center Manager` role (shown in
+the top bar as "Management"). Never rename those without a migration plan.
+
 ## Home and the health score
 
 Home follows the approved mockup (`gigmann-redesign/home.html`, 18 Oct 2026): three hero

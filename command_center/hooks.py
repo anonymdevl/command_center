@@ -1,5 +1,5 @@
 app_name = "command_center"
-app_title = "Intelligent Command Center"
+app_title = "AI Business Intelligence"
 app_publisher = "Michael Appiah-Kubi"
 app_description = "An executive intelligence layer over ERPNext."
 app_email = "kubiappiahmichael@gmail.com"
@@ -24,7 +24,7 @@ add_to_apps_screen = [
     {
         "name": "command_center",
         "logo": "/assets/command_center/images/command-center.svg",
-        "title": "Command Center",
+        "title": "AI Business Intelligence",
         "route": "/command-center",
         "has_permission": "command_center.api.businesses.has_app_permission",
     }

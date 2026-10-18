@@ -95,7 +95,7 @@ function captionOf(key) {
     const it = g.items.find((i) => i.key === key);
     if (it) return it.label;
   }
-  return "Command Center";
+  return "AI Business Intelligence";
 }
 
 /**

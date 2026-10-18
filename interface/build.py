@@ -217,7 +217,7 @@ def switch_options(): return "".join(_opts)
 BODY=f"""
 <div class="shell">
 <div class="topnav">
-<div class="brand"><div class="logo">IC</div><div><b>Intelligent Command Center</b><span>Executive platform</span></div></div>
+<div class="brand"><div class="logo">IC</div><div><b>AI Business Intelligence</b><span>Executive Intelligence Platform</span></div></div>
 <span class="lbl">Business</span>
 <select class="sel" id="entity"><option>Gigmann Medical Supplies Ltd · GHS</option>
 <option disabled>Adehyeman Specialist Hospital — not connected</option>

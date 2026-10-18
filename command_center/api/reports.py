@@ -277,7 +277,7 @@ def send_scheduled(schedule: str):
                      f"<p>The full report is attached. It was written from the records as at "
                      f"{frappe.utils.escape_html(_as_of())}, with the permissions of "
                      f"{frappe.utils.escape_html(frappe.utils.get_fullname(doc.run_as))}.</p>"
-                     f"<p style='color:#777'>Sent by the Command Center on its "
+                     f"<p style='color:#777'>Sent by AI Business Intelligence on its "
                      f"{frappe.utils.escape_html(describe(doc))} schedule.</p>"),
             attachments=[{"fname": f"{title} {frappe.utils.today()}.pdf", "fcontent": pdf}],
             now=True,

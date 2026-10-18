@@ -111,11 +111,11 @@ function contextFor(b) {
   if (row) {
     const cells = Array.from(row.querySelectorAll("td")).map((td) => (td.textContent || "").trim())
       .filter((t) => t && t.length < 300 && !/^(raise it|open|give it an owner)$/i.test(t));
-    return { title: cells[0] || "From the Command Center", detail: cells.slice(1).join(" · ") };
+    return { title: cells[0] || "From AI Business Intelligence", detail: cells.slice(1).join(" · ") };
   }
   const card = b.closest(".alert, .panel, .kpi, .bk") || b.parentElement;
   const head = card?.querySelector(".awhat, .ph b, h4, b");
-  return { title: (head?.textContent || "From the Command Center").trim(),
+  return { title: (head?.textContent || "From AI Business Intelligence").trim(),
            detail: text(card, ".awhy") };
 }
 

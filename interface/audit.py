@@ -3,11 +3,11 @@ SQ=chr(39)
 # Real events from this engagement against biomed.ultrasoft-systems.com, 19 Sept 2026.
 TRAIL=[
 # --- platform setup, 19 Sep 2026, by the team that configured it ---
-("19 Sep 2026","16:40","System Administration","connect","Profiling completed","Command Center","all nine areas","Record volumes and gaps recorded for the design",""),
+("19 Sep 2026","16:40","System Administration","connect","Profiling completed","AI Business Intelligence","all nine areas","Record volumes and gaps recorded for the design",""),
 ("19 Sep 2026","15:28","System Administration","create","Records created","Task","TASK-2026-00001 to 00011","Work breakdown added to three installation projects",""),
 ("19 Sep 2026","15:21","System Administration","create","Records created","Issue","ISS-2026-00001 to 00011","Demonstration complaints, marked as such",""),
 ("19 Sep 2026","14:33","System Administration","read","Stock position read","Bin","704 valued records","GHS 3,769,970 across six locations",""),
-("19 Sep 2026","14:02","System Administration","connect","Connection registered","Command Center Connection","Gigmann ERPNext","Read access established",""),
+("19 Sep 2026","14:02","System Administration","connect","Connection registered","AI Business Intelligence connection","Gigmann ERPNext","Read access established",""),
 # --- real business activity by Gigmann staff, from the ERPNext change history ---
 ("18 Mar 2026","13:19","Samuel Opoku","change","Supplier invoice amended","Purchase Invoice","ACC-PINV-2026-00001","Changed twice within five seconds",""),
 ("2 Sep 2025","17:07","Solomon Adortsu","change","Supplier invoice amended","Purchase Invoice","ACC-PINV-2025-00245","",""),
