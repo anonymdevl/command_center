@@ -167,5 +167,33 @@ big = {"rows": [{"n": "x" * 500}] * 200}
 fit = agent._fit(big)
 check("trimmed" in fit and len(fit["rows"]) < 200, "large results are trimmed by rows")
 
+# 9. Every tool declaration is one Gemini accepts. One invalid schema -- an OBJECT with no
+#    properties is the usual one -- makes Gemini refuse the whole request, and with it
+#    every answer.
+bad = []
+
+
+def walk(name, sch, path):
+    if sch.get("type") == "object" and not sch.get("properties") and path:
+        bad.append(f"{name}:{path}")
+    for k, v in (sch.get("properties") or {}).items():
+        walk(name, v, f"{path}.{k}")
+    if "items" in sch:
+        walk(name, sch["items"], f"{path}[]")
+
+
+for d in tools.declarations():
+    walk(d["name"], d.get("parameters", {}), "")
+check(not bad, f"tool schemas Gemini would reject: {bad}")
+check(len({d["name"] for d in tools.declarations()}) == len(tools.declarations()),
+      "tool names are unique")
+
+# 10. Only allowlisted ERPNext reports run.
+try:
+    tools.run("run_report", {"report": "Some Custom Script Report"}, "GIGMANN")
+    check(False, "an unlisted report is refused")
+except tools.ToolError:
+    check(True, "an unlisted report is refused")
+
 print(f"analyst: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

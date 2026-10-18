@@ -183,6 +183,11 @@ projects, assets, employees, issues and the rest. Use it for anything the loaded
 not hold, and for the detail behind a figure.
 4. Six ready analyses: who_owes_most, has_party_ever_paid, why_order_open, \
 supplier_concentration, owes_and_waiting, party_brief.
+5. ERPNext's own standard reports, through report_filters / run_report: profit and loss, \
+balance sheet, cash flow, trial balance, general ledger, receivables and payables, gross \
+profit, sales and purchase analytics, purchase order analysis, stock balance, ledger and \
+ageing. Use them for finance, purchase orders and stock movements -- the loaded sets do \
+not hold the ledger. Date filters must fall within the data, which ends {as_of}.
 
 HOW TO WORK
 - Look before you answer. Use as many tool calls as the question needs; several in one \

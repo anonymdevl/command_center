@@ -358,6 +358,87 @@ def erpnext_document(doctype: str, name: str):
     return doc
 
 
+# ERPNext's own reports. The general ledger, purchase orders and stock movements are
+# not loaded as facts; these reports read them directly, computed the way Gigmann's
+# accountants already see them. An allowlist, because a custom script report can do
+# anything its author wrote -- these standard ones only read.
+REPORTS = {
+    "Profit and Loss Statement", "Balance Sheet", "Cash Flow", "Trial Balance",
+    "General Ledger", "Accounts Receivable", "Accounts Receivable Summary",
+    "Accounts Payable", "Accounts Payable Summary", "Gross Profit",
+    "Sales Analytics", "Purchase Analytics", "Purchase Order Analysis",
+    "Sales Order Analysis", "Item-wise Sales Register", "Item-wise Purchase Register",
+    "Stock Balance", "Stock Ledger", "Stock Ageing", "Stock Projected Qty",
+    "Budget Variance Report", "Customer Ledger Summary", "Supplier Ledger Summary",
+}
+MAX_REPORT_ROWS = 80
+
+
+def _company(business_code) -> str | None:
+    if business_code and business_code != "__all__":
+        c = frappe.db.get_value("Connected Business", business_code, "erpnext_company")
+        if c:
+            return c
+    return frappe.defaults.get_user_default("Company")
+
+
+def _report_allowed(report: str) -> str:
+    if report not in REPORTS:
+        raise ToolError(f"{report!r} is not one of the reports available here: "
+                        f"{', '.join(sorted(REPORTS))}")
+    if not frappe.db.exists("Report", report):
+        raise ToolError(f"This site has no report called {report!r}.")
+    return report
+
+
+def report_filters(report: str, business_code=None):
+    """The filters a report takes, read from its own definition."""
+    _report_allowed(report)
+    from frappe.desk.query_report import get_script
+
+    script = (get_script(report) or {}).get("script") or ""
+    i = script.find("filters")
+    return {"report": report, "company": _company(business_code),
+            "filters_definition": script[max(0, i - 20): i + 3500] if i >= 0 else script[:3500]}
+
+
+def run_report(report: str, filters=None, business_code=None):
+    """Run a standard ERPNext report with the asker's permissions; rows, columns, summary."""
+    _report_allowed(report)  # before anything else: an unlisted report never loads
+    from frappe.desk.query_report import run
+
+    pairs = filters if isinstance(filters, list) else [{"field": k, "value": v}
+                                                       for k, v in (filters or {}).items()]
+    f = {p.get("field"): p.get("value") for p in pairs if p.get("field") and p.get("value") not in (None, "")}
+    f.setdefault("company", _company(business_code))
+    try:
+        res = run(report, filters=json.dumps(f), ignore_prepared_report=True) or {}
+    except frappe.PermissionError:
+        raise ToolError(f"The person asking may not run {report}.")
+    except Exception as e:  # a missing or wrong filter is the usual cause
+        raise ToolError(f"{report} could not run with these filters ({str(e)[:300]}). "
+                        f"Call report_filters to see what it needs.")
+    cols = []
+    for c in res.get("columns") or []:
+        if isinstance(c, dict):
+            cols.append({"key": c.get("fieldname") or c.get("label"), "label": c.get("label"),
+                         "type": c.get("fieldtype")})
+        else:  # "Label:Type/Options:width"
+            label = str(c).split(":")[0]
+            cols.append({"key": label, "label": label, "type": None})
+    rows = []
+    for r in (res.get("result") or [])[:MAX_REPORT_ROWS]:
+        if isinstance(r, dict):
+            rows.append(_clean({k: v for k, v in r.items() if v not in (None, "")}))
+        elif isinstance(r, (list, tuple)):
+            rows.append(_clean({cols[i]["key"]: v for i, v in enumerate(r) if i < len(cols)}))
+    total = len(res.get("result") or [])
+    return {"report": report, "filters": f, "columns": cols, "rows": rows,
+            "row_count": total, "trimmed": total > len(rows),
+            "summary": _clean(res.get("report_summary") or []),
+            "message": _clean(res.get("message") or "")}
+
+
 # The six deep analyses that existed before the analyst. They stay: each is a careful,
 # tested piece of reasoning, and the model calling one is better than re-deriving it.
 def _intent(name: str, phrasing: str):
@@ -469,6 +550,26 @@ TOOLS = {
         "One ERPNext document in full, with its line items -- an invoice, order, quotation, "
         "employee, project, issue ...",
         {"doctype": {"type": "string"}, "name": {"type": "string"}}, ["doctype", "name"])),
+    "report_filters": (report_filters, _decl(
+        "report_filters",
+        "The filters an ERPNext report takes (dates, periodicity, fiscal year, company ...), "
+        "read from the report itself. Call before run_report when unsure.",
+        {"report": {"type": "string", "enum": sorted(REPORTS)}}, ["report"])),
+    "run_report": (run_report, _decl(
+        "run_report",
+        "Run one of ERPNext's standard reports -- the way Gigmann's accountants see the "
+        "numbers. Use for profit and loss, the balance sheet, cash flow, the trial balance, "
+        "the general ledger, purchase orders, stock movements and ageing, gross profit, and "
+        "anything else the loaded data sets do not hold. The company is filled in.",
+        {"report": {"type": "string", "enum": sorted(REPORTS)},
+         # A list of pairs, not an open object: Gemini rejects an object parameter with
+         # no declared properties.
+         "filters": {"type": "array", "description": "the report's own filters, e.g. "
+                     "from_date 2025-01-01, to_date 2025-08-19, periodicity Monthly",
+                     "items": {"type": "object", "properties": {
+                         "field": {"type": "string"}, "value": {"type": "string"}},
+                         "required": ["field", "value"]}}},
+        ["report"])),
 }
 
 for _name, _phrasing, _desc in [
