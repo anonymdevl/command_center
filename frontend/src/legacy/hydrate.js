@@ -68,6 +68,18 @@ export const CARD_KPIS = {
   proc: {
     "Top supplier": "supplier_top_share",
     "Top 2 suppliers": "supplier_top2_share",
+    // Read straight from ERPNext's purchase orders (kpi/live.py): no fact loads them yet.
+    "Purchase orders": "po_count",
+    "Longest wait": "po_longest_wait",
+  },
+  // Systems and Access: the accounts and roles themselves, read from ERPNext.
+  it: {
+    "Staff accounts": "users_active",
+    "Role conflicts": "users_role_conflicts",
+    "5 manager roles": "users_manager_roles",
+    Departments: "departments_erp",
+    Disabled: "users_disabled",
+    "Last refreshed": "last_refreshed",
   },
   inv: {
     "Stock we hold": "stock_value",
@@ -103,6 +115,13 @@ export const CARD_KPIS = {
   aud: {
     // "Unsupported" on Internal Audit is the invoices never issued, as its footnote says.
     Unsupported: "invoices_draft",
+    // The change log and the purchase orders, read from ERPNext (kpi/live.py).
+    "Changes logged": "versions_total",
+    "On business docs": "versions_business",
+    "Earliest entry": "versions_earliest",
+    Unsubmitted: "po_drafts_value",
+    "Oldest of those": "po_drafts_oldest",
+    Withdrawn: "po_cancelled",
   },
 };
 
@@ -335,6 +354,21 @@ function renderFigure(target, figure, unit) {
     target.textContent = "";
     target.append(document.createTextNode(Number(figure.value).toFixed(1)),
                   el("span", "cur", "%"));
+    return;
+  }
+
+  if (figure.unit === "date") {
+    // "5 Feb" with the year beside it, as the designed card wrote it.
+    const d = new Date(`${String(figure.value).slice(0, 10)}T00:00`);
+    target.textContent = d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    target.append(document.createTextNode(" "), el("span", "cur", String(d.getFullYear())));
+    return;
+  }
+
+  if (figure.unit === "time") {
+    const d = new Date(String(figure.value).replace(" ", "T"));
+    target.textContent = Number.isNaN(d.getTime()) ? String(figure.value)
+      : d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
     return;
   }
 

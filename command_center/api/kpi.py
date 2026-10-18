@@ -20,13 +20,18 @@ def get(keys, business_code: str | None = None):
     require_manager()
     keys = frappe.parse_json(keys) if isinstance(keys, str) else list(keys)
 
+    from command_center.kpi.live import LIVE, evaluate as evaluate_live
+
     known = load_all()
-    unknown = [k for k in keys if k not in known]
+    unknown = [k for k in keys if k not in known and k not in LIVE]
     if unknown:
         frappe.throw(f"Unknown KPI(s): {', '.join(unknown)}. "
-                     f"Known: {', '.join(sorted(known))}")
+                     f"Known: {', '.join(sorted(known) + sorted(LIVE))}")
 
-    return evaluate_set(keys, business_code)
+    # Figures from the facts, and the few read straight from ERPNext (kpi/live.py).
+    result = evaluate_set([k for k in keys if k in known], business_code)
+    result.update(evaluate_live([k for k in keys if k in LIVE], business_code))
+    return result
 
 
 @frappe.whitelist()

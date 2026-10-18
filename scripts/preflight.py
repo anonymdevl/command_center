@@ -672,15 +672,18 @@ else:
             out.append((view, src[frm:to]))
         return out
 
+    from command_center.kpi.live import LIVE as _LIVE
+    for _k in _LIVE:
+        check(_k not in REGISTRY, f"{_k} is both a KPI and a live read; one figure, one definition")
     for _view, _body in _map_sections("CARD_KPIS"):
         check(_view in _views_json,
               f"hydrate.js maps cards for {_view!r}, which is not a designed view")
         for _label, _key in re.findall(r'^\s*"?([^":\n]+?)"?:\s*"([a-z][a-z0-9_]+)"',
                                        _body, re.M):
             _label = _label.strip()
-            check(_key in REGISTRY,
+            check(_key in REGISTRY or _key in _LIVE,
                   f"hydrate.js maps {_view}/{_label!r} to KPI {_key!r}, which is not "
-                  f"registered")
+                  f"registered (kpi/*.py) or a live read (kpi/live.py)")
             _seen_keys = re.findall(r':\s*"([a-z][a-z0-9_]+)"', _body)
             check(_seen_keys.count(_key) == 1,
                   f"{_view}: two cards both map to KPI {_key!r}, so the screen would "

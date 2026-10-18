@@ -330,7 +330,7 @@ something real before any new intelligence is added. Tracked as tasks 20-31, the
 
 | | |
 |---|---|
-| Designed KPI cards | 68, of which **37 are live** (18 Oct 2026) |
+| Designed KPI cards | 68, of which **51 are live** (18 Oct 2026; 14 read straight from ERPNext via kpi/live.py) |
 | `.bk` tiles | 34, of which **6 are live** — all six on Business Overview |
 | Static drawers / explainers | 78 (48 explainers, 7 drawers, 6 drill panels) |
 | Explicit `unwired` placeholders | 4 (Home 2, Internal Audit 2) |
@@ -350,7 +350,10 @@ Order of work:
    dimension or `month:<date>`), `top_n`, `order`, `as_share`, `negate`; also `avg` and
    `max`. Notes may say `{period}` and `{group}`. Tested offline by
    `scripts/test_kpi.py` (in preflight). 23 cards wired with them on 18 Oct 2026.
-4. **Two more facts**: purchase orders (235 on the site) and stock movements.
+4. **Two more facts**: purchase orders (235 on the site) and stock movements. Meanwhile
+   `kpi/live.py` reads what the facts do not hold straight from ERPNext (users and
+   roles, the Version log, purchase orders), in the engine's figure shape, drilling to
+   the ERPNext list. Waits are measured to the purchase orders' own last date.
 5. **Fill the 54 illustrative cards**, money screens first, then operational.
 6. **The 78 static drawers** — decide prose-or-live for each, and record the decision.
 7. **The 4 `unwired` placeholders.**
