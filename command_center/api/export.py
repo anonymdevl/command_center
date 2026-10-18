@@ -330,3 +330,41 @@ code{{font-family:Menlo,Consolas,monospace;font-size:8.5pt}}
 It reads the records the person who asked may see and cannot change anything in ERPNext.
 Projections are indicative; recommendations are for management to decide on.</div>
 </body></html>"""
+
+
+@frappe.whitelist()
+def pdf_diagnostics():
+    """What the server's PDF engine has to work with -- System Managers only, reads only.
+
+    Built to find out why Biomed's PDFs came out in DejaVu Sans: which wkhtmltopdf, which
+    home folder the workers run as, whether the Manrope files are installed there, and
+    what fontconfig answers when asked for Manrope.
+    """
+    import os
+    import shutil
+    import subprocess
+
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("System Managers only.", frappe.PermissionError)
+
+    def run(*cmd):
+        if not shutil.which(cmd[0]):
+            return f"{cmd[0]} not found"
+        try:
+            r = subprocess.run(list(cmd), capture_output=True, text=True, timeout=20)
+            return (r.stdout or r.stderr).strip()[:1500]
+        except Exception as e:
+            return f"failed: {e}"
+
+    home = os.path.expanduser("~")
+    folder = os.path.join(home, ".local", "share", "fonts", "command_center")
+    return {
+        "wkhtmltopdf": run("wkhtmltopdf", "--version"),
+        "home": home,
+        "installed": sorted(os.listdir(folder)) if os.path.isdir(folder) else "folder missing",
+        "fc_match": run("fc-match", "Manrope"),
+        "fc_list": run("fc-list", ":family=Manrope", "family", "style", "file"),
+        "bundled": sorted(os.listdir(os.path.join(os.path.dirname(__file__), "fonts"))),
+        "pdf_generator": frappe.db.get_single_value("Print Settings", "pdf_generator")
+        if frappe.db.has_column("Print Settings", "pdf_generator") else "n/a",
+    }
