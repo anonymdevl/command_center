@@ -148,7 +148,8 @@ def add_comment(business_code: str, doctype: str, name: str, text: str):
 @frappe.whitelist()
 def create_task(business_code: str, subject: str, description: str = "",
                 allocated_to: str | None = None, due_date: str | None = None,
-                project: str | None = None, priority: str | None = None):
+                project: str | None = None, priority: str | None = None,
+                reference_type: str | None = None, reference_name: str | None = None):
     """Work attached to a job becomes a Task where the engineers already look.
     Work belonging to nothing becomes a ToDo."""
     conn = _conn(business_code)
@@ -163,4 +164,7 @@ def create_task(business_code: str, subject: str, description: str = "",
             "date": due_date, "status": "Open", "assigned_by": frappe.session.user}
     if priority in ("Low", "Medium", "High"):
         todo["priority"] = priority
+    # Work raised from an alert points back at it, so the alert shows who has it.
+    if reference_type and reference_name:
+        todo["reference_type"], todo["reference_name"] = reference_type, reference_name
     return conn.insert(todo)

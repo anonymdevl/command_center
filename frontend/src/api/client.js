@@ -181,9 +181,16 @@ export const api = {
 
   /* Actions a manager takes, as themselves -- never the assistant (api/actions.py). */
   people: (business_code) => call("command_center.api.actions.people", { business_code }),
-  createTask: ({ business_code, subject, description, allocated_to, due_date, priority }) =>
+  createTask: ({ business_code, subject, description, allocated_to, due_date, priority,
+                 reference_type, reference_name }) =>
     call("command_center.api.actions.create_task",
-      { business_code, subject, description, allocated_to, due_date, priority }),
+      { business_code, subject, description, allocated_to, due_date, priority,
+        reference_type, reference_name }),
+
+  /* Alerts (api/alerts.py): read, and what the manager decided about one. */
+  alerts: (business_code) => call("command_center.api.alerts.open_alerts", { business_code }),
+  alertAct: ({ name, action, reason, until, todo }) =>
+    call("command_center.api.alerts.act", { name, action, reason, until, todo }),
 
   /* Today, Approvals and Outstanding Tasks (api/work.py), and the decisions on them. */
   work: (business_code) => call("command_center.api.work.summary", { business_code }),

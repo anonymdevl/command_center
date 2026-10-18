@@ -12,6 +12,9 @@ OPEN_ORDER = {"is_open": 1}
 OPEN_TASK = {"is_open": 1}
 OPEN_CASE = {"is_open": 1}
 ACTIVE = {"is_active": 1}
+# Everything delivered and some of it not billed. per_delivered is a percentage.
+DELIVERED_UNBILLED = {"src_docstatus": 1, "per_delivered": [">=", 99.99],
+                      "unbilled_value": [">", 0]}
 
 register(
     # ---------------------------------------------------------------- order book
@@ -325,6 +328,46 @@ register(
         filters=OPEN_CASE,
         note="on {cases_open} open cases",
         drill_filters=OPEN_CASE,
+        as_of_basis="data_horizon",
+    ),
+    Kpi(
+        key="order_book_late_count",
+        label="Orders past the promised date",
+        fact="fact_sales_order",
+        measure="*",
+        agg="count",
+        unit="count",
+        direction="higher_is_worse",
+        filters={**OPEN_ORDER,
+                 "lateness_bucket": ["in", ["0-30", "31-60", "61-90", "90+"]]},
+        note="worth {order_book_late} still to deliver",
+        drill_filters={**OPEN_ORDER,
+                       "lateness_bucket": ["in", ["0-30", "31-60", "61-90", "90+"]]},
+        as_of_basis="data_horizon",
+    ),
+    Kpi(
+        key="order_delivered_unbilled",
+        label="Delivered, not invoiced",
+        fact="fact_sales_order",
+        measure="unbilled_value",
+        unit="currency",
+        direction="higher_is_worse",
+        filters=DELIVERED_UNBILLED,
+        note="across {order_delivered_unbilled_count} orders",
+        drill_filters=DELIVERED_UNBILLED,
+        as_of_basis="data_horizon",
+    ),
+    Kpi(
+        key="order_delivered_unbilled_count",
+        label="Orders delivered, not invoiced",
+        fact="fact_sales_order",
+        measure="*",
+        agg="count",
+        unit="count",
+        direction="higher_is_worse",
+        filters=DELIVERED_UNBILLED,
+        note="worth {order_delivered_unbilled}",
+        drill_filters=DELIVERED_UNBILLED,
         as_of_basis="data_horizon",
     ),
 )

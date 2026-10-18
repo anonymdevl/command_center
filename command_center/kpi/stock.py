@@ -141,4 +141,18 @@ register(
         drill_filters={"reserved_qty": [">", 0]},
         as_of_basis="data_horizon",
     ),
+    Kpi(
+        key="stock_short_products",
+        label="Products promised but not there",
+        fact="fact_stock_balance",
+        measure="*",
+        agg="count_distinct",
+        distinct_on="item_code",
+        unit="count",
+        direction="higher_is_worse",
+        filters={"available_qty": ["<", 0]},
+        note="reserved beyond what is on hand",
+        drill_filters={"available_qty": ["<", 0]},
+        as_of_basis="data_horizon",
+    ),
 )

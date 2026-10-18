@@ -48,7 +48,7 @@ export default function ActionDialog({ scope }) {
   useEffect(() => {
     const open = (e) => {
       const r = e.detail || {};
-      const decision = r.kind === "decide" || r.kind === "review";
+      const decision = r.kind === "decide" || r.kind === "review" || r.kind === "alert";
       const k = KINDS[r.kind] || KINDS.assign;
       setReq({ ...r, kind: decision || KINDS[r.kind] ? r.kind : "assign" });
       setWho("");
@@ -104,7 +104,15 @@ export default function ActionDialog({ scope }) {
         allocated_to: who,
         due_date: due || null,
         priority: k.priority || null,
+        reference_type: req.alert ? "Command Center Alert" : null,
+        reference_name: req.alert || null,
       });
+      // An alert that has become someone's To-Do says so, and says which.
+      if (req.alert && res?.name) {
+        await api.alertAct({ name: req.alert, action: "actioned", todo: res.name }).catch(() => {});
+        window.dispatchEvent(new CustomEvent("cc-alerts-changed"));
+      }
+      window.dispatchEvent(new CustomEvent("cc-work-changed"));
       setDone({ name: res?.name, person: person?.name || who, due });
       setState("done");
     } catch (err) {
@@ -170,13 +178,29 @@ export default function ActionDialog({ scope }) {
 
 
 /** Approve / reject a document, or accept / send back handed-out work. Asks first. */
+const ALERT_VERBS = {
+  defer: ["Defer", "It leaves your list until the date you choose, then comes back if the condition is still there.", "Deferred"],
+  dismiss: ["Dismiss", "It stays dismissed while the condition lasts. Your reason is kept so the rule can be tuned.", "Dismissed"],
+  false_positive: ["Not a real problem", "Marked as a false alarm. Your reason is kept so the rule that raised it can be corrected.", "Marked not a real problem"],
+};
+
+function inDays(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  const pad = (x) => String(x).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function Decision({ req, scope, note, setNote, close }) {
   const [state, setState] = useState("idle");
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [until, setUntil] = useState(inDays(7));
+  const alertVerb = req.kind === "alert" ? ALERT_VERBS[req.verb] : null;
   const back = req.kind === "review" && req.verdict === "return";
-  const verb = req.kind === "decide" ? req.action : back ? "Send it back" : "Accept it";
-  const what = req.kind === "decide"
+  const needsNote = back || !!alertVerb;
+  const verb = alertVerb ? alertVerb[0] : req.kind === "decide" ? req.action : back ? "Send it back" : "Accept it";
+  const what = alertVerb ? alertVerb[1] : req.kind === "decide"
     ? `This applies “${req.action}” to ${req.doctype} ${req.name} in ERPNext, as you. ERPNext checks that your role may take this step, and records it in the document's history.`
     : back
       ? "The To-Do reopens on their list, with your note as a comment they will see."
@@ -184,19 +208,23 @@ function Decision({ req, scope, note, setNote, close }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (back && !note.trim()) {
-      setError("Say what is still needed, so they know what to do.");
+    if (needsNote && !note.trim()) {
+      setError(back ? "Say what is still needed, so they know what to do."
+        : "Give a reason. It is kept so the rule can be tuned.");
       return;
     }
     setState("saving");
     setError("");
     try {
-      const res = req.kind === "decide"
-        ? await api.decide({ business_code: scope, doctype: req.doctype, name: req.name, action: req.action })
-        : await api.review({ todo: req.todo, verdict: req.verdict, note });
+      const res = alertVerb
+        ? await api.alertAct({ name: req.alert, action: req.verb, reason: note,
+                               until: req.verb === "defer" ? until : null })
+        : req.kind === "decide"
+          ? await api.decide({ business_code: scope, doctype: req.doctype, name: req.name, action: req.action })
+          : await api.review({ todo: req.todo, verdict: req.verdict, note });
       setResult(res || {});
       setState("done");
-      window.dispatchEvent(new CustomEvent("cc-work-changed"));
+      window.dispatchEvent(new CustomEvent(alertVerb ? "cc-alerts-changed" : "cc-work-changed"));
     } catch (err) {
       setError(err?.message || "ERPNext did not accept it.");
       setState("failed");
@@ -209,9 +237,13 @@ function Decision({ req, scope, note, setNote, close }) {
         {state === "done" ? (
           <>
             <div className="dlg-ok" aria-hidden="true">✓</div>
-            <h3 id="dlg-t">{req.kind === "decide" ? `${req.action}: done` : back ? "Sent back" : "Accepted"}</h3>
+            <h3 id="dlg-t">{alertVerb ? alertVerb[2] : req.kind === "decide" ? `${req.action}: done` : back ? "Sent back" : "Accepted"}</h3>
             <p className="dlg-sub">
-              {req.kind === "decide"
+              {alertVerb
+                ? req.verb === "defer"
+                  ? `It comes back on ${new Date(`${until}T00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} if the condition is still there.`
+                  : "It is off the list, with your reason on record."
+                : req.kind === "decide"
                 ? `${req.doctype} ${req.name} is now at “${result.workflow_state || "its next step"}”.`
                 : back ? "It is open on their list again, with your note." : "It is off your list."}
             </p>
@@ -224,9 +256,15 @@ function Decision({ req, scope, note, setNote, close }) {
             <h3 id="dlg-t">{verb}</h3>
             <p className="dlg-sub">{req.title}</p>
             <p className="dlg-hint">{what}</p>
-            {req.kind === "review" ? (
+            {alertVerb && req.verb === "defer" ? (
               <>
-                <label htmlFor="dlg-note">{back ? "What is still needed" : "Note (optional)"}</label>
+                <label htmlFor="dlg-until">Bring it back on</label>
+                <input id="dlg-until" type="date" value={until} min={inDays(1)} onChange={(e) => setUntil(e.target.value)} />
+              </>
+            ) : null}
+            {req.kind === "review" || alertVerb ? (
+              <>
+                <label htmlFor="dlg-note">{alertVerb ? "Reason" : back ? "What is still needed" : "Note (optional)"}</label>
                 <textarea id="dlg-note" rows={4} value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
               </>
             ) : null}

@@ -75,7 +75,7 @@ export default function App() {
       <Sidebar nav={nav} current={view} onGo={go} scope={scope} onScope={setScope} />
       {navOpen ? <div className="scrim-nav" onClick={() => setNavOpen(false)} /> : null}
       <div className="col">
-        <Topbar scope={scope} openDrawer={setDrawer} onMenu={() => setNavOpen((o) => !o)} />
+        <Topbar scope={scope} openDrawer={setDrawer} onGo={go} onMenu={() => setNavOpen((o) => !o)} />
         <main className="main" id="cc-main">
           <ViewTools caption={captionOf(view)} scope={scope} />
           {showBanner ? <IllustrativeNotice /> : null}

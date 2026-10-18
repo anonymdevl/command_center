@@ -150,7 +150,7 @@ function button(name, cls, onClick) {
 }
 
 /** A small menu: opens on click, closes on the next click anywhere or Escape. */
-function menu(items) {
+export function menu(items) {
   const wrap = document.createElement("span");
   wrap.className = "amenu";
   const trigger = document.createElement("button");

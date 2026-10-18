@@ -103,6 +103,9 @@ scheduler_events = {
         # read the conclusions. See connectors/remote.py.
         "*/15 * * * *": ["command_center.api.changes.refresh_peers"],
     },
+    # Alerts, from the KPIs. Also evaluated when they are read and the last pass is
+    # stale, so they do not depend on the workers running.
+    "hourly": ["command_center.alerts.engine.scheduled"],
     "daily": [
         "command_center.api.changes.prune_consumed_events",
         # Incremental by watermark, so a daily run is cheap. A full rebuild is a

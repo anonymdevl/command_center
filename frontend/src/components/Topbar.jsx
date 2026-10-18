@@ -3,6 +3,7 @@ import { boot } from "../api/boot.js";
 import { getAppearance, setAppearance } from "../appearance.js";
 import Appearance from "./Appearance.jsx";
 import AskBar from "./AskBar.jsx";
+import Bell from "./Bell.jsx";
 import Icon from "./Icon.jsx";
 
 /**
@@ -17,7 +18,7 @@ import Icon from "./Icon.jsx";
  * never ring is a control that lies about what the platform does. It arrives with the
  * engine.
  */
-export default function Topbar({ scope, openDrawer, onMenu }) {
+export default function Topbar({ scope, openDrawer, onMenu, onGo }) {
   return (
     <header className="topnav">
       {/* Phones only: the sidebar is a drawer there. */}
@@ -27,6 +28,7 @@ export default function Topbar({ scope, openDrawer, onMenu }) {
       <AskBar scope={scope} openDrawer={openDrawer} />
       <ThemeToggle />
       <div className="pill">
+        <Bell scope={scope} onGo={onGo} />
         <Appearance />
         <Who />
       </div>

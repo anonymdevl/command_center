@@ -13,6 +13,7 @@ import { followDeep, withSteps } from "../askFlow.js";
 import { runReport } from "../legacy/reports.js";
 import { wireActions } from "../legacy/actions.js";
 import { WORK_VIEWS, renderWork } from "../legacy/work.js";
+import { ALERT_VIEWS, renderAlerts } from "../legacy/alerts.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -58,6 +59,16 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
     window.addEventListener("cc-work-changed", again);
     return () => window.removeEventListener("cc-work-changed", again);
   }, [isWork, work.reload]);
+
+  // Home and the Executive Summary show the alert engine's alerts (api/alerts.py).
+  const hasAlerts = ALERT_VIEWS.has(viewKey);
+  const alerts = useApi(() => api.alerts(scope), [viewKey, scope], { skip: !hasAlerts });
+  useEffect(() => {
+    if (!hasAlerts) return;
+    const again = () => alerts.reload();
+    window.addEventListener("cc-alerts-changed", again);
+    return () => window.removeEventListener("cc-alerts-changed", again);
+  }, [hasAlerts, alerts.reload]);
 
   // The generated markup calls these by name from inline onclick attributes.
   useEffect(() => {
@@ -299,12 +310,13 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
       hydrateCards(root, viewKey, figures.data, opts) +
       hydrateTiles(root, viewKey, figures.data, opts) +
       (isWork ? renderWork(root, viewKey, work.data, opts) : 0));
+    if (hasAlerts) renderAlerts(root, viewKey, alerts.data, opts);
     // An alert drawn by the generator is a designed sample until something live replaces
     // it, and the screen's "still illustrative" line must keep saying so.
     root.querySelectorAll(".alert:not([data-live])").forEach((a) => {
       a.dataset.illustrative = "1";
     });
-  }, [viewKey, html, figures.data, work.data, isWork, scope, openDrawer]);
+  }, [viewKey, html, figures.data, work.data, isWork, alerts.data, hasAlerts, scope, openDrawer]);
 
   // The designed action buttons (Assign, the "⋯" menu, Raise it...) had no handlers.
   useEffect(() => {

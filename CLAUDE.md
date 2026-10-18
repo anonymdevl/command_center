@@ -160,8 +160,8 @@ The shell -- sidebar, bar, content panel, appearance menu -- is styled in
 `interface/shell.py` only, appended last; preflight fails any other generator that
 styles a shell class, and any screen that uses one. Card rows size against the panel
 (`container: panel`), not the window. The question bar hands its question to the Ask AI
-screen's `runSearch`, so there is one answering path. No alerts bell until the alert
-engine exists.
+screen's `runSearch`, so there is one answering path. The alerts bell (`Bell.jsx`) reads
+`api/alerts.open_alerts`, the same list as Home's "Needs your attention".
 `interface/blocks.py` is the skin of the screens' blocks (cards, tiles, panels, tables,
 tags, tabs, alerts, buttons, notes, drawer), appended after the generators and before
 the shell: it owns appearance, the generators keep layout. Business Overview's tiles get
@@ -356,7 +356,15 @@ Order of work:
     wrongly put on Command belong.
 11. **Click-through audit** of all 19 screens. Preflight checks source, not behaviour, so
     only clicking can answer "does everything work as expected".
-12. **Alert engine**, five rules. AL-01..AL-07.
+12. ~~**Alert engine**~~ Done (18 Oct 2026): `command_center/alerts/` -- seven rules over
+    the KPIs (so an alert and its card agree), thresholds in `Command Center Alert Rule`
+    (editable in the desk, AL-05), alerts in `Command Center Alert` with the lifecycle
+    raised/acknowledged/actioned/deferred/dismissed/false positive/resolved (AL-06).
+    Evaluated hourly and on read when stale (no worker needed). `legacy/alerts.js` puts
+    them in Home and the Executive Summary; the bell lists them. Assign/evidence/escalate
+    make a To-Do referencing the alert; defer/dismiss/not-a-problem need a reason. The
+    two doctypes need `bench migrate` on deploy. Not yet: per-record alerts (one per
+    invoice), Business Health's and Risk's own alerts, the other six §9 types.
 13. **Blueprint §8.5**, plus Gemini and the ten facts.
 
 Then: second-site pairing.

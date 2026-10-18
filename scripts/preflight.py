@@ -107,6 +107,8 @@ CONFIG_MODULES = (
     "command_center/install.py",     # the manager role, the local business
     "command_center/patches/",       # upgrade steps
     "command_center/ingest/",        # the platform's own derived tables
+    "command_center/alerts/",        # Command Center Alert and Alert Rule only: the
+                                     # engine runs from the scheduler, as no one
 )
 
 # The doctypes this app ships, read from the JSON on disk rather than listed by
@@ -1238,6 +1240,10 @@ _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_analyst.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,
       "scripts/test_analyst.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+_t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_alerts.py")],
+             capture_output=True, text=True, timeout=120)
+check(_t.returncode == 0,
+      "scripts/test_alerts.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
 _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_kpi.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,

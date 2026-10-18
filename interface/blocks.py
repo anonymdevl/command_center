@@ -159,6 +159,11 @@ a.chip.src{text-decoration:none}
 a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .work-banner{margin:0 0 14px}
 
+/* ---- live alerts (legacy/alerts.js) ---- */
+.asev.astate{margin-left:6px;color:var(--ok);background:var(--ok-bg);border-color:var(--ok-line)}
+.alert-flash{box-shadow:0 0 0 3px var(--accent-bg2);border-color:var(--accent)!important;transition:box-shadow .3s}
+.alert-live-list{display:block}
+
 /* ---- the action dialog: assign, request evidence, escalate, raise a finding ---- */
 .dlg-scrim{position:fixed;inset:0;background:var(--scrim);z-index:120;display:flex;align-items:center;
  justify-content:center;padding:16px}

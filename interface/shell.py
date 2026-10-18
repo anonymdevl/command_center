@@ -168,6 +168,33 @@ SHELL_CSS = """
 .ib:hover{background:var(--raised);color:var(--ink)}
 .ib.on{background:var(--raised);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line2)}
 .ib:focus-visible,.ask-go:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- the alerts bell (components/Bell.jsx) ---- */
+.bellw{position:relative}
+.ib.bell{position:relative}
+.bell-n{position:absolute;top:5px;right:4px;min-width:18px;height:18px;padding:0 5px;border-radius:var(--r-pill);
+ background:var(--raised);color:var(--ink);font-size:var(--fs-3xs);font-weight:var(--fw-bold);line-height:18px;
+ text-align:center;box-shadow:0 0 0 2px var(--surface)}
+.bell-n.fresh{background:var(--crit);color:#fff}
+.bellpop{position:absolute;right:0;top:calc(100% + 12px);width:min(380px,calc(100vw - 32px));z-index:60;
+ background:var(--surface);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--shadow2);padding:8px}
+.bellpop-h{display:flex;align-items:baseline;justify-content:space-between;padding:10px 12px 8px}
+.bellpop-h b{font-size:var(--fs-md);font-weight:var(--fw-semibold)}
+.bellpop-h span{font-size:var(--fs-xs);color:var(--mut)}
+.bellpop-l{list-style:none;margin:0;padding:0;max-height:min(60vh,440px);overflow:auto}
+.bellpop-l button{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;background:none;border:0;
+ border-radius:var(--r-sm);padding:10px 12px;cursor:pointer;color:var(--ink);font:inherit}
+.bellpop-l button:hover,.bellpop-l button:focus-visible{background:var(--hover);outline:0}
+.bell-dot{flex:none;width:8px;height:8px;border-radius:50%;margin-top:6px;background:var(--dim)}
+.bell-dot.crit{background:var(--crit)}.bell-dot.high{background:var(--high)}
+.bell-dot.med{background:var(--med)}.bell-dot.info{background:var(--info)}
+.bell-t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.bell-t b{font-size:var(--fs-sm);font-weight:var(--fw-semibold);line-height:1.35}
+.bell-t span{font-size:var(--fs-xs);color:var(--mut)}
+.bellpop-e{font-size:var(--fs-sm);color:var(--mut);padding:4px 12px 12px;margin:0}
+.bellpop-f{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--line);
+ padding:10px 12px 6px;margin-top:4px;font-size:var(--fs-sm)}
+.bellpop-f .lnk{background:none;border:0;padding:0;cursor:pointer;color:var(--accent-ink);text-decoration:none}
 .menu-b{display:none}
 .who{display:flex;align-items:center;gap:10px;padding:0 14px 0 4px;min-width:0}
 .av{width:44px;height:44px;border-radius:50%;background:var(--accent-bg2);color:var(--accent-ink);
