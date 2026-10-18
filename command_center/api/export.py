@@ -23,6 +23,7 @@ import re
 import frappe
 from frappe.utils import escape_html
 
+from command_center.api import pdf_blocks
 from command_center.api.businesses import require_manager
 
 EXPORT_CAP = 20000
@@ -49,28 +50,73 @@ def _as_of() -> str:
 
 def pdf_bytes(question: str, answer: str, checked=None, business_code: str | None = None,
               model: str | None = None) -> bytes:
-    """An answer or a report as a PDF: the download, and the scheduled email's attachment."""
+    """An answer or a report as a PDF: the download, and the scheduled email's attachment.
+
+    It reads like the screen it came from: the figure cards and charts drawn as they are
+    in the app (api/pdf_blocks.py), tables with numbers aligned, the opening line as the
+    lead. "What it checked" stays on the screen, collapsed, and is never printed -- a
+    list of lookups reads as gibberish to the people the document is for (Michael,
+    18 Oct 2026). `checked` is accepted and ignored so callers need not change.
+    """
     from frappe.utils.html_utils import sanitize_html
     from frappe.utils.pdf import get_pdf
 
-    checked = frappe.parse_json(checked) if isinstance(checked, str) else (checked or [])
-    # The answer is model-written markdown: rendered, then sanitised, never trusted.
-    body = sanitize_html(frappe.utils.md_to_html(_blocks_to_tables(answer or "")))
+    html = _document_html(question, answer, business_code, model, sanitize_html,
+                          frappe.utils.md_to_html)
+    return get_pdf(html, {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "18mm",
+                          "margin-left": "15mm", "margin-right": "15mm",
+                          "footer-center": "Page [page] of [topage]", "footer-font-size": "7",
+                          "footer-spacing": "6", "encoding": "UTF-8"})
+
+
+def _document_html(question, answer, business_code, model, sanitize, md_to_html) -> str:
+    """The PDF's HTML. Separate from get_pdf so it can be looked at in a browser."""
+    blocks = []
+
+    def keep(m):
+        drawn = pdf_blocks.render(m.group(1).lower(), m.group(2))
+        if not drawn:
+            return ""
+        blocks.append(drawn)
+        # A paragraph of its own, so markdown leaves it alone and it is easy to swap back.
+        return f"\n\nCCBLOCK{len(blocks) - 1}X\n\n"
+
+    md = re.sub(r"```\s*followups\s*\n.*?\n\s*```", "", answer or "", flags=re.S | re.I)
+    md = re.sub(r"```\s*(figures|chart)\s*\n(.*?)\n\s*```", keep, md, flags=re.S | re.I)
+    # The answer is model-written markdown: rendered, then sanitised, never trusted. The
+    # cards and charts are ours, built from escaped values, and go in after.
+    body = sanitize(md_to_html(md))
+    for i, drawn in enumerate(blocks):
+        body = re.sub(rf"<p>\s*CCBLOCK{i}X\s*</p>|CCBLOCK{i}X", lambda _m, d=drawn: d, body, count=1)
+    body = _polish(body)
     who = frappe.utils.get_fullname(frappe.session.user)
-    when = frappe.utils.format_datetime(frappe.utils.now_datetime(), "d MMM yyyy, HH:mm")
-    checks = "".join(f"<li>{escape_html(str(c))}</li>" for c in checked[:40])
-    html = PDF_TEMPLATE.format(
+    when = frappe.utils.format_datetime(frappe.utils.now_datetime(), "d MMMM yyyy, HH:mm")
+    return PDF_TEMPLATE.format(
+        css=pdf_blocks.CSS,
         business=escape_html(_business(business_code)),
         question=escape_html(question or ""),
         body=body,
-        checks=(f"<h3>What it checked</h3><ul class='checks'>{checks}</ul>" if checks else ""),
         as_of=escape_html(_as_of()),
         who=escape_html(who),
         when=escape_html(when),
         model=escape_html(model or "the analyst"),
     )
-    return get_pdf(html, {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "16mm",
-                          "margin-left": "14mm", "margin-right": "14mm"})
+
+
+_NUMBER = re.compile(r"^\s*(?:<strong>)?\s*[-+(]?(?:GHS|USD|\$|€|£)?\s*[-+]?[\d,]+(?:\.\d+)?\s*"
+                     r"(?:%|[kKMB]|days?|months?)?\)?\s*(?:</strong>)?\s*$")
+
+
+def _polish(body: str) -> str:
+    """Small things a well-made document does: the first paragraph is the lead, numbers
+    in tables line up on the right, and each recommendation stands out."""
+    body = re.sub(r"<p>", '<p class="lead">', body, count=1)
+    body = re.sub(r"<td>(.*?)</td>",
+                  lambda m: f'<td class="n">{m.group(1)}</td>' if _NUMBER.match(m.group(1)) else m.group(0),
+                  body, flags=re.S)
+    body = re.sub(r"<li>(\s*(?:<strong>)?\s*Recommendation)", r'<li class="rec">\1', body)
+    body = re.sub(r"<p>(\s*(?:<strong>)?\s*Projection)", r'<p class="proj">\1', body)
+    return body
 
 
 @frappe.whitelist(methods=["POST"])
@@ -112,44 +158,6 @@ def records_xlsx(fact: str, filters=None, business_code: str | None = None, titl
             + (" -- the export cap was reached" if s.get("count", 0) > len(rows) else ""))
     _send_xlsx(title or data.get("noun") or fact, [(title or "Records", header, rows)],
                business_code, note=note)
-
-
-def _blocks_to_tables(md: str) -> str:
-    """```figures and ```chart blocks become markdown tables on paper.
-
-    The screen draws them (charts.js); a PDF engine cannot, and a PDF that silently
-    dropped the key figures would be a worse document than the screen it came from.
-    """
-    import json
-
-    def table(head, rows):
-        out = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
-        out += ["| " + " | ".join(str(c).replace("|", "/") for c in r) + " |" for r in rows]
-        return "\n".join(out)
-
-    def convert(m):
-        lang, body = m.group(1).lower(), m.group(2)
-        try:
-            data = json.loads(body)
-        except ValueError:
-            return ""
-        if lang == "figures" and isinstance(data, list):
-            return table(["Figure", "Value", "Note"],
-                         [[f.get("label", ""), f.get("value", ""), f.get("note", "")]
-                          for f in data if isinstance(f, dict)])
-        if lang == "chart" and isinstance(data, dict):
-            series = [x for x in data.get("series") or [] if isinstance(x, dict)][:3]
-            head = [""] + [x.get("name") or "Value" for x in series]
-            rows = [[label] + [(x.get("values") or [])[i] if i < len(x.get("values") or []) else ""
-                               for x in series]
-                    for i, label in enumerate(data.get("labels") or [])]
-            title = f"**{data.get('title')}**" + (f" ({data.get('unit')})" if data.get("unit") else "")
-            return (title + "\n\n" if data.get("title") else "") + table(head, rows)
-        return ""
-
-    # Follow-up suggestions are for the screen, not for paper.
-    md = re.sub(r"```\s*followups\s*\n.*?\n\s*```", "", md, flags=re.S | re.I)
-    return re.sub(r"```\s*(figures|chart)\s*\n(.*?)\n\s*```", convert, md, flags=re.S | re.I)
 
 
 def _cell(v):
@@ -210,24 +218,43 @@ def _send_xlsx(title: str, sheets: list, business_code, note: str | None = None)
 
 
 PDF_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><style>
-body{{font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;color:#111317;font-size:11.5pt;line-height:1.5}}
-.hd{{border-bottom:2px solid #111317;padding-bottom:8px;margin-bottom:18px}}
-.hd .b{{font-size:9pt;color:#646973;letter-spacing:.04em;text-transform:uppercase}}
-.hd .t{{font-size:10pt;color:#646973;margin-top:2px}}
-h1{{font-size:17pt;margin:0 0 12px;letter-spacing:-.01em}}
-h2,h3{{font-size:12.5pt;margin:16px 0 6px}}
-table{{border-collapse:collapse;width:100%;margin:8px 0 12px;font-size:10pt}}
-th{{text-align:left;color:#646973;font-weight:600;border-bottom:1px solid #dfe1e6;padding:6px 8px}}
-td{{border-bottom:1px solid #ecedf0;padding:6px 8px}}
-ul.checks{{font-family:Menlo,Consolas,monospace;font-size:8pt;color:#646973}}
-.ft{{margin-top:26px;border-top:1px solid #dfe1e6;padding-top:8px;font-size:8.5pt;color:#646973}}
+@page{{size:A4}}
+body{{font-family:'Helvetica Neue',Helvetica,Arial,'Liberation Sans',sans-serif;color:#111317;font-size:10.5pt;
+ line-height:1.55;margin:0}}
+.hd{{border-bottom:1px solid #e3e5ea;padding-bottom:10px;margin-bottom:20px}}
+.hd td{{border:0;padding:0;vertical-align:bottom;background:none}}
+.brand{{font-size:8.5pt;font-weight:700;color:#2443e8;letter-spacing:.02em}}
+.biz{{font-size:8.5pt;color:#646973;margin-top:1px}}
+.meta{{font-size:8.5pt;color:#646973;text-align:right}}
+h1{{font-size:20pt;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin:0 0 6px}}
+.sub{{font-size:9pt;color:#646973;margin-bottom:18px}}
+p{{margin:0 0 9px}}
+p.lead{{font-size:12pt;line-height:1.5;color:#111317;margin-bottom:12px}}
+h2{{font-size:13pt;font-weight:700;margin:22px 0 8px;padding-top:4px;letter-spacing:-.01em;page-break-after:avoid}}
+h3{{font-size:11pt;font-weight:700;margin:16px 0 6px;page-break-after:avoid}}
+h4{{font-size:10.5pt;font-weight:700;margin:12px 0 4px}}
+ul,ol{{margin:4px 0 10px;padding-left:18px}}
+li{{margin:3px 0}}
+li.rec{{list-style:none;margin:8px 0 8px -18px;padding:8px 12px;border-left:3px solid #2443e8;background:#f4f6fe;
+ border-radius:0 6px 6px 0}}
+p.proj{{padding:8px 12px;border-left:3px solid #a85a0a;background:#fbf5ec;border-radius:0 6px 6px 0}}
+strong{{font-weight:700}}
+table{{border-collapse:collapse;width:100%;margin:10px 0 14px;font-size:9pt;page-break-inside:auto}}
+tr{{page-break-inside:avoid}}
+th{{text-align:left;color:#3b3f47;font-weight:700;background:#f2f3f5;border-bottom:1px solid #d9dce2;padding:7px 9px}}
+td{{border-bottom:1px solid #eceef1;padding:6px 9px;vertical-align:top}}
+td.n{{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}}
+tbody tr:nth-child(even) td{{background:#fafbfc}}
+code{{font-family:Menlo,Consolas,monospace;font-size:9pt}}
+.ft{{margin-top:28px;border-top:1px solid #e3e5ea;padding-top:9px;font-size:8pt;color:#8a8f99;line-height:1.5}}
+{css}
 </style></head><body>
-<div class="hd"><div class="b">{business} · AI Business Intelligence</div>
-<div class="t">Figures as at {as_of} · generated by {who} on {when}</div></div>
+<table class="hd" style="width:100%;border-collapse:collapse"><tr>
+<td><div class="brand">AI Business Intelligence</div><div class="biz">{business}</div></td>
+<td class="meta">Figures as at {as_of}<br>Prepared for {who} · {when}</td></tr></table>
 <h1>{question}</h1>
 {body}
-{checks}
-<div class="ft">Answered by {model} from {business}'s ERPNext data. The assistant reads the business
-within the asking person's permissions and cannot change anything in ERPNext. Projections are
-indicative; recommendations are for a person to decide on.</div>
+<div class="ft">Prepared by AI Business Intelligence from {business}'s ERPNext records, using {model}.
+It reads the records the person who asked may see and cannot change anything in ERPNext.
+Projections are indicative; recommendations are for management to decide on.</div>
 </body></html>"""

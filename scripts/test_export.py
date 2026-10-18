@@ -89,18 +89,36 @@ check(r.type == "pdf" and r.filename.endswith(".pdf"), "a pdf download")
 check("Who owes &lt;us&gt;?" in html, "the question is escaped")
 check("<script>" not in html, "the model's markdown is sanitised")
 check("Figures as at 2025-08-19" in html and "Kofi Mensah" in html, "the header says as-of and who")
-check("get_figures" in html and "cannot change anything" in html, "what it checked, and the boundary")
+check("get_figures" not in html and "What it checked" not in html,
+      "what it checked stays on the screen and never reaches the PDF")
+check("cannot change anything" in html, "the PDF states the boundary")
 
-# Figures and charts become tables on paper, never vanish.
-md = ('Lead.\n\n```figures\n[{"label": "Owed", "value": "GHS 9.18M", "note": "806"}]\n```\n\n'
+# Figures and charts are drawn on paper as on the screen, never dropped or printed raw.
+md = ('Lead.\n\n```figures\n[{"label": "Owed", "value": "GHS 9.18M", "note": "806", "tone": "bad"}]\n```\n\n'
       '```chart\n{"type": "bar", "title": "Spend", "unit": "GHS", "labels": ["A", "B"], '
-      '"series": [{"name": "Spend", "values": [10, 5]}]}\n```\n\n```chart\nnot json\n```')
-t = export._blocks_to_tables(md)
-check("| Owed | GHS 9.18M | 806 |" in t, "a figures block becomes a table")
-check("**Spend** (GHS)" in t and "| A | 10 |" in t, "a chart block becomes its data table")
-check("not json" not in t and "```" not in t, "a block that does not parse is dropped, not printed raw")
-check("Next?" not in export._blocks_to_tables('Hi.\n\n```followups\n["Next?"]\n```'),
-      "follow-up suggestions are left off paper")
+      '"series": [{"name": "Spend", "values": [10, 5]}]}\n```\n\n'
+      '```chart\n{"type": "line", "labels": ["Jan", "Feb"], "series": [{"name": "S", "values": [1, 2]}]}\n```\n\n'
+      '```chart\n{"type": "donut", "labels": ["X", "Y"], "series": [{"name": "S", "values": [3, 1]}]}\n```\n\n'
+      '```chart\nnot json\n```\n\n```followups\n["Next?"]\n```\n\n'
+      '| Who | Owed |\n|---|---|\n| UBUNTU | 636,675 |\n\n- **Recommendation:** Call them.')
+export.answer_pdf("Report", md, [], "GIGMANN", "m")
+doc = frappe.local.response.filecontent.decode()
+check('class="figs"' in doc and "GHS 9.18M" in doc and "#c2392f" in doc,
+      "a figures block becomes cards, in the tone's colour")
+check('class="bars"' in doc and "Spend" in doc, "a bar chart is drawn as bars")
+check(doc.count("<svg") == 2 and "polyline" in doc and "<path" in doc, "line and donut are drawn as SVG")
+check("not json" not in doc and "```" not in doc and "CCBLOCK" not in doc,
+      "a block that does not parse is dropped, not printed raw")
+check("Next?" not in doc, "follow-up suggestions are left off paper")
+_pol = export._polish('<p>Lead</p><p>More</p><table><tr><td>UBUNTU</td><td>636,675</td><td>GHS 9.18M</td>'
+                      '<td>73.8%</td></tr></table><ul><li><strong>Recommendation:</strong> Call.</li></ul>')
+check('<td class="n">636,675</td>' in _pol and '<td class="n">GHS 9.18M</td>' in _pol
+      and '<td class="n">73.8%</td>' in _pol and "<td>UBUNTU</td>" in _pol,
+      "numbers in tables line up on the right, words do not")
+check('<li class="rec">' in _pol and _pol.count('class="lead"') == 1,
+      "recommendations stand out; only the first paragraph is the lead")
+check("<script" not in export.pdf_blocks.figures([{"label": "<script>x</script>", "value": "1"}]),
+      "a card's text is escaped")
 
 # _cell
 check(export._cell("GHS 1,234.50") == 1234.5 and export._cell("12%") == 0.12, "figure parsing")
