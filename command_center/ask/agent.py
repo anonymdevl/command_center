@@ -1,0 +1,214 @@
+"""The analyst: Gemini, reading the business through tools, answering in full.
+
+This replaces "Gemini routes; the facts answer" (Michael's decision, 18 Oct 2026). The
+model now reads whatever figures and records a question needs -- within the asking
+person's own permissions -- and reasons over them: explains, compares, projects and
+recommends. What it cannot do is change anything. That is enforced in tools.py, by
+there being no write tool at all, and here, by rolling back any write that happens
+while a question is answered.
+
+The loop is plain: send the conversation and the tool catalogue, run whatever tools
+the model asks for, send their results back, repeat until it answers or the step budget
+runs out -- at which point it is told to answer from what it has. Every tool call is
+recorded and shown under the answer as "what it checked", so a reader can see what the
+answer rests on.
+
+If the model cannot be reached, returns nothing, or a key is not configured, this
+returns None and engine.py falls back to the pattern answers. The question box never
+goes dark because a third party is having a bad afternoon.
+"""
+
+from __future__ import annotations
+
+import json
+
+import frappe
+
+from command_center.ask import gemini, tools
+
+MAX_STEPS = 8            # rounds of tool use before the model must answer
+MAX_CALLS_PER_STEP = 6   # parallel tool calls honoured in one round
+MAX_RESULT_CHARS = 24000 # one tool result, as sent back to the model
+
+
+def answer(question: str, business_code: str | None = None, history=None) -> dict | None:
+    system = _system(business_code)
+    contents = _history(history) + [{"role": "user", "parts": [{"text": question}]}]
+    checked, errors, drill = [], [], None
+    text, steps = None, 0
+    writes_before = _writes()
+
+    for steps in range(1, MAX_STEPS + 2):
+        final = steps > MAX_STEPS
+        if final:
+            # Out of budget: answer from what has been gathered, and say if incomplete.
+            contents.append({"role": "user", "parts": [{"text": (
+                "Answer now from what you have gathered. If it is incomplete, say what "
+                "you could not check.")}]})
+        content, err = gemini.chat(contents, None if final else tools.declarations(), system)
+        if err:
+            errors.append(err)
+            break
+        contents.append(content)
+        parts = content.get("parts") or []
+        calls = [p["functionCall"] for p in parts if "functionCall" in p]
+        if not calls:
+            text = "".join(p.get("text", "") for p in parts if not p.get("thought")).strip()
+            break
+
+        responses = []
+        for call in calls[:MAX_CALLS_PER_STEP]:
+            name, args = call.get("name", ""), call.get("args") or {}
+            try:
+                result = tools.run(name, args, business_code)
+                checked.append(tools.summary(name, args))
+                if name in ("query_data", "list_records") and isinstance(result, dict):
+                    drill = {"fact": result.get("data_set"), "filters": result.get("filters")}
+            except tools.ToolError as e:
+                result = {"error": str(e)}
+                checked.append(tools.summary(name, args) + " -- refused: " + str(e)[:120])
+            except Exception:
+                errors.append(f"tool {name} failed: {frappe.get_traceback()[:1500]}")
+                result = {"error": "That lookup failed. Try a different way to answer, or "
+                                   "say the figure could not be checked."}
+                checked.append(tools.summary(name, args) + " -- failed")
+            responses.append({"functionResponse": {"name": name,
+                                                   "response": {"result": _fit(result)}}})
+        contents.append({"role": "user", "parts": responses})
+
+    # The guard. Nothing above can write -- tools.py has no write path and preflight
+    # holds it that way -- so a write here means something changed underneath us, and
+    # it is undone before anyone can rely on it.
+    if _writes() > writes_before:
+        frappe.db.rollback()
+        errors.append("A database write happened while answering a question and was "
+                      "rolled back. The assistant is read-only; this needs looking at.")
+    for e in errors:
+        frappe.log_error(title="Command Center analyst", message=f"Q: {question}\n\n{e}")
+
+    if not text:
+        return None
+    return {
+        "answered": True,
+        "answer": text,
+        "format": "markdown",
+        "question": question,
+        "checked": checked or ["nothing -- answered from the conversation so far"],
+        "planner": "gemini",
+        "mode": "analyst",
+        "model": gemini.analyst_model(),
+        "steps": steps,
+        "records": drill,
+        "figures": [],
+        "degraded": errors or None,
+    }
+
+
+def _writes() -> int:
+    # Frappe counts write queries per transaction; it is what raises "too many writes".
+    return int(getattr(frappe.db, "transaction_writes", 0) or 0)
+
+
+def _fit(result) -> dict:
+    """A tool result small enough to send back, trimmed by rows rather than mid-JSON."""
+    raw = json.dumps(result, default=str)
+    if len(raw) <= MAX_RESULT_CHARS:
+        return result if isinstance(result, dict) else {"value": result}
+    if isinstance(result, dict) and isinstance(result.get("rows"), list):
+        rows = result["rows"]
+        while rows and len(json.dumps({**result, "rows": rows}, default=str)) > MAX_RESULT_CHARS:
+            rows = rows[: max(1, len(rows) * 2 // 3)] if len(rows) > 1 else []
+        return {**result, "rows": rows, "trimmed": f"showing {len(rows)} of {len(result['rows'])} rows"}
+    return {"value": raw[:MAX_RESULT_CHARS], "trimmed": "the result was cut to fit"}
+
+
+def _history(history) -> list:
+    """The last few turns, so "and last month?" means something."""
+    out = []
+    for turn in (history or [])[-4:]:
+        q, a = (turn or {}).get("q"), (turn or {}).get("a")
+        if q and a:
+            out.append({"role": "user", "parts": [{"text": str(q)[:2000]}]})
+            out.append({"role": "model", "parts": [{"text": str(a)[:4000]}]})
+    return out
+
+
+def _system(business_code) -> str:
+    from command_center.facts.schema import DIMENSIONS, FACTS, MEASURES
+    from command_center.kpi.registry import load_all
+
+    as_of = _as_of(business_code)
+    business = _business_name(business_code)
+    data_sets = "\n".join(
+        f"- {f}: breakdowns {', '.join(DIMENSIONS.get(f, []))}; amounts "
+        f"{', '.join(MEASURES.get(f, []))}" for f in FACTS)
+    figures = "\n".join(f"- {k}: {v.label}" for k, v in sorted(load_all().items()))
+    return SYSTEM.format(today=frappe.utils.today(), as_of=as_of or "unknown",
+                         business=business, data_sets=data_sets, figures=figures)
+
+
+def _as_of(business_code):
+    try:
+        from command_center.www.command_center import _as_of as boot_as_of
+        d = boot_as_of()
+        return (d or {}).get("date") if isinstance(d, dict) else d
+    except Exception:
+        return None
+
+
+def _business_name(business_code) -> str:
+    if business_code and business_code != "__all__":
+        return frappe.db.get_value("Connected Business", business_code, "business_name") or business_code
+    return "all connected businesses"
+
+
+SYSTEM = """You are the analyst inside the Command Center, the executive platform over \
+Gigmann Medical Supplies' ERPNext. The people asking are directors and senior managers. \
+They want straight answers, the reasons behind them, and what to do next.
+
+Today is {today}. The loaded data runs up to {as_of}. Measure ageing, "this month", \
+"recent" and "overdue" against {as_of} unless the person says otherwise, and say so when \
+it matters -- a restored snapshot measured against today produces false findings.
+Scope: {business}. Amounts are in Ghana cedis (GHS) unless a result says otherwise.
+
+WHERE THE DATA IS
+1. Loaded data sets -- fast, complete, for totals, breakdowns and trends:
+{data_sets}
+   Call describe_data for the full columns and date fields of any of them.
+2. The platform's defined headline figures (get_figures), the same numbers its cards show:
+{figures}
+3. Live ERPNext, through erpnext_fields / erpnext_list / erpnext_count / erpnext_document: \
+any doctype the person asking may read -- quotations, leads, opportunities, journal entries, \
+projects, assets, employees, issues and the rest. Use it for anything the loaded sets do \
+not hold, and for the detail behind a figure.
+4. Six ready analyses: who_owes_most, has_party_ever_paid, why_order_open, \
+supplier_concentration, owes_and_waiting, party_brief.
+
+HOW TO WORK
+- Look before you answer. Use as many tool calls as the question needs; several in one \
+round when they are independent. Use find to get exact names before filtering on them.
+- Every figure you state must come from a tool result, or be calculated from tool results \
+with the calculation made plain. Never estimate a number you could have looked up, and \
+never invent one.
+- If a figure covers part of something (the top ten, one warehouse, one year), say what it \
+is part of.
+- If the data to answer is not loaded or not readable, say exactly what is missing and \
+answer what you can.
+- Projections: use the trend tool, label them "Projection", give the range and the method, \
+and say they assume the recent pattern continues.
+- Advice: label each "Recommendation", make it specific (who, what, by when), and tie it to \
+the figures that justify it.
+- Personal and payroll data: give it only when it is asked for and the tools return it.
+
+YOU CANNOT CHANGE ANYTHING
+You can read; you cannot create, edit, submit, cancel, delete, approve, pay or send \
+anything in ERPNext, whoever asks and whatever they authorise. If asked, say so plainly, \
+say where in ERPNext and by whom it would be done, and offer to draft the wording or \
+prepare the figures for the person who will do it.
+
+HOW TO ANSWER
+Lead with the answer in one or two sentences. Then the supporting detail: short headings, \
+bullets, and a markdown table for any list of more than three items. Plain words, no \
+jargon, no field names. Keep it under about 300 words unless a report is asked for. \
+End with Recommendations when there is something worth doing.
+"""

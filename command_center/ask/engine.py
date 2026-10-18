@@ -1,16 +1,15 @@
 """Answering a question, and being honest when it cannot.
 
-Two layers, deliberately separated:
+First, the analyst (agent.py): Gemini reading the business through read-only tools and
+answering in full -- figures, reasons, projections, recommendations. That is the
+decision of 18 Oct 2026, which replaced "the model routes and never states a number":
+the model is used to its full capacity for anything informational and can change
+nothing, which tools.py enforces by having no write path at all.
 
-    a planner   decides which intent applies and what it is about
-    the intents compute the answer from the facts
-
-Today the planner is pattern matching. When Claude is wired in, it replaces the
-planner and nothing else: it will choose an intent and its subject, and the figures
-will still come out of intents.py, which reads the facts. The model will never state
-a number. That is not caution for its own sake -- every honesty rule this platform
-has depends on the figure and the sentence coming from different places, so that a
-model being confidently wrong cannot change what the number says.
+Below it, the floor: the original planner and intents. If there is no key, the site
+is set to router mode, or the analyst cannot be reached, a question is answered the
+old way -- six careful analyses, routed by Gemini if it is reachable and by patterns
+if not.
 
 `suggest` exists because a question that matches nothing should say what the platform
 can answer, not "no results". A blank screen teaches nobody what to ask next.
@@ -20,7 +19,7 @@ from __future__ import annotations
 
 import frappe
 
-from command_center.ask import gemini, intents, planner_llm, resolve
+from command_center.ask import agent, gemini, intents, planner_llm, resolve
 
 # What a manager can ask today, in their words. Shown when nothing matches, and it is
 # also the list a client can be given when agreeing what the assistant covers.
@@ -112,10 +111,24 @@ def plan(question: str, business_code: str | None = None) -> tuple:
     return None, failures, note
 
 
-def answer(question: str, business_code: str | None = None) -> dict:
+def analyst_enabled() -> bool:
+    """On unless a site opts out: bench --site <site> set-config command_center_ai_mode router"""
+    return gemini.configured() and (frappe.conf.get("command_center_ai_mode") or "analyst") != "router"
+
+
+def answer(question: str, business_code: str | None = None, history=None) -> dict:
     question = (question or "").strip()
     if not question:
         return _cannot("Ask a question and I will look it up.", [])
+
+    if analyst_enabled():
+        try:
+            result = agent.answer(question, business_code, history)
+        except Exception:
+            frappe.log_error(title="Command Center analyst", message=frappe.get_traceback())
+            result = None
+        if result:
+            return result
 
     result, failures, note = plan(question, business_code)
     if result:

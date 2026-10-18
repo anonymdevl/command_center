@@ -163,14 +163,38 @@ const HANDLERS = {
     scopes: window.CC_BOOT.scopes,
   }),
   "command_center.api.facts.records": ({ fact }) => records(fact),
+  // The shape the analyst returns, so the formatted answer can be looked at offline.
+  // The figures are Biomed's verified ones; the customer rows are the samples above.
   "command_center.api.ask.answer": ({ question }) => ({
-    answered: false,
-    intent: null,
-    answer:
-      `Preview: “${question}” is answered on the live site. ` +
-      "Ask reads the fact tables there, so there is nothing to answer it from here.",
-    planner: "patterns",
-    checked: ["nothing — this is the offline preview"],
+    answered: true,
+    format: "markdown",
+    mode: "analyst",
+    planner: "gemini",
+    model: "gemini-2.5-flash",
+    question,
+    answer: [
+      `**Preview answer to “${question}”** — on the live site Gemini answers from the records.`,
+      "",
+      "Customers owe **GHS 9,177,568.91** across **806 unpaid invoices**, and **73.8%** of it " +
+        "(GHS 6,777,142.92) is more than 90 days old, measured against 19 Aug 2025.",
+      "",
+      "## Largest balances",
+      "| Customer | Owed (GHS) | Invoices | Oldest |",
+      "|---|---:|---:|---:|",
+      ...SAMPLE_CUSTOMERS.map(([n, v, c], i) => `| ${n} | ${v.toLocaleString("en-GB")} | ${c} | ${[118, 47, 96, 12][i]} days |`),
+      "",
+      "**Projection:** at the last six months' collection rate the over-90 share stays above " +
+        "70% through November — indicative only, it assumes the recent pattern continues.",
+      "",
+      "- **Recommendation:** Finance to agree payment dates with the three largest debtors this week.",
+      "- **Recommendation:** Hold new credit for customers more than 90 days overdue until a plan is agreed.",
+    ].join("\n"),
+    checked: [
+      'get_figures({"keys":["ar_total","ar_count","ar_over_90"]})',
+      'query_data({"fact":"fact_sales_invoice","group_by":["customer"],"limit":10})',
+      'trend({"fact":"fact_payment_allocation","measure":"allocated_amount","period":"month"})',
+    ],
+    records: { fact: "fact_sales_invoice", filters: {} },
   }),
   "command_center.api.ask.answerable": () => [],
   "command_center.api.ingest.status": () => [],

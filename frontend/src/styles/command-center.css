@@ -413,6 +413,20 @@ background:var(--raised)}
    "Find anything" and "Ask the business" were two doors to one room, and the designed
    placeholder on Find anything was already a question rather than a keyword. */
 .askans{padding:14px 16px 4px;font-size:var(--fs-md);line-height:1.62}
+/* The analyst's formatted answer (markdown.js builds these nodes). */
+.md > *{margin:0 0 10px}
+.md > *:last-child{margin-bottom:0}
+.md h4{font-size:var(--fs-lg);font-weight:var(--fw-semibold);margin-top:16px;letter-spacing:-.01em}
+.md h5{font-size:var(--fs-md);font-weight:var(--fw-semibold);margin-top:14px}
+.md ul,.md ol{padding-left:20px}
+.md li{margin:3px 0}
+.md code{font:var(--fs-sm) var(--mono);background:var(--raised);padding:1px 5px;border-radius:var(--r-xs)}
+.md-table{overflow-x:auto;margin:6px 0 12px}
+.md-table table.dt{min-width:100%}
+.md .md-rec,.md .md-proj{padding:9px 12px;border-radius:var(--r-sm);list-style:none}
+.md .md-rec{background:var(--accent-bg);border-left:3px solid var(--accent)}
+.md .md-proj{background:var(--raised);border-left:3px solid var(--dim)}
+.md li.md-rec,.md li.md-proj{margin-left:-20px;margin-bottom:6px}
 .askchecked{padding:10px 16px 14px;border-top:1px solid var(--line);margin-top:10px}
 .askchecked-t{display:block;font-size:var(--fs-2xs);letter-spacing:.06em;text-transform:uppercase;
 color:var(--accent);font-weight:var(--fw-bold);margin-bottom:6px}

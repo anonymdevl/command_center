@@ -15,6 +15,7 @@
  */
 
 import { exact, count, shortDate } from "../format.js";
+import { renderMarkdown } from "./markdown.js";
 
 export function renderAnswer(container, payload, { onOpen } = {}) {
   container.textContent = "";
@@ -51,7 +52,8 @@ function block(p, onOpen) {
   wrap.append(head);
 
   const body = div("askans");
-  body.append(text(p.answer || ""));
+  // The analyst answers in formatted text; the pattern answers are plain sentences.
+  body.append(p.format === "markdown" ? renderMarkdown(p.answer) : text(p.answer || ""));
   wrap.append(body);
 
   if (p.entity) {
@@ -95,11 +97,14 @@ function checkedList(items, p) {
   if (p?.planner) {
     const li = document.createElement("li");
     li.textContent =
-      p.planner === "gemini"
-        ? "the wording was read by Gemini, which chose what to look up — the figures "
-          + "above came from the records, not from the model"
-        : "the wording was matched against known question patterns, with no model "
-          + "involved";
+      p.mode === "analyst"
+        ? `answered by Gemini (${p.model}) from the lookups above. It reads the business `
+          + "within your permissions; it cannot change anything in ERPNext"
+        : p.planner === "gemini"
+          ? "the wording was read by Gemini, which chose what to look up — the figures "
+            + "above came from the records, not from the model"
+          : "the wording was matched against known question patterns, with no model "
+            + "involved";
     ul.append(li);
   }
   wrap.append(ul);

@@ -214,38 +214,43 @@ departments; 57 tasks in flight, 24 past due.
 
 ## The question box
 
-Two layers. **Gemini routes; the facts answer.** The model reads the question, the handler
-list and entity names found in the question, then names one handler and at most one
-subject. It computes, states, rounds and phrases nothing. Every figure comes from
-`ask/intents.py` reading the fact tables, and a test asserts the router and the patterns
-produce a byte-identical sentence for the same question.
+**Decision of 18 Oct 2026 (Michael), replacing "Gemini routes; the facts answer":**
+Gemini is used to its full capacity for anything informational -- it reads the figures
+and records a question needs, reasons over them, explains, compares, projects and
+recommends -- and it may never create, edit, submit, cancel or delete anything in
+ERPNext, with or without anyone's approval.
 
-`MATCHERS` in `intents.py` routes the fallback and **nothing else**. An intent must never
-check the question's wording itself: when they were the same thing, a question Gemini
-classified correctly was still refused by the intent's own regex, which made the router
-pointless. Preflight fails any intent containing a phrasing guard.
+**The analyst** (`ask/agent.py`) runs Gemini (`gemini-2.5-flash`, pinned; override with
+`command_center_analyst_model`) with the read-only tools in `ask/tools.py`: query any
+loaded fact (totals, breakdowns, periods, filters), list records, the KPI figures, name
+lookup, trend + straight-line projection, the six original analyses, and any ERPNext
+doctype through `frappe.client.get / get_list / get_count` -- Frappe's own
+permission-checked reads, so the model sees only what the asking person may see (AI-00).
+Credential doctypes are refused outright. Up to eight rounds of tool calls, then a forced
+answer. Answers are markdown; projections are labelled "Projection" with their method,
+advice "Recommendation". Every call is listed under the answer as "what it checked".
 
-Everything about Gemini is optional. No key, no network, a slow reply, a malformed reply,
-an invented handler name, or a subject that was not in the question — each falls back to
-the patterns, and the answer reports which path actually decided. The screen says so too:
-"the wording was read by Gemini … the figures above came from the records, not from the
-model."
+**Why it cannot write, in order of strength:** there is no write tool and the model can
+reach only `tools.run`, which dispatches through the `TOOLS` registry; preflight scans
+every file on the question path (`ask/`, the KPI engine, the schema) and fails on any
+write call; and `agent.py` rolls back any write made while a question is answered, then
+logs that it happened (errors are logged after the guard, so it cannot erase them).
+`scripts/test_analyst.py` tests the loop, the scope, the budget and the guard offline,
+and preflight runs it.
+
+**The floor.** No key, `command_center_ai_mode = router`, or Gemini unreachable: the
+original router + six intents answer, as before. `MATCHERS` in `intents.py` routes that
+fallback and nothing else.
 
 **The key lives in `site_config.json`, never in the repo.** Set it with
 `bench --site <site> set-config command_center_gemini_key "..."`. Preflight scans every
-tracked file for anything shaped like a Google API key and fails the build. The model is
-pinned (`gemini-2.5-flash-lite`), not a `-latest` name, because a floating name changes a
-deployed demonstration's behaviour with nobody deploying anything.
+tracked file for anything shaped like a Google API key and fails the build.
 
-What actually leaves the site is far less than the "whatever the question needs" boundary
-Michael authorised: the question as typed, the fixed handler list, and entity names found
-in the question itself. No figures, no totals, no record contents, no customer list. Worth
-telling Gigmann precisely that. If we later let the model phrase answers, figures would
-have to go to it, and that is a separate decision.
-
-Decisions on record: keep "Ask the business" (now "Ask AI") and drop "Find anything";
-deterministic first with the model as a router; Gemini rather than Claude, on Michael's
-key.
+**What leaves the site now:** the question and the last four turns; the totals,
+breakdowns and records the question needs; ERPNext documents the person may read. That is
+what `api/ask.answerable` reports. Gigmann's AI-01 (approval of the provider) and SE-07
+(disclosure of data flows to it) are **not yet on record** and are needed before
+production use.
 
 ## The sidebar captions
 

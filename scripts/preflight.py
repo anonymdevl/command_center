@@ -1135,6 +1135,54 @@ check(not _inview,
       f"change that screen too. Rename the screen's class.")
 
 # --------------------------------------------------------------------------
+# The analyst reads everything it may and changes nothing (decision of 18 Oct 2026)
+# --------------------------------------------------------------------------
+# Gemini is used to its full capacity for anything informational, and may never create,
+# edit, submit, cancel or delete anything, whoever approves. That holds only while no
+# code the analyst can reach has a write in it, so the whole question path is scanned.
+_WRITE = re.compile(
+    r"\.(insert|save|submit|cancel|delete|db_set|db_insert|db_update)\(|"
+    r"frappe\.(delete_doc|new_doc|get_doc|rename_doc|set_value|enqueue|call)\b|"
+    r"frappe\.db\.(sql|set_value|delete|insert|commit|set_single_value|bulk_insert|truncate)\b|"
+    r"frappe\.client\.(insert|save|submit|cancel|delete|set_value|insert_many|bulk_update|rename_doc)\b|"
+    r"from\s+frappe\.client\s+import[^\n]*\b(insert|save|submit|cancel|delete|set_value|"
+    r"insert_many|bulk_update|rename_doc)\b")
+_READ_PATH = [os.path.join(APP, "ask", f) for f in sorted(os.listdir(os.path.join(APP, "ask")))
+              if f.endswith(".py")] + [os.path.join(APP, "kpi", "engine.py"),
+                                       os.path.join(APP, "kpi", "registry.py"),
+                                       os.path.join(APP, "facts", "schema.py")]
+for _f in _READ_PATH:
+    _src = open(_f).read()
+    for _m in _WRITE.finditer(_src):
+        _line = _src[:_m.start()].count("\n") + 1
+        check(False, f"{os.path.relpath(_f, ROOT)}:{_line} has a write ({_m.group(0)}) on the "
+                     f"question path. The analyst is read-only: no code it can reach may "
+                     f"create, change or delete a record.")
+
+_tools_src = open(os.path.join(APP, "ask", "tools.py")).read()
+check("Command Center Site Credential" in _tools_src and '"Connected Business"' in _tools_src,
+      "ask/tools.py no longer refuses the credential doctypes (Command Center Site "
+      "Credential, Connected Business). The analyst must never read API keys.")
+check("def run(" in _tools_src and "TOOLS.get(name)" in _tools_src,
+      "ask/tools.py does not dispatch through the TOOLS registry, so the model could reach "
+      "a function that is not in its catalogue.")
+_agent_src = open(os.path.join(APP, "ask", "agent.py")).read()
+check("transaction_writes" in _agent_src and "frappe.db.rollback()" in _agent_src,
+      "ask/agent.py lost its write guard: any write made while answering must be rolled "
+      "back and recorded.")
+check("tools.run(" in _agent_src and "frappe.get_attr" not in _agent_src
+      and "getattr(tools" not in _agent_src,
+      "ask/agent.py calls tools other than through tools.run, which is the only way a "
+      "model's function call may be honoured.")
+
+# The analyst's loop -- dispatch, scope, budget, the write guard -- tested offline.
+import subprocess as _sp
+_t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_analyst.py")],
+             capture_output=True, text=True, timeout=120)
+check(_t.returncode == 0,
+      "scripts/test_analyst.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+
+# --------------------------------------------------------------------------
 print(f"preflight: {checks} checks")
 if problems:
     print(f"\n{len(problems)} problem(s):\n")
