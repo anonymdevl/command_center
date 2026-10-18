@@ -52,7 +52,7 @@ def _key() -> str | None:
 def model_for(kind: str) -> str:
     """The model in use: the site's own choice, else one found working, else preferred."""
     chosen = (frappe.conf.get(CONF_KEY[kind])
-              or frappe.cache().get_value(f"cc_gemini_model::{kind}"))
+              or frappe.cache().get_value(f"cc_gemini_model::{_kid()}::{kind}"))
     if not chosen and kind == "router":
         chosen = _discover("router")
     return chosen or PREFERRED[kind]
@@ -126,7 +126,7 @@ def _discover(kind: str) -> str | None:
             return None
         name = choose_model(r.json().get("models") or [], kind)
         if name:
-            frappe.cache().set_value(f"cc_gemini_model::{kind}", name, expires_in_sec=CHOSEN_FOR)
+            frappe.cache().set_value(f"cc_gemini_model::{_kid()}::{kind}", name, expires_in_sec=CHOSEN_FOR)
         return name
     except Exception:
         return None
@@ -140,8 +140,16 @@ def _discover(kind: str) -> str | None:
 # model the key may use answers instead. Only when every one is out does a question fail,
 # and then it says so in words, with when it comes back.
 # ---------------------------------------------------------------------------
-OUT = "cc_gemini_out::{model}"
-LISTED = "cc_gemini_listed"
+OUT = "cc_gemini_out::{kid}::{model}"
+LISTED = "cc_gemini_listed::{kid}"
+
+
+def _kid() -> str:
+    """Which key the remembered state belongs to. A new key (a new Google project) has
+    its own allowances and its own model list, so nothing learned under the old one may
+    carry over -- otherwise a fresh key would skip a model the old key had used up."""
+    import hashlib
+    return hashlib.sha256((_key() or "").encode()).hexdigest()[:10]
 
 
 def retry_after(text: str) -> int:
@@ -155,18 +163,18 @@ def retry_after(text: str) -> int:
 
 
 def is_out(model: str) -> bool:
-    return bool(frappe.cache().get_value(OUT.format(model=model)))
+    return bool(frappe.cache().get_value(OUT.format(kid=_kid(), model=model)))
 
 
 def _mark_out(model: str, seconds: int, text: str):
-    frappe.cache().set_value(OUT.format(model=model),
+    frappe.cache().set_value(OUT.format(kid=_kid(), model=model),
                              {"until": seconds, "why": _quota_words(model, text, seconds)},
                              expires_in_sec=max(60, min(seconds or 3600, 86400)))
 
 
 def _listed() -> list:
     import requests
-    cached = frappe.cache().get_value(LISTED)
+    cached = frappe.cache().get_value(LISTED.format(kid=_kid()))
     if cached:
         return cached
     try:
@@ -175,7 +183,7 @@ def _listed() -> list:
     except Exception:
         models = []
     if models:
-        frappe.cache().set_value(LISTED, models, expires_in_sec=CHOSEN_FOR)
+        frappe.cache().set_value(LISTED.format(kid=_kid()), models, expires_in_sec=CHOSEN_FOR)
     return models
 
 
@@ -236,7 +244,7 @@ def _post(kind: str, body: dict, timeout: int):
             model = _next_model(kind, tried)
             continue
         if r.status_code == 404 and not frappe.conf.get(CONF_KEY[kind]):
-            frappe.cache().delete_value(f"cc_gemini_model::{kind}")
+            frappe.cache().delete_value(f"cc_gemini_model::{_kid()}::{kind}")
             model = _discover(kind)
             if model and model not in tried:
                 continue

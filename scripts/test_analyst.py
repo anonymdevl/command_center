@@ -335,6 +335,13 @@ check(gemini.retry_after(QUOTA) == 9 * 3600 + 41 * 60 + 36, f"retry_after: {gemi
 posted.clear()
 REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S")
 check(posted and posted[0] != "gemini-3.8-flash", f"a model that is out is not tried again: {posted}")
+# A new key (a new Google project) has its own allowance: nothing learned under the old
+# key carries over.
+_old_key = frappe.conf["command_center_gemini_key"]
+frappe.conf["command_center_gemini_key"] = "another-project"
+check(not gemini.is_out("gemini-3.8-flash"), "a new key starts with every model available")
+frappe.conf["command_center_gemini_key"] = _old_key
+check(gemini.is_out("gemini-3.8-flash"), "the old key's used-up model is still remembered for it")
 
 sys.modules["requests"] = _t.SimpleNamespace(post=lambda *a, **k: _Q(), get=lambda *a, **k: _R(200, {"models": listed}))
 _cache.d.clear()
