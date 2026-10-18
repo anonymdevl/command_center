@@ -296,13 +296,13 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     if (viewKey !== "ask") return;
     window.drawThread?.();
     // The Ask AI screen's suggestions come from the server's one list, the same the
-    // bar offers; the read-only demonstration ("Issue a credit note") stays last.
+    // bar offers. No suggestion asks it to change anything: one that did ("Issue a
+    // credit note", to show the refusal) read as if the assistant could (18 Oct 2026).
     const sugg = document.getElementById("asksugg");
     if (sugg) {
       api.answerable().then((r) => {
         const list = (r?.examples || []).slice(0, 6);
         if (!list.length || !document.body.contains(sugg)) return;
-        const keep = sugg.lastElementChild;
         sugg.textContent = "";
         list.forEach((e) => {
           const b = document.createElement("button");
@@ -311,7 +311,6 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
           b.onclick = () => window.runSearch && window.runSearch(e.q);
           sugg.append(b);
         });
-        if (keep) sugg.append(keep);
       }).catch(() => {});
     }
 

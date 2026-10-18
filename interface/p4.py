@@ -7,13 +7,12 @@ V_ASK=f'''<div class="topbar"><div><h3>Ask the business</h3>
 <div class="askbox">⌕<input id="askin" placeholder="Try: why is the Ejura order still open?" autocomplete="off"></div>
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
 <button class="btn" onclick="ask(0)">Why is the Ejura order still open?</button>
-<button class="btn" onclick="ask(1)">Who owes us the most and have they ever paid?</button>
-<button class="btn" onclick="ask(2)">Issue a credit note for A1 Medicalsupplies</button></div>
+<button class="btn" onclick="ask(1)">Who owes us the most and have they ever paid?</button></div>
 <div id="answers"></div>
 <div class="note"><h4>Two things to watch on this screen</h4><ul>
 <li>Every figure in an answer came out of a query. The wording around it is written; <b>the numbers are not</b>.</li>
-<li>The third question is refused. Not because it was told to refuse — <b>there is no function on the
-platform that can issue a credit note</b>, however the request is phrased.</li></ul></div>'''
+<li>It reads; it never writes. <b>There is no function on the platform that can create, change or
+delete anything in ERPNext</b>, however a request is phrased.</li></ul></div>'''
 
 ANSWERS = [
  {"q":"Why is the Ejura order still open?",

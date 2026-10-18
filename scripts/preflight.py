@@ -1270,6 +1270,14 @@ check(not re.search(r"(?<![\w-])--crit-solid:#", open(os.path.join(ROOT, "interf
 check('[data-signal="quiet"] :is(.alert .asev' in _css_all,
       "Quiet has no chip-and-dot treatment for the status pills")
 
+# No suggested question asks the assistant to change anything. "Issue a credit note" was
+# offered to show the refusal, and read as if the assistant could (18 Oct 2026).
+_WRITE_VERBS = r"\b(issue|create|raise an?|cancel|delete|approve|submit|amend|post|send|make an?|add an?)\b"
+_suggested = re.findall(r"runSearch\('([^']+)'\)", "".join(_views.values()))
+_suggested += re.findall(r'"q":\s*"([^"]+)"', open(os.path.join(APP, "ask", "engine.py")).read())
+_bad = [q for q in _suggested if re.match(r"\s*" + _WRITE_VERBS, q, re.I)]
+check(not _bad, f"suggested questions ask the assistant to change something: {_bad[:5]}")
+
 # Today and Outstanding Tasks hydrate from the work queue (api/work.py). Each tile the
 # map names must be on its screen, and each key must be a figure the server returns.
 _wjs = open(os.path.join(ROOT, "frontend", "src", "legacy", "work.js")).read()

@@ -144,9 +144,8 @@ V_ASK=f'''<div class="topbar"><div><h3>Ask AI</h3>
 <button class="btn" onclick="runSearch('Who owes us the most, and how long have they owed it?')">Who owes us the most?</button>
 <button class="btn" onclick="runSearch('How did sales trend over the last 12 months, and where are we heading?')">How are sales trending?</button>
 <button class="btn" onclick="runSearch('Which suppliers do we depend on most, and what if one stopped?')">Which suppliers do we depend on?</button>
-<button class="btn" onclick="runSearch('Issue a credit note for A1 Medicalsupplies')">Issue a credit note</button>
 </div>
 <div id="sout2"></div>
 <div class="note"><h4>Two things worth watching</h4><ul>
 <li>It shows <b>what it checked</b>, step by step as it works, and lists every lookup under the answer. Every figure comes from the records or from ERPNext's own reports.</li>
-<li>Ask it to issue a credit note and it refuses — <b>not because it was told to, but because it has no way to change anything in ERPNext</b>.</li></ul></div>'''
+<li>It reads; it never writes. <b>It has no way to create, change, approve or delete anything in ERPNext</b> — every action on these screens is yours, taken as you.</li></ul></div>'''
