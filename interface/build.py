@@ -658,6 +658,30 @@ def signature_tiles(html: str) -> str:
 
 VIEWS = {k: signature_tiles(v) for k, v in VIEWS.items()}
 
+
+def alert_labels(html: str) -> str:
+    """A severity label at the top of each alert card, in place of the coloured edge.
+
+    Only on the alert cards the alert() generator makes (they carry the overflow
+    menu): the approval and task cards on Approvals and Outstanding Tasks share the
+    class for its layout, and "High" above a credit-note request would be noise.
+    """
+    import re as _re
+    words = {"crit": "Critical", "high": "High", "med": "Medium", "info": "For information"}
+
+    def fix(m):
+        body = m.group(0)
+        end = html.find('<div class="alert', m.end())
+        chunk = html[m.end(): end if end > 0 else len(html)]
+        if 'class="morebtn"' not in chunk:
+            return body
+        return f'{body}<span class="asev">{words[m.group(1)]}</span>'
+
+    return _re.sub(r'<div class="alert (crit|high|med|info)"><div class="arow"><div>', fix, html)
+
+
+VIEWS = {k: alert_labels(v) for k, v in VIEWS.items()}
+
 _i = BODY.index("<script>")
 _j = BODY.rindex("</script>")
 PARTS = {

@@ -179,6 +179,12 @@ export const api = {
   /* The lookups an ask has made so far, recorded under the id the page gave it. */
   askPoll: (ask_id, opts, deep = 0) => call("command_center.api.ask.poll", { ask_id, deep }, opts),
 
+  /* Actions a manager takes, as themselves -- never the assistant (api/actions.py). */
+  people: (business_code) => call("command_center.api.actions.people", { business_code }),
+  createTask: ({ business_code, subject, description, allocated_to, due_date, priority }) =>
+    call("command_center.api.actions.create_task",
+      { business_code, subject, description, allocated_to, due_date, priority }),
+
   /* Downloads. Reads only: nothing is written to the site, not even a File. */
   answerPdf: (args) => download("command_center.api.export.answer_pdf", args, "answer.pdf"),
   tablesXlsx: (args) => download("command_center.api.export.tables_xlsx", args, "tables.xlsx"),

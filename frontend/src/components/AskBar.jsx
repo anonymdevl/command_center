@@ -139,6 +139,20 @@ export default function AskBar({ scope, openDrawer }) {
     }
   };
 
+  // "Ask AI about this" on an alert card (legacy/actions.js) asks here, in the bar.
+  const askRef = useRef(ask);
+  askRef.current = ask;
+  useEffect(() => {
+    const on = (e) => {
+      const question = e.detail?.question;
+      if (!question) return;
+      window.scrollTo?.({ top: 0 });
+      askRef.current(question);
+    };
+    window.addEventListener("cc-ask", on);
+    return () => window.removeEventListener("cc-ask", on);
+  }, []);
+
   const cancel = () => {
     ctrl.current?.abort();
     setPhase(result ? "answer" : "idle");

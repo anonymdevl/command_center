@@ -295,6 +295,14 @@ const HANDLERS = {
       { q: "What should I raise with UBUNTU before our call?", area: "Briefing" },
     ],
   }),
+  // The action dialog. The preview has no ERPNext, so the To-Do is not created --
+  // the name it returns says so rather than looking like a real record.
+  "command_center.api.actions.people": () => [
+    { user: "akosua@gigmann.example", name: "Akosua Boateng" },
+    { user: "kwame@gigmann.example", name: "Kwame Mensah" },
+    { user: "efua@gigmann.example", name: "Efua Owusu" },
+  ],
+  "command_center.api.actions.create_task": ({ subject }) => ({ name: "preview-only", subject }),
   "command_center.api.ingest.status": () => [],
 };
 

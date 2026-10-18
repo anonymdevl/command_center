@@ -72,7 +72,8 @@ def alert(sev, what, why, sowhat, fig, cur, srcdt, srcnm, owner, elapsed, drawer
 # ---------------- V: COMMAND ----------------
 V_COMMAND=f'''<div class="topbar"><div><h3 class="hello" id="greet">Good morning</h3></div></div>
 <div class="banner"><b>This is a prototype.</b> Every customer, order, invoice and figure is real data
-from Gigmann's own ERPNext. Buttons that would change a record are inert — nothing here writes back.</div>
+from Gigmann's own ERPNext. Nothing here changes a business record: Assign, Request evidence and
+Escalate put a To-Do on a colleague's ERPNext list, from you, and that is all they do.</div>
 <div class="kpis" style="grid-template-columns:repeat(6,1fr)">
 {kpi("Money in, month","0","GHS","no invoices raised in the period","flat","stale")}
 {kpi("Owed to us","9.18","M GHS","74% more than 3 months late","dn","review","go('sales')")}

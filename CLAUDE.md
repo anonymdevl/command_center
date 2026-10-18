@@ -279,6 +279,17 @@ The analyst reaches the ledger, purchase orders and stock movements through
 `run_report` -- 23 allowlisted standard ERPNext reports, run with the asker's
 permissions -- rather than new facts.
 
+## Buttons on the designed screens
+
+`frontend/src/legacy/actions.js` gives every designed button a handler after each render
+(the "⋯" menus called a `moreMenu()` that only the first prototype defined, so Assign and
+every menu item did nothing until 18 Oct 2026). Assign, Request evidence, Escalate, Raise
+it, Give it an owner, Pass to someone else and Ask for more open `ActionDialog.jsx`, which
+creates a real ERPNext To-Do as the manager (`api/actions.create_task`); the assistant never
+calls it. Approve/Reject/Accept/Send back on the sample requests say they are samples.
+Defer, Dismiss and Approve inside an alert's menu are removed until an alert engine can
+remember a decision. A new button label needs a handler there, or preflight fails.
+
 ## The sidebar captions
 
 Settled by Michael, in this order, and enforced by preflight: Home, Executive Summary,

@@ -1190,6 +1190,25 @@ check(len(_codes) == 9 and _codes == _server,
       f"the Reports screen's Run buttons ({sorted(_codes)}) and api/reports.REPORTS "
       f"({sorted(_server)}) disagree, so a Run button would start a report that does not exist.")
 
+# Every designed button does something (18 Oct 2026: Assign and the "⋯" menu on every
+# alert were dead -- moreMenu() only ever existed in the first HTML prototype).
+_act = open(os.path.join(ROOT, "frontend", "src", "legacy", "actions.js")).read()
+_known = set(re.findall(r'"([a-z][a-z ]+)"', _act[_act.index("const TO_DIALOG"):_act.index("export function")]))
+_known |= {"open the pack", "load older", "defer", "dismiss"}  # handled by name in handlerFor
+_dead = sorted({re.sub(r"<[^>]+>", "", m.group(2)).strip()
+                for h in _views.values()
+                for m in re.finditer(r"<button([^>]*)>(.*?)</button>", h, re.S)
+                if "onclick" not in m.group(1) and 'class="tab' not in m.group(1)
+                and re.sub(r"<[^>]+>", "", m.group(2)).strip().lower() not in _known})
+check(not _dead,
+      f"button(s) {', '.join(map(repr, _dead))} have no onclick and legacy/actions.js does "
+      f"not know them, so they would do nothing when pressed.")
+check("<ActionDialog" in open(os.path.join(ROOT, "frontend", "src", "App.jsx")).read()
+      and "wireActions(ref.current)" in open(os.path.join(ROOT, "frontend", "src", "components",
+                                                         "LegacyView.jsx")).read(),
+      "the action dialog is not mounted or the screens' buttons are not wired, so Assign, "
+      "Escalate and the alert menus do nothing.")
+
 # The analyst's loop -- dispatch, scope, budget, the write guard -- tested offline.
 import subprocess as _sp
 _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_analyst.py")],

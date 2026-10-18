@@ -30,7 +30,37 @@ from command_center.connectors.registry import connector_for
 
 def _conn(business_code: str):
     require_manager()
-    return connector_for(business_code, acting_user=frappe.session.user)
+    return connector_for(_business(business_code), acting_user=frappe.session.user)
+
+
+def _business(business_code: str | None) -> str:
+    """"All businesses" is a view, not a place to put work: that means this site's own."""
+    if business_code and business_code != "__all__":
+        return business_code
+    code = frappe.db.get_value("Connected Business", {"is_local": 1}, "business_code")
+    if not code:
+        frappe.throw("No business on this site is marked as local, so there is nowhere to put the work.")
+    return code
+
+
+@frappe.whitelist()
+def people(business_code: str | None = None):
+    """Who work can be put on: the enabled staff accounts of the business, by name.
+
+    Names and logins only. For this site read as the system -- a manager may not hold
+    read on User, and an assignment form with nobody in it helps no one; for a peer,
+    through that site's own API, so its permissions decide.
+    """
+    require_manager()
+    code = _business(business_code)
+    filters = {"enabled": 1, "user_type": "System User",
+               "name": ["not in", ["Administrator", "Guest"]]}
+    if frappe.db.get_value("Connected Business", {"business_code": code}, "is_local"):
+        rows = frappe.get_all("User", filters=filters, fields=["name", "full_name"],
+                              order_by="full_name asc", limit=500)
+    else:
+        rows = _conn(code).get_list("User", filters=filters, fields=["name", "full_name"], limit=500)
+    return [{"user": r["name"], "name": r.get("full_name") or r["name"]} for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +148,7 @@ def add_comment(business_code: str, doctype: str, name: str, text: str):
 @frappe.whitelist()
 def create_task(business_code: str, subject: str, description: str = "",
                 allocated_to: str | None = None, due_date: str | None = None,
-                project: str | None = None):
+                project: str | None = None, priority: str | None = None):
     """Work attached to a job becomes a Task where the engineers already look.
     Work belonging to nothing becomes a ToDo."""
     conn = _conn(business_code)
@@ -128,7 +158,8 @@ def create_task(business_code: str, subject: str, description: str = "",
             "project": project, "exp_end_date": due_date, "status": "Open",
         })
     body = subject if not description else f"{subject}\n\n{description}"
-    return conn.insert({
-        "doctype": "ToDo", "description": body, "allocated_to": allocated_to,
-        "date": due_date, "status": "Open",
-    })
+    todo = {"doctype": "ToDo", "description": body, "allocated_to": allocated_to,
+            "date": due_date, "status": "Open"}
+    if priority in ("Low", "Medium", "High"):
+        todo["priority"] = priority
+    return conn.insert(todo)

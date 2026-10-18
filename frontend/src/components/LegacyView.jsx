@@ -11,6 +11,7 @@ import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js
 import { clearTurns, historyFor, remember, replaceAnswer, turnsFor } from "../askHistory.js";
 import { followDeep, withSteps } from "../askFlow.js";
 import { runReport } from "../legacy/reports.js";
+import { wireActions } from "../legacy/actions.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -284,6 +285,11 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
       hydrateCards(root, viewKey, figures.data, opts) +
       hydrateTiles(root, viewKey, figures.data, opts));
   }, [viewKey, html, figures.data, scope, openDrawer]);
+
+  // The designed action buttons (Assign, the "⋯" menu, Raise it...) had no handlers.
+  useEffect(() => {
+    wireActions(ref.current);
+  }, [viewKey, html]);
 
   // Tabs inside the generated markup are plain DOM, so they are wired here
   // rather than reimplemented.
