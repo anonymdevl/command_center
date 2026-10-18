@@ -162,6 +162,12 @@ styles a shell class, and any screen that uses one. Card rows size against the p
 (`container: panel`), not the window. The question bar hands its question to the Ask AI
 screen's `runSearch`, so there is one answering path. No alerts bell until the alert
 engine exists.
+`interface/blocks.py` is the skin of the screens' blocks (cards, tiles, panels, tables,
+tags, tabs, alerts, buttons, notes, drawer), appended after the generators and before
+the shell: it owns appearance, the generators keep layout. Business Overview's tiles get
+the mockup's cut corner and arrow from `signature_tiles()` in build.py -- that screen
+only. The screens' inline `style` sizes and weights are on the scale too, and preflight
+holds them there.
 `preview.html?theme=light&accent=cobalt&audit=1` walks all nineteen screens and lists
 anything wider than its box.
 
@@ -252,6 +258,25 @@ what `api/ask.answerable` reports. Gigmann's AI-01 (approval of the provider) an
 (disclosure of data flows to it) are **not yet on record** and are needed before
 production use.
 
+## Exports and reports
+
+`api/export.py`: an answer to PDF (Frappe's PDF engine; question escaped, model markdown
+sanitised), tables to .xlsx (one sheet each, figures as numbers), and every record
+behind a figure to .xlsx (up to 20,000 via `facts._records(cap=...)`; the public
+`records` endpoint still caps at 500). A screen goes to PDF through the browser's print
+(`@media print` in shell.py, header added by ViewTools.jsx), so the PDF holds exactly
+the rendered figures. All reads; files are streamed, no File is written.
+`scripts/test_export.py` runs in preflight.
+
+`api/reports.py`: RP-01..RP-09 as briefs to the analyst (16 rounds), run as a job on the
+long queue as the asking user, result in the cache for an hour, polled by
+`legacy/reports.js`. The Reports screen's Last run shows what happened, never a designed
+tick. Scheduling and email distribution are **not built** and the screen says so.
+
+The analyst reaches the ledger, purchase orders and stock movements through
+`run_report` -- 23 allowlisted standard ERPNext reports, run with the asker's
+permissions -- rather than new facts.
+
 ## The sidebar captions
 
 Settled by Michael, in this order, and enforced by preflight: Home, Executive Summary,
@@ -303,7 +328,8 @@ Order of work:
 8. **Task and approval engine** — Approvals, Today, Outstanding Tasks and Executive
    Summary have no facts behind them and never will; they need the platform's own records.
    TK-01..TK-08, AP-01..AP-07, AC-06.
-9. **Reports** — nine named reports, none generating anything. RP-01..RP-10.
+9. ~~**Reports**~~ — written by the analyst on Run, PDF/Excel export (18 Oct 2026).
+   Still to do: running on the planned schedule and emailing a distribution list.
 10. **Refresh control and load history on Business Health** — where the trust panels I
     wrongly put on Command belong.
 11. **Click-through audit** of all 19 screens. Preflight checks source, not behaviour, so
