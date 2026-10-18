@@ -1260,6 +1260,10 @@ _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_analyst.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,
       "scripts/test_analyst.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+_t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_schedule.py")],
+             capture_output=True, text=True, timeout=120)
+check(_t.returncode == 0,
+      "scripts/test_schedule.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
 _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_alerts.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,

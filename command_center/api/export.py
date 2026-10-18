@@ -47,11 +47,9 @@ def _as_of() -> str:
     return d.get("date") or "not loaded"
 
 
-@frappe.whitelist(methods=["POST"])
-def answer_pdf(question: str, answer: str, checked=None, business_code: str | None = None,
-               model: str | None = None):
-    """The answer as a PDF. The answer text is the one the analyst returned."""
-    require_manager()
+def pdf_bytes(question: str, answer: str, checked=None, business_code: str | None = None,
+              model: str | None = None) -> bytes:
+    """An answer or a report as a PDF: the download, and the scheduled email's attachment."""
     from frappe.utils.html_utils import sanitize_html
     from frappe.utils.pdf import get_pdf
 
@@ -71,11 +69,17 @@ def answer_pdf(question: str, answer: str, checked=None, business_code: str | No
         when=escape_html(when),
         model=escape_html(model or "the analyst"),
     )
+    return get_pdf(html, {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "16mm",
+                          "margin-left": "14mm", "margin-right": "14mm"})
+
+
+@frappe.whitelist(methods=["POST"])
+def answer_pdf(question: str, answer: str, checked=None, business_code: str | None = None,
+               model: str | None = None):
+    """The answer as a PDF. The answer text is the one the analyst returned."""
+    require_manager()
     frappe.local.response.filename = _name(question[:60] if question else "Answer", "pdf")
-    frappe.local.response.filecontent = get_pdf(html, {"page-size": "A4", "margin-top": "16mm",
-                                                       "margin-bottom": "16mm",
-                                                       "margin-left": "14mm",
-                                                       "margin-right": "14mm"})
+    frappe.local.response.filecontent = pdf_bytes(question, answer, checked, business_code, model)
     frappe.local.response.type = "pdf"
 
 

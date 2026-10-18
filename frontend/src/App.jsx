@@ -7,6 +7,7 @@ import Drawer from "./components/Drawer.jsx";
 import LegacyView from "./components/LegacyView.jsx";
 import ViewTools from "./components/ViewTools.jsx";
 import ActionDialog from "./components/ActionDialog.jsx";
+import ScheduleDialog from "./components/ScheduleDialog.jsx";
 import nav from "./legacy/nav.json";
 
 /**
@@ -84,6 +85,7 @@ export default function App() {
       </div>
       <Drawer content={drawer} onClose={() => setDrawer(null)} />
       <ActionDialog scope={scope} />
+      <ScheduleDialog scope={scope} />
     </div>
   );
 }

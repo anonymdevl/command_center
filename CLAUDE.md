@@ -364,7 +364,13 @@ Order of work:
    with the reason as a comment (`work.review`). Not yet: "Reopened twice+" (needs To-Do
    history), connected peers' queues, Executive Summary.
 9. ~~**Reports**~~ — written by the analyst on Run, PDF/Excel export (18 Oct 2026).
-   Still to do: running on the planned schedule and emailing a distribution list.
+   ~~Schedule and email~~ Done (18 Oct 2026): `Command Center Report Schedule` (one per
+   report per business; daily/weekly/monthly at an hour), set from the Reports screen
+   (ScheduleDialog.jsx) or the desk. `reports.send_due` (hourly) queues what is due;
+   `send_scheduled` writes it with the setter's permissions and emails the PDF
+   (`export.pdf_bytes`) via frappe.sendmail. Recipients must be enabled System Users of
+   the site; the board report (rp04) cannot be scheduled. Needs workers and an outgoing
+   email account on the site.
 10. **Refresh control and load history on Business Health** — where the trust panels I
     wrongly put on Command belong.
 11. **Click-through audit** of all 19 screens. Preflight checks source, not behaviour, so

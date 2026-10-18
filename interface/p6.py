@@ -28,7 +28,7 @@ V_MYDAY=f'''<div class="topbar"><div><h3>Today</h3>
 
 V_REPORTS=f'''<div class="topbar"><div><h3>Reports</h3>
 <div class="when">Nine reports · built from the records, never typed up by hand</div></div></div>
-<table class="dt"><thead><tr><th>Report</th><th>Checked against</th><th>Planned schedule</th><th>Last run</th><th></th></tr></thead><tbody>
+<table class="dt"><thead><tr><th>Report</th><th>Checked against</th><th>Schedule</th><th>Last run</th><th></th></tr></thead><tbody>
 <tr><td><b>Executive Summary</b><div style="font-size:var(--fs-2xs);color:var(--mut)">What moved, what is wrong, what needs deciding</div></td>
 <td style="color:var(--mut)">The alert and task records</td><td style="color:var(--mut)">06:00 every day</td>
 <td><span class="tag t-dr" data-last="rp01">Not run yet</span></td><td><button class="btn" data-report="rp01" onclick="runReport(&#39;rp01&#39;)">Run</button></td></tr>
@@ -57,10 +57,11 @@ V_REPORTS=f'''<div class="topbar"><div><h3>Reports</h3>
 <li>Each report is written from current data when you run it: every figure comes from the loaded records or
 from ERPNext's own reports, and the report lists <b>what it checked</b>. Where the records do not hold
 something a report should cover, it says so rather than leaving it out.</li>
-<li>Projections and recommendations are labelled as such. Nothing is sent anywhere: a report is downloaded
-by the person who ran it, and the board report is not released outside the company without an approval.</li>
-<li>The schedule column is the plan agreed for each report. Running on that schedule and emailing a
-distribution list are <b>not switched on yet</b>; today a report is written when you press Run.</li></ul></div>'''
+<li>Projections and recommendations are labelled as such. The board report is written on request only and
+is not released outside the company without an approval.</li>
+<li>Any other report can be put on a schedule: it is written at that time and emailed as a PDF to the people
+you choose, who must have an account on this site, so a report never leaves the company. It is written with
+the permissions of the person who set the schedule.</li></ul></div>'''
 
 V_SEARCH=f'''<div class="topbar"><div><h3>Find anything</h3>
 <div class="when">Records and documents · you only ever see what you are allowed to see</div></div></div>

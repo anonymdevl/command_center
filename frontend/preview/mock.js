@@ -418,6 +418,16 @@ const HANDLERS = {
            ["Ridge Pharmacy (sample)", 5.4]].map(([customer, share]) => ({
       customer, share, sold: share * 124000, drill: { fact: "fact_sales_invoice_line", filters: { customer } } })),
   }),
+  // Report schedules: one set, so the column shows both states.
+  "command_center.api.reports.schedules": () => ({
+    business_code: "GIG", unschedulable: ["rp04"],
+    schedules: [{ report: "rp02", enabled: 1, frequency: "Weekly", weekday: "Monday", day_of_month: 1, hour: 7,
+                  recipients: ["akosua@gigmann.example", "kwame@gigmann.example"], says: "Mondays at 07:00 · 2 people",
+                  next_run: "2026-10-19 07:00", last_sent: null, last_status: null }],
+  }),
+  "command_center.api.reports.save_schedule": ({ frequency, hour }) =>
+    ({ name: "preview", says: `${frequency} at ${String(hour).padStart(2, "0")}:00 (preview)`, next_run: "2026-10-19 07:00" }),
+  "command_center.api.reports.send_now": () => ({ queued: true }),
   "command_center.api.ingest.status": () => [],
 };
 

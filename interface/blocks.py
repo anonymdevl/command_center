@@ -289,6 +289,19 @@ div.work-table table.dt{min-width:560px}
 .alert-flash{box-shadow:0 0 0 3px var(--accent-bg2);border-color:var(--accent)!important;transition:box-shadow .3s}
 .alert-live-list{display:block}
 
+/* ---- report schedules (legacy/schedules.js, ScheduleDialog.jsx) ---- */
+.sch-on{color:var(--ink);font-weight:var(--fw-medium)}
+.sch-off{color:var(--mut)}
+.sch-edit{display:block;background:none;border:0;padding:0;margin-top:2px;cursor:pointer;font-size:var(--fs-xs);
+ color:var(--accent-ink)}
+.sch-next{display:block;color:var(--dim);font-size:var(--fs-2xs)}
+.sch-people{display:flex;flex-direction:column;gap:2px;max-height:200px;overflow:auto;border:1px solid var(--line2);
+ border-radius:var(--r-sm);padding:6px 10px;background:var(--bg)}
+.dlg label.sch-person{display:flex;align-items:center;gap:10px;margin:0;padding:6px 0;font-weight:var(--fw-medium);
+ color:var(--ink);font-size:var(--fs-sm);cursor:pointer}
+.dlg .sch-person input{width:auto;margin:0}
+.dlg label.sch-enabled{margin-top:14px}
+
 /* ---- the action dialog: assign, request evidence, escalate, raise a finding ---- */
 .dlg-scrim{position:fixed;inset:0;background:var(--scrim);z-index:120;display:flex;align-items:center;
  justify-content:center;padding:16px}

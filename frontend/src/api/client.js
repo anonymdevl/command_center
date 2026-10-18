@@ -187,6 +187,11 @@ export const api = {
       { business_code, subject, description, allocated_to, due_date, priority,
         reference_type, reference_name }),
 
+  /* Report schedules (api/reports.py): when each report is written and who gets it. */
+  schedules: (business_code) => call("command_center.api.reports.schedules", { business_code }),
+  saveSchedule: (args) => call("command_center.api.reports.save_schedule", args),
+  sendNow: ({ code, business_code }) => call("command_center.api.reports.send_now", { code, business_code }),
+
   /* Home's two lists (api/home.py). */
   homeDebtors: ({ business_code, mode }) => call("command_center.api.home.debtors", { business_code, mode }),
   topCustomers: ({ business_code }) => call("command_center.api.home.top_customers", { business_code }),

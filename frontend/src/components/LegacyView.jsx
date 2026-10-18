@@ -15,6 +15,7 @@ import { wireActions } from "../legacy/actions.js";
 import { WORK_VIEWS, renderWork } from "../legacy/work.js";
 import { ALERT_VIEWS, renderAlerts } from "../legacy/alerts.js";
 import { renderHealthTiles, renderHome } from "../legacy/home.js";
+import { renderSchedules } from "../legacy/schedules.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -70,6 +71,19 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
     window.addEventListener("cc-alerts-changed", again);
     return () => window.removeEventListener("cc-alerts-changed", again);
   }, [hasAlerts, alerts.reload]);
+
+  // The Reports screen says the schedule actually set for each report.
+  const isReports = viewKey === "reports";
+  const sched = useApi(() => api.schedules(scope), [viewKey, scope], { skip: !isReports });
+  useEffect(() => {
+    if (!isReports) return;
+    const again = () => sched.reload();
+    window.addEventListener("cc-schedules-changed", again);
+    return () => window.removeEventListener("cc-schedules-changed", again);
+  }, [isReports, sched.reload]);
+  useEffect(() => {
+    if (isReports) renderSchedules(ref.current, sched.data);
+  }, [isReports, sched.data, html]);
 
   // The generated markup calls these by name from inline onclick attributes.
   useEffect(() => {
