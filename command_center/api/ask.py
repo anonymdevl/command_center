@@ -46,12 +46,13 @@ def answer(question: str, business_code: str | None = None, history=None, ask_id
 # ---------------------------------------------------------------------------
 # A deeper look. A big question can need more lookups than a web request has time
 # for -- the server ends it at 120 seconds. Then the request answers with what it has,
-# and a job carries on from exactly where it stopped, with twenty rounds and ten
-# minutes; the page follows its steps and swaps in the fuller answer. If no worker
-# picks the job up, the first answer stands and the page says why.
+# and a job carries on from exactly where it stopped, with forty rounds and twenty
+# minutes (raised 18 Oct 2026: big questions may take as long as they need); the page
+# follows its steps and swaps in the fuller answer. If no worker picks the job up, the
+# first answer stands and the page says why.
 # ---------------------------------------------------------------------------
-DEEP_STEPS = 20
-DEEP_DEADLINE = 600
+DEEP_STEPS = 40
+DEEP_DEADLINE = 1200
 
 
 def _start_deep(ask_id: str, question: str, business_code, resume: dict):
@@ -59,7 +60,7 @@ def _start_deep(ask_id: str, question: str, business_code, resume: dict):
     frappe.cache().set_value(base + "::resume", resume, expires_in_sec=ASK_KEEP)
     frappe.cache().set_value(base + "::deep", {"state": "queued", "steps": []}, expires_in_sec=ASK_KEEP)
     # ask_id as a keyword is fine; job_id would be swallowed by frappe.enqueue.
-    frappe.enqueue("command_center.api.ask._deep", queue="long", timeout=900,
+    frappe.enqueue("command_center.api.ask._deep", queue="long", timeout=1500,
                    ask_id=ask_id, question=question, business_code=business_code,
                    user=frappe.session.user, enqueue_after_commit=False)
 
@@ -97,7 +98,7 @@ def _deep(ask_id: str, question: str, business_code, user: str):
 # ---------------------------------------------------------------------------
 # Live steps: answer() records each lookup under an id the page chose; poll() reads it.
 # ---------------------------------------------------------------------------
-ASK_KEEP = 900
+ASK_KEEP = 1800
 
 
 def _ask_key(ask_id: str) -> str:

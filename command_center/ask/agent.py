@@ -26,7 +26,7 @@ import frappe
 
 from command_center.ask import gemini, tools
 
-MAX_STEPS = 8            # rounds of tool use before the model must answer
+MAX_STEPS = 12           # rounds of tool use; the deadline below is what really bounds it
 MAX_CALLS_PER_STEP = 6   # parallel tool calls honoured in one round
 MAX_RESULT_CHARS = 24000 # one tool result, as sent back to the model
 # A question runs inside the web request, which the server ends at 120 seconds. The
@@ -40,7 +40,7 @@ WRAP_UP_AT = 30
 def answer(question: str, business_code: str | None = None, history=None,
            max_steps: int = MAX_STEPS, on_step=None, deadline: int = DEADLINE,
            resume: dict | None = None) -> dict | None:
-    """max_steps: rounds of tool use. A question gets eight; a report (api/reports.py)
+    """max_steps: rounds of tool use. A question gets twelve; a report (api/reports.py)
     gathers across every area and gets more. on_step(text) is told each lookup, in plain
     words, as it starts -- the live "what it is doing" under the question bar.
 
@@ -80,6 +80,19 @@ def answer(question: str, business_code: str | None = None, history=None,
                                    mode="ANY" if steps == 1 and not resume else "AUTO")
         if err:
             errors.append(err)
+            # Refused part-way, after lookups were made: what was gathered is not thrown
+            # away. One last turn asks for the answer from it (gemini falls over to
+            # another model if this one is out of allowance).
+            if checked and not final:
+                contents.append({"role": "user", "parts": [{"text": (
+                    "Answer now from what you have gathered. If it is incomplete, say "
+                    "what you could not check.")}]})
+                content, err2 = gemini.chat(contents, None, system,
+                                            timeout=int(max(15, min(60, left - 5))))
+                if not err2 and content:
+                    contents.append(content)
+                    text = "".join(p.get("text", "") for p in (content.get("parts") or [])
+                                   if not p.get("thought")).strip()
             break
         contents.append(content)
         parts = content.get("parts") or []

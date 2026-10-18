@@ -29,7 +29,9 @@ import re
 import frappe
 
 # The models used when site_config names none. Google's own 404 named 3.8 Flash as the
-# replacement for 2.5 Flash.
+# replacement for 2.5 Flash. The router (one small JSON call per question) runs on a Lite
+# model where the key has one: on the free tier each model has its own daily allowance,
+# and routing on the analyst's model spent the analyst's (18 Oct 2026: 20 a day).
 PREFERRED = {"analyst": "gemini-3.8-flash", "router": "gemini-3.8-flash"}
 DEFAULT_MODEL = PREFERRED["router"]  # kept: api/ask.answerable reports it
 CONF_KEY = {"analyst": "command_center_analyst_model", "router": "command_center_gemini_model"}
@@ -49,9 +51,11 @@ def _key() -> str | None:
 
 def model_for(kind: str) -> str:
     """The model in use: the site's own choice, else one found working, else preferred."""
-    return (frappe.conf.get(CONF_KEY[kind])
-            or frappe.cache().get_value(f"cc_gemini_model::{kind}")
-            or PREFERRED[kind])
+    chosen = (frappe.conf.get(CONF_KEY[kind])
+              or frappe.cache().get_value(f"cc_gemini_model::{kind}"))
+    if not chosen and kind == "router":
+        chosen = _discover("router")
+    return chosen or PREFERRED[kind]
 
 
 def analyst_model() -> str:
@@ -60,6 +64,29 @@ def analyst_model() -> str:
 
 def _model() -> str:
     return model_for("router")
+
+
+def ranked_models(listed: list, kind: str, allow_lite: bool = False) -> list:
+    """Every suitable model, best first. The analyst's fallbacks may include Lite."""
+    skip = ("image", "tts", "audio", "live", "embedding", "native", "exp", "preview",
+            "latest", "learnlm", "vision")
+    found = []
+    for m in listed or []:
+        name = str(m.get("name", "")).removeprefix("models/")
+        if "generateContent" not in (m.get("supportedGenerationMethods") or []):
+            continue
+        if not name.startswith("gemini-") or "flash" not in name or any(x in name for x in skip):
+            continue
+        v = re.match(r"gemini-(\d+)(?:\.(\d+))?", name)
+        if not v:
+            continue
+        lite = "lite" in name
+        if kind == "analyst" and lite and not allow_lite:
+            continue
+        # The analyst prefers full Flash, newest first, then Lite; the router the reverse.
+        prefer = (not lite) if kind == "analyst" else lite
+        found.append(((prefer, (int(v.group(1)), int(v.group(2) or 0)), -len(name)), name))
+    return [n for _, n in sorted(found, reverse=True)]
 
 
 def choose_model(listed: list, kind: str) -> str | None:
@@ -105,26 +132,116 @@ def _discover(kind: str) -> str | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Allowances. A 429 is either a short rate limit (wait a few seconds) or an allowance
+# used up for the day -- on 18 Oct 2026 the free tier gave gemini-3.8-flash 20 requests
+# a day, and a question takes several. Each model has its own allowance, so a model
+# that is out is remembered as out until Google says it resets, and the next suitable
+# model the key may use answers instead. Only when every one is out does a question fail,
+# and then it says so in words, with when it comes back.
+# ---------------------------------------------------------------------------
+OUT = "cc_gemini_out::{model}"
+LISTED = "cc_gemini_listed"
+
+
+def retry_after(text: str) -> int:
+    """Seconds until Google will serve again, from its 429 ("retry in 9h41m36s", "41s")."""
+    m = re.search(r"retry in (?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?", text or "", re.I)
+    if m and any(m.groups()):
+        h, mi, sec = (float(g) if g else 0 for g in m.groups())
+        return int(h * 3600 + mi * 60 + sec)
+    m = re.search(r'"retryDelay":\s*"(\d+)s"', text or "")
+    return int(m.group(1)) if m else 0
+
+
+def is_out(model: str) -> bool:
+    return bool(frappe.cache().get_value(OUT.format(model=model)))
+
+
+def _mark_out(model: str, seconds: int, text: str):
+    frappe.cache().set_value(OUT.format(model=model),
+                             {"until": seconds, "why": _quota_words(model, text, seconds)},
+                             expires_in_sec=max(60, min(seconds or 3600, 86400)))
+
+
+def _listed() -> list:
+    import requests
+    cached = frappe.cache().get_value(LISTED)
+    if cached:
+        return cached
+    try:
+        r = requests.get(f"{BASE}/models", params={"key": _key(), "pageSize": 200}, timeout=10)
+        models = (r.json().get("models") or []) if r.status_code == 200 else []
+    except Exception:
+        models = []
+    if models:
+        frappe.cache().set_value(LISTED, models, expires_in_sec=CHOSEN_FOR)
+    return models
+
+
+def _next_model(kind: str, tried: list) -> str | None:
+    for name in ranked_models(_listed(), kind, allow_lite=True):
+        if name not in tried and not is_out(name):
+            return name
+    return None
+
+
+def _quota_words(model: str, text: str, seconds: int) -> str:
+    limit = re.search(r"limit:\s*(\d+)", text or "")
+    free = "free_tier" in (text or "")
+    back = (f"{seconds // 3600}h {seconds % 3600 // 60}m" if seconds >= 3600 else
+            f"{max(1, seconds // 60)} minutes" if seconds else "later today")
+    return (f"Google's {'free ' if free else ''}allowance for this Gemini key is used up"
+            + (f" ({limit.group(1)} requests a day on {model})" if limit else f" on {model}")
+            + f". It comes back in {back}"
+            + ("; switching on billing for the key's Google Cloud project removes the daily limit."
+               if free else "."))
+
+
+def last_quota_words() -> str | None:
+    return getattr(frappe.local, "cc_gemini_quota", None)
+
+
 def _post(kind: str, body: dict, timeout: int):
-    """POST to the model for this kind, with one retry for a passing fault and one
-    re-choice of model when Google has retired the one in use. Returns the response."""
+    """POST to the model for this kind. A passing fault is retried once; a retired model
+    is replaced; a model whose allowance is used up is skipped for the next one the key
+    may use. Returns the response (the last one, if every model refused)."""
     import time
 
     import requests
 
+    def send(model):
+        return requests.post(ENDPOINT.format(model=model), params={"key": _key()}, json=body,
+                             timeout=timeout)
+
     model = model_for(kind)
-    r = requests.post(ENDPOINT.format(model=model), params={"key": _key()}, json=body,
-                      timeout=timeout)
-    if r.status_code in (429, 500, 502, 503, 504):
-        time.sleep(1.5)
-        r = requests.post(ENDPOINT.format(model=model), params={"key": _key()}, json=body,
-                          timeout=timeout)
-    if r.status_code == 404 and not frappe.conf.get(CONF_KEY[kind]):
-        frappe.cache().delete_value(f"cc_gemini_model::{kind}")
-        replacement = _discover(kind)
-        if replacement and replacement != model:
-            r = requests.post(ENDPOINT.format(model=replacement), params={"key": _key()},
-                              json=body, timeout=timeout)
+    if is_out(model):
+        model = _next_model(kind, [model]) or model
+    tried, r = [], None
+    while model and len(tried) < 6:
+        tried.append(model)
+        r = send(model)
+        if r.status_code in (500, 502, 503, 504):
+            time.sleep(1.5)
+            r = send(model)
+        if r.status_code == 429:
+            wait = retry_after(r.text)
+            if 0 < wait <= 8:  # a per-minute limit: worth waiting for
+                time.sleep(wait)
+                r = send(model)
+        if r.status_code == 429:
+            wait = retry_after(r.text)
+            _mark_out(model, wait, r.text)
+            frappe.local.cc_gemini_quota = _quota_words(model, r.text, wait)
+            model = _next_model(kind, tried)
+            continue
+        if r.status_code == 404 and not frappe.conf.get(CONF_KEY[kind]):
+            frappe.cache().delete_value(f"cc_gemini_model::{kind}")
+            model = _discover(kind)
+            if model and model not in tried:
+                continue
+        break
+    frappe.local.cc_gemini_used = tried[-1] if tried else None
     return r
 
 
@@ -160,8 +277,12 @@ def chat(contents: list, tools: list, system: str, timeout: int = 40, mode: str 
             # A model that does not know thinkingLevel: ask again without it.
             body["generationConfig"].pop("thinkingConfig", None)
             r = _post("analyst", body, timeout)
+        if r.status_code == 429 and last_quota_words():
+            # Every model the key may use is out: say it in words, with when it is back.
+            return None, last_quota_words()
         if r.status_code != 200:
-            return None, f"Gemini refused ({analyst_model()}): {r.status_code} {r.text[:900]}"
+            used = getattr(frappe.local, "cc_gemini_used", None) or analyst_model()
+            return None, f"Gemini refused ({used}): {r.status_code} {r.text[:900]}"
         payload = r.json()
         candidates = payload.get("candidates") or []
         if not candidates or "content" not in candidates[0]:

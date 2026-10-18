@@ -20,7 +20,7 @@ import frappe
 
 from command_center.api.businesses import require_manager
 
-REPORT_STEPS = 16
+REPORT_STEPS = 30
 KEEP_SECONDS = 3600
 
 # code: (title, the brief). Sections follow the RTM's RP rows.
@@ -91,7 +91,7 @@ def generate(code: str, business_code: str | None = None):
     frappe.cache().set_value(_key(job_id), {"state": "running", "code": code},
                              expires_in_sec=KEEP_SECONDS)
     # report_id, not job_id: frappe.enqueue keeps job_id for itself and would swallow it.
-    frappe.enqueue("command_center.api.reports._run", queue="long", timeout=900,
+    frappe.enqueue("command_center.api.reports._run", queue="long", timeout=1500,
                    report_id=job_id, code=code, business_code=business_code,
                    user=frappe.session.user, enqueue_after_commit=False)
     return {"job_id": job_id, "title": REPORTS[code][0]}
@@ -116,7 +116,7 @@ def _run(report_id: str, code: str, business_code: str | None, user: str):
         brief = BRIEF.format(title=title, business=_business(business_code),
                              sections=sections, as_of=_as_of())
         # A job, not a web request: room for a report's sixteen rounds.
-        result = agent.answer(brief, business_code, max_steps=REPORT_STEPS, deadline=600)
+        result = agent.answer(brief, business_code, max_steps=REPORT_STEPS, deadline=1200)
         if not result:
             raise RuntimeError("the analyst could not be reached or returned nothing")
         result.update({"title": title, "code": code,
@@ -229,7 +229,7 @@ def send_now(code: str, business_code: str | None = None):
     name = frappe.db.get_value(SCHEDULE, {"report": code, "business_code": _local_code(business_code)})
     if not name:
         frappe.throw("Set the schedule first, so there is a list to send it to.")
-    frappe.enqueue("command_center.api.reports.send_scheduled", queue="long", timeout=900,
+    frappe.enqueue("command_center.api.reports.send_scheduled", queue="long", timeout=1500,
                    schedule=name, enqueue_after_commit=True)
     return {"queued": True}
 
@@ -244,7 +244,7 @@ def send_due():
         # Moved on before the job runs, so a slow or failed job is not sent twice.
         doc.db_set("next_run", next_run(doc), update_modified=False)
         frappe.enqueue("command_center.api.reports.send_scheduled", queue="long",
-                       timeout=900, schedule=name)
+                       timeout=1500, schedule=name)
     frappe.db.commit()
 
 
@@ -262,7 +262,7 @@ def send_scheduled(schedule: str):
             raise RuntimeError("the analyst needs the Gemini key on this site")
         brief = BRIEF.format(title=title, business=_business(doc.business_code),
                              sections=sections, as_of=_as_of())
-        result = agent.answer(brief, doc.business_code, max_steps=REPORT_STEPS, deadline=600)
+        result = agent.answer(brief, doc.business_code, max_steps=REPORT_STEPS, deadline=1200)
         if not result or not result.get("answer"):
             raise RuntimeError("the analyst returned nothing")
         pdf = pdf_bytes(title, result["answer"], result.get("checked"), doc.business_code,

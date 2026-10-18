@@ -72,6 +72,9 @@ function Business({ scope, onScope }) {
   const current = options.find((s) => s.code === scope) || options[0];
   const label = current?.label || "No business connected";
   const canSwitch = options.length > 1;
+  // With one business the switcher still opens: it says which business this is and how
+  // another one is added, instead of a greyed-out button that reads as broken.
+  const canConnect = (boot.user?.roles || []).some((r) => /system manager/i.test(r));
 
   useEffect(() => {
     if (!open) return;
@@ -99,8 +102,7 @@ function Business({ scope, onScope }) {
         </div>
         <button
           className="biz-sw"
-          disabled={!canSwitch}
-          title={canSwitch ? "Switch business" : "Only one business is connected"}
+          title={canSwitch ? "Switch business" : "The business you are looking at"}
           aria-label="Switch business"
           aria-haspopup="listbox"
           aria-expanded={open}
@@ -140,6 +142,16 @@ function Business({ scope, onScope }) {
               </button>
             );
           })}
+          {!canSwitch ? (
+            <div className="biz-note">
+              {options.length ? "This is the only business connected so far. " : "No business is connected yet. "}
+              Each Gigmann company on its own ERPNext site can be connected, and then
+              chosen here, or seen together as All businesses.
+              {canConnect ? (
+                <a href="/app/connected-business/new" target="_blank" rel="noreferrer">Connect a business ↗</a>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

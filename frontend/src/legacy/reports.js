@@ -12,7 +12,7 @@ import { renderMarkdown } from "./markdown.js";
 import { tablesFrom } from "../exportTables.js";
 
 const POLL_MS = 2500;
-const GIVE_UP_MS = 6 * 60 * 1000;
+const GIVE_UP_MS = 22 * 60 * 1000;
 
 export async function runReport(code, scope) {
   const out = document.getElementById("rpout");

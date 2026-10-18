@@ -60,7 +60,7 @@ export function followDeep(askId, { onSteps, onDone, onFailed, onStuck }) {
       if (st?.state === "done") return onDone(st.result);
       if (st?.state === "failed") return onFailed(st.error || "the deeper look stopped");
       if (st?.state === "queued" && Date.now() - t0 > 45000) return onStuck();
-      if (Date.now() - t0 > 11 * 60000) return onFailed("it took longer than eleven minutes");
+      if (Date.now() - t0 > 22 * 60000) return onFailed("it took longer than twenty minutes");
     }
   })();
   return () => {

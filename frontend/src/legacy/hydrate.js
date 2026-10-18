@@ -362,7 +362,8 @@ function renderFigure(target, figure, unit) {
  */
 function provenance(node, figure) {
   const state = figure.data_status?.state;
-  if (state === "stale") setFlag(node, "as at", "f-med");
+  // Quiet: it is on nearly every card, so it must not shout like a status does.
+  if (state === "stale") setFlag(node, "as at", "f-asat");
   else if (state === "failed") setFlag(node, "load failed", "f-crit");
   else clearFlag(node);
   delete node.dataset.illustrative;

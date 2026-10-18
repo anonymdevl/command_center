@@ -34,6 +34,7 @@ class _DB:
 
 frappe = types.ModuleType("frappe")
 frappe.db = _DB()
+frappe.local = types.SimpleNamespace()
 frappe.conf = {"command_center_gemini_key": "test"}
 frappe.logged = []
 frappe.log_error = lambda title=None, message=None: frappe.logged.append(
@@ -299,6 +300,49 @@ frappe.conf["command_center_analyst_model"] = "gemini-2.5-flash"
 REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S")
 check(posted == ["gemini-2.5-flash"], "a model named in site_config is never second-guessed")
 frappe.conf.pop("command_center_analyst_model", None)
+
+# 12b. An allowance used up (18 Oct 2026: free tier, 20 a day on 3.8 Flash): that model
+# is remembered as out, the next one the key may use answers, and when every one is out
+# the error says so in words, with when it comes back.
+QUOTA = ('{"error": {"code": 429, "message": "You exceeded your current quota... Quota exceeded '
+         'for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, '
+         'limit: 20, model: gemini-3.8-flash\\nPlease retry in 9h41m36.7s.", '
+         '"status": "RESOURCE_EXHAUSTED"}}')
+posted.clear()
+_cache.d.clear()
+frappe.local = types.SimpleNamespace()
+gemini.PREFERRED["analyst"] = "gemini-3.8-flash"
+
+
+class _Q(_R):
+    def __init__(self):
+        self.status_code, self._b, self.text = 429, {}, QUOTA
+
+
+def _post_q(url, params=None, json=None, timeout=None):
+    posted.append(url.split("/models/")[1].split(":")[0])
+    if "gemini-3.8-flash-lite:" in url:
+        return _R(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": "OK"}]}}]})
+    return _Q()
+
+
+sys.modules["requests"] = _t.SimpleNamespace(post=_post_q, get=lambda *a, **k: _R(200, {"models": listed}))
+content, err = REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S")
+check(err is None and posted[0] == "gemini-3.8-flash" and posted[-1] == "gemini-3.8-flash-lite",
+      f"a used-up allowance falls over to the next model: {posted}, {err}")
+check(gemini.is_out("gemini-3.8-flash"), "the used-up model is remembered as out")
+check(gemini.retry_after(QUOTA) == 9 * 3600 + 41 * 60 + 36, f"retry_after: {gemini.retry_after(QUOTA)}")
+posted.clear()
+REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S")
+check(posted and posted[0] != "gemini-3.8-flash", f"a model that is out is not tried again: {posted}")
+
+sys.modules["requests"] = _t.SimpleNamespace(post=lambda *a, **k: _Q(), get=lambda *a, **k: _R(200, {"models": listed}))
+_cache.d.clear()
+frappe.local = types.SimpleNamespace()
+content, err = REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S")
+check(content is None and err and "allowance" in err and "9h 41m" in err and "billing" in err,
+      f"every model out: said in words, with when it is back: {err}")
+_cache.d.clear()
 
 # 13. Thinking is asked for low; a model that refuses the setting is asked again without it.
 sent = []

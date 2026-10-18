@@ -98,14 +98,13 @@ table.dt tr:hover td{background:var(--hover)}
 .alert>*{flex:1 1 100%;min-width:0}
 .alert>.arow{gap:20px;align-items:flex-start;padding-bottom:16px}
 .alert>.arow>div:first-child{min-width:0}
-.asev{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-2xs);font-weight:var(--fw-semibold);
- padding:3px 10px 3px 8px;border-radius:var(--r-pill);margin-bottom:10px;border:1px solid var(--line2);
- color:var(--mut);background:var(--raised)}
-.asev::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
-.alert.crit .asev{color:var(--crit);background:var(--crit-bg);border-color:var(--crit-line)}
-.alert.high .asev{color:var(--high);background:var(--high-bg);border-color:var(--high-line)}
-.alert.med .asev{color:var(--stale);background:var(--med-bg);border-color:var(--med-line)}
-.alert.info .asev{color:var(--info);background:var(--accent-bg2);border-color:var(--accent-dim)}
+.asev{display:inline-flex;align-items:center;font-size:var(--fs-2xs);font-weight:var(--fw-semibold);
+ padding:4px 11px;border-radius:var(--r-pill);margin-bottom:10px;border:0;letter-spacing:.01em;
+ color:var(--ink2);background:var(--raised)}
+.alert.crit .asev{color:var(--on-solid);background:var(--crit-solid)}
+.alert.high .asev{color:var(--on-solid);background:var(--high-solid)}
+.alert.med .asev{color:var(--on-solid);background:var(--med-solid)}
+.alert.info .asev{color:var(--on-accent);background:var(--solid)}
 .awhat{font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.015em;line-height:1.35}
 .awhy{font-size:var(--fs-sm);color:var(--mut);margin-top:6px;line-height:1.55}
 .asw{font-size:var(--fs-sm);color:var(--ink2);font-weight:var(--fw-medium);margin-top:10px;line-height:1.5}
@@ -219,12 +218,11 @@ div.work-table table.dt{min-width:560px}
 .debt-name{display:flex;flex-direction:column;min-width:0}
 .debt-name b{font-weight:var(--fw-semibold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .debt-name span{font-size:var(--fs-xs);color:var(--mut)}
-.dpill{justify-self:start;font-size:var(--fs-xs);font-weight:var(--fw-semibold);border-radius:var(--r-pill);padding:3px 10px;
- border:1px solid var(--line2);color:var(--mut)}
-.dpill::before{content:"● ";font-size:.8em}
-.dpill.crit{color:var(--crit);background:var(--crit-bg);border-color:var(--crit-line)}
-.dpill.high{color:var(--high);background:var(--high-bg);border-color:var(--high-line)}
-.dpill.ok{color:var(--ok);background:var(--ok-bg);border-color:var(--ok-line)}
+.dpill{justify-self:start;font-size:var(--fs-xs);font-weight:var(--fw-semibold);border-radius:var(--r-pill);padding:4px 11px;
+ border:0;color:var(--ink2);background:var(--raised)}
+.dpill.crit{color:var(--on-solid);background:var(--crit-solid)}
+.dpill.high{color:var(--on-solid);background:var(--high-solid)}
+.dpill.ok{color:var(--on-solid);background:var(--ok-solid)}
 .debt-amt{display:flex;align-items:center;justify-content:flex-end;gap:12px}
 .debt-a{display:flex;flex-direction:column;align-items:flex-end}
 .debt-a b{font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.01em;font-variant-numeric:tabular-nums}
@@ -297,8 +295,26 @@ div.work-table table.dt{min-width:560px}
 @media (prefers-reduced-motion:reduce){.view.on{animation:none}
  :is(.kpi,.bk)[data-loading] :is(.val,.n)::after{animation:none}}
 
+/* ---- status pills: solid colour, white words, like the Assign button (18 Oct 2026).
+   The pale tint with a coloured dot read as generated; a solid pill reads as a decision
+   somebody made. Neutral states (illustrative, not run, "as at") stay quiet. ---- */
+:root{--crit-solid:#d64a3f;--high-solid:#c4661a;--med-solid:#a3800f;--ok-solid:#1f8f63;--on-solid:#fff}
+[data-theme="light"]{--crit-solid:#c2392f;--high-solid:#b35a0b;--med-solid:#946f05;--ok-solid:#127a55}
+.flag,.bk .flag{color:var(--on-solid);background:var(--med-solid);border:0;padding:4px 10px;letter-spacing:.01em}
+.flag.f-crit,.bk .flag.f-crit{color:var(--on-solid);background:var(--crit-solid)}
+.flag.f-high,.bk .flag.f-high{color:var(--on-solid);background:var(--high-solid)}
+.flag.f-med,.bk .flag.f-med{color:var(--on-solid);background:var(--med-solid)}
+.flag.f-ok,.bk .flag.f-ok{color:var(--on-solid);background:var(--ok-solid)}
+.flag.f-dim,.bk .flag.f-dim,.flag.f-asat,.bk .flag.f-asat{color:var(--mut);background:transparent;
+ box-shadow:inset 0 0 0 1px var(--line2)}
+.tag{border:0}
+.tag.t-od{color:var(--on-solid);background:var(--crit-solid)}
+.tag.t-wt{color:var(--on-solid);background:var(--high-solid)}
+.tag.t-ok{color:var(--on-solid);background:var(--ok-solid)}
+.tag.t-dr{color:var(--mut);background:transparent;box-shadow:inset 0 0 0 1px var(--line2)}
+
 /* ---- live alerts (legacy/alerts.js) ---- */
-.asev.astate{margin-left:6px;color:var(--ok);background:var(--ok-bg);border-color:var(--ok-line)}
+.alert .asev.astate{margin-left:6px;color:var(--on-solid);background:var(--ok-solid)}
 .alert-flash{box-shadow:0 0 0 3px var(--accent-bg2);border-color:var(--accent)!important;transition:box-shadow .3s}
 .alert-live-list{display:block}
 

@@ -67,6 +67,9 @@ SHELL_CSS = """
 .biz-sw:hover:not(:disabled){border-color:var(--ink2)}
 .biz-sw:disabled{color:var(--dim);background:transparent;cursor:default}
 .biz-sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.biz-note{font-size:var(--fs-xs);color:var(--mut);line-height:1.5;padding:10px 12px 6px;border-top:1px solid var(--line);
+ margin-top:6px}
+.biz-note a{display:block;margin-top:6px;color:var(--accent-ink);font-weight:var(--fw-semibold);text-decoration:none}
 .biz-menu{position:absolute;left:0;right:0;bottom:calc(100% + 8px);background:var(--surface);
  border-radius:18px;box-shadow:var(--shadow2);padding:6px;z-index:70}
 .biz-opt{display:flex;align-items:center;gap:10px;width:100%;padding:8px;border-radius:var(--r-sm);border:0;
