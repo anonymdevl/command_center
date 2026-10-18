@@ -12,6 +12,7 @@ import { clearTurns, historyFor, remember, replaceAnswer, turnsFor } from "../as
 import { followDeep, withSteps } from "../askFlow.js";
 import { runReport } from "../legacy/reports.js";
 import { wireActions } from "../legacy/actions.js";
+import { WORK_VIEWS, renderWork } from "../legacy/work.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -46,6 +47,17 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
     [viewKey, scope, keys.join(",")],
     { skip: keys.length === 0 }
   );
+
+  // Today, Approvals and Outstanding Tasks read the real queue (api/work.py), again
+  // after any decision made on them.
+  const isWork = WORK_VIEWS.has(viewKey);
+  const work = useApi(() => api.work(scope), [viewKey, scope], { skip: !isWork });
+  useEffect(() => {
+    if (!isWork) return;
+    const again = () => work.reload();
+    window.addEventListener("cc-work-changed", again);
+    return () => window.removeEventListener("cc-work-changed", again);
+  }, [isWork, work.reload]);
 
   // The generated markup calls these by name from inline onclick attributes.
   useEffect(() => {
@@ -268,7 +280,9 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
     if (!root || !html) return;
     const opts = {
       onOpen: (figure) =>
-        figure.drill?.fact
+        figure.drill?.href
+          ? window.open(figure.drill.href, "_blank", "noopener")
+          : figure.drill?.fact
           ? openDrawer(
               <Records
                 scope={scope}
@@ -283,8 +297,14 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
     };
     setLiveCount(
       hydrateCards(root, viewKey, figures.data, opts) +
-      hydrateTiles(root, viewKey, figures.data, opts));
-  }, [viewKey, html, figures.data, scope, openDrawer]);
+      hydrateTiles(root, viewKey, figures.data, opts) +
+      (isWork ? renderWork(root, viewKey, work.data, opts) : 0));
+    // An alert drawn by the generator is a designed sample until something live replaces
+    // it, and the screen's "still illustrative" line must keep saying so.
+    root.querySelectorAll(".alert:not([data-live])").forEach((a) => {
+      a.dataset.illustrative = "1";
+    });
+  }, [viewKey, html, figures.data, work.data, isWork, scope, openDrawer]);
 
   // The designed action buttons (Assign, the "⋯" menu, Raise it...) had no handlers.
   useEffect(() => {
@@ -330,6 +350,12 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
         <div className="warn" style={{ margin: "0 0 14px" }}>
           <b>The live figures could not be read.</b> {figures.error.message} The screen
           below is showing its designed demonstration values.
+        </div>
+      ) : null}
+      {work.error ? (
+        <div className="warn" style={{ margin: "0 0 14px" }}>
+          <b>Your approvals and tasks could not be read.</b> {work.error.message} The
+          requests and tasks below are the designed samples, not yours.
         </div>
       ) : null}
       <div className="view on" ref={ref} dangerouslySetInnerHTML={{ __html: html }} />

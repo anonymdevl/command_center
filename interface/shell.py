@@ -206,6 +206,8 @@ SHELL_CSS = """
 .dnote{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;margin:0 0 22px;
  border-radius:var(--r-sm);background:var(--raised);color:var(--mut);font-size:var(--fs-xs);line-height:1.5}
 .dnote b{color:var(--ink);font-weight:var(--fw-semibold)}
+/* Said only while something on the screen is still illustrative (hydrate.js marks it). */
+.main:not(:has([data-illustrative])) .dnote{display:none}
 .dnote .dn-i{flex:none;color:var(--med);font-size:var(--fs-2xs);line-height:1.65}
 
 @media(prefers-reduced-motion:reduce){.asof .dot,.ap-spin{animation:none}}

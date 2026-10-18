@@ -185,6 +185,12 @@ export const api = {
     call("command_center.api.actions.create_task",
       { business_code, subject, description, allocated_to, due_date, priority }),
 
+  /* Today, Approvals and Outstanding Tasks (api/work.py), and the decisions on them. */
+  work: (business_code) => call("command_center.api.work.summary", { business_code }),
+  decide: ({ business_code, doctype, name, action }) =>
+    call("command_center.api.actions.apply_workflow_action", { business_code, doctype, name, action }),
+  review: ({ todo, verdict, note }) => call("command_center.api.work.review", { todo, verdict, note }),
+
   /* Downloads. Reads only: nothing is written to the site, not even a File. */
   answerPdf: (args) => download("command_center.api.export.answer_pdf", args, "answer.pdf"),
   tablesXlsx: (args) => download("command_center.api.export.tables_xlsx", args, "tables.xlsx"),

@@ -110,6 +110,6 @@ V_DELEG=f'''<div class="topbar"><div><h3>Outstanding Tasks</h3>
 <div class="acts"><button class="btn pri">Accept it</button><button class="btn dgr">Send it back</button>
 <button class="btn">Ask for more</button></div></div></div>
 <div class="note"><h4>Where the work actually happens</h4><ul>
-<li>This platform is for management. <b>K. Mensah does not have a login here.</b></li>
-<li>The task was written into ERPNext, where she already works, and her evidence came back the same way.
+<li>This platform is for management. <b>The people you hand work to do not need a login here.</b></li>
+<li>Each task is a To-Do in ERPNext, where they already work, and they mark it done there.
 Only the decision to accept or reject it happens on this screen.</li></ul></div>'''

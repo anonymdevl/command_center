@@ -145,6 +145,20 @@ table.dt tr:hover td{background:var(--hover)}
  padding:10px 14px;margin:0 0 14px;line-height:1.5}
 .panel>.act-notice{margin:12px 0 0}
 
+/* ---- the live queue on Today, Approvals and Outstanding Tasks (legacy/work.js) ---- */
+.work-list{display:block}
+.work-list>.sect:first-child{margin-top:8px}
+.work-empty{display:flex;flex-direction:column;gap:4px;background:var(--surface);border:1px dashed var(--line2);
+ border-radius:var(--r);padding:22px 22px;margin-bottom:12px;color:var(--mut);font-size:var(--fs-sm)}
+.work-empty b{color:var(--ink);font-size:var(--fs-md);font-weight:var(--fw-semibold)}
+.work-detail{flex:1 1 100%;font-size:var(--fs-sm);color:var(--mut);background:var(--raised);
+ border-radius:var(--r-sm);padding:10px 14px;margin:0 0 14px;white-space:pre-line;line-height:1.5}
+.work-more{display:inline-block;margin:2px 0 14px;background:none;border:0;padding:0;cursor:pointer;
+ color:var(--accent-ink);font-size:var(--fs-sm)}
+a.chip.src{text-decoration:none}
+a.btn{text-decoration:none;display:inline-flex;align-items:center}
+.work-banner{margin:0 0 14px}
+
 /* ---- the action dialog: assign, request evidence, escalate, raise a finding ---- */
 .dlg-scrim{position:fixed;inset:0;background:var(--scrim);z-index:120;display:flex;align-items:center;
  justify-content:center;padding:16px}

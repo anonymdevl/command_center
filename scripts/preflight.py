@@ -835,8 +835,9 @@ _ask_query = open(os.path.join(ROOT, "command_center", "ask", "query.py")).read(
 # "not because it was told to, but because no such function exists".
 for _name, _src in (("ask/engine.py", _ask_engine), ("ask/intents.py", _ask_intents),
                     ("api/ask.py", _ask_api), ("ask/query.py", _ask_query)):
-    check("api import actions" not in _src and "api.actions" not in _src,
-          f"{_name} can reach actions.py. The question box is read-only by "
+    check("api import actions" not in _src and "api.actions" not in _src
+          and "api.work" not in _src and "api import work" not in _src,
+          f"{_name} can reach actions.py or work.py. The question box is read-only by "
           f"construction, which is what makes the refusal true rather than a promise.")
     for _write in (".insert(", ".save(", ".submit(", "db.set_value(", "db.delete("):
         check(_write not in _src,
@@ -1208,6 +1209,28 @@ check("<ActionDialog" in open(os.path.join(ROOT, "frontend", "src", "App.jsx")).
                                                          "LegacyView.jsx")).read(),
       "the action dialog is not mounted or the screens' buttons are not wired, so Assign, "
       "Escalate and the alert menus do nothing.")
+
+# Today and Outstanding Tasks hydrate from the work queue (api/work.py). Each tile the
+# map names must be on its screen, and each key must be a figure the server returns.
+_wjs = open(os.path.join(ROOT, "frontend", "src", "legacy", "work.js")).read()
+_wpy = open(os.path.join(APP, "api", "work.py")).read()
+_wfigs = set(re.findall(r'^\s*"(work_[a-z_]+)": _fig\(', _wpy, re.M))
+_wmap = re.search(r"export const WORK_TILES = \{(.*?)\n\};", _wjs, re.S)
+_wpairs = re.findall(r'^\s{4}"?([^":\n]+?)"?:\s*\{\s*key:\s*"(work_[a-z_]+)"', _wmap.group(1) if _wmap else "", re.M)
+check(len(_wpairs) >= 7, f"work.js WORK_TILES maps only {len(_wpairs)} tiles; Today and "
+      f"Outstanding Tasks would fall back to their sample figures")
+_wview = None
+for _line in (_wmap.group(1) if _wmap else "").splitlines():
+    _m = re.match(r"^  (\w+): \{", _line)
+    if _m:
+        _wview = _m.group(1)
+    _p = re.match(r'^\s{4}"?([^":\n]+?)"?:\s*\{\s*key:\s*"(work_[a-z_]+)"', _line)
+    if _p and _wview:
+        check(f'<div class="l">{_p.group(1)}</div>' in _views.get(_wview, ""),
+              f"work.js maps a tile {_p.group(1)!r} on {_wview}, but no tile there carries it")
+        check(_p.group(2) in _wfigs,
+              f"work.js maps {_wview}/{_p.group(1)!r} to {_p.group(2)!r}, which api/work.py "
+              f"does not return")
 
 # The analyst's loop -- dispatch, scope, budget, the write guard -- tested offline.
 import subprocess as _sp

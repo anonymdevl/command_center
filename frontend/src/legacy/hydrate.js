@@ -202,8 +202,9 @@ export function hydrateCards(root, viewKey, figures, { onOpen } = {}) {
  * or `explain('unwired')`, which is a placeholder. Only the placeholder is replaced, so
  * hydrating Business Overview does not cost it its navigation.
  */
-export function hydrateTiles(root, viewKey, figures, { onOpen } = {}) {
-  const map = TILE_KPIS[viewKey] || {};
+export function hydrateTiles(root, viewKey, figures, { onOpen } = {}, map = TILE_KPIS[viewKey] || {}) {
+  // `map` is TILE_KPIS by default; Today and Outstanding Tasks pass legacy/work.js's,
+  // whose figures come from the work queue rather than the KPI engine.
   let live = 0;
 
   root.querySelectorAll(".bk").forEach((tile) => {

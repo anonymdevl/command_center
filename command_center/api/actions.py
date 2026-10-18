@@ -158,8 +158,9 @@ def create_task(business_code: str, subject: str, description: str = "",
             "project": project, "exp_end_date": due_date, "status": "Open",
         })
     body = subject if not description else f"{subject}\n\n{description}"
+    # assigned_by is what puts it on the sender's Outstanding Tasks (api/work.py).
     todo = {"doctype": "ToDo", "description": body, "allocated_to": allocated_to,
-            "date": due_date, "status": "Open"}
+            "date": due_date, "status": "Open", "assigned_by": frappe.session.user}
     if priority in ("Low", "Medium", "High"):
         todo["priority"] = priority
     return conn.insert(todo)

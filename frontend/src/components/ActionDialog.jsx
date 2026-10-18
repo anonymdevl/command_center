@@ -10,6 +10,11 @@ import { api } from "../api/client.js";
  * person's list, created as the manager who sent it (api/actions.create_task), so
  * ERPNext's own notifications, permissions and history apply. The assistant never
  * reaches this; only a person pressing the button does.
+ *
+ * Two decisions come through here too (legacy/work.js): "decide" applies a workflow
+ * action to a document waiting on this person, and "review" accepts or sends back work
+ * they handed out. Both ask first and say exactly what will change; after either, a
+ * "cc-work-changed" event tells the screen to read the queue again.
  */
 
 const KINDS = {
@@ -30,7 +35,7 @@ function addDays(n) {
 }
 
 export default function ActionDialog({ scope }) {
-  const [req, setReq] = useState(null); // {kind, title, detail, owner}
+  const [req, setReq] = useState(null); // {kind, title, detail, owner} or a decision
   const [people, setPeople] = useState([]);
   const [who, setWho] = useState("");
   const [due, setDue] = useState("");
@@ -43,11 +48,12 @@ export default function ActionDialog({ scope }) {
   useEffect(() => {
     const open = (e) => {
       const r = e.detail || {};
+      const decision = r.kind === "decide" || r.kind === "review";
       const k = KINDS[r.kind] || KINDS.assign;
-      setReq({ ...r, kind: KINDS[r.kind] ? r.kind : "assign" });
+      setReq({ ...r, kind: decision || KINDS[r.kind] ? r.kind : "assign" });
       setWho("");
       setDue(addDays(k.days));
-      setNote([r.title, r.detail].filter(Boolean).join("\n\n"));
+      setNote(decision ? "" : [r.title, r.detail].filter(Boolean).join("\n\n"));
       setState("idle");
       setError("");
       setDone(null);
@@ -58,6 +64,9 @@ export default function ActionDialog({ scope }) {
 
   useEffect(() => {
     if (!req) return;
+    const esc = (e) => e.key === "Escape" && setReq(null);
+    document.addEventListener("keydown", esc);
+    if (!KINDS[req.kind]) return () => document.removeEventListener("keydown", esc);
     const key = scope || "__all__";
     if (peopleCache[key]) {
       setPeople(peopleCache[key]);
@@ -68,12 +77,13 @@ export default function ActionDialog({ scope }) {
       }).catch(() => setPeople([]));
     }
     setTimeout(() => first.current?.focus(), 30);
-    const esc = (e) => e.key === "Escape" && setReq(null);
-    document.addEventListener("keydown", esc);
     return () => document.removeEventListener("keydown", esc);
   }, [req, scope]);
 
   if (!req) return null;
+  if (!KINDS[req.kind]) {
+    return <Decision req={req} scope={scope} note={note} setNote={setNote} close={() => setReq(null)} />;
+  }
   const k = KINDS[req.kind];
   const person = people.find((p) => p.user === who);
 
@@ -151,6 +161,82 @@ export default function ActionDialog({ scope }) {
               </button>
             </div>
             <p className="dlg-foot">Creates a To-Do in ERPNext, as you. Nothing else changes.</p>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+/** Approve / reject a document, or accept / send back handed-out work. Asks first. */
+function Decision({ req, scope, note, setNote, close }) {
+  const [state, setState] = useState("idle");
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
+  const back = req.kind === "review" && req.verdict === "return";
+  const verb = req.kind === "decide" ? req.action : back ? "Send it back" : "Accept it";
+  const what = req.kind === "decide"
+    ? `This applies “${req.action}” to ${req.doctype} ${req.name} in ERPNext, as you. ERPNext checks that your role may take this step, and records it in the document's history.`
+    : back
+      ? "The To-Do reopens on their list, with your note as a comment they will see."
+      : "The To-Do is tagged Accepted and leaves your list of evidence to check.";
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (back && !note.trim()) {
+      setError("Say what is still needed, so they know what to do.");
+      return;
+    }
+    setState("saving");
+    setError("");
+    try {
+      const res = req.kind === "decide"
+        ? await api.decide({ business_code: scope, doctype: req.doctype, name: req.name, action: req.action })
+        : await api.review({ todo: req.todo, verdict: req.verdict, note });
+      setResult(res || {});
+      setState("done");
+      window.dispatchEvent(new CustomEvent("cc-work-changed"));
+    } catch (err) {
+      setError(err?.message || "ERPNext did not accept it.");
+      setState("failed");
+    }
+  };
+
+  return (
+    <div className="dlg-scrim" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div className="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+        {state === "done" ? (
+          <>
+            <div className="dlg-ok" aria-hidden="true">✓</div>
+            <h3 id="dlg-t">{req.kind === "decide" ? `${req.action}: done` : back ? "Sent back" : "Accepted"}</h3>
+            <p className="dlg-sub">
+              {req.kind === "decide"
+                ? `${req.doctype} ${req.name} is now at “${result.workflow_state || "its next step"}”.`
+                : back ? "It is open on their list again, with your note." : "It is off your list."}
+            </p>
+            <div className="dlg-acts">
+              <button type="button" className="ap-act pri" onClick={close}>Done</button>
+            </div>
+          </>
+        ) : (
+          <form onSubmit={submit}>
+            <h3 id="dlg-t">{verb}</h3>
+            <p className="dlg-sub">{req.title}</p>
+            <p className="dlg-hint">{what}</p>
+            {req.kind === "review" ? (
+              <>
+                <label htmlFor="dlg-note">{back ? "What is still needed" : "Note (optional)"}</label>
+                <textarea id="dlg-note" rows={4} value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
+              </>
+            ) : null}
+            {error ? <div className="dlg-err" role="alert">{error}</div> : null}
+            <div className="dlg-acts">
+              <button type="button" className="ap-act" onClick={close}>Cancel</button>
+              <button type="submit" className="ap-act pri" disabled={state === "saving"} autoFocus={req.kind === "decide"}>
+                {state === "saving" ? "Working…" : verb}
+              </button>
+            </div>
           </form>
         )}
       </div>

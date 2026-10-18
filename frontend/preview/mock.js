@@ -321,6 +321,44 @@ const HANDLERS = {
     { user: "efua@gigmann.example", name: "Efua Owusu" },
   ],
   "command_center.api.actions.create_task": ({ subject }) => ({ name: "preview-only", subject }),
+  // Today, Approvals and Outstanding Tasks. Sample people and documents, marked so.
+  "command_center.api.work.summary": () => {
+    const fig = (key, label, value, note) => ({ key, label, value, unit: "count", note,
+      currency: null, as_of: { date: "2026-10-18", basis: "today" },
+      drill: { href: "/app/todo" }, data_status: { state: "live" } });
+    const approvals = [
+      { doctype: "Purchase Order", name: "PUR-ORD-2025-00231", title: "Medi-Source Ghana (sample)",
+        state: "Pending Approval", actions: ["Approve", "Reject"], value: 48200,
+        raised_by: "Ama Owusu (sample)", raised: "2026-10-06", waiting_days: 12, url: "/app/purchase-order" },
+      { doctype: "Sales Invoice", name: "ACC-SINV-2025-00870", title: "A1 MEDICALSUPPLIES (sample)",
+        state: "Awaiting CEO", actions: ["Approve", "Send back"], value: 11000,
+        raised_by: "Yaw Boateng (sample)", raised: "2026-10-16", waiting_days: 2, url: "/app/sales-invoice" },
+    ];
+    const open = [
+      { name: "td-01", title: "Get a payment plan from HAIRASH ENTERPRISE (sample)", status: "Open", priority: "High",
+        date: "2026-09-26", late_days: 22, to: "kwame@gigmann.example", to_name: "Kwame Mensah (sample)", url: "/app/todo" },
+      { name: "td-02", title: "Count the 5ml syringes in Kumasi (sample)", status: "Open", priority: "Medium",
+        date: "2026-10-25", late_days: 0, to: "efua@gigmann.example", to_name: "Efua Owusu (sample)", url: "/app/todo" },
+    ];
+    const check = [
+      { name: "td-03", title: "Confirm the C-arm installation date with UBUNTU (sample)", detail: "Called them; installation booked for 4 November.",
+        status: "Closed", priority: "Medium", date: "2026-10-10", closed_on: "2026-10-15",
+        to: "akosua@gigmann.example", to_name: "Akosua Boateng (sample)", url: "/app/todo" },
+    ];
+    const late = open.filter((t) => t.late_days > 0);
+    return { available: true, currency: "GHS", approvals, open, late, check, mine: [],
+      figures: {
+        work_awaiting: fig("work_awaiting", "Awaiting you", 2, "GHS 59,200 involved"),
+        work_due_today: fig("work_due_today", "Due today", 0, "on your own list, today or earlier"),
+        work_to_check: fig("work_to_check", "Evidence to check", 1, "marked done in the last 14 days"),
+        work_unkept: fig("work_unkept", "Promises unkept", 1, "oldest is 22 days late"),
+        work_open: fig("work_open", "Still open", 2, "work you handed out"),
+        work_late: fig("work_late", "Late", 1, "past the date you set"),
+        work_high: fig("work_high", "High risk", 1, "marked high priority"),
+      } };
+  },
+  "command_center.api.actions.apply_workflow_action": () => ({ workflow_state: "Approved (preview)" }),
+  "command_center.api.work.review": () => ({ ok: true }),
   "command_center.api.ingest.status": () => [],
 };
 

@@ -341,9 +341,15 @@ Order of work:
 5. **Fill the 54 illustrative cards**, money screens first, then operational.
 6. **The 78 static drawers** — decide prose-or-live for each, and record the decision.
 7. **The 4 `unwired` placeholders.**
-8. **Task and approval engine** — Approvals, Today, Outstanding Tasks and Executive
-   Summary have no facts behind them and never will; they need the platform's own records.
-   TK-01..TK-08, AP-01..AP-07, AC-06.
+8. ~~**Task and approval engine**~~ Done for this site (18 Oct 2026): `api/work.py`
+   reads ERPNext's own records -- documents whose workflow has a step this user may take
+   (`frappe.model.workflow.get_transitions`, so roles, self-approval and conditions are
+   the site's), and the To-Dos they assigned (`assigned_by`, set by create_task).
+   `legacy/work.js` replaces the sample cards on Approvals, Today and Outstanding Tasks
+   and hydrates their tiles (WORK_TILES). Decisions go through ActionDialog: approve /
+   reject = `actions.apply_workflow_action`; accept = tag "Accepted"; send back = reopen
+   with the reason as a comment (`work.review`). Not yet: "Reopened twice+" (needs To-Do
+   history), connected peers' queues, Executive Summary.
 9. ~~**Reports**~~ — written by the analyst on Run, PDF/Excel export (18 Oct 2026).
    Still to do: running on the planned schedule and emailing a distribution list.
 10. **Refresh control and load history on Business Health** — where the trust panels I
