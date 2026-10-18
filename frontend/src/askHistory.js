@@ -106,10 +106,9 @@ function save(scope, question, payload, replace) {
   saving = saving
     .then(() => api.convAdd({ question, payload, business_code: scope, name: current[scope], replace }))
     .then((r) => {
-      if (r?.name && current[scope] !== r.name) {
-        current[scope] = r.name;
-        changed(false);
-      }
+      if (r?.name) current[scope] = r.name;
+      // The list's "N questions" and its order move on with every save.
+      changed(false);
     })
     .catch(() => {});
 }
