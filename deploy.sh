@@ -41,6 +41,8 @@ step() { printf '\n== %s\n' "$1"; }
 
 step "pulling $APP_DIR"
 git -C "$APP_DIR" pull --ff-only
+# Said, so "did the new code arrive?" is answered by the output, not by guessing.
+echo "   now at $(git -C "$APP_DIR" log -1 --format='%h %s') (branch $(git -C "$APP_DIR" rev-parse --abbrev-ref HEAD))"
 
 cd "$BENCH_DIR"
 
@@ -120,4 +122,4 @@ step "clearing cache and restarting"
 bench --site "$SITE" clear-cache
 bench restart
 
-printf '\n== done. %s/command-center\n' "https://$SITE"
+printf '\n== done: %s. %s/command-center\n' "$(git -C "$APP_DIR" log -1 --format='%h')" "https://$SITE"
