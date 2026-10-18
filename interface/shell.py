@@ -1,0 +1,170 @@
+# -*- coding: utf-8 -*-
+"""The shell: sidebar, bar, and the panel the screens sit in. The one owner of their CSS.
+
+Restyle, phase 3 (17-18 Oct 2026), from the approved mockup. These rules used to be
+spread over p1.py, build.py, tidy.py and signals.py, each overriding the last; they
+were removed from all four and live here only, appended last so nothing downstream
+can quietly win.
+
+Only shell classes are styled here. None of them appears in views.json -- checked
+before the move -- so this file cannot change anything inside a screen.
+"""
+
+SHELL_CSS = """
+/* ============ SHELL (shell.py is the only owner) ============ */
+.shell{display:grid;grid-template-columns:252px minmax(0,1fr);gap:14px;height:100vh;
+ padding:14px;background:var(--bg)}
+
+/* ---- sidebar ---- */
+.side{display:flex;flex-direction:column;min-height:0;padding:6px 4px 4px}
+.brand{display:flex;align-items:center;gap:11px;padding:6px 10px 18px;margin:0 6px;
+ border-bottom:1px solid var(--line2)}
+.logo{width:34px;height:34px;border-radius:11px;background:var(--ink);display:grid;place-items:center;flex:none}
+.logo i{width:14px;height:14px;border-radius:50%;border:3px solid var(--accent);display:block;
+ box-shadow:6px 0 0 -1px var(--bg)}
+.brand-t{min-width:0}
+.brand-t b{display:block;font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.02em;
+ white-space:nowrap;line-height:1.25}
+.brand-t span{display:block;font-size:var(--fs-xs);color:var(--mut);white-space:nowrap}
+.nav{flex:1;min-height:0;overflow-y:auto;padding:12px 6px 18px;
+ scrollbar-width:thin;scrollbar-color:var(--line2) transparent;
+ /* The last screens sit below the fold on a laptop; a soft edge says there is more. */
+ -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent);
+ mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent)}
+.navsec{font-size:var(--fs-2xs);font-weight:var(--fw-semibold);letter-spacing:.06em;text-transform:uppercase;
+ color:var(--dim);padding:14px 12px 5px}
+.navgrp:first-child .navsec{padding-top:4px}
+.navi{display:flex;align-items:center;gap:11px;height:34px;padding:0 12px;border-radius:11px;
+ color:var(--ink2);font-size:var(--fs-md);font-weight:var(--fw-medium);cursor:pointer;white-space:nowrap;
+ transition:background .15s,color .15s,box-shadow .15s}
+.navi .ic{color:var(--mut);flex:none;transition:color .15s}
+.navi span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.navi:hover{background:var(--hover);color:var(--ink)}
+.navi.on{background:var(--surface);color:var(--ink);font-weight:var(--fw-semibold);box-shadow:var(--shadow)}
+.navi.on .ic{color:var(--accent)}
+.navi:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* ---- the business being looked at ---- */
+.biz{position:relative;margin:4px 6px 0;padding:12px 6px 6px;border-top:1px solid var(--line2)}
+.biz-row{display:flex;align-items:center;gap:10px}
+.biz-av{width:36px;height:36px;border-radius:11px;background:var(--accent-bg2);color:var(--accent-ink);
+ display:grid;place-items:center;font-size:var(--fs-xs);font-weight:var(--fw-bold);flex:none}
+.biz-av.sm{width:30px;height:30px;border-radius:var(--r-xs)}
+.biz-t{min-width:0}
+.biz-t b{display:block;font-size:var(--fs-sm);font-weight:var(--fw-semibold);line-height:1.3}
+.asof{display:flex;align-items:center;gap:7px;font-size:var(--fs-xs);color:var(--mut);margin-top:3px;
+ white-space:nowrap}
+.asof .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none;
+ animation:ccpulse 2.2s ease-out infinite}
+/* Behind today: the figures are a snapshot, so the dot says so rather than pulsing
+   "live" over data that is not. */
+.asof.stale .dot{background:var(--med);animation:none}
+.asof.none .dot{background:var(--high);animation:none}
+@keyframes ccpulse{0%{box-shadow:0 0 0 0 var(--ok-glow)}100%{box-shadow:0 0 0 7px transparent}}
+.biz-sw{margin-left:auto;width:34px;height:34px;flex:none;border:1px solid var(--line2);border-radius:50%;
+ background:var(--surface);color:var(--ink2);display:grid;place-items:center;cursor:pointer;
+ transition:border-color .15s,color .15s}
+.biz-sw:hover:not(:disabled){border-color:var(--ink2)}
+.biz-sw:disabled{color:var(--dim);background:transparent;cursor:default}
+.biz-sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.biz-menu{position:absolute;left:0;right:0;bottom:calc(100% + 8px);background:var(--surface);
+ border-radius:18px;box-shadow:var(--shadow2);padding:6px;z-index:70}
+.biz-opt{display:flex;align-items:center;gap:10px;width:100%;padding:8px;border-radius:var(--r-sm);border:0;
+ background:none;text-align:left;cursor:pointer;color:var(--ink);font:inherit}
+.biz-opt:hover:not(:disabled),.biz-opt.on{background:var(--raised)}
+.biz-opt:disabled{opacity:.5;cursor:not-allowed}
+.biz-opt-t{min-width:0}
+.biz-opt-t b{display:block;font-size:var(--fs-sm);font-weight:var(--fw-semibold)}
+.biz-opt-t small{display:block;font-size:var(--fs-xs);color:var(--mut)}
+
+/* ---- the bar ---- */
+.col{display:flex;flex-direction:column;gap:14px;min-width:0;min-height:0}
+.topnav{display:flex;align-items:center;gap:12px;flex:none;position:relative;z-index:30}
+.ask{flex:1;min-width:0;height:56px;display:flex;align-items:center;gap:12px;padding:0 8px 0 20px;
+ background:var(--surface);border-radius:var(--r-pill);border:1px solid transparent;box-shadow:var(--shadow);
+ transition:border-color .2s,box-shadow .2s}
+.ask:focus-within{border-color:var(--accent-dim);box-shadow:0 0 0 5px var(--accent-bg)}
+.ask-i{color:var(--accent);flex:none}
+.ask input{flex:1;min-width:0;border:0;outline:0;background:none;color:var(--ink);
+ font:var(--fw-regular) var(--fs-md) var(--sans)}
+.ask input::placeholder{color:var(--mut)}
+.ask-k{font:var(--fw-semibold) var(--fs-xs) var(--sans);color:var(--mut);border:1px solid var(--line2);
+ border-radius:var(--r-xs);padding:2px 7px;white-space:nowrap}
+.ask-go{height:40px;padding:0 18px 0 15px;border-radius:var(--r-pill);border:0;background:var(--accent);
+ color:var(--on-accent);font:var(--fw-semibold) var(--fs-sm) var(--sans);display:flex;align-items:center;
+ gap:7px;cursor:pointer;white-space:nowrap;transition:filter .15s}
+.ask-go:hover{filter:brightness(1.07)}
+.pill{display:flex;align-items:center;gap:4px;padding:5px;background:var(--surface);border-radius:var(--r-pill);
+ box-shadow:var(--shadow);flex:none}
+.ib{width:46px;height:46px;border-radius:50%;border:0;background:none;color:var(--mut);display:grid;
+ place-items:center;cursor:pointer;transition:background .15s,color .15s}
+.ib:hover{background:var(--raised);color:var(--ink)}
+.ib.on{background:var(--raised);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line2)}
+.ib:focus-visible,.ask-go:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.menu-b{display:none}
+.who{display:flex;align-items:center;gap:10px;padding:0 14px 0 4px;min-width:0}
+.av{width:44px;height:44px;border-radius:50%;background:var(--accent-bg2);color:var(--accent-ink);
+ display:grid;place-items:center;font:var(--fw-bold) var(--fs-sm) var(--sans);flex:none}
+.whotxt{min-width:0}
+.whotxt b{display:block;font-size:var(--fs-sm);font-weight:var(--fw-semibold);white-space:nowrap;
+ max-width:170px;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+.whotxt span{display:block;font-size:var(--fs-xs);color:var(--mut);white-space:nowrap}
+
+/* ---- appearance menu ---- */
+.appear{position:relative}
+.appearmenu{position:absolute;top:calc(100% + 14px);right:-4px;width:280px;background:var(--surface);
+ border-radius:20px;box-shadow:var(--shadow2);padding:16px;z-index:60;display:none}
+.appearmenu.on{display:block}
+.amsec{font-size:var(--fs-2xs);font-weight:var(--fw-semibold);letter-spacing:.06em;text-transform:uppercase;
+ color:var(--dim);margin:0 0 10px}
+.amsec:not(:first-child){margin-top:18px}
+.seg{display:flex;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-pill);padding:3px}
+.seg button{flex:1;background:none;border:none;color:var(--mut);font:var(--fw-semibold) var(--fs-xs) var(--sans);
+ padding:7px 4px;border-radius:var(--r-pill);cursor:pointer;white-space:nowrap;transition:.14s}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.swatches{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.sw{width:100%;aspect-ratio:1;border-radius:50%;border:1px solid var(--line2);cursor:pointer;padding:0;
+ transition:transform .12s}
+.sw:hover{transform:scale(1.08)}
+.sw.on{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--ink)}
+.swname{display:flex;justify-content:space-between;gap:8px;font-size:var(--fs-xs);color:var(--mut);margin-top:10px}
+.swname b{color:var(--ink);font-weight:var(--fw-semibold)}
+
+/* ---- the panel every screen sits in ---- */
+.main{flex:1;min-height:0;overflow-y:auto;background:var(--surface);border-radius:28px;
+ padding:32px 36px 64px;box-shadow:var(--shadow);
+ /* The screens' card rows size themselves against this panel (see build.py). */
+ container:panel/inline-size}
+.dnote{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;margin:0 0 22px;
+ border-radius:var(--r-sm);background:var(--raised);color:var(--mut);font-size:var(--fs-xs);line-height:1.5}
+.dnote b{color:var(--ink);font-weight:var(--fw-semibold)}
+.dnote .dn-i{flex:none;color:var(--med);font-size:var(--fs-2xs);line-height:1.65}
+
+@media(prefers-reduced-motion:reduce){.asof .dot{animation:none}}
+
+/* ---- narrower screens ---- */
+@media(max-width:1180px){
+ .shell{grid-template-columns:228px minmax(0,1fr)}
+ .whotxt,.ask-k{display:none}
+ .who{padding:0 4px}
+}
+/* A phone: the sidebar becomes a drawer behind a menu button, rather than vanishing
+   and leaving no way to reach eighteen of the nineteen screens. */
+@media(max-width:900px){
+ .shell{grid-template-columns:minmax(0,1fr);padding:10px;gap:10px}
+ .side{position:fixed;inset:0 auto 0 0;width:280px;z-index:90;background:var(--bg);padding:14px 6px 10px;
+  transform:translateX(-102%);transition:transform .22s ease;box-shadow:var(--shadow2)}
+ .shell.navopen .side{transform:none}
+ .scrim-nav{position:fixed;inset:0;background:var(--scrim);z-index:80}
+ .menu-b{display:grid;background:var(--surface);box-shadow:var(--shadow);flex:none}
+ .topnav{gap:8px}
+ .ask{height:50px;padding-left:16px}
+ .ask-go{width:40px;padding:0;justify-content:center}
+ .ask-go span{display:none}
+ .seg2{display:none}
+ .ib{width:40px;height:40px}
+ .av{width:38px;height:38px}
+ .main{padding:20px 16px 56px;border-radius:var(--r)}
+}
+"""

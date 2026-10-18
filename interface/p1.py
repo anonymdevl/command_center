@@ -6,7 +6,7 @@ CSS = """
     single strongest "generated" tell of the first design. Restyle, 17 Oct 2026. */
  --bg:#0c0d0f; --chrome:#0c0d0f; --surface:#141518; --raised:#1a1b1f; --panel:#141518;
  --line:#222428; --line2:#2c2f35; --hover:rgba(255,255,255,.04); --zebra:rgba(255,255,255,.02);
- --ink:#f2f3f5; --mut:#8d929b; --dim:#6b707a;
+ --ink:#f2f3f5; --ink2:#c8cbd1; --mut:#8d929b; --dim:#6b707a;
  --accent:#6a7fef; --accent-ink:#9aa8f4; --accent-dim:#262c4d;
  --accent-bg:rgba(106,127,239,.10); --accent-bg2:rgba(106,127,239,.17); --on-accent:#111317;
  --crit:#f0695e; --crit-bg:rgba(240,105,94,.12); --crit-line:rgba(240,105,94,.32);
@@ -38,7 +38,7 @@ CSS = """
 [data-theme="light"]{
  --bg:#f3f4f6; --chrome:#f3f4f6; --surface:#ffffff; --raised:#f5f6f8; --panel:#ffffff;
  --line:#ecedf0; --line2:#dfe1e6; --hover:rgba(17,19,23,.04); --zebra:rgba(17,19,23,.02);
- --ink:#111317; --mut:#646973; --dim:#7c818b; --solid:#2443e8;
+ --ink:#111317; --ink2:#3b3f47; --mut:#646973; --dim:#7c818b; --solid:#2443e8;
  --accent:#2443e8; --accent-ink:#1c34b5; --accent-dim:#c9d1fa;
  --accent-bg:rgba(36,67,232,.08); --accent-bg2:rgba(36,67,232,.14); --on-accent:#ffffff;
  --crit:#c2392f; --crit-bg:rgba(194,57,47,.09); --crit-line:rgba(194,57,47,.26);
@@ -55,17 +55,11 @@ CSS = """
 }
 
 /* ---- light-only refinements ---- */
-[data-theme="light"] .topnav{box-shadow:0 1px 0 var(--line)}
-[data-theme="light"] .side{box-shadow:1px 0 0 var(--line)}
 [data-theme="light"] table.dt th{color:var(--mut);border-bottom-color:var(--line2)}
 [data-theme="light"] .btn{background:var(--surface)}
 [data-theme="light"] .btn:hover{background:var(--raised)}
-[data-theme="light"] .logo{box-shadow:var(--shadow)}
 [data-theme="light"] .chartwrap,[data-theme="light"] .ans,[data-theme="light"] .askbox,
 [data-theme="light"] .note{box-shadow:var(--shadow)}
-[data-theme="light"] .navi.on{background:linear-gradient(90deg,var(--accent-bg2),transparent);
- box-shadow:inset 2px 0 0 var(--accent)}
-[data-theme="light"] .side{background:var(--chrome)}
 
 /* ============ BASE ============ */
 *{box-sizing:border-box;margin:0;padding:0}
@@ -77,28 +71,7 @@ button{font-family:inherit}
 /* Tabular figures only where numbers line up: figures and table columns. On running
    text Manrope's tabular digits leave a gap after every 1 -- "9.1 8M", "1 9 Aug". */
 .val,.n,.num,.barval,.afig,.dsum-n,table.dt td,.dt td{font-variant-numeric:tabular-nums}
-.shell{display:grid;grid-template-rows:auto 1fr;height:100vh}
-.topnav{display:flex;align-items:center;gap:13px;padding:10px 18px;background:var(--chrome);
- border-bottom:1px solid var(--line);flex-wrap:wrap}
-.brand{display:flex;align-items:center;gap:10px;padding-right:15px;border-right:1px solid var(--line)}
-.logo{width:28px;height:28px;border-radius:var(--r-xs);background:var(--grad);display:grid;place-items:center;
- font:var(--fw-bold) var(--fs-2xs) var(--sans);color:var(--on-accent);letter-spacing:.02em;box-shadow:var(--shadow)}
-.brand b{font-size:var(--fs-sm);display:block;line-height:1.2;letter-spacing:-.01em}
-.brand span{font-size:var(--fs-3xs);color:var(--dim)}
-.sel{background:var(--raised);border:1px solid var(--line2);color:var(--ink);border-radius:var(--r-pill);
- padding:8px 14px;font-size:var(--fs-xs);cursor:pointer;transition:border-color .15s}
-.sel:hover{border-color:var(--dim)}
-.sel:focus{outline:2px solid var(--accent-bg2);border-color:var(--accent)}
-.lbl{font-size:var(--fs-3xs);color:var(--dim);letter-spacing:.07em;text-transform:uppercase;margin-right:-7px}
-.spacer{flex:1}
-.themebtn{background:var(--raised);border:1px solid var(--line2);color:var(--mut);border-radius:var(--r-pill);
- width:32px;height:32px;display:grid;place-items:center;cursor:pointer;font-size:var(--fs-sm);transition:.15s}
-.themebtn:hover{color:var(--ink);border-color:var(--dim)}
-.asof{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;background:var(--med-bg);border:1px solid var(--med-line);
- color:var(--stale);border-radius:var(--r-pill);padding:6px 12px;font-size:var(--fs-2xs);font-weight:var(--fw-semibold)}
-.body{display:grid;grid-template-columns:212px 1fr;min-height:0}
-.side{background:var(--chrome);border-right:1px solid var(--line);padding:14px 10px;overflow-y:auto}
-.main{padding:30px 34px 80px;overflow-y:auto;min-width:0}
+/* The shell -- sidebar, bar, content panel -- is styled in shell.py, and only there. */
 .view{display:none}.view.on{display:block}
 .topbar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;gap:16px}
 .eyebrow{font-size:var(--fs-3xs);letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
@@ -268,10 +241,6 @@ background:var(--raised)}
 .denied h4{font-size:var(--fs-lg);color:var(--ink);margin-bottom:8px}
 .denied p{font-size:var(--fs-sm);max-width:440px;margin:0 auto;line-height:1.65}
 .hide{display:none!important}
-@media(max-width:900px){
- .body{grid-template-columns:1fr}.side{display:none}
- .main{padding:16px 15px 70px}.drawer{width:100%}
- .topnav{gap:9px}.lbl{display:none}
-}
+@media(max-width:900px){.drawer{width:100%}}
 
 """

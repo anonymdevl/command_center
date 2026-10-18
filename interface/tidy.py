@@ -101,20 +101,6 @@ TIDY_CSS = """
 .tab:hover{color:var(--ink)}
 .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
 .tabpane{display:none}.tabpane.on{display:block}
-/* --- left nav hierarchy --- */
-.side{padding:14px 9px}
-.navgrp{margin-bottom:4px}
-.navsec{font-size:var(--fs-3xs);letter-spacing:.12em;text-transform:uppercase;color:var(--dim);
- padding:14px 10px 6px;font-weight:var(--fw-bold);display:flex;align-items:center;gap:7px}
-.navsec::after{content:"";flex:1;height:1px;background:var(--line)}
-.navi{padding:7px 10px;border-radius:var(--r-xs);font-size:var(--fs-sm);margin:1px 0}
-.navi.on{background:linear-gradient(90deg,var(--accent-bg2),transparent);
- color:var(--ink);font-weight:var(--fw-semibold);box-shadow:inset 2px 0 0 var(--accent)}
-.navi.sub{padding-left:20px;font-size:var(--fs-xs)}
-.navi.sub::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--line2);
- position:absolute;margin-left:-12px;margin-top:6px}
-.navi{position:relative}
-.navi.sub.on::before{background:var(--accent)}
 /* --- alert actions: one primary + overflow --- */
 .acts{gap:6px;align-items:center}
 .more{position:relative}

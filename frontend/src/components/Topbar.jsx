@@ -1,100 +1,123 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { boot } from "../api/boot.js";
-import { shortDate } from "../format.js";
+import { getAppearance, setAppearance } from "../appearance.js";
 import Appearance from "./Appearance.jsx";
-
-export default function Topbar({ scope, onScope }) {
-  const real = (boot.scopes || []).filter((s) => s.code !== "__all__");
-  // "All businesses" is a scope only once there is more than one business.
-  const options = real.length > 1 ? boot.scopes : real;
-  const byCode = Object.fromEntries((boot.businesses || []).map((b) => [b.business_code, b]));
-
-  return (
-    <div className="topnav">
-      <div className="brand">
-        <div className="logo">IC</div>
-        <div>
-          <b>Intelligent Command Center</b>
-          <span>Executive platform</span>
-        </div>
-      </div>
-
-      <span className="lbl">Business</span>
-      <select className="sel" value={scope} onChange={(e) => onScope(e.target.value)}>
-        {options.map((s) => {
-          const b = byCode[s.code];
-          const bits = [s.label];
-          if (b?.currency) bits.push(b.currency);
-          if (b && !b.can_read) bits.push("unreachable");
-          else if (b && !b.can_act) bits.push("read only here");
-          return (
-            <option key={s.code} value={s.code} disabled={b ? !b.can_read : false}>
-              {bits.join(" · ")}
-            </option>
-          );
-        })}
-      </select>
-
-      <span className="spacer" />
-      <Appearance />
-      <Connection />
-      <AsOf />
-      <Who />
-    </div>
-  );
-}
-
-function Connection() {
-  return (
-    <span className="live">
-      <span className="dot" />
-      ERPNext connected <small>{boot.site}</small>
-    </span>
-  );
-}
+import Icon from "./Icon.jsx";
 
 /**
- * What the figures describe, which is not necessarily today.
+ * The question box, the theme, and who is signed in.
  *
- * Shown in the topbar rather than buried, because every ageing number on every
- * screen is measured against this date. Reading it as "today" on a restored
- * dataset is exactly how a stale snapshot becomes a false finding.
+ * The question box is the widest thing on the bar on purpose: asking the business a
+ * question is the platform's main idea, so it is not tucked behind a menu item. A
+ * question typed here is answered on the Ask AI screen by the same engine, so there
+ * is one way questions get answered, not two that could disagree.
+ *
+ * No alerts bell. The alert engine (AL-01..AL-07) is not built, and a bell that can
+ * never ring is a control that lies about what the platform does. It arrives with the
+ * engine.
  */
-function AsOf() {
-  const d = boot.as_of?.date;
-  if (!d) {
-    return (
-      <span className="asof" title="Run the load before relying on anything here">
-        ● No figures loaded yet
-      </span>
-    );
-  }
+export default function Topbar({ onAsk, onMenu }) {
   return (
-    <span
-      className="asof"
-      title={`The latest date the data covers. Ageing is measured against this, not today${
-        boot.as_of.last_run ? ` · last read ${boot.as_of.last_run}` : ""
-      }`}
-    >
-      ● Figures as at {shortDate(d)}
-    </span>
+    <header className="topnav">
+      {/* Phones only: the sidebar is a drawer there. */}
+      <button className="ib menu-b" title="Screens" aria-label="Open the list of screens" onClick={onMenu}>
+        <Icon name="menu" />
+      </button>
+      <AskBox onAsk={onAsk} />
+      <ThemeToggle />
+      <div className="pill">
+        <Appearance />
+        <Who />
+      </div>
+    </header>
+  );
+}
+
+function AskBox({ onAsk }) {
+  const [q, setQ] = useState("");
+  const input = useRef(null);
+
+  // Cmd/Ctrl-K from anywhere: the shortcut every serious tool has taught people.
+  useEffect(() => {
+    const key = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        input.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, []);
+
+  const submit = (e) => {
+    e.preventDefault();
+    const question = q.trim();
+    if (!question) {
+      input.current?.focus();
+      return;
+    }
+    onAsk(question);
+  };
+
+  return (
+    <form className="ask" role="search" onSubmit={submit}>
+      <Icon name="spark" className="ask-i" />
+      <input
+        ref={input}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Ask anything about the business — who owes us the most?"
+        aria-label="Ask a question about the business"
+        autoComplete="off"
+      />
+      <kbd className="ask-k" aria-hidden="true">
+        ⌘K
+      </kbd>
+      <button className="ask-go" type="submit">
+        <Icon name="search" size={16} />
+        <span>Ask</span>
+      </button>
+    </form>
+  );
+}
+
+function ThemeToggle() {
+  const [theme, setTheme] = useState(() => getAppearance().theme);
+  const set = (t) => {
+    setAppearance("theme", t);
+    setTheme(t);
+  };
+  return (
+    <div className="pill seg2" role="group" aria-label="Theme">
+      {[
+        ["dark", "moon", "Dark"],
+        ["light", "sun", "Light"],
+      ].map(([t, icon, label]) => (
+        <button
+          key={t}
+          className={`ib${theme === t ? " on" : ""}`}
+          title={label}
+          aria-label={label}
+          aria-pressed={theme === t}
+          onClick={() => set(t)}
+        >
+          <Icon name={icon} />
+        </button>
+      ))}
+    </div>
   );
 }
 
 function Who() {
   const u = boot.user || {};
-  const roles = (u.roles || []).join(" \u00b7 ") || "Management";
+  const roles = (u.roles || []).join(" · ") || "Management";
   return (
-    <div className="who nopick" style={{ cursor: "default" }}>
+    // The person is read from the ERPNext session, never chosen: with a real session
+    // the only person it can be is the one signed in.
+    <div className="who" title={`${u.name} · ${roles}`}>
       <div className="av">{u.initials}</div>
       <div className="whotxt">
-        {/* .whosel carries the name's type, width and truncation. The original
-            was a <select> of personas; with a real session the only person it
-            can be is the one signed in, so it is no longer a control -- but it
-            keeps the class, because that is what the design styles. */}
-        <div className="whosel" title={u.name}>
-          {u.name}
-        </div>
+        <b>{u.name}</b>
         <span>{roles}</span>
       </div>
     </div>

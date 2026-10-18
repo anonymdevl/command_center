@@ -106,27 +106,8 @@ SIGNAL_OPTIONS = ('<option value="vivid">Vivid</option>'
                   '<option value="muted">Muted</option>'
                   '<option value="quiet">Quiet</option>')
 
-APPEAR_CSS = """
-.appear{position:relative}
-.appearmenu{position:absolute;top:calc(100% + 10px);right:0;width:292px;background:var(--panel);
- border:1px solid var(--line2);border-radius:var(--r2);padding:15px 16px;z-index:60;
- box-shadow:var(--shadow2);display:none}
-.appearmenu.on{display:block}
-.amsec{font-size:var(--fs-3xs);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
- font-weight:var(--fw-bold);margin:0 0 9px}
-.amsec:not(:first-child){margin-top:17px}
-.seg{display:flex;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-pill);padding:3px}
-.seg button{flex:1;background:none;border:none;color:var(--mut);font:var(--fw-semibold) var(--fs-xs) var(--sans);
- padding:6px 4px;border-radius:var(--r-pill);cursor:pointer;white-space:nowrap;transition:.14s}
-.seg button:hover{color:var(--ink)}
-.seg button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
-.swatches{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
-.sw{width:100%;aspect-ratio:1;border-radius:var(--r-pill);border:1px solid var(--line2);cursor:pointer;
- padding:0;position:relative;transition:transform .12s}
-.sw:hover{transform:scale(1.13)}
-.sw.on{box-shadow:0 0 0 2px var(--panel),0 0 0 3.5px var(--ink)}
-.swname{font-size:var(--fs-2xs);color:var(--mut);margin-top:9px;text-align:center;min-height:14px}
-"""
+# The appearance menu is styled in shell.py with the rest of the shell.
+
 
 def swatches(ACC):
     out=[]

@@ -156,6 +156,12 @@ only -- five of them, Cobalt the default. The font is Manrope, bundled from
 `@fontsource-variable/manrope`; nothing fetches a font at runtime. Preflight fails an
 off-scale size or weight, a colour defined for one theme only, an accent without CSS, or a
 web-font URL. The screens' own `style="..."` attributes are not yet on the scale (phase 5).
+The shell -- sidebar, bar, content panel, appearance menu -- is styled in
+`interface/shell.py` only, appended last; preflight fails any other generator that
+styles a shell class, and any screen that uses one. Card rows size against the panel
+(`container: panel`), not the window. The question bar hands its question to the Ask AI
+screen's `runSearch`, so there is one answering path. No alerts bell until the alert
+engine exists.
 `preview.html?theme=light&accent=cobalt&audit=1` walks all nineteen screens and lists
 anything wider than its box.
 

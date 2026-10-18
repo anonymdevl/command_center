@@ -1107,6 +1107,34 @@ if os.path.exists(CSS_FILE):
               f"which has no CSS")
 
 # --------------------------------------------------------------------------
+# The shell has one owner (restyle phase 3)
+# --------------------------------------------------------------------------
+# Its rules were spread over four generator files, each overriding the last, so a
+# change in one was undone by another further down. shell.py now owns them, and no
+# other generator may style a shell class again.
+_SHELL_CLASSES = ("shell", "col", "side", "brand", "logo", "nav", "navsec", "navgrp", "navi",
+                  "biz", "biz-row", "biz-sw", "biz-menu", "biz-opt", "topnav", "ask", "ask-go",
+                  "pill", "ib", "who", "av", "whotxt", "appearmenu", "swatches", "dnote")
+_shell_sel = re.compile(r"\.(%s)(?![\w-])" % "|".join(map(re.escape, _SHELL_CLASSES)))
+_span = re.compile(r'(?:\b[A-Z_]*CSS\s*=\s*(?:[A-Z_]+\s*\+\s*)*"""|\+\s*""")(.*?)"""', re.S)
+for _f in sorted(os.listdir(os.path.join(ROOT, "interface"))):
+    if not _f.endswith(".py") or _f == "shell.py":
+        continue
+    _src = open(os.path.join(ROOT, "interface", _f)).read()
+    _hits = sorted({m.group(0) for css in _span.findall(_src)
+                    for sel in re.findall(r"([^{}]+)\{[^{}]*\}", css)
+                    for m in _shell_sel.finditer(sel)})
+    check(not _hits,
+          f"interface/{_f} styles shell classes {', '.join(_hits)}. The shell is styled "
+          f"in interface/shell.py only, which is appended last.")
+_views = json.load(open(os.path.join(ROOT, "frontend", "src", "legacy", "views.json")))
+_inview = sorted({c for h in _views.values() for c in _SHELL_CLASSES
+                  if re.search(r'class="[^"]*\b%s\b' % re.escape(c), h)})
+check(not _inview,
+      f"a screen uses shell class(es) {', '.join(_inview)}, so restyling the shell would "
+      f"change that screen too. Rename the screen's class.")
+
+# --------------------------------------------------------------------------
 print(f"preflight: {checks} checks")
 if problems:
     print(f"\n{len(problems)} problem(s):\n")

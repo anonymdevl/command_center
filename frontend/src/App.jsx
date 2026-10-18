@@ -33,6 +33,8 @@ export default function App() {
     return real.length === 1 ? real[0].code : boot.scopes?.[0]?.code || "__all__";
   });
   const [drawer, setDrawer] = useState(null);
+  // Phones: the sidebar is a drawer, open only while choosing a screen.
+  const [navOpen, setNavOpen] = useState(false);
 
   // Deep-link by hash so a manager can send someone a screen.
   useEffect(() => {
@@ -51,6 +53,7 @@ export default function App() {
   const go = (key) => {
     setView(key);
     setDrawer(null);
+    setNavOpen(false);
     window.history.replaceState(null, "", `#${key}`);
     const main = document.getElementById("cc-main");
     if (main) main.scrollTop = 0;
@@ -65,15 +68,34 @@ export default function App() {
 
   const ctx = useMemo(() => ({ scope, go, openDrawer: setDrawer }), [scope]);
 
+  // A question typed in the bar is answered on the Ask AI screen, by the same
+  // runSearch the screen's own box uses -- one engine, one place answers appear. The
+  // screen mounts on the next render, so wait for its answer slot before asking.
+  const ask = (question) => {
+    go("ask");
+    let tries = 0;
+    const run = () => {
+      const box = document.getElementById("askin");
+      if (box && document.getElementById("sout2") && window.runSearch) {
+        box.value = question;
+        window.runSearch(question);
+      } else if (tries++ < 120) {
+        requestAnimationFrame(run);
+      }
+    };
+    run();
+  };
+
   return (
-    <div className="shell">
-      <Topbar scope={scope} onScope={setScope} />
-      <div className="body">
-        <Sidebar nav={nav} current={view} onGo={go} />
-        <div className="main" id="cc-main">
+    <div className={`shell${navOpen ? " navopen" : ""}`}>
+      <Sidebar nav={nav} current={view} onGo={go} scope={scope} onScope={setScope} />
+      {navOpen ? <div className="scrim-nav" onClick={() => setNavOpen(false)} /> : null}
+      <div className="col">
+        <Topbar onAsk={ask} onMenu={() => setNavOpen((o) => !o)} />
+        <main className="main" id="cc-main">
           {showBanner ? <IllustrativeNotice /> : null}
           {Ported ? <Ported {...ctx} /> : <LegacyView viewKey={view} {...ctx} />}
-        </div>
+        </main>
       </div>
       <Drawer content={drawer} onClose={() => setDrawer(null)} />
     </div>
@@ -91,7 +113,7 @@ function IllustrativeNotice() {
   return (
     // No horizontal margin: it sits inside .main alongside the view's own
     // banners, so any inset here makes it narrower than they are.
-    <div className="dnote" style={{ margin: "0 0 18px" }}>
+    <div className="dnote">
       <span className="dn-i">●</span>
       <span>
         <b>Some figures on this screen are still illustrative.</b> Cards reading the

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getAppearance, setAppearance } from "../appearance.js";
 import extras from "../legacy/extras.json";
+import Icon from "./Icon.jsx";
 
 const ACCENTS = extras.accents || [];
 const SIGNALS = [
@@ -31,34 +32,21 @@ export default function Appearance() {
   return (
     <div className="appear" ref={ref}>
       <button
-        className="themebtn"
+        className={`ib${open ? " on" : ""}`}
         title="Appearance"
         aria-label="Appearance"
+        aria-expanded={open}
         onClick={(e) => {
           e.stopPropagation();
           setOpen((o) => !o);
         }}
       >
-        {/* Drawn rather than typed. The original used the characters U+25D1 and
-            U+25D8, which render as a missing-glyph box in fonts that lack them
-            -- which is what this button had become. */}
-        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-          <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor"
-                  strokeWidth="1.4" />
-          <path d="M8 1.4A6.6 6.6 0 0 1 8 14.6Z" fill="currentColor" />
-        </svg>
+        <Icon name="sliders" />
       </button>
 
+      {/* Light and dark live on the bar itself; this menu holds the finer choices.
+          Both are saved per browser and only for the person choosing. */}
       <div className={`appearmenu${open ? " on" : ""}`} onClick={(e) => e.stopPropagation()}>
-        <div className="amsec">Theme</div>
-        <div className="seg">
-          {["light", "dark"].map((t) => (
-            <button key={t} className={look.theme === t ? "on" : ""} onClick={() => set("theme", t)}>
-              {t === "light" ? "Light" : "Dark"}
-            </button>
-          ))}
-        </div>
-
         <div className="amsec">Accent</div>
         <div className="swatches">
           {ACCENTS.map((a) => (
@@ -77,7 +65,8 @@ export default function Appearance() {
           ))}
         </div>
         <div className="swname">
-          {ACCENTS.find((a) => a.key === look.accent)?.label || ""}
+          <span>Saved for you only</span>
+          <b>{ACCENTS.find((a) => a.key === look.accent)?.label || ""}</b>
         </div>
 
         <div className="amsec">Signal strength</div>

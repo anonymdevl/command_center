@@ -5,7 +5,7 @@ sys.path.insert(0,IFACE)
 exec(_src('p1.py'))
 exec(_src('accents.py'))
 exec(_src('signals.py'))
-CSS = CSS + '\n/* ============ ACCENT VARIANTS ============ */\n' + css() + SIGNAL_CSS + APPEAR_CSS
+CSS = CSS + '\n/* ============ ACCENT VARIANTS ============ */\n' + css() + SIGNAL_CSS
 exec(_src('p7.py'))
 _OLD_ANSWERS=ANSWERS
 exec(_src('audit.py'))
@@ -17,6 +17,7 @@ exec(_src('brain.py'))
 exec(_src('explain.py'))
 exec(_src('records.py'))
 exec(_src('tidy.py'))
+exec(_src('shell.py'))
 
 EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + """
 .tod{flex:none;overflow:visible}
@@ -33,31 +34,10 @@ EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + """
 @keyframes todglow{0%,100%{opacity:.55}50%{opacity:1}}
 @keyframes todtwinkle{0%,100%{opacity:.25}50%{opacity:1}}
 
-.live{display:inline-flex;align-items:center;gap:7px;background:var(--ok-bg);
- border:1px solid var(--ok-line);border-radius:var(--r-xs);padding:4px 10px;font-size:var(--fs-2xs);
- color:var(--ok);font-weight:var(--fw-semibold);white-space:nowrap}
-.live .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none;
- animation:blink 1.6s ease-in-out infinite;box-shadow:0 0 0 0 var(--ok-glow)}
-@keyframes blink{0%,100%{opacity:1;box-shadow:0 0 0 0 var(--ok-glow)}
- 70%{opacity:.85;box-shadow:0 0 0 6px transparent}}
-.live small{color:var(--dim);font-weight:var(--fw-regular);font-size:var(--fs-3xs)}
 @media(prefers-reduced-motion:reduce){
- .todray,.todcore,.todrise,.todglow,.todstar,.live .dot{animation:none}}
-.who{display:flex;align-items:center;gap:8px;padding-left:12px;border-left:1px solid var(--line)}
-.av{width:30px;height:30px;border-radius:50%;background:var(--accent);
- display:grid;place-items:center;font:var(--fw-semibold) var(--fs-xs) var(--sans);color:var(--on-accent);flex:none}
-.whosel{background:none;border:none;color:var(--ink);font:var(--fw-semibold) var(--fs-xs) var(--sans);
- padding:0 15px 0 0;margin:0;cursor:pointer;outline:none;-webkit-appearance:none;appearance:none;
- line-height:1.25;display:block;max-width:180px;text-overflow:ellipsis;white-space:nowrap}
-.whosel:hover{color:var(--accent)}
-.whosel option{background:var(--raised);color:var(--ink);font-weight:var(--fw-regular)}
-.who{position:relative;cursor:pointer}
-.who::after{content:"\\25BE";position:absolute;right:0;top:8px;font-size:var(--fs-3xs);color:var(--dim);pointer-events:none}
-.whotxt span{font-size:var(--fs-3xs);color:var(--dim);display:block;line-height:1.2}
+ .todray,.todcore,.todrise,.todglow,.todstar{animation:none}}
 
-@media(max-width:900px){.who .whotxt{display:none}}
-
-.kpis.six{grid-template-columns:repeat(6,1fr)}
+.kpis.six{grid-template-columns:repeat(6,minmax(0,1fr))}
 .kpi.clickable:hover{border-color:var(--accent);cursor:pointer}
 .panel{background:transparent;margin-bottom:16px}
 .ph{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
@@ -93,8 +73,22 @@ color:var(--accent);font-weight:var(--fw-bold);margin-bottom:6px}
 .drt td{padding:6px 8px}
 .drfoot{font-size:var(--fs-xs);color:var(--mut);margin-top:8px;line-height:1.5}
 .exbox{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-xs);padding:12px 14px;margin:10px 0}
-@media(max-width:1100px){.kpis.six{grid-template-columns:repeat(3,1fr)}.two{grid-template-columns:1fr}
- .grid.six{grid-template-columns:repeat(3,1fr)}}
+/* Card rows answer to the width of the panel they sit in, not the window: the window
+   width said nothing once the sidebar and gutters changed, and six cards ran off the
+   edge on ten screens at 1280px. The !important is for the few rows whose columns
+   are written inline in the markup -- inline style beats any class otherwise. */
+@container panel (max-width:1199px){
+ .kpis.six,.grid.six,.kpis[style*="repeat(6"]{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@container panel (max-width:899px){
+ .two{grid-template-columns:1fr}
+ .kpis,.kpis.six,.grid,.grid.six{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@container panel (max-width:560px){
+ .kpis,.kpis.six,.grid,.grid.six{grid-template-columns:minmax(0,1fr)!important}
+ /* A phone is narrower than any data table here. The table scrolls inside its own
+    box, so the page never moves sideways under the reader's thumb. */
+ table.dt{display:block;max-width:100%;overflow-x:auto}
+ .tabbar{overflow-x:auto;scrollbar-width:none}
+ .tabbar::-webkit-scrollbar{display:none}}
 """
 
 NAVGROUPS=[
@@ -422,11 +416,6 @@ setRole(); go('command'); greet(); filterTrail(); syncAppear(); setInterval(gree
 
 BOOT_CSS = """
 /* ============ LIVE vs DEMO ============ */
-.dnote{display:flex;align-items:flex-start;gap:9px;background:var(--med-bg);
- border:1px solid var(--med-line);border-left:3px solid var(--med);border-radius:var(--r);
- padding:10px 13px;margin-bottom:14px;font-size:var(--fs-xs);color:var(--mut);line-height:1.45}
-.dnote b{color:var(--stale);font-weight:var(--fw-bold)}
-.dnote .dn-i{flex:none;font-size:var(--fs-xs);color:var(--stale);line-height:1.3}
 .livechip{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-2xs);font-weight:var(--fw-bold);
  padding:3px 9px;border-radius:var(--r-pill);white-space:nowrap;
  background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
@@ -436,11 +425,6 @@ BOOT_CSS = """
    figure. So the hydrator appends its own pill as a direct child, which lands after
    the footnote because .bk .l and .bk>.khead both take order:-1. */
 .bk>.flag{margin-top:9px;align-self:center}
-.whosel:disabled{opacity:1;cursor:default}
-/* The caret was drawn for a persona dropdown. With a real session there is
-   nothing to choose, so the arrow would promise a menu that never opens. */
-.who.nopick::after{content:none}
-.who.nopick{cursor:default}
 
 /* ============ THE DRILL AFFORDANCE ============ */
 /* It sat at bottom:7px, below the footnote rather than beside it. The footnote
@@ -479,18 +463,6 @@ BOOT_CSS = """
 .view > .hello:first-child{margin-top:4px}
 #ccdnote{margin-bottom:18px !important}
 
-/* ============ SIDEBAR BADGES ============ */
-/* The markup emitted <span class="bdg">5</span> from the start and nothing ever
-   styled it, so it rendered as bare text against the label: "Daily brief5". */
-.navi{display:flex;align-items:center;gap:8px}
-.navi > span:first-of-type{flex:1;min-width:0;overflow:hidden;
- text-overflow:ellipsis;white-space:nowrap}
-.navi.sub::before{flex:none}
-.bdg{flex:none;min-width:19px;height:18px;padding:0 6px;border-radius:var(--r-pill);
- background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-dim);
- font-size:var(--fs-3xs);font-weight:var(--fw-bold);line-height:1;display:inline-flex;
- align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
-.navi.on .bdg{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 """
 
 BOOT_JS = """
@@ -649,7 +621,8 @@ VIEWS = {k: normalise_cards(v) for k, v in VIEWS.items()}
 _i = BODY.index("<script>")
 _j = BODY.rindex("</script>")
 PARTS = {
-    "css": CSS + EXTRA_CSS + BOOT_CSS,
+    # The shell goes last: it is the one owner of its rules, so nothing may follow it.
+    "css": CSS + EXTRA_CSS + BOOT_CSS + SHELL_CSS,
     "body": BODY[:_i],
     "js": BODY[_i + len("<script>"):_j] + BOOT_JS,
 }
