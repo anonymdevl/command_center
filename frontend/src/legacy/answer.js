@@ -24,11 +24,26 @@ export function renderAnswer(container, payload, { onOpen, onPdf } = {}) {
   container.append(block(payload, onOpen, onPdf));
 }
 
-export function renderThinking(container, question) {
+export function renderThinking(container, question, steps = []) {
   container.textContent = "";
-  const el = div("step");
-  el.append(span("spin"), text(`Looking up “${question}”…`));
-  container.append(el);
+  const box = div("ap-think");
+  box.append(span("ap-spin"));
+  const t = document.createElement("div");
+  t.append(bold(`Looking into “${question}”`),
+    span("", steps.length ? "Working through it" : "Reading the question"));
+  if (steps.length) {
+    const ol = document.createElement("ol");
+    ol.className = "ap-steps";
+    steps.forEach((s, i) => {
+      const li = document.createElement("li");
+      li.className = i === steps.length - 1 ? "now" : "done";
+      li.textContent = s;
+      ol.append(li);
+    });
+    t.append(ol);
+  }
+  box.append(t);
+  container.append(box);
 }
 
 export function renderFailure(container, message) {

@@ -138,15 +138,15 @@ V_SEARCH=f'''<div class="topbar"><div><h3>Find anything</h3>
 
 V_ASK=f'''<div class="topbar"><div><h3>Ask AI</h3>
 <div class="when">Answers come from the records, and always say which ones</div></div></div>
-<div class="askbox">⌕<input id="askin" placeholder="Ask anything about the business" autocomplete="off"
+<div class="askbox"><svg class="askbox-i" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 3.5l1.7 4.8 4.8 1.7-4.8 1.7L11 16.5l-1.7-4.8L4.5 10l4.8-1.7z"/><path d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg><input id="askin" placeholder="Ask anything about the business — in your own words" autocomplete="off"
  onkeyup="if(event.key==='Enter')runSearch(this.value)"></div>
-<div class="sugg">
-<button class="btn" onclick="runSearch('Why is the Ejura order still open?')">Why is the Ejura order still open?</button>
-<button class="btn" onclick="runSearch('Who owes us the most and have they ever paid?')">Who owes us the most?</button>
-<button class="btn" onclick="runSearch('What should I say to UBUNTU?')">What should I say to UBUNTU?</button>
+<div class="sugg" id="asksugg">
+<button class="btn" onclick="runSearch('Who owes us the most, and how long have they owed it?')">Who owes us the most?</button>
+<button class="btn" onclick="runSearch('How did sales trend over the last 12 months, and where are we heading?')">How are sales trending?</button>
+<button class="btn" onclick="runSearch('Which suppliers do we depend on most, and what if one stopped?')">Which suppliers do we depend on?</button>
 <button class="btn" onclick="runSearch('Issue a credit note for A1 Medicalsupplies')">Issue a credit note</button>
 </div>
 <div id="sout2"></div>
 <div class="note"><h4>Two things worth watching</h4><ul>
-<li>It shows <b>what it checked</b> before it answers. Every figure came out of a query; the wording around it is written, the numbers are not.</li>
-<li>Ask it to issue a credit note and it refuses — <b>not because it was told to, but because no such function exists on the platform</b>.</li></ul></div>'''
+<li>It shows <b>what it checked</b>, step by step as it works, and lists every lookup under the answer. Every figure comes from the records or from ERPNext's own reports.</li>
+<li>Ask it to issue a credit note and it refuses — <b>not because it was told to, but because it has no way to change anything in ERPNext</b>.</li></ul></div>'''

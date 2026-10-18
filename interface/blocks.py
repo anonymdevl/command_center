@@ -115,6 +115,9 @@ table.dt tr:hover td{background:var(--hover)}
 
 /* ---- the Ask screen's own box ---- */
 .askbox,[data-theme="light"] .askbox{border:1px solid var(--line2);box-shadow:none;padding:14px 22px}
+.askbox{align-items:center}
+.askbox .askbox-i{color:var(--accent);flex:none}
+.askbox:focus-within{border-color:var(--accent-dim);box-shadow:0 0 0 5px var(--accent-bg)}
 
 /* ---- the signature card, on every screen (build.py signature_tiles) ---- */
 /* Tinted, left-aligned, a cut corner with a round arrow -- the approved mockup, on every

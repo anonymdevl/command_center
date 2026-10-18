@@ -9,6 +9,7 @@ import Records from "./Records.jsx";
 import { hydrateCards, hydrateTiles, keysFor } from "../legacy/hydrate.js";
 import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js";
 import { historyFor, remember } from "../askHistory.js";
+import { withSteps } from "../askFlow.js";
 import { runReport } from "../legacy/reports.js";
 
 /**
@@ -66,11 +67,12 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
       if (!q) return;
       renderThinking(out, q);
       try {
-        const payload = await api.ask({
-          question: q,
-          business_code: scopeRef.current,
-          history: historyFor(scopeRef.current),
-        });
+        // The same flow as the bar: a job that reports each lookup, shown live.
+        const payload = await withSteps(
+          { question: q, business_code: scopeRef.current, history: historyFor(scopeRef.current) },
+          new AbortController().signal,
+          (steps) => renderThinking(out, q, steps),
+        );
         remember(scopeRef.current, q, payload);
         renderAnswer(out, payload, {
           onPdf: (res) =>
@@ -109,6 +111,30 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
       delete window.runSearch;
     };
   }, [openDrawer]);
+
+  useEffect(() => {
+    if (viewKey !== "ask") return;
+    // The Ask AI screen's suggestions come from the server's one list, the same the
+    // bar offers; the read-only demonstration ("Issue a credit note") stays last.
+    const sugg = document.getElementById("asksugg");
+    if (sugg) {
+      api.answerable().then((r) => {
+        const list = (r?.examples || []).slice(0, 6);
+        if (!list.length || !document.body.contains(sugg)) return;
+        const keep = sugg.lastElementChild;
+        sugg.textContent = "";
+        list.forEach((e) => {
+          const b = document.createElement("button");
+          b.className = "btn";
+          b.textContent = e.q;
+          b.onclick = () => window.runSearch && window.runSearch(e.q);
+          sugg.append(b);
+        });
+        if (keep) sugg.append(keep);
+      }).catch(() => {});
+    }
+
+  }, [viewKey]);
 
   // The generated markup has an empty #greet that the old script filled on a
   // timer. Ported here so the command screen still greets the person by name
