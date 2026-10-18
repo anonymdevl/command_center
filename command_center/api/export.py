@@ -358,13 +358,39 @@ def pdf_diagnostics():
 
     home = os.path.expanduser("~")
     folder = os.path.join(home, ".local", "share", "fonts", "command_center")
-    return {
+    out = {
         "wkhtmltopdf": run("wkhtmltopdf", "--version"),
         "home": home,
         "installed": sorted(os.listdir(folder)) if os.path.isdir(folder) else "folder missing",
         "fc_match": run("fc-match", "Manrope"),
         "fc_list": run("fc-list", ":family=Manrope", "family", "style", "file"),
         "bundled": sorted(os.listdir(os.path.join(os.path.dirname(__file__), "fonts"))),
-        "pdf_generator": frappe.db.get_single_value("Print Settings", "pdf_generator")
-        if frappe.db.has_column("Print Settings", "pdf_generator") else "n/a",
     }
+    try:
+        out["pdf_generator"] = frappe.db.get_single_value("Print Settings", "pdf_generator")
+    except Exception as e:
+        out["pdf_generator"] = f"n/a ({type(e).__name__})"
+
+    # The decisive test: the same tiny page three ways, through Frappe's own get_pdf, and
+    # which font each PDF actually used.
+    import base64
+    from frappe.utils.pdf import get_pdf
+
+    ttf = base64.b64encode(open(os.path.join(os.path.dirname(__file__), "fonts", "manrope-bold.ttf"),
+                                "rb").read()).decode()
+    tests = {
+        "system": "body{font-family:'Manrope';font-weight:700}",
+        "embedded": ("@font-face{font-family:'MPDF';font-weight:700;src:url(data:font/truetype;base64,%s) "
+                     "format('truetype')} body{font-family:'MPDF';font-weight:700}" % ttf),
+        "embedded_x": ("@font-face{font-family:'MPDF2';src:url(data:application/x-font-ttf;base64,%s) "
+                       "format('truetype')} body{font-family:'MPDF2'}" % ttf),
+    }
+    for name, css in tests.items():
+        try:
+            pdf = get_pdf(f"<html><head><style>{css}</style></head><body><p>Executive Summary 123</p></body></html>")
+            import re as _re
+            out[f"test_{name}"] = sorted(set(_re.findall(rb"/BaseFont\s*/([A-Za-z0-9+_-]+)", pdf)))
+            out[f"test_{name}"] = [x.decode() for x in out[f"test_{name}"]]
+        except Exception as e:
+            out[f"test_{name}"] = f"failed: {e}"[:300]
+    return out
