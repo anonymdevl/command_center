@@ -178,10 +178,23 @@ const HANDLERS = {
     model: "gemini-2.5-flash",
     question,
     answer: [
-      `**Preview answer to “${question}”** — on the live site Gemini answers from the records.`,
+      "Customers owe **GHS 9.18M** across **806 unpaid invoices**, and nearly three quarters of " +
+        "it is more than 90 days old — a collection problem, not a sales one. *(Preview: on the " +
+        "live site Gemini answers from the records.)*",
       "",
-      "Customers owe **GHS 9,177,568.91** across **806 unpaid invoices**, and **73.8%** of it " +
-        "(GHS 6,777,142.92) is more than 90 days old, measured against 19 Aug 2025.",
+      "```figures",
+      JSON.stringify([
+        { label: "Owed to us", value: "GHS 9.18M", note: "806 unpaid invoices", tone: "bad" },
+        { label: "Over 90 days", value: "73.8%", note: "GHS 6.78M", tone: "warn" },
+        { label: "We owe suppliers", value: "GHS 5.65M", note: "122 bills" },
+      ]),
+      "```",
+      "",
+      "```chart",
+      JSON.stringify({ type: "bar", title: "Largest balances (sample customers)", unit: "GHS",
+        labels: SAMPLE_CUSTOMERS.map((c) => c[0].replace(" (sample)", "")),
+        series: [{ name: "Owed", values: SAMPLE_CUSTOMERS.map((c) => c[1]) }] }),
+      "```",
       "",
       "## Largest balances",
       "| Customer | Owed (GHS) | Invoices | Oldest |",

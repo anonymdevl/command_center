@@ -1,3 +1,5 @@
+import { renderBlock } from "./charts.js";
+
 /**
  * The analyst's answer, as formatted text -- built from DOM nodes, never from HTML.
  *
@@ -14,6 +16,7 @@ export function renderMarkdown(src) {
   const root = document.createElement("div");
   root.className = "md";
   const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
+  let lead = true; // the first paragraph is the answer itself, set as the headline
 
   let i = 0;
   while (i < lines.length) {
@@ -21,6 +24,28 @@ export function renderMarkdown(src) {
 
     if (!line.trim()) {
       i++;
+      continue;
+    }
+
+    // Fenced blocks: ```figures and ```chart are drawn (charts.js); anything else is
+    // shown as code. Never parsed as HTML.
+    const fence = /^\s*```\s*([\w-]*)\s*$/.exec(line);
+    if (fence) {
+      const lang = fence[1].toLowerCase();
+      const body = [];
+      i++;
+      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) body.push(lines[i++]);
+      i++; // the closing fence
+      if (lang === "figures" || lang === "chart") {
+        const drawn = renderBlock(lang, body.join("\n"));
+        if (drawn) root.append(drawn);
+      } else {
+        const pre = document.createElement("pre");
+        const code = document.createElement("code");
+        code.textContent = body.join("\n");
+        pre.append(code);
+        root.append(pre);
+      }
       continue;
     }
 
@@ -38,6 +63,7 @@ export function renderMarkdown(src) {
 
     const h = /^(#{1,4})\s+(.*)$/.exec(line);
     if (h) {
+      lead = false;
       const el = document.createElement(h[1].length <= 2 ? "h4" : "h5");
       inline(el, h[2]);
       root.append(el);
@@ -71,6 +97,8 @@ export function renderMarkdown(src) {
     const p = document.createElement("p");
     inline(p, para.join(" "));
     mark(p, para.join(" "));
+    if (lead && !p.classList.length) p.classList.add("md-lead");
+    lead = false;
     root.append(p);
   }
   return root;
@@ -85,7 +113,7 @@ function mark(el, raw) {
 
 function startsBlock(lines, i) {
   const l = lines[i];
-  return /^#{1,4}\s/.test(l) || /^\s*([-*•]|\d+[.)])\s+/.test(l) ||
+  return /^\s*```/.test(l) || /^#{1,4}\s/.test(l) || /^\s*([-*•]|\d+[.)])\s+/.test(l) ||
     (isRow(l) && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1]));
 }
 

@@ -664,6 +664,83 @@ table.dt tr:hover td{background:var(--hover)}
 .rp-body{font-size:var(--fs-md);line-height:1.62;color:var(--ink2)}
 .rp-body b{color:var(--ink)}
 
+/* ---- the analyst's answers (markdown.js, charts.js) ---- */
+.md{font-size:var(--fs-md);line-height:1.68;color:var(--ink2)}
+.md > *{margin:0 0 12px}
+.md b{color:var(--ink);font-weight:var(--fw-semibold)}
+.md .md-lead{font-size:var(--fs-lg);line-height:1.55;color:var(--ink);font-weight:var(--fw-medium);
+ letter-spacing:-.01em}
+.md h4{font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.015em;color:var(--ink);
+ margin:22px 0 8px}
+.md h5{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--ink);margin:18px 0 6px}
+.md ul,.md ol{padding-left:20px}
+.md li{margin:5px 0;padding-left:2px}
+.md li::marker{color:var(--dim)}
+.md pre{background:var(--raised);border-radius:var(--r-sm);padding:12px 14px;overflow-x:auto;
+ font:var(--fs-xs)/1.5 var(--mono)}
+.md .md-rec,.md .md-proj{list-style:none;border-left:0;border-radius:var(--r-sm);padding:11px 14px 11px 40px;
+ position:relative;color:var(--ink)}
+.md .md-rec{background:var(--accent-bg)}
+.md .md-rec::before{content:"";position:absolute;left:14px;top:14px;width:14px;height:14px;border-radius:50%;
+ background:var(--accent);box-shadow:inset 0 0 0 4px var(--accent-bg)}
+.md .md-proj{background:var(--raised)}
+.md .md-proj::before{content:"";position:absolute;left:15px;top:15px;width:12px;height:12px;
+ border:2px dashed var(--dim);border-radius:50%}
+.md li.md-rec,.md li.md-proj{margin-left:-20px;margin-bottom:8px}
+.md-table{border:1px solid var(--line);border-radius:var(--r-sm);overflow-x:auto;margin:6px 0 14px}
+.md-table table.dt{margin:0}
+.md-table table.dt th{background:var(--raised);padding:9px 12px}
+.md-table table.dt td{padding:10px 12px}
+.md-table table.dt tbody tr:nth-child(even) td{background:var(--zebra)}
+.md-table td.r,.md-table th.r{text-align:right;font-variant-numeric:tabular-nums}
+/* Key figures: the same tints as the cards, so an answer and a screen are one product. */
+.md-figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0 8px}
+.md-fig{background:var(--t1);border-radius:var(--r-sm);padding:13px 15px;display:flex;flex-direction:column;gap:2px;
+ min-width:0}
+.md-fig:nth-child(3n+2){background:var(--t2)}
+.md-fig:nth-child(3n+3){background:var(--t3)}
+.md-fig-l{font-size:var(--fs-xs);color:var(--ink2);font-weight:var(--fw-semibold)}
+.md-fig-v{font-size:var(--fs-2xl);font-weight:var(--fw-semibold);letter-spacing:-.025em;color:var(--ink);
+ line-height:1.15;margin-top:4px;overflow-wrap:anywhere}
+.md-fig-n{font-size:var(--fs-xs);color:var(--mut)}
+.md-fig.t-bad .md-fig-v{color:var(--crit)}
+.md-fig.t-warn .md-fig-v{color:var(--high)}
+.md-fig.t-good .md-fig-v{color:var(--ok)}
+.md-chart{margin:14px 0;padding:16px 18px 14px;border:1px solid var(--line);border-radius:var(--r-sm);
+ background:var(--surface)}
+.md-chart figcaption{font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--ink);margin-bottom:12px}
+.md-bars{display:flex;flex-direction:column;gap:9px}
+.md-bar{display:grid;grid-template-columns:minmax(90px,34%) minmax(0,1fr) auto;gap:12px;align-items:center;
+ font-size:var(--fs-sm)}
+.md-bar-l{color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.md-bar-t{height:10px;background:var(--raised);border-radius:var(--r-pill);overflow:hidden}
+.md-bar-t i{display:block;height:100%;background:var(--accent);border-radius:var(--r-pill)}
+.md-bar:first-child .md-bar-t i{filter:saturate(1.15)}
+.md-bar-v{font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);color:var(--ink);white-space:nowrap}
+.md-line{width:100%;height:auto;display:block;overflow:visible}
+.md-grid{stroke:var(--line);stroke-width:1}
+.md-axis{fill:var(--mut);font-size:var(--fs-3xs);font-family:var(--sans)}
+.md-area{fill:var(--accent-bg)}
+.md-ln{fill:none;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.md-ln.s0,.md-legend i.s0{stroke:var(--accent);background:var(--accent)}
+.md-ln.s1,.md-legend i.s1{stroke:var(--ok);background:var(--ok)}
+.md-ln.s2,.md-legend i.s2{stroke:var(--dim);background:var(--dim)}
+.md-pt.s0{fill:var(--accent)}.md-pt.s1{fill:var(--ok)}.md-pt.s2{fill:var(--dim)}
+.md-donut{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+.md-donut svg{width:150px;height:150px;flex:none}
+.md-sl.c0,.md-legend i.c0{fill:var(--accent);background:var(--accent)}
+.md-sl.c1,.md-legend i.c1{fill:var(--ok);background:var(--ok)}
+.md-sl.c2,.md-legend i.c2{fill:var(--high);background:var(--high)}
+.md-sl.c3,.md-legend i.c3{fill:var(--dim);background:var(--dim)}
+.md-sl.c4,.md-legend i.c4{fill:var(--crit);background:var(--crit)}
+.md-sl.c5,.md-legend i.c5{fill:var(--med);background:var(--med)}
+.md-dt{fill:var(--ink);font-size:var(--fs-xs);font-weight:var(--fw-semibold);font-family:var(--sans)}
+.md-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:var(--fs-xs);color:var(--mut);margin-top:10px}
+.md-legend span{display:inline-flex;align-items:center;gap:7px}
+.md-legend i{width:9px;height:9px;border-radius:3px;flex:none}
+.md-legend.col{flex-direction:column;gap:9px;margin:0;flex:1;min-width:180px}
+.md-legend.col b{margin-left:auto;color:var(--ink);font-variant-numeric:tabular-nums}
+
 /* ---- the last small-capital labels, in plain words like the rest ---- */
 .eyebrow,.dhead .dt,.askchecked-t{text-transform:none;letter-spacing:0;font-size:var(--fs-xs);
  font-weight:var(--fw-semibold);color:var(--mut)}

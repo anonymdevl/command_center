@@ -57,7 +57,7 @@ def answer_pdf(question: str, answer: str, checked=None, business_code: str | No
 
     checked = frappe.parse_json(checked) if isinstance(checked, str) else (checked or [])
     # The answer is model-written markdown: rendered, then sanitised, never trusted.
-    body = sanitize_html(frappe.utils.md_to_html(answer or ""))
+    body = sanitize_html(frappe.utils.md_to_html(_blocks_to_tables(answer or "")))
     who = frappe.utils.get_fullname(frappe.session.user)
     when = frappe.utils.format_datetime(frappe.utils.now_datetime(), "d MMM yyyy, HH:mm")
     checks = "".join(f"<li>{escape_html(str(c))}</li>" for c in checked[:40])
@@ -108,6 +108,42 @@ def records_xlsx(fact: str, filters=None, business_code: str | None = None, titl
             + (" -- the export cap was reached" if s.get("count", 0) > len(rows) else ""))
     _send_xlsx(title or data.get("noun") or fact, [(title or "Records", header, rows)],
                business_code, note=note)
+
+
+def _blocks_to_tables(md: str) -> str:
+    """```figures and ```chart blocks become markdown tables on paper.
+
+    The screen draws them (charts.js); a PDF engine cannot, and a PDF that silently
+    dropped the key figures would be a worse document than the screen it came from.
+    """
+    import json
+
+    def table(head, rows):
+        out = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
+        out += ["| " + " | ".join(str(c).replace("|", "/") for c in r) + " |" for r in rows]
+        return "\n".join(out)
+
+    def convert(m):
+        lang, body = m.group(1).lower(), m.group(2)
+        try:
+            data = json.loads(body)
+        except ValueError:
+            return ""
+        if lang == "figures" and isinstance(data, list):
+            return table(["Figure", "Value", "Note"],
+                         [[f.get("label", ""), f.get("value", ""), f.get("note", "")]
+                          for f in data if isinstance(f, dict)])
+        if lang == "chart" and isinstance(data, dict):
+            series = [x for x in data.get("series") or [] if isinstance(x, dict)][:3]
+            head = [""] + [x.get("name") or "Value" for x in series]
+            rows = [[label] + [(x.get("values") or [])[i] if i < len(x.get("values") or []) else ""
+                               for x in series]
+                    for i, label in enumerate(data.get("labels") or [])]
+            title = f"**{data.get('title')}**" + (f" ({data.get('unit')})" if data.get("unit") else "")
+            return (title + "\n\n" if data.get("title") else "") + table(head, rows)
+        return ""
+
+    return re.sub(r"```\s*(figures|chart)\s*\n(.*?)\n\s*```", convert, md, flags=re.S | re.I)
 
 
 def _cell(v):

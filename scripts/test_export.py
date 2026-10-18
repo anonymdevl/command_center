@@ -91,6 +91,15 @@ check("<script>" not in html, "the model's markdown is sanitised")
 check("Figures as at 2025-08-19" in html and "Kofi Mensah" in html, "the header says as-of and who")
 check("get_figures" in html and "cannot change anything" in html, "what it checked, and the boundary")
 
+# Figures and charts become tables on paper, never vanish.
+md = ('Lead.\n\n```figures\n[{"label": "Owed", "value": "GHS 9.18M", "note": "806"}]\n```\n\n'
+      '```chart\n{"type": "bar", "title": "Spend", "unit": "GHS", "labels": ["A", "B"], '
+      '"series": [{"name": "Spend", "values": [10, 5]}]}\n```\n\n```chart\nnot json\n```')
+t = export._blocks_to_tables(md)
+check("| Owed | GHS 9.18M | 806 |" in t, "a figures block becomes a table")
+check("**Spend** (GHS)" in t and "| A | 10 |" in t, "a chart block becomes its data table")
+check("not json" not in t and "```" not in t, "a block that does not parse is dropped, not printed raw")
+
 # _cell
 check(export._cell("GHS 1,234.50") == 1234.5 and export._cell("12%") == 0.12, "figure parsing")
 check(export._cell("Q3 2025") == "Q3 2025" and export._cell(None) == "", "non-figures untouched")
