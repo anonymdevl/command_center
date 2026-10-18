@@ -247,6 +247,11 @@ export default function AskBar({ scope, openDrawer }) {
               scope={scope}
               openDrawer={openDrawer}
               onReset={reset}
+              onAsk={ask}
+              onContinue={() => {
+                setOpen(false);
+                window.location.hash = "ask";
+              }}
             />
           ) : null}
         </div>
@@ -279,10 +284,14 @@ function Suggestions({ choices, recentCount, hi, onPick }) {
   );
 }
 
-function Answer({ asked, result, scope, openDrawer, onReset }) {
+function Answer({ asked, result, scope, openDrawer, onReset, onAsk, onContinue }) {
   const body = useRef(null);
   const [copied, setCopied] = useState(false);
   const [hasTables, setHasTables] = useState(false);
+  // Follow-up chips are built once per answer; the ref keeps them asking through the
+  // current ask, not the one captured when the answer was drawn.
+  const askRef = useRef(onAsk);
+  askRef.current = onAsk;
   const markdown = result.format === "markdown";
 
   // The analyst's markdown is rendered compactly here; a pattern answer has its own
@@ -291,7 +300,7 @@ function Answer({ asked, result, scope, openDrawer, onReset }) {
     const el = body.current;
     if (!el) return;
     el.textContent = "";
-    if (markdown) el.append(renderMarkdown(result.answer));
+    if (markdown) el.append(renderMarkdown(result.answer, { onFollowup: (q) => askRef.current(q) }));
     else
       renderAnswer(el, result, {
         onOpen: (records, title) => openRecords(openDrawer, scope, records, title),
@@ -377,6 +386,10 @@ function Answer({ asked, result, scope, openDrawer, onReset }) {
           {copied ? "Copied" : "Copy"}
         </button>
         <span className="ap-gap" />
+        <button className="ap-act" type="button" onClick={onContinue}
+          title="Open this conversation on the Ask AI screen">
+          Continue in Ask AI
+        </button>
         <button className="ap-act" type="button" onClick={onReset}>
           New question
         </button>

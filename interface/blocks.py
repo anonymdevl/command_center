@@ -246,6 +246,27 @@ table.dt tr:hover td{background:var(--hover)}
 .md-legend.stack{flex-direction:column;gap:9px;margin:0;flex:1;min-width:180px}
 .md-legend.stack b{margin-left:auto;color:var(--ink);font-variant-numeric:tabular-nums}
 
+/* ---- follow-up questions under an answer ---- */
+.md-follow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:16px 0 4px;padding-top:14px;
+ border-top:1px solid var(--line)}
+.md-follow-t{font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--mut);margin-right:4px}
+.md-follow-q{border:1px solid var(--line2);background:var(--surface);color:var(--ink);border-radius:var(--r-pill);
+ padding:7px 14px;font:var(--fw-medium) var(--fs-sm) var(--sans);cursor:pointer;text-align:left;
+ transition:border-color .15s,background .15s}
+.md-follow-q:hover{border-color:var(--accent);background:var(--accent-bg)}
+.md-follow-q:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- the Ask AI screen as a conversation ---- */
+.thread-tools{display:flex;justify-content:flex-end;margin:6px 0 4px}
+#sout2{display:flex;flex-direction:column;gap:22px;margin-top:10px}
+.turn{display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px}
+.turn-q{align-self:flex-end;max-width:min(78%,640px);background:var(--accent-bg);color:var(--ink);
+ border-radius:20px 20px 6px 20px;padding:11px 16px;font-size:var(--fs-md);font-weight:var(--fw-medium);
+ line-height:1.5}
+.turn-a > .panel{margin:0;border:0;padding:0;background:none}
+.turn-a .askans{padding:0}
+.turn-a .ap-think{padding:6px 0}
+
 /* ---- the last small-capital labels, in plain words like the rest ---- */
 .eyebrow,.dhead .dt,.askchecked-t{text-transform:none;letter-spacing:0;font-size:var(--fs-xs);
  font-weight:var(--fw-semibold);color:var(--mut)}

@@ -8,7 +8,7 @@ import { useApi } from "../useApi.js";
 import Records from "./Records.jsx";
 import { hydrateCards, hydrateTiles, keysFor } from "../legacy/hydrate.js";
 import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js";
-import { historyFor, remember } from "../askHistory.js";
+import { clearTurns, historyFor, remember, turnsFor } from "../askHistory.js";
 import { withSteps } from "../askFlow.js";
 import { runReport } from "../legacy/reports.js";
 
@@ -60,11 +60,89 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
     // The designed Ask screen calls runSearch(value) from its own input and its own
     // suggestion buttons, and expects the answer in its own #sout2. So it is wired
     // rather than replaced: same markup, same ids, real answers.
+    // The Ask AI screen is a conversation: each question is a turn -- the person's
+    // question, then the analyst's answer under it -- kept in order, newest last, and
+    // redrawn from askHistory.js whenever the screen opens, so a conversation started
+    // in the bar carries on here.
+    const answerOpts = (q) => ({
+      inThread: true,
+      onFollowup: (next) => window.runSearch && window.runSearch(next),
+      onPdf: (res) =>
+        api.answerPdf({
+          question: q,
+          answer: res.answer,
+          checked: res.checked,
+          business_code: scopeRef.current,
+          model: res.model,
+        }),
+      onOpen: (records, title) =>
+        openDrawer(
+          <Records
+            scope={scopeRef.current}
+            fact={records.fact}
+            filters={records.filters}
+            title={title?.slice(0, 80) || "The records behind it"}
+            openDrawer={openDrawer}
+          />
+        ),
+    });
+
+    const newTurn = (thread, q) => {
+      const turn = document.createElement("div");
+      turn.className = "turn";
+      const qb = document.createElement("div");
+      qb.className = "turn-q";
+      qb.textContent = q;
+      const a = document.createElement("div");
+      a.className = "turn-a";
+      turn.append(qb, a);
+      thread.append(turn);
+      return a;
+    };
+
+    const threadTools = (thread) => {
+      const has = !!thread.querySelector(".turn");
+      let bar = thread.previousElementSibling?.classList?.contains("thread-tools")
+        ? thread.previousElementSibling : null;
+      if (!has) {
+        bar?.remove();
+        return;
+      }
+      if (bar) return;
+      bar = document.createElement("div");
+      bar.className = "thread-tools";
+      const b = document.createElement("button");
+      b.className = "btn";
+      b.textContent = "New conversation";
+      b.onclick = () => {
+        clearTurns(scopeRef.current);
+        thread.textContent = "";
+        bar.remove();
+        document.getElementById("askin")?.focus();
+      };
+      bar.append(b);
+      thread.before(bar);
+    };
+
+    window.drawThread = () => {
+      const thread = document.getElementById("sout2");
+      if (!thread) return;
+      thread.textContent = "";
+      turnsFor(scopeRef.current).forEach((t) => {
+        renderAnswer(newTurn(thread, t.q), t.payload, answerOpts(t.q));
+      });
+      threadTools(thread);
+    };
+
     window.runSearch = async (question) => {
-      const out = document.getElementById("sout2") || document.getElementById("sout");
-      if (!out) return;
+      const thread = document.getElementById("sout2") || document.getElementById("sout");
+      if (!thread) return;
       const q = (question || "").trim();
       if (!q) return;
+      const box = document.getElementById("askin");
+      if (box) box.value = "";
+      const out = newTurn(thread, q);
+      out.parentElement.scrollIntoView({ behavior: "smooth", block: "start" });
       renderThinking(out, q);
       try {
         // The same flow as the bar: a job that reports each lookup, shown live.
@@ -74,29 +152,11 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
           (steps) => renderThinking(out, q, steps),
         );
         remember(scopeRef.current, q, payload);
-        renderAnswer(out, payload, {
-          onPdf: (res) =>
-            api.answerPdf({
-              question: q,
-              answer: res.answer,
-              checked: res.checked,
-              business_code: scopeRef.current,
-              model: res.model,
-            }),
-          onOpen: (records, title) =>
-            openDrawer(
-              <Records
-                scope={scopeRef.current}
-                fact={records.fact}
-                filters={records.filters}
-                title={title?.slice(0, 80) || "The records behind it"}
-                openDrawer={openDrawer}
-              />
-            ),
-        });
+        renderAnswer(out, payload, answerOpts(q));
       } catch (e) {
         renderFailure(out, e?.message);
       }
+      threadTools(thread);
     };
 
     // The designed Reports screen's Run buttons call runReport(code).
@@ -104,6 +164,7 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
 
     return () => {
       delete window.runReport;
+      delete window.drawThread;
       delete window.openDrawer;
       delete window.explain;
       delete window.drill;
@@ -114,6 +175,7 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
 
   useEffect(() => {
     if (viewKey !== "ask") return;
+    window.drawThread?.();
     // The Ask AI screen's suggestions come from the server's one list, the same the
     // bar offers; the read-only demonstration ("Issue a credit note") stays last.
     const sugg = document.getElementById("asksugg");

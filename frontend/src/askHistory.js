@@ -17,7 +17,19 @@ export function historyFor(scope) {
 }
 
 export function remember(scope, question, payload) {
-  if (payload?.answered && payload.answer) turns.push({ q: question, a: payload.answer, scope });
+  if (payload?.answered && payload.answer) {
+    turns.push({ q: question, a: payload.answer, scope, payload });
+  }
+}
+
+/** The whole conversation for this business, oldest first -- the Ask AI screen's thread. */
+export function turnsFor(scope) {
+  return turns.filter((t) => t.scope === scope);
+}
+
+/** Start a new conversation for this business. */
+export function clearTurns(scope) {
+  for (let i = turns.length - 1; i >= 0; i--) if (turns[i].scope === scope) turns.splice(i, 1);
 }
 
 /** Questions asked this session, newest first, without repeats. */

@@ -207,6 +207,11 @@ const HANDLERS = {
       "",
       "- **Recommendation:** Finance to agree payment dates with the three largest debtors this week.",
       "- **Recommendation:** Hold new credit for customers more than 90 days overdue until a plan is agreed.",
+      "",
+      "```followups",
+      JSON.stringify(["Which of these customers has not paid in 90 days?",
+        "How does what we are owed compare with a year ago?", "What do we owe our suppliers?"]),
+      "```",
     ].join("\n"),
     // Said on the answer itself: on 18 Oct this fixed sample was read as the AI giving
     // the same answer to every question. The server never sends a notice.

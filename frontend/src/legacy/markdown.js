@@ -12,7 +12,7 @@ import { renderBlock } from "./charts.js";
  * italics, inline code and links. That is everything the system prompt asks for.
  */
 
-export function renderMarkdown(src) {
+export function renderMarkdown(src, { onFollowup } = {}) {
   const root = document.createElement("div");
   root.className = "md";
   const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
@@ -36,7 +36,12 @@ export function renderMarkdown(src) {
       i++;
       while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) body.push(lines[i++]);
       i++; // the closing fence
-      if (lang === "figures" || lang === "chart") {
+      if (lang === "followups") {
+        // The analyst's suggested next questions: chips that ask them. Shown only where
+        // there is somewhere to ask (the bar, the Ask AI screen) -- never in a report.
+        const chips = onFollowup ? followups(body.join("\n"), onFollowup) : null;
+        if (chips) root.append(chips);
+      } else if (lang === "figures" || lang === "chart") {
         const drawn = renderBlock(lang, body.join("\n"));
         if (drawn) root.append(drawn);
       } else {
@@ -102,6 +107,33 @@ export function renderMarkdown(src) {
     root.append(p);
   }
   return root;
+}
+
+function followups(source, onAsk) {
+  let list;
+  try {
+    list = JSON.parse(source);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(list)) return null;
+  const qs = list.map((q) => String(q || "").trim()).filter((q) => q && q.length < 200).slice(0, 3);
+  if (!qs.length) return null;
+  const box = document.createElement("div");
+  box.className = "md-follow";
+  const t = document.createElement("span");
+  t.className = "md-follow-t";
+  t.textContent = "Ask next";
+  box.append(t);
+  qs.forEach((q) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "md-follow-q";
+    b.textContent = q;
+    b.onclick = () => onAsk(q);
+    box.append(b);
+  });
+  return box;
 }
 
 /** Recommendations and projections are labelled in the text; give them a look too. */

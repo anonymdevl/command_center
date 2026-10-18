@@ -17,11 +17,11 @@
 import { exact, count, shortDate } from "../format.js";
 import { renderMarkdown } from "./markdown.js";
 
-export function renderAnswer(container, payload, { onOpen, onPdf } = {}) {
+export function renderAnswer(container, payload, { onOpen, onPdf, onFollowup, inThread } = {}) {
   container.textContent = "";
   if (!payload) return;
 
-  container.append(block(payload, onOpen, onPdf));
+  container.append(block(payload, onOpen, onPdf, onFollowup, inThread));
 }
 
 export function renderThinking(container, question, steps = []) {
@@ -55,13 +55,14 @@ export function renderFailure(container, message) {
 
 /* ------------------------------------------------------------------------- */
 
-function block(p, onOpen, onPdf) {
+function block(p, onOpen, onPdf, onFollowup, inThread) {
   const wrap = div("panel");
   wrap.style.margin = "0 0 16px";
 
   // No "Answer" heading: the question is the heading, and a label over a reply reads
   // like an exam paper.
-  if (p.question) {
+  // In a conversation the question is already shown as the person's turn.
+  if (p.question && !inThread) {
     const q = div("ans-q");
     q.textContent = p.question;
     wrap.append(q);
@@ -80,7 +81,7 @@ function block(p, onOpen, onPdf) {
 
   const body = div("askans");
   // The analyst answers in formatted text; the pattern answers are plain sentences.
-  body.append(p.format === "markdown" ? renderMarkdown(p.answer) : text(p.answer || ""));
+  body.append(p.format === "markdown" ? renderMarkdown(p.answer, { onFollowup }) : text(p.answer || ""));
   wrap.append(body);
 
   if (p.entity) {

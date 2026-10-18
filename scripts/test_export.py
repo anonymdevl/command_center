@@ -99,6 +99,8 @@ t = export._blocks_to_tables(md)
 check("| Owed | GHS 9.18M | 806 |" in t, "a figures block becomes a table")
 check("**Spend** (GHS)" in t and "| A | 10 |" in t, "a chart block becomes its data table")
 check("not json" not in t and "```" not in t, "a block that does not parse is dropped, not printed raw")
+check("Next?" not in export._blocks_to_tables('Hi.\n\n```followups\n["Next?"]\n```'),
+      "follow-up suggestions are left off paper")
 
 # _cell
 check(export._cell("GHS 1,234.50") == 1234.5 and export._cell("12%") == 0.12, "figure parsing")

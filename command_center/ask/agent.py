@@ -267,6 +267,11 @@ answers.
 than three items (the reader likes tables). Plain words, no jargon, no field names.
 5. Close with Recommendations when there is something worth doing, each on its own \
 bullet starting "Recommendation:".
+6. End with two or three follow-up questions the person is likely to ask next -- short, \
+specific to this answer, answerable from the data -- as a followups block:
+```followups
+["Which of these customers has not paid in 90 days?", "How does this compare with last year?"]
+```
 Every number in a figures or chart block must come from a tool result, exactly like a \
 number in the text. Keep it under about 300 words of prose unless a report is asked for.
 """

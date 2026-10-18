@@ -143,6 +143,8 @@ def _blocks_to_tables(md: str) -> str:
             return (title + "\n\n" if data.get("title") else "") + table(head, rows)
         return ""
 
+    # Follow-up suggestions are for the screen, not for paper.
+    md = re.sub(r"```\s*followups\s*\n.*?\n\s*```", "", md, flags=re.S | re.I)
     return re.sub(r"```\s*(figures|chart)\s*\n(.*?)\n\s*```", convert, md, flags=re.S | re.I)
 
 
