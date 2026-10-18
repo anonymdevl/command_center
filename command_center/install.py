@@ -64,3 +64,36 @@ def seed_local_business():
         "status": "Active",
     }).insert(ignore_permissions=True)
     return doc.name
+
+
+def install_pdf_fonts():
+    """Put Manrope where the server's PDF engine finds fonts (after every migrate).
+
+    The PDF embeds Manrope too, but wkhtmltopdf -- the engine Frappe uses -- ignored the
+    embedded font on Biomed and printed every PDF in DejaVu Sans. It reads the fonts
+    fontconfig knows, so the three weights are copied into the bench user's own font
+    folder and the font cache is refreshed. Nothing outside that folder is touched, and
+    a server without fontconfig simply keeps the embedded font.
+    """
+    import os
+    import shutil
+    import subprocess
+
+    src = os.path.join(os.path.dirname(__file__), "api", "fonts")
+    dest = os.path.join(os.path.expanduser("~"), ".local", "share", "fonts", "command_center")
+    try:
+        os.makedirs(dest, exist_ok=True)
+        changed = False
+        for name in sorted(os.listdir(src)):
+            if not name.endswith(".ttf"):
+                continue
+            a, b = os.path.join(src, name), os.path.join(dest, name)
+            if not os.path.exists(b) or open(a, "rb").read() != open(b, "rb").read():
+                shutil.copyfile(a, b)
+                changed = True
+        if changed and shutil.which("fc-cache"):
+            subprocess.run(["fc-cache", "-f", dest], check=False, timeout=60,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"Command Center: PDF fonts {'installed' if changed else 'already in place'} in {dest}")
+    except Exception as e:  # never stop a migrate over a typeface
+        print(f"Command Center: could not install the PDF fonts ({e}); PDFs keep the embedded font")

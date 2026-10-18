@@ -45,6 +45,8 @@ fixtures = [
 ]
 
 after_install = "command_center.install.after_install"
+# Manrope for the PDF engine, refreshed on every deploy (see install.install_pdf_fonts).
+after_migrate = ["command_center.install.install_pdf_fonts"]
 
 # A credential belongs to one person. Enforced by query condition, not by
 # remembering to filter in every read.

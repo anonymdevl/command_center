@@ -130,7 +130,7 @@ def _line(labels, series, unit) -> str:
         gy = T + (H - T - B) * f
         grid.append(f'<line x1="{L}" x2="{W - R}" y1="{gy:.1f}" y2="{gy:.1f}" stroke="#c9cdd4" '
                     f'stroke-width="0.8" stroke-dasharray="3,3"/>')
-        grid.append(f'<text x="{W - R}" y="{gy - 4:.1f}" text-anchor="end" font-size="10" fill="{MUT}">'
+        grid.append(f'<text x="{W - R}" y="{gy - 4:.1f}" text-anchor="end" font-size="9" fill="{MUT}">'
                     f'{escape(fmt(hi - span * f, unit))}</text>')
     colours = (ACCENT, "#127a55", "#b35a0b")
     areas, lines = [], []
@@ -150,7 +150,7 @@ def _line(labels, series, unit) -> str:
     for i, label in enumerate(labels):
         if i % step and i != len(labels) - 1:
             continue
-        parts.append(f'<text x="{x(i):.1f}" y="{H - 8}" text-anchor="middle" font-size="10" fill="{MUT}">'
+        parts.append(f'<text x="{x(i):.1f}" y="{H - 8}" text-anchor="middle" font-size="9" fill="{MUT}">'
                      f'{escape(label[:9])}</text>')
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 {W} {H}" '
            f'font-family="Helvetica, Arial, sans-serif">{"".join(parts)}</svg>')
@@ -204,26 +204,26 @@ def fmt(v: float, unit: str = "") -> str:
 # The styles these blocks need, for the PDF template.
 CSS = f"""
 table.figs{{width:100%;border-collapse:separate;border-spacing:8px 0;margin:16px -8px 12px;table-layout:fixed}}
-table.figs td.fig{{border:0;border-radius:10px;padding:12px 14px 13px;vertical-align:top}}
-.fig-l{{font-size:8pt;font-weight:600;color:{INK2};line-height:1.3;height:2.6em;overflow:hidden}}
-.fig-v{{font-size:15pt;font-weight:700;letter-spacing:-.02em;line-height:1.15;margin-top:4px;white-space:nowrap}}
-.fig-n{{font-size:7.5pt;color:{MUT};margin-top:4px;line-height:1.35}}
+table.figs td.fig{{border:0;border-radius:9px;padding:10px 12px 11px;vertical-align:top}}
+.fig-l{{font-size:7pt;font-weight:600;color:{INK2};line-height:1.3;height:2.6em;overflow:hidden}}
+.fig-v{{font-size:12.5pt;font-weight:700;letter-spacing:-.015em;line-height:1.15;margin-top:3px;white-space:nowrap}}
+.fig-n{{font-size:6.5pt;color:{MUT};margin-top:3px;line-height:1.35}}
 .ch{{border:1px solid {LINE};border-radius:10px;padding:13px 15px 11px;margin:14px 0;page-break-inside:avoid}}
-.ch-t{{font-size:10pt;font-weight:700;color:{INK};margin-bottom:10px}}
+.ch-t{{font-size:8.5pt;font-weight:700;color:{INK};margin-bottom:8px}}
 table.bars{{width:100%;border-collapse:collapse;margin:0}}
 table.bars td,table.dn td,table.dn-k td{{background:none!important}}
-table.bars td{{border:0;padding:4px 0;font-size:9pt;vertical-align:middle}}
+table.bars td{{border:0;padding:3px 0;font-size:7.5pt;vertical-align:middle}}
 td.bar-l{{width:32%;color:{INK2};padding-right:10px}}
 td.bar-t{{width:auto}}
-.bar-track{{height:9px;background:{RAISED};border-radius:5px;overflow:hidden}}
-.bar-f{{height:9px;background:{ACCENT};border-radius:5px}}
+.bar-track{{height:7px;background:{RAISED};border-radius:5px;overflow:hidden}}
+.bar-f{{height:7px;background:{ACCENT};border-radius:5px}}
 td.bar-v{{width:18%;text-align:right;font-weight:700;color:{INK};padding-left:10px;white-space:nowrap}}
-.lg{{font-size:8.5pt;color:{INK2};margin-top:6px}}
+.lg{{font-size:7.5pt;color:{INK2};margin-top:6px}}
 .lg span{{margin-right:14px}}
 .lg i,.dn-k i{{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}}
 table.dn{{border-collapse:collapse;margin:0}}
 table.dn td{{border:0;vertical-align:middle;background:none}}
 td.dn-l{{padding-left:18px}}
-table.dn-k td{{border:0;padding:3px 6px 3px 0;font-size:9pt;color:{INK2};background:none}}
+table.dn-k td{{border:0;padding:3px 6px 3px 0;font-size:7.5pt;color:{INK2};background:none}}
 td.dn-p{{font-weight:700;color:{INK};text-align:right;padding-left:14px}}
 """

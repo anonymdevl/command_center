@@ -65,7 +65,7 @@ def pdf_bytes(question: str, answer: str, checked=None, business_code: str | Non
                           frappe.utils.md_to_html)
     return get_pdf(html, {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "18mm",
                           "margin-left": "15mm", "margin-right": "15mm",
-                          "footer-center": "Page [page] of [topage]", "footer-font-size": "7",
+                          "footer-center": "Page [page] of [topage]", "footer-font-size": "6",
                           "footer-spacing": "6", "encoding": "UTF-8"})
 
 
@@ -288,37 +288,37 @@ def _send_xlsx(title: str, sheets: list, business_code, note: str | None = None)
 PDF_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><style>
 {fonts}
 @page{{size:A4}}
-body{{font-family:'Manrope PDF',Manrope,'Helvetica Neue',Helvetica,Arial,'Liberation Sans',sans-serif;
- color:#111317;font-size:10pt;line-height:1.6;margin:0;-webkit-font-smoothing:antialiased}}
+body{{font-family:'Manrope PDF','Manrope','Helvetica Neue',Helvetica,Arial,'Liberation Sans',sans-serif;
+ color:#111317;font-size:9pt;line-height:1.6;margin:0;-webkit-font-smoothing:antialiased}}
 .hd{{border-bottom:1px solid #e3e5ea;padding-bottom:10px;margin-bottom:22px}}
 .hd td{{border:0;padding:0;vertical-align:bottom;background:none}}
-.brand{{font-size:8.5pt;font-weight:700;color:#2443e8}}
-.biz{{font-size:8.5pt;color:#646973;margin-top:2px}}
-.meta{{font-size:8.5pt;color:#646973;text-align:right;line-height:1.5}}
-h1{{font-size:22pt;font-weight:700;letter-spacing:-.025em;line-height:1.15;margin:0 0 10px}}
+.brand{{font-size:8pt;font-weight:700;color:#2443e8}}
+.biz{{font-size:7.5pt;color:#646973;margin-top:2px}}
+.meta{{font-size:7.5pt;color:#646973;text-align:right;line-height:1.5}}
+h1{{font-size:18pt;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin:0 0 8px}}
 p{{margin:0 0 9px}}
-p.lead{{font-size:11.5pt;line-height:1.55;color:#24272d;margin-bottom:14px}}
-h2{{font-size:13pt;font-weight:700;margin:24px 0 8px;letter-spacing:-.015em;page-break-after:avoid}}
-h3{{font-size:11.5pt;font-weight:700;margin:20px 0 6px;letter-spacing:-.01em;page-break-after:avoid}}
-h4{{font-size:10.5pt;font-weight:600;margin:14px 0 4px}}
+p.lead{{font-size:10pt;line-height:1.55;color:#24272d;margin-bottom:12px}}
+h2{{font-size:11.5pt;font-weight:700;margin:20px 0 7px;letter-spacing:-.01em;page-break-after:avoid}}
+h3{{font-size:10pt;font-weight:700;margin:16px 0 5px;page-break-after:avoid}}
+h4{{font-size:9pt;font-weight:600;margin:12px 0 4px}}
 hr{{border:0;border-top:1px solid #e3e5ea;margin:18px 0}}
 ul,ol{{margin:4px 0 12px;padding-left:18px}}
 li{{margin:4px 0}}
-li.rec{{list-style:none;margin:8px 0 8px -18px;padding:9px 13px;border-left:3px solid #2443e8;background:#f4f6fe;
+li.rec{{list-style:none;margin:7px 0 7px -18px;padding:8px 12px;border-left:3px solid #2443e8;background:#f4f6fe;
  border-radius:0 8px 8px 0}}
 p.proj{{padding:9px 13px;border-left:3px solid #a85a0a;background:#fbf5ec;border-radius:0 8px 8px 0}}
 strong,b{{font-weight:700}}
 em{{color:#3b3f47}}
-table{{border-collapse:collapse;width:100%;margin:10px 0 16px;font-size:9pt;page-break-inside:auto}}
+table{{border-collapse:collapse;width:100%;margin:8px 0 14px;font-size:8pt;page-break-inside:auto}}
 tr{{page-break-inside:avoid}}
-th{{text-align:left;color:#3b3f47;font-weight:600;background:#f2f3f5;border-bottom:1px solid #d9dce2;padding:8px 9px;
- font-size:8.5pt}}
-td{{border-bottom:1px solid #eceef1;padding:7px 9px;vertical-align:top}}
+th{{text-align:left;color:#3b3f47;font-weight:600;background:#f2f3f5;border-bottom:1px solid #d9dce2;padding:7px 8px;
+ font-size:7.5pt}}
+td{{border-bottom:1px solid #eceef1;padding:6px 8px;vertical-align:top}}
 td.n,th.n{{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}}
 th.n{{white-space:normal}}
 tbody tr:nth-child(even) td{{background:#fafbfc}}
 code{{font-family:Menlo,Consolas,monospace;font-size:8.5pt}}
-.ft{{margin-top:30px;border-top:1px solid #e3e5ea;padding-top:10px;font-size:7.5pt;color:#8a8f99;line-height:1.55}}
+.ft{{margin-top:26px;border-top:1px solid #e3e5ea;padding-top:9px;font-size:6.5pt;color:#8a8f99;line-height:1.55}}
 {css}
 </style></head><body>
 <table class="hd" style="width:100%;border-collapse:collapse"><tr>
