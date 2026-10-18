@@ -18,6 +18,7 @@
  --sun:#e3c063; --dawn:#e8994a; --moon:#9aa8f4;
  --shadow:0 1px 2px rgba(0,0,0,.35); --shadow2:0 24px 60px -20px rgba(0,0,0,.72),0 0 0 1px #26282d;
  --shadow-hover:0 4px 10px rgba(0,0,0,.25),0 14px 32px -14px rgba(0,0,0,.55);
+ --t1:#17241e; --t2:#262017; --t3:#1a1f2b;
  --grad:linear-gradient(#6a7fef,#6a7fef);
  --solid:#6a7fef;
 
@@ -50,6 +51,7 @@
  --shadow:0 1px 2px rgba(17,19,23,.04),0 8px 24px -12px rgba(17,19,23,.10);
  --shadow2:0 24px 60px -20px rgba(17,19,23,.28),0 2px 6px rgba(17,19,23,.06);
  --shadow-hover:0 2px 6px rgba(17,19,23,.06),0 14px 32px -14px rgba(17,19,23,.18);
+ --t1:#dceae2; --t2:#f1e6d4; --t3:#e1e5f0;
  --grad:linear-gradient(#2443e8,#2443e8);
 }
 
@@ -613,6 +615,34 @@ table.dt tr:hover td{background:var(--hover)}
 
 /* ---- the Ask screen's own box ---- */
 .askbox,[data-theme="light"] .askbox{border:1px solid var(--line2);box-shadow:none;padding:14px 22px}
+
+/* ---- Business Overview's signature tiles (build.py signature_tiles) ---- */
+/* Tinted, left-aligned, a cut corner with a round arrow -- the approved mockup. The
+   tints (--t1..--t3) are tokens in both themes. */
+.bk.sig{--cut:76px;--r-cut:20px;background:var(--t1);border:0;text-align:left;align-items:flex-start;
+ min-height:190px;padding:22px 22px 18px;position:relative;overflow:visible}
+.bk.sig:nth-child(3n+2){background:var(--t2)}
+.bk.sig:nth-child(3n+3){background:var(--t3)}
+.bk.sig:hover{box-shadow:var(--shadow-hover);transform:translateY(-2px)}
+.bk.sig > .khead{justify-content:flex-start}
+.bk.sig .l{color:var(--ink2);font-weight:var(--fw-semibold);font-size:var(--fs-sm)}
+.bk.sig .n{justify-content:flex-start;font-size:clamp(30px,15cqi,46px);margin-top:auto;padding-top:18px}
+/* The footnote may take a second line beside the arrow: cutting it off with an
+   ellipsis hid what the figure means. */
+.bk.sig .v{border-top:0;padding-top:0;margin-top:6px;max-width:calc(100% - var(--cut));color:var(--ink2);
+ white-space:normal;overflow:visible;text-overflow:clip;line-height:1.4}
+.bk.sig > .flag[data-prov]{align-self:flex-start;margin-top:8px}
+.bk.sig:has(.n):not(:has(.v))::after{display:none}
+.bk.sig.clickable::before{display:none}
+.sig-cut{position:absolute;right:0;bottom:0;width:var(--cut);height:var(--cut);background:var(--surface);
+ border-top-left-radius:var(--r-cut);pointer-events:none}
+.sig-cut::before,.sig-cut::after{content:"";position:absolute;width:var(--r-cut);height:var(--r-cut);
+ background:radial-gradient(circle at 0 0,transparent calc(var(--r-cut) - .5px),var(--surface) var(--r-cut))}
+.sig-cut::before{right:0;top:calc(var(--r-cut) * -1)}
+.sig-cut::after{left:calc(var(--r-cut) * -1);bottom:0}
+.sig-go{position:absolute;right:6px;bottom:6px;width:58px;height:58px;border-radius:50%;background:var(--ink);
+ color:var(--surface);display:grid;place-items:center;transition:transform .2s;pointer-events:none}
+.bk.sig:hover .sig-go{transform:rotate(45deg)}
 
 /* ---- the records drawer ---- */
 .drawer{border-left:0;border-radius:24px 0 0 24px;box-shadow:var(--shadow2)}

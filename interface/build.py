@@ -634,6 +634,27 @@ def normalise_cards(html: str) -> str:
 
 VIEWS = {k: normalise_cards(v) for k, v in VIEWS.items()}
 
+
+def signature_tiles(html: str) -> str:
+    """The mockup's tiles for Business Overview: a cut corner holding an arrow button.
+
+    Two absolutely placed spans at the start of each tile, so nothing in the flow
+    moves: the label, figure, footnote and the provenance pill hydrate.js appends are
+    exactly where hydration expects them, and the tile still opens with its own
+    onclick. Business Overview only -- the signature used everywhere would turn back
+    into a template.
+    """
+    import re as _re
+    arrow = ('<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
+             'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+             '<path d="M7 17 17 7M8.5 7H17v8.5"/></svg>')
+    return _re.sub(r'(<div class="bk(?:\s+[\w-]+)*)("(?:(?!>).)*>)',
+                   lambda m: f'{m.group(1)} sig{m.group(2)}<span class="sig-cut" aria-hidden="true">'
+                             f'</span><span class="sig-go" aria-hidden="true">{arrow}</span>', html)
+
+
+VIEWS["ops"] = signature_tiles(VIEWS["ops"])
+
 _i = BODY.index("<script>")
 _j = BODY.rindex("</script>")
 PARTS = {

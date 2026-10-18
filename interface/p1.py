@@ -19,6 +19,7 @@ CSS = """
  --sun:#e3c063; --dawn:#e8994a; --moon:#9aa8f4;
  --shadow:0 1px 2px rgba(0,0,0,.35); --shadow2:0 24px 60px -20px rgba(0,0,0,.72),0 0 0 1px #26282d;
  --shadow-hover:0 4px 10px rgba(0,0,0,.25),0 14px 32px -14px rgba(0,0,0,.55);
+ --t1:#17241e; --t2:#262017; --t3:#1a1f2b;
  --grad:linear-gradient(#6a7fef,#6a7fef);
  --solid:#6a7fef;
 
@@ -51,6 +52,7 @@ CSS = """
  --shadow:0 1px 2px rgba(17,19,23,.04),0 8px 24px -12px rgba(17,19,23,.10);
  --shadow2:0 24px 60px -20px rgba(17,19,23,.28),0 2px 6px rgba(17,19,23,.06);
  --shadow-hover:0 2px 6px rgba(17,19,23,.06),0 14px 32px -14px rgba(17,19,23,.18);
+ --t1:#dceae2; --t2:#f1e6d4; --t3:#e1e5f0;
  --grad:linear-gradient(#2443e8,#2443e8);
 }
 
