@@ -159,6 +159,31 @@ export const TILE_KPIS = {
   sales: {},
 };
 
+/**
+ * While the figures are on their way, the cards that will receive one show a quiet
+ * placeholder instead of their designed figure: a sample value that flashes and then
+ * changes reads as the number being wrong. Cards with no KPI behind them are left as
+ * designed (they will be marked illustrative). writeFigure clears the mark.
+ */
+export function markLoading(root, viewKey, on) {
+  if (!root) return;
+  const cards = CARD_KPIS[viewKey] || {};
+  const tiles = TILE_KPIS[viewKey] || {};
+  root.querySelectorAll(".kpi").forEach((card) => {
+    const label = card.querySelector(".lab")?.textContent?.trim();
+    if (label && cards[label] && card.dataset.live !== "1") toggle(card, on);
+  });
+  root.querySelectorAll(".bk").forEach((tile) => {
+    const label = tile.querySelector(".l")?.textContent?.trim();
+    if (label && tiles[label] && tile.dataset.live !== "1") toggle(tile, on);
+  });
+}
+
+function toggle(node, on) {
+  if (on) node.dataset.loading = "1";
+  else delete node.dataset.loading;
+}
+
 /** Which views have any live figure at all. Used for the banner wording. */
 export function hasLiveFigures(viewKey) {
   return keysFor(viewKey).length > 0;
@@ -254,6 +279,7 @@ function writeFigure(card, figure) {
 
   provenance(card, figure);
   card.dataset.live = "1";
+  delete card.dataset.loading;
   card.title = titleFor(figure, "Opens to the records behind it.");
 
   return true;
@@ -279,6 +305,7 @@ function writeTileFigure(tile, figure, unit) {
 
   provenance(tile, figure);
   tile.dataset.live = "1";
+  delete tile.dataset.loading;
   tile.title = titleFor(
     figure,
     navigates(tile) ? "" : "Opens to the records behind it.");

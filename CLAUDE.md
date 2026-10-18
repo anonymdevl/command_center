@@ -376,8 +376,12 @@ Order of work:
     fails a load); `ingest.history` and `ingest.refresh` (incremental, in the request)
     feed `legacy/loads.js`'s panel. The headline "Control health" is the same average as
     Home's gauge; the live alerts replace the designed ones there too.
-11. **Click-through audit** of all 19 screens. Preflight checks source, not behaviour, so
-    only clicking can answer "does everything work as expected".
+11. ~~**Click-through audit**~~ Done in the preview (18 Oct 2026): a script clicked all
+    276 cards, tiles, buttons, chips and links on the 19 screens. It found go(), ask2(),
+    tab() and moreMenu() called inline but never installed on window (25 navigations
+    dead), and ~40 cards generated with onclick="po" (a bare explainer key) instead of
+    explain('po'). Both fixed and now guarded in preflight. Not yet clicked on the live
+    site.
 12. ~~**Alert engine**~~ Done (18 Oct 2026): `command_center/alerts/` -- seven rules over
     the KPIs (so an alert and its card agree), thresholds in `Command Center Alert Rule`
     (editable in the desk, AL-05), alerts in `Command Center Alert` with the lifecycle

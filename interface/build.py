@@ -48,7 +48,8 @@ EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + """
 .ph.clickable{cursor:pointer}
 .ph.clickable:hover b{color:var(--accent)}
 .pmore{font-size:var(--fs-2xs);color:var(--accent);white-space:nowrap}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.two>*{min-width:0}
 .grid.six{display:grid;grid-template-columns:repeat(6,1fr);gap:9px}
 .bul{margin-left:17px;font-size:var(--fs-sm);color:var(--mut)}
 .bul li{margin:5px 0}.bul b{color:var(--ink)}
@@ -96,7 +97,7 @@ color:var(--accent);font-weight:var(--fw-bold);margin-bottom:6px}
 @container panel (max-width:1199px){
  .kpis.six,.grid.six,.kpis[style*="repeat(6"]{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 @container panel (max-width:899px){
- .two{grid-template-columns:1fr}
+ .two{grid-template-columns:minmax(0,1fr)}
  .kpis,.kpis.six,.kpis[style],.grid,.grid.six,.grid[style]{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 @container panel (max-width:560px){
  /* [style] as well: the six-column rule above names the inline style, so without it

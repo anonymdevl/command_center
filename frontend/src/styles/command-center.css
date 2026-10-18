@@ -312,7 +312,7 @@ background:var(--raised)}
 .xlab{display:flex;margin-top:6px;font-size:var(--fs-3xs);color:var(--dim)}
 .ymax{position:absolute;top:8px;right:12px;font-size:var(--fs-3xs);color:var(--dim)}
 .bars{display:flex;flex-direction:column;gap:6px}
-.barrow{display:grid;grid-template-columns:1fr 3fr auto;gap:10px;align-items:center;font-size:var(--fs-xs)}
+.barrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,3fr) auto;gap:10px;align-items:center;font-size:var(--fs-xs)}
 .barlab{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bartrack{background:var(--raised);border-radius:4px;height:16px;overflow:hidden}
 .barfill{height:100%;border-radius:4px}
@@ -406,7 +406,8 @@ background:var(--raised)}
 .ph.clickable{cursor:pointer}
 .ph.clickable:hover b{color:var(--accent)}
 .pmore{font-size:var(--fs-2xs);color:var(--accent);white-space:nowrap}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.two>*{min-width:0}
 .grid.six{display:grid;grid-template-columns:repeat(6,1fr);gap:9px}
 .bul{margin-left:17px;font-size:var(--fs-sm);color:var(--mut)}
 .bul li{margin:5px 0}.bul b{color:var(--ink)}
@@ -454,7 +455,7 @@ color:var(--accent);font-weight:var(--fw-bold);margin-bottom:6px}
 @container panel (max-width:1199px){
  .kpis.six,.grid.six,.kpis[style*="repeat(6"]{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 @container panel (max-width:899px){
- .two{grid-template-columns:1fr}
+ .two{grid-template-columns:minmax(0,1fr)}
  .kpis,.kpis.six,.kpis[style],.grid,.grid.six,.grid[style]{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 @container panel (max-width:560px){
  /* [style] as well: the six-column rule above names the inline style, so without it
@@ -786,12 +787,27 @@ div.work-table table.dt{min-width:560px}
 .home-wait{padding:18px 22px;color:var(--mut);font-size:var(--fs-sm)}
 .topc .home-wait,.gauge .home-wait{padding:18px 0}
 
+/* ---- polish: figures arriving, and moving between screens ---- */
+:is(.kpi,.bk)[data-loading] :is(.val,.n){color:transparent!important;position:relative}
+:is(.kpi,.bk)[data-loading] :is(.val,.n) *{visibility:hidden}
+:is(.kpi,.bk)[data-loading] :is(.val,.n)::after{content:"";position:absolute;left:0;bottom:12%;width:min(9ch,70%);
+ height:.62em;border-radius:var(--r-xs);background:linear-gradient(90deg,var(--line) 0%,var(--line2) 50%,var(--line) 100%);
+ background-size:200% 100%;animation:ccshim 1.2s ease-in-out infinite}
+:is(.kpi,.bk)[data-loading] :is(.delta,.v){color:transparent}
+@keyframes ccshim{from{background-position:100% 0}to{background-position:-100% 0}}
+.view.on{animation:ccin .22s ease-out both}
+@keyframes ccin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.view.on{animation:none}
+ :is(.kpi,.bk)[data-loading] :is(.val,.n)::after{animation:none}}
+
 /* ---- live alerts (legacy/alerts.js) ---- */
 .asev.astate{margin-left:6px;color:var(--ok);background:var(--ok-bg);border-color:var(--ok-line)}
 .alert-flash{box-shadow:0 0 0 3px var(--accent-bg2);border-color:var(--accent)!important;transition:box-shadow .3s}
 .alert-live-list{display:block}
 
 /* ---- Business Health: the data behind the figures (legacy/loads.js) ---- */
+.hh-head>*{min-width:0}
+@container panel (max-width:560px){.hh-head{grid-template-columns:minmax(0,1fr)!important}}
 .panel.loads{margin-top:16px}
 .loads-h{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:10px}
 .loads-h h4{font-size:var(--fs-lg);font-weight:var(--fw-semibold);margin:0}

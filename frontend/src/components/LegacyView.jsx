@@ -6,7 +6,7 @@ import { renderGreeting } from "../greeting.js";
 import { api } from "../api/client.js";
 import { useApi } from "../useApi.js";
 import Records from "./Records.jsx";
-import { hydrateCards, hydrateTiles, keysFor } from "../legacy/hydrate.js";
+import { hydrateCards, hydrateTiles, keysFor, markLoading } from "../legacy/hydrate.js";
 import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js";
 import { clearTurns, historyFor, remember, replaceAnswer, turnsFor } from "../askHistory.js";
 import { followDeep, withSteps } from "../askFlow.js";
@@ -35,7 +35,7 @@ import { renderLoads } from "../legacy/loads.js";
  * acceptable in this one place. Nothing from the API is ever written as HTML: the
  * hydrator sets textContent and builds elements.
  */
-export default function LegacyView({ viewKey, scope, openDrawer }) {
+export default function LegacyView({ viewKey, scope, go, openDrawer }) {
   const ref = useRef(null);
   const html = views[viewKey];
   const [liveCount, setLiveCount] = useState(null);
@@ -44,6 +44,9 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
   // ref keeps it reading the current scope rather than the one captured at install.
   const scopeRef = useRef(scope);
   scopeRef.current = scope;
+  // App's go() is a new function each render; the inline handlers read the latest.
+  const goRef = useRef(go);
+  goRef.current = go;
 
   const keys = keysFor(viewKey);
   const figures = useApi(
@@ -111,6 +114,16 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
     window.explain = show(extras.explainers);
     window.drill = show(extras.drill);
     window.closeDrawer = () => openDrawer(null);
+    // Navigation from the designed tiles and links ("open any one of them"). Missing until
+    // the click-through of 18 Oct 2026: 25 tiles and links called a go() nobody defined.
+    window.go = (key) => goRef.current?.(key);
+    // "Ask why" buttons beside a row ask the question in the bar, where every answer goes.
+    window.ask2 = (question) =>
+      window.dispatchEvent(new CustomEvent("cc-ask", { detail: { question } }));
+    // Tabs are switched by the click handler below; the generated onclick has nothing to do.
+    window.tab = () => {};
+    // The prototype's "⋯" menus are replaced by working ones (legacy/actions.js).
+    window.moreMenu = () => {};
 
     // The designed Ask screen calls runSearch(value) from its own input and its own
     // suggestion buttons, and expects the answer in its own #sout2. So it is wired
@@ -315,6 +328,11 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
     return () => clearInterval(t);
   }, [viewKey]);
 
+  // Placeholders on the cards that are about to receive a live figure.
+  useEffect(() => {
+    markLoading(ref.current, viewKey, figures.loading && !figures.data);
+  }, [viewKey, html, figures.loading, figures.data]);
+
   // Live figures into the designed cards and tiles. Runs after the markup is in the DOM
   // and again whenever the figures or the business change.
   useEffect(() => {
@@ -405,7 +423,7 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
           requests and tasks below are the designed samples, not yours.
         </div>
       ) : null}
-      <div className="view on" ref={ref} dangerouslySetInnerHTML={{ __html: html }} />
+      <div key={viewKey} className="view on" ref={ref} dangerouslySetInnerHTML={{ __html: html }} />
     </>
   );
 }

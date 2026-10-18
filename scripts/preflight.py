@@ -1232,6 +1232,28 @@ for _key in re.findall(r'"([a-z][a-z0-9_]+)"', _extra.group(1) if _extra else ""
     check(_key in REGISTRY, f"hydrate.js EXTRA_KPIS names {_key!r}, which is not registered")
 check(bool(_extra), "hydrate.js has no EXTRA_KPIS, so Home's gauge and counts have no figures")
 
+# Every function the generated markup calls from an inline onclick must be installed on
+# window by the app. go() was not, so 25 designed tiles and links that navigate did
+# nothing at all until the click-through of 18 Oct 2026 found it.
+_lv = open(os.path.join(ROOT, "frontend", "src", "components", "LegacyView.jsx")).read()
+_called = sorted({m for h in _views.values() for m in re.findall(r'onclick="([A-Za-z_]\w*)\(', h)})
+for _fn in _called:
+    check(f"window.{_fn} =" in _lv,
+          f"the screens call {_fn}() from inline onclick, but LegacyView.jsx never sets "
+          f"window.{_fn}, so every one of those clicks does nothing")
+
+# An inline handler is a call, never a bare name: onclick="po" does nothing.
+_bare = sorted({f"{k}:{m}" for k, h in _views.items()
+                for m in re.findall(r'onclick="([A-Za-z_][\w-]*)"', h)})
+check(not _bare, f"inline onclick holds a bare name, not a call, so it does nothing: {_bare[:8]}")
+# And every explainer, drawer or drill it names exists.
+_ex = json.load(open(os.path.join(ROOT, "frontend", "src", "legacy", "extras.json")))
+_maps = {"explain": _ex["explainers"], "openDrawer": _ex["drawers"], "drill": _ex["drill"]}
+_missing = sorted({f"{k}:{fn}({key})" for k, h in _views.items()
+                   for fn, key in re.findall(r"onclick=\"(explain|openDrawer|drill)\((?:'|&#39;)([\w-]+)", h)
+                   if key not in _maps[fn]})
+check(not _missing, f"inline handlers open content that does not exist: {_missing[:8]}")
+
 # Today and Outstanding Tasks hydrate from the work queue (api/work.py). Each tile the
 # map names must be on its screen, and each key must be a figure the server returns.
 _wjs = open(os.path.join(ROOT, "frontend", "src", "legacy", "work.js")).read()

@@ -66,7 +66,7 @@ CHART_CSS = """
 .xlab{display:flex;margin-top:6px;font-size:var(--fs-3xs);color:var(--dim)}
 .ymax{position:absolute;top:8px;right:12px;font-size:var(--fs-3xs);color:var(--dim)}
 .bars{display:flex;flex-direction:column;gap:6px}
-.barrow{display:grid;grid-template-columns:1fr 3fr auto;gap:10px;align-items:center;font-size:var(--fs-xs)}
+.barrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,3fr) auto;gap:10px;align-items:center;font-size:var(--fs-xs)}
 .barlab{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bartrack{background:var(--raised);border-radius:4px;height:16px;overflow:hidden}
 .barfill{height:100%;border-radius:4px}

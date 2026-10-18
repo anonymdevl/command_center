@@ -284,12 +284,27 @@ div.work-table table.dt{min-width:560px}
 .home-wait{padding:18px 22px;color:var(--mut);font-size:var(--fs-sm)}
 .topc .home-wait,.gauge .home-wait{padding:18px 0}
 
+/* ---- polish: figures arriving, and moving between screens ---- */
+:is(.kpi,.bk)[data-loading] :is(.val,.n){color:transparent!important;position:relative}
+:is(.kpi,.bk)[data-loading] :is(.val,.n) *{visibility:hidden}
+:is(.kpi,.bk)[data-loading] :is(.val,.n)::after{content:"";position:absolute;left:0;bottom:12%;width:min(9ch,70%);
+ height:.62em;border-radius:var(--r-xs);background:linear-gradient(90deg,var(--line) 0%,var(--line2) 50%,var(--line) 100%);
+ background-size:200% 100%;animation:ccshim 1.2s ease-in-out infinite}
+:is(.kpi,.bk)[data-loading] :is(.delta,.v){color:transparent}
+@keyframes ccshim{from{background-position:100% 0}to{background-position:-100% 0}}
+.view.on{animation:ccin .22s ease-out both}
+@keyframes ccin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.view.on{animation:none}
+ :is(.kpi,.bk)[data-loading] :is(.val,.n)::after{animation:none}}
+
 /* ---- live alerts (legacy/alerts.js) ---- */
 .asev.astate{margin-left:6px;color:var(--ok);background:var(--ok-bg);border-color:var(--ok-line)}
 .alert-flash{box-shadow:0 0 0 3px var(--accent-bg2);border-color:var(--accent)!important;transition:box-shadow .3s}
 .alert-live-list{display:block}
 
 /* ---- Business Health: the data behind the figures (legacy/loads.js) ---- */
+.hh-head>*{min-width:0}
+@container panel (max-width:560px){.hh-head{grid-template-columns:minmax(0,1fr)!important}}
 .panel.loads{margin-top:16px}
 .loads-h{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:10px}
 .loads-h h4{font-size:var(--fs-lg);font-weight:var(--fw-semibold);margin:0}

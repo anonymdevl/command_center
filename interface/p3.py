@@ -81,7 +81,7 @@ for nm,sc,sev,note in fams:
 
 V_HEALTH=f'''<div class="topbar"><div><h3>Business Health</h3>
 <div class="when">Six questions, asked of the business every morning</div></div></div>
-<div style="display:grid;grid-template-columns:190px 1fr;gap:16px;align-items:center;
+<div class="hh-head" style="display:grid;grid-template-columns:190px 1fr;gap:16px;align-items:center;
 background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--crit);
 border-radius:var(--r);padding:18px 20px;margin-bottom:16px">
 <div style="text-align:center"><div id="hh-score" style="font-size:var(--fs-5xl);font-weight:var(--fw-bold);color:var(--crit);line-height:1">39</div>

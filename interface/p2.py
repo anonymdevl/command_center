@@ -38,6 +38,12 @@ def kpi(lab, val, cur="", delta="", dcls="flat", flag="", dr="", explain=""):
     # card that cannot be opened would be an exception to it. Cards not yet
     # wired fall back to a shared panel that says so plainly, rather than
     # showing no affordance and looking like a different component.
+    # The views_* screens pass an explainer's key here ("po", "drafts") where p2's own
+    # callers pass a handler ("go('sales')"). A bare key became onclick="po", which does
+    # nothing: forty cards whose explanation never opened, found by the click-through of
+    # 18 Oct 2026. A key is an explainer.
+    if dr and "(" not in dr:
+        dr = f"explain('{dr}')"
     action = dr or f"explain('{explain or 'unwired'}')"
     od = f' onclick="{action}"'
     cl = "kpi clickable"
