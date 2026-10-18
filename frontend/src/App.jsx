@@ -9,6 +9,7 @@ import ViewTools from "./components/ViewTools.jsx";
 import ActionDialog from "./components/ActionDialog.jsx";
 import ScheduleDialog from "./components/ScheduleDialog.jsx";
 import nav from "./legacy/nav.json";
+import { restore } from "./askHistory.js";
 
 /**
  * Views that have become components. Everything else renders its generated
@@ -38,6 +39,12 @@ export default function App() {
   const [drawer, setDrawer] = useState(null);
   // Phones: the sidebar is a drawer, open only while choosing a screen.
   const [navOpen, setNavOpen] = useState(false);
+
+  // The person's latest conversation with the AI, back after a refresh or a sign-in, so
+  // a follow-up in the bar still knows what was asked before.
+  useEffect(() => {
+    restore(scope);
+  }, [scope]);
 
   // Deep-link by hash so a manager can send someone a screen.
   useEffect(() => {

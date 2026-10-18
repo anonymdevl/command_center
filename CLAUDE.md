@@ -279,6 +279,16 @@ The analyst reaches the ledger, purchase orders and stock movements through
 `run_report` -- 23 allowlisted standard ERPNext reports, run with the asker's
 permissions -- rather than new facts.
 
+## Conversations with the AI
+
+Kept on the server, per person, in `Command Center Conversation` (if_owner on every
+role, and owner checks in `api/conversations.py`), so they survive a refresh, a sign-out
+and another device. `askHistory.js` restores the latest conversation for the business
+when the app opens and saves each answered turn (and a deeper look's replacement) in
+order. The Ask AI screen lists "Your conversations" to reopen or delete. Only what the
+screen needs to redraw a turn is stored -- never the analyst's working -- and the
+assistant itself never reads or writes these.
+
 ## The product's name
 
 Shown everywhere people look as **AI Business Intelligence**, with the line **Executive

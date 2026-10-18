@@ -206,6 +206,13 @@ const LOOKUP_SAMPLE = (question) => ({
   checked: ["(sample) the live site lists the lookups Gemini actually made"],
 });
 
+const CONVS = {
+  "conv-sample": { name: "conv-sample", title: "Who owes us the most? (sample)", business_code: BUSINESS,
+    last_at: "2026-10-17 16:20:00",
+    turns: [{ q: "Who owes us the most? (sample)", payload: { answered: true, format: "markdown",
+      answer: "**HAIRASH ENTERPRISE owes the most, GHS 737,544, all more than three months late.** (sample)" } }] },
+};
+
 const HANDLERS = {
   "command_center.api.kpi.get": ({ keys }) =>
     Object.fromEntries((keys || []).map((k) => [k, figure(k)]).filter(([, f]) => f)),
@@ -440,6 +447,22 @@ const HANDLERS = {
     };
   },
   "command_center.api.ingest.refresh": () => ({ as_of: "2025-08-19", loaded: [{ fact: "fact_sales_invoice", rows: 3 }] }),
+  // Conversations, kept in this browser tab's memory so the preview behaves like the
+  // site: ask, refresh the screen (not the page), reopen. One sample is there to start.
+  "command_center.api.conversations.recent": () => Object.values(CONVS)
+    .sort((a, b) => (a.last_at < b.last_at ? 1 : -1))
+    .map(({ name, title, business_code, last_at, turns }) => ({ name, title, business_code, last_at, turn_count: turns.length })),
+  "command_center.api.conversations.load": ({ name }) => CONVS[name] || { name, turns: [] },
+  "command_center.api.conversations.add": ({ question, payload, business_code, name, replace }) => {
+    const p = typeof payload === "string" ? JSON.parse(payload) : payload;
+    const c = CONVS[name] || (CONVS[name = `conv-${Object.keys(CONVS).length + 1}`] =
+      { name, title: question.slice(0, 140), business_code, turns: [] });
+    if (Number(replace)) c.turns = c.turns.filter((t) => t.q !== question);
+    c.turns.push({ q: question, payload: p, at: new Date().toISOString() });
+    c.last_at = new Date().toISOString().replace("T", " ").slice(0, 19);
+    return { name: c.name, title: c.title };
+  },
+  "command_center.api.conversations.remove": ({ name }) => { delete CONVS[name]; return { removed: name }; },
   "command_center.api.ingest.status": () => [],
 };
 

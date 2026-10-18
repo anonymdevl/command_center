@@ -187,6 +187,14 @@ export const api = {
       { business_code, subject, description, allocated_to, due_date, priority,
         reference_type, reference_name }),
 
+  /* Conversations with the AI, kept per person on the server (api/conversations.py). */
+  convRecent: (business_code) => call("command_center.api.conversations.recent", { business_code }),
+  convLoad: (name) => call("command_center.api.conversations.load", { name }),
+  convAdd: ({ question, payload, business_code, name, replace }) =>
+    call("command_center.api.conversations.add",
+      { question, payload: JSON.stringify(payload || {}), business_code, name, replace: replace ? 1 : 0 }),
+  convRemove: (name) => call("command_center.api.conversations.remove", { name }),
+
   /* Report schedules (api/reports.py): when each report is written and who gets it. */
   schedules: (business_code) => call("command_center.api.reports.schedules", { business_code }),
   saveSchedule: (args) => call("command_center.api.reports.save_schedule", args),

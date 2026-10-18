@@ -858,6 +858,26 @@ div.work-table table.dt{min-width:560px}
 .loads-list li span{color:var(--mut)}
 .loads-list li.bad span{color:var(--crit)}
 
+/* ---- Ask AI: your earlier conversations (legacy/conversations.js) ---- */
+.askconvs{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;margin:0 0 16px}
+.askconvs-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.askconvs-h b{font-size:var(--fs-md);font-weight:var(--fw-semibold)}
+.askconvs-h .lnk{background:none;border:0;padding:0;cursor:pointer;font-size:var(--fs-sm);color:var(--accent-ink)}
+.askconvs-l{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.askconvs-l li{display:flex;align-items:center;gap:6px;border-radius:var(--r-sm)}
+.askconvs-l li:hover{background:var(--hover)}
+.askconvs-l li.on{background:var(--raised)}
+.askconv{flex:1;min-width:0;display:flex;justify-content:space-between;gap:12px;align-items:baseline;background:none;
+ border:0;padding:8px 10px;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.askconv-t{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--fs-sm);
+ font-weight:var(--fw-medium)}
+.askconv-m{flex:none;font-size:var(--fs-xs);color:var(--mut)}
+.askconv-x{flex:none;width:26px;height:26px;border:0;background:none;border-radius:50%;color:var(--dim);cursor:pointer;
+ font-size:var(--fs-md);line-height:1;margin-right:4px;opacity:0}
+.askconvs-l li:hover .askconv-x,.askconv-x:focus-visible{opacity:1}
+.askconv-x:hover{background:var(--line);color:var(--ink)}
+@media (hover:none){.askconv-x{opacity:1}}
+
 /* ---- report schedules (legacy/schedules.js, ScheduleDialog.jsx) ---- */
 .sch-on{color:var(--ink);font-weight:var(--fw-medium)}
 .sch-off{color:var(--mut)}

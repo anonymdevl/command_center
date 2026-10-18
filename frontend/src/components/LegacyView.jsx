@@ -8,7 +8,8 @@ import { useApi } from "../useApi.js";
 import Records from "./Records.jsx";
 import { hydrateCards, hydrateTiles, keysFor, markLoading } from "../legacy/hydrate.js";
 import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js";
-import { clearTurns, historyFor, remember, replaceAnswer, turnsFor } from "../askHistory.js";
+import { clearTurns, historyFor, remember, replaceAnswer, restore, turnsFor } from "../askHistory.js";
+import { renderConversations } from "../legacy/conversations.js";
 import { followDeep, withSteps } from "../askFlow.js";
 import { runReport } from "../legacy/reports.js";
 import { wireActions } from "../legacy/actions.js";
@@ -186,6 +187,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
         clearTurns(scopeRef.current);
         thread.textContent = "";
         bar.remove();
+        renderConversations(ref.current, scopeRef.current);
         document.getElementById("askin")?.focus();
       };
       bar.append(b);
@@ -291,6 +293,20 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       delete window.runSearch;
     };
   }, [openDrawer]);
+
+  // The saved conversation comes back from the server after the screen draws; redraw the
+  // thread and the list when it arrives, or when another conversation is opened.
+  useEffect(() => {
+    if (viewKey !== "ask") return;
+    const again = (e) => {
+      if (e?.detail?.redraw !== false) window.drawThread?.();
+      renderConversations(ref.current, scopeRef.current);
+    };
+    window.addEventListener("cc-history-changed", again);
+    restore(scope);
+    renderConversations(ref.current, scope);
+    return () => window.removeEventListener("cc-history-changed", again);
+  }, [viewKey, scope]);
 
   useEffect(() => {
     if (viewKey !== "ask") return;

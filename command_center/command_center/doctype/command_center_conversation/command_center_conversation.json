@@ -1,0 +1,85 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-10-18 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "business_code",
+  "last_at",
+  "turn_count",
+  "turns"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "in_list_view": 1,
+   "length": 200
+  },
+  {
+   "fieldname": "business_code",
+   "fieldtype": "Data",
+   "label": "Business",
+   "in_list_view": 1,
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_at",
+   "fieldtype": "Datetime",
+   "label": "Last question",
+   "in_list_view": 1,
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "turn_count",
+   "fieldtype": "Int",
+   "label": "Questions",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "turns",
+   "fieldtype": "Long Text",
+   "label": "Turns",
+   "read_only": 1,
+   "description": "The questions and answers, as JSON. Written by api/conversations.py."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-18 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Conversation",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Command Center Manager",
+   "read": 1,
+   "write": 1,
+   "delete": 1,
+   "if_owner": 1,
+   "create": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "delete": 1,
+   "if_owner": 1,
+   "create": 1
+  }
+ ],
+ "sort_field": "last_at",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "title_field": "title"
+}

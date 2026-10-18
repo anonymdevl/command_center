@@ -145,6 +145,7 @@ V_ASK=f'''<div class="topbar"><div><h3>Ask AI</h3>
 <button class="btn" onclick="runSearch('How did sales trend over the last 12 months, and where are we heading?')">How are sales trending?</button>
 <button class="btn" onclick="runSearch('Which suppliers do we depend on most, and what if one stopped?')">Which suppliers do we depend on?</button>
 </div>
+<div class="askconvs" id="askconvs" hidden></div>
 <div id="sout2"></div>
 <div class="note"><h4>Two things worth watching</h4><ul>
 <li>It shows <b>what it checked</b>, step by step as it works, and lists every lookup under the answer. Every figure comes from the records or from ERPNext's own reports.</li>
