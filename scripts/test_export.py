@@ -48,7 +48,8 @@ sys.modules["command_center.www.command_center"] = www
 
 from openpyxl import load_workbook  # noqa: E402
 
-from command_center.api import export  # noqa: E402
+from command_center.api import export
+export._ensure_fonts.done = True  # never install fonts into the home folder of whoever runs the tests  # noqa: E402
 
 passed = failed = 0
 

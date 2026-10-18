@@ -61,6 +61,7 @@ def pdf_bytes(question: str, answer: str, checked=None, business_code: str | Non
     from frappe.utils.html_utils import sanitize_html
     from frappe.utils.pdf import get_pdf
 
+    _ensure_fonts()
     html = _document_html(question, answer, business_code, model, sanitize_html,
                           frappe.utils.md_to_html)
     return get_pdf(html, {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "18mm",
@@ -103,6 +104,16 @@ def _document_html(question, answer, business_code, model, sanitize, md_to_html)
         when=escape_html(when),
         model=escape_html(model or "the analyst"),
     )
+
+
+def _ensure_fonts():
+    """Manrope installed for the PDF engine, once per worker (install.install_pdf_fonts)."""
+    if getattr(_ensure_fonts, "done", False):
+        return
+    from command_center.install import install_pdf_fonts
+
+    install_pdf_fonts(quiet=True)
+    _ensure_fonts.done = True
 
 
 def _font_css() -> str:
@@ -357,7 +368,8 @@ def pdf_diagnostics():
             return f"failed: {e}"
 
     home = os.path.expanduser("~")
-    folder = os.path.join(home, ".local", "share", "fonts", "command_center")
+    folder = os.path.join(home, ".fonts", "command_center")
+    _ensure_fonts()
     out = {
         "wkhtmltopdf": run("wkhtmltopdf", "--version"),
         "home": home,

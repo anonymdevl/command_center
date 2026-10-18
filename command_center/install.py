@@ -66,21 +66,24 @@ def seed_local_business():
     return doc.name
 
 
-def install_pdf_fonts():
-    """Put Manrope where the server's PDF engine finds fonts (after every migrate).
+def install_pdf_fonts(quiet: bool = False):
+    """Put Manrope where the server's PDF engine finds fonts.
 
-    The PDF embeds Manrope too, but wkhtmltopdf -- the engine Frappe uses -- ignored the
-    embedded font on Biomed and printed every PDF in DejaVu Sans. It reads the fonts
-    fontconfig knows, so the three weights are copied into the bench user's own font
-    folder and the font cache is refreshed. Nothing outside that folder is touched, and
-    a server without fontconfig simply keeps the embedded font.
+    wkhtmltopdf (0.12.6, patched Qt, on Biomed) ignores fonts embedded in the page, and
+    reads only the fonts fontconfig knows. The first version installed them under
+    ~/.local/share/fonts, which Biomed's fontconfig does not search: the files were there
+    and `fc-list` still had no Manrope. ~/.fonts is searched by every fontconfig setup, so
+    they go there, and the cache is refreshed. Runs after every migrate, and before a PDF
+    if the fonts are not in place, so a pull and a restart are enough. Nothing outside
+    that folder is touched; without fontconfig the PDF keeps its fallback font.
     """
     import os
     import shutil
     import subprocess
 
     src = os.path.join(os.path.dirname(__file__), "api", "fonts")
-    dest = os.path.join(os.path.expanduser("~"), ".local", "share", "fonts", "command_center")
+    home = os.path.expanduser("~")
+    dest = os.path.join(home, ".fonts", "command_center")
     try:
         os.makedirs(dest, exist_ok=True)
         changed = False
@@ -91,9 +94,17 @@ def install_pdf_fonts():
             if not os.path.exists(b) or open(a, "rb").read() != open(b, "rb").read():
                 shutil.copyfile(a, b)
                 changed = True
+        # The folder the first version used, which nothing searched.
+        old = os.path.join(home, ".local", "share", "fonts", "command_center")
+        if os.path.isdir(old):
+            shutil.rmtree(old, ignore_errors=True)
         if changed and shutil.which("fc-cache"):
-            subprocess.run(["fc-cache", "-f", dest], check=False, timeout=60,
+            subprocess.run(["fc-cache", "-f"], check=False, timeout=120,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print(f"Command Center: PDF fonts {'installed' if changed else 'already in place'} in {dest}")
-    except Exception as e:  # never stop a migrate over a typeface
-        print(f"Command Center: could not install the PDF fonts ({e}); PDFs keep the embedded font")
+        if not quiet:
+            print(f"Command Center: PDF fonts {'installed' if changed else 'already in place'} in {dest}")
+        return changed
+    except Exception as e:  # never stop a migrate, or a PDF, over a typeface
+        if not quiet:
+            print(f"Command Center: could not install the PDF fonts ({e}); PDFs keep the fallback font")
+        return False
