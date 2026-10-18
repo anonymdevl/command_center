@@ -110,6 +110,10 @@ check(doc.count("<svg") == 2 and "polyline" in doc and "<path" in doc, "line and
 check("not json" not in doc and "```" not in doc and "CCBLOCK" not in doc,
       "a block that does not parse is dropped, not printed raw")
 check("Next?" not in doc, "follow-up suggestions are left off paper")
+check("font-family:'Manrope PDF'" in doc and "base64," in doc,
+      "the app's typeface, Manrope, is embedded in the PDF")
+check(export._md_lists("Items:\n- one\n- two") == "Items:\n\n- one\n- two",
+      "a list straight after a line of text gets the blank line it needs")
 _pol = export._polish('<p>Lead</p><p>More</p><table><thead><tr><th>Who</th><th>Owed</th><th>Band</th>'
                       '<th>Share</th></tr></thead><tbody><tr><td>UBUNTU</td><td>636,675</td><td>GHS 9.18M</td>'
                       '<td>73.8%</td></tr><tr><td>HAIRASH</td><td>—</td><td>GHS 0.74M</td><td>8.0%</td></tr>'

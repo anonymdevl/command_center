@@ -43,6 +43,10 @@ def render(lang: str, source: str) -> str:
 
 # ---------------------------------------------------------------------------- figures
 def figures(items) -> str:
+    """Up to four cards in one row, equal in height, values on one line across the row:
+    the background is on the table cell itself, so every card in the row is as tall as
+    the tallest, and labels get two lines of room so a long one does not push its value
+    below the others."""
     if not isinstance(items, list):
         return ""
     cards = [f for f in items if isinstance(f, dict) and f.get("value") is not None][:4]
@@ -52,11 +56,12 @@ def figures(items) -> str:
     cells = []
     for i, f in enumerate(cards):
         tone = TONES.get(str(f.get("tone") or "").lower(), INK)
-        note = (f'<div class="fig-n">{escape(str(f["note"]))}</div>' if f.get("note") else "")
+        note = escape(str(f["note"])) if f.get("note") else ""
         cells.append(
-            f'<td class="fig-c" style="width:{width}"><div class="fig" style="background:{TINTS[i % 3]}">'
+            f'<td class="fig" style="width:{width};background:{TINTS[i % 3]}">'
             f'<div class="fig-l">{escape(str(f.get("label") or ""))}</div>'
-            f'<div class="fig-v" style="color:{tone}">{escape(str(f["value"]))}</div>{note}</div></td>')
+            f'<div class="fig-v" style="color:{tone}">{escape(str(f["value"]))}</div>'
+            f'<div class="fig-n">{note}</div></td>')
     return f'<table class="figs"><tr>{"".join(cells)}</tr></table>'
 
 
@@ -198,16 +203,15 @@ def fmt(v: float, unit: str = "") -> str:
 
 # The styles these blocks need, for the PDF template.
 CSS = f"""
-table.figs{{width:100%;border-collapse:separate;border-spacing:8px 0;margin:14px -8px 10px;table-layout:fixed}}
-td.fig-c{{padding:0;vertical-align:top;border:0}}
-.fig{{border-radius:10px;padding:11px 13px 12px}}
-.fig-l{{font-size:8.5pt;font-weight:600;color:{INK2}}}
-.fig-v{{font-size:16pt;font-weight:700;letter-spacing:-.02em;margin-top:3px;white-space:nowrap}}
-.fig-n{{font-size:8pt;color:{MUT};margin-top:2px}}
+table.figs{{width:100%;border-collapse:separate;border-spacing:8px 0;margin:16px -8px 12px;table-layout:fixed}}
+table.figs td.fig{{border:0;border-radius:10px;padding:12px 14px 13px;vertical-align:top}}
+.fig-l{{font-size:8pt;font-weight:600;color:{INK2};line-height:1.3;height:2.6em;overflow:hidden}}
+.fig-v{{font-size:15pt;font-weight:700;letter-spacing:-.02em;line-height:1.15;margin-top:4px;white-space:nowrap}}
+.fig-n{{font-size:7.5pt;color:{MUT};margin-top:4px;line-height:1.35}}
 .ch{{border:1px solid {LINE};border-radius:10px;padding:13px 15px 11px;margin:14px 0;page-break-inside:avoid}}
 .ch-t{{font-size:10pt;font-weight:700;color:{INK};margin-bottom:10px}}
 table.bars{{width:100%;border-collapse:collapse;margin:0}}
-table.bars td,table.dn td,table.dn-k td,table.figs td{{background:none!important}}
+table.bars td,table.dn td,table.dn-k td{{background:none!important}}
 table.bars td{{border:0;padding:4px 0;font-size:9pt;vertical-align:middle}}
 td.bar-l{{width:32%;color:{INK2};padding-right:10px}}
 td.bar-t{{width:auto}}

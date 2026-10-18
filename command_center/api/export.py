@@ -82,6 +82,7 @@ def _document_html(question, answer, business_code, model, sanitize, md_to_html)
         return f"\n\nCCBLOCK{len(blocks) - 1}X\n\n"
 
     md = re.sub(r"```\s*followups\s*\n.*?\n\s*```", "", answer or "", flags=re.S | re.I)
+    md = _md_lists(md)
     md = re.sub(r"```\s*(figures|chart)\s*\n(.*?)\n\s*```", keep, md, flags=re.S | re.I)
     # The answer is model-written markdown: rendered, then sanitised, never trusted. The
     # cards and charts are ours, built from escaped values, and go in after.
@@ -92,15 +93,53 @@ def _document_html(question, answer, business_code, model, sanitize, md_to_html)
     who = frappe.utils.get_fullname(frappe.session.user)
     when = frappe.utils.format_datetime(frappe.utils.now_datetime(), "d MMMM yyyy, HH:mm")
     return PDF_TEMPLATE.format(
+        fonts=_font_css(),
         css=pdf_blocks.CSS,
         business=escape_html(_business(business_code)),
         question=escape_html(question or ""),
         body=body,
-        as_of=escape_html(_as_of()),
+        as_of=escape_html(_pretty_date(_as_of())),
         who=escape_html(who),
         when=escape_html(when),
         model=escape_html(model or "the analyst"),
     )
+
+
+def _font_css() -> str:
+    """Manrope, the app's own typeface, embedded in the PDF (scripts/build_pdf_fonts.py).
+
+    Embedded rather than linked: the server's PDF engine fetches nothing reliably and has
+    no Manrope installed, so without this every PDF came out in DejaVu Sans -- wide,
+    heavy, and dropping the space before a bold word ("totaledGHS 15.45M").
+    """
+    import base64
+    import os
+
+    here = os.path.join(os.path.dirname(__file__), "fonts")
+    out = []
+    for weight, name in ((400, "regular"), (600, "semibold"), (700, "bold")):
+        path = os.path.join(here, f"manrope-{name}.ttf")
+        if not os.path.exists(path):
+            continue
+        data = base64.b64encode(open(path, "rb").read()).decode()
+        # A value put into the template, not part of it: single braces.
+        out.append("@font-face{font-family:'Manrope PDF';font-weight:%d;font-style:normal;"
+                   "src:url(data:font/truetype;base64,%s) format('truetype')}" % (weight, data))
+    return "\n".join(out)
+
+
+def _pretty_date(value: str) -> str:
+    """2025-08-19 -> 19 August 2025."""
+    try:
+        return frappe.utils.format_date(value, "d MMMM yyyy") if re.match(r"\d{4}-\d{2}-\d{2}", str(value)) else value
+    except Exception:
+        return value
+
+
+def _md_lists(md: str) -> str:
+    """A list straight after a line of text needs a blank line before it, or the PDF's
+    markdown runs the items into the paragraph (" - Draft invoices: ... - Draft orders")."""
+    return re.sub(r"(?m)^(?!\s*(?:[-*+]|\d+\.)\s)(\S[^\n]*)\n(\s*(?:[-*+]|\d+\.)\s)", r"\1\n\n\2", md)
 
 
 _NUMBER = re.compile(r"^\s*(?:<strong>)?\s*[-+(]?(?:GHS|USD|\$|€|£)?\s*[-+]?[\d,]+(?:\.\d+)?\s*"
@@ -247,38 +286,39 @@ def _send_xlsx(title: str, sheets: list, business_code, note: str | None = None)
 
 
 PDF_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><style>
+{fonts}
 @page{{size:A4}}
-body{{font-family:'Helvetica Neue',Helvetica,Arial,'Liberation Sans','Nimbus Sans','Nimbus Sans L',sans-serif;
- color:#111317;font-size:10.5pt;
- line-height:1.55;margin:0}}
-.hd{{border-bottom:1px solid #e3e5ea;padding-bottom:10px;margin-bottom:20px}}
+body{{font-family:'Manrope PDF',Manrope,'Helvetica Neue',Helvetica,Arial,'Liberation Sans',sans-serif;
+ color:#111317;font-size:10pt;line-height:1.6;margin:0;-webkit-font-smoothing:antialiased}}
+.hd{{border-bottom:1px solid #e3e5ea;padding-bottom:10px;margin-bottom:22px}}
 .hd td{{border:0;padding:0;vertical-align:bottom;background:none}}
-.brand{{font-size:8.5pt;font-weight:700;color:#2443e8;letter-spacing:.02em}}
-.biz{{font-size:8.5pt;color:#646973;margin-top:1px}}
-.meta{{font-size:8.5pt;color:#646973;text-align:right}}
-h1{{font-size:20pt;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin:0 0 6px}}
-.sub{{font-size:9pt;color:#646973;margin-bottom:18px}}
+.brand{{font-size:8.5pt;font-weight:700;color:#2443e8}}
+.biz{{font-size:8.5pt;color:#646973;margin-top:2px}}
+.meta{{font-size:8.5pt;color:#646973;text-align:right;line-height:1.5}}
+h1{{font-size:22pt;font-weight:700;letter-spacing:-.025em;line-height:1.15;margin:0 0 10px}}
 p{{margin:0 0 9px}}
-p.lead{{font-size:12pt;line-height:1.5;color:#111317;margin-bottom:12px}}
-h2{{font-size:13pt;font-weight:700;margin:22px 0 8px;padding-top:4px;letter-spacing:-.01em;page-break-after:avoid}}
-h3{{font-size:11pt;font-weight:700;margin:16px 0 6px;page-break-after:avoid}}
-h4{{font-size:10.5pt;font-weight:700;margin:12px 0 4px}}
-ul,ol{{margin:4px 0 10px;padding-left:18px}}
-li{{margin:3px 0}}
-li.rec{{list-style:none;margin:8px 0 8px -18px;padding:8px 12px;border-left:3px solid #2443e8;background:#f4f6fe;
- border-radius:0 6px 6px 0}}
-p.proj{{padding:8px 12px;border-left:3px solid #a85a0a;background:#fbf5ec;border-radius:0 6px 6px 0}}
-strong{{font-weight:700}}
-table{{border-collapse:collapse;width:100%;margin:10px 0 14px;font-size:9pt;page-break-inside:auto}}
+p.lead{{font-size:11.5pt;line-height:1.55;color:#24272d;margin-bottom:14px}}
+h2{{font-size:13pt;font-weight:700;margin:24px 0 8px;letter-spacing:-.015em;page-break-after:avoid}}
+h3{{font-size:11.5pt;font-weight:700;margin:20px 0 6px;letter-spacing:-.01em;page-break-after:avoid}}
+h4{{font-size:10.5pt;font-weight:600;margin:14px 0 4px}}
+hr{{border:0;border-top:1px solid #e3e5ea;margin:18px 0}}
+ul,ol{{margin:4px 0 12px;padding-left:18px}}
+li{{margin:4px 0}}
+li.rec{{list-style:none;margin:8px 0 8px -18px;padding:9px 13px;border-left:3px solid #2443e8;background:#f4f6fe;
+ border-radius:0 8px 8px 0}}
+p.proj{{padding:9px 13px;border-left:3px solid #a85a0a;background:#fbf5ec;border-radius:0 8px 8px 0}}
+strong,b{{font-weight:700}}
+em{{color:#3b3f47}}
+table{{border-collapse:collapse;width:100%;margin:10px 0 16px;font-size:9pt;page-break-inside:auto}}
 tr{{page-break-inside:avoid}}
-th{{text-align:left;color:#3b3f47;font-weight:700;background:#f2f3f5;border-bottom:1px solid #d9dce2;padding:7px 8px;
+th{{text-align:left;color:#3b3f47;font-weight:600;background:#f2f3f5;border-bottom:1px solid #d9dce2;padding:8px 9px;
  font-size:8.5pt}}
-td{{border-bottom:1px solid #eceef1;padding:6px 9px;vertical-align:top}}
+td{{border-bottom:1px solid #eceef1;padding:7px 9px;vertical-align:top}}
 td.n,th.n{{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}}
 th.n{{white-space:normal}}
 tbody tr:nth-child(even) td{{background:#fafbfc}}
-code{{font-family:Menlo,Consolas,monospace;font-size:9pt}}
-.ft{{margin-top:28px;border-top:1px solid #e3e5ea;padding-top:9px;font-size:8pt;color:#8a8f99;line-height:1.5}}
+code{{font-family:Menlo,Consolas,monospace;font-size:8.5pt}}
+.ft{{margin-top:30px;border-top:1px solid #e3e5ea;padding-top:10px;font-size:7.5pt;color:#8a8f99;line-height:1.55}}
 {css}
 </style></head><body>
 <table class="hd" style="width:100%;border-collapse:collapse"><tr>
