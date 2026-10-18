@@ -8,6 +8,7 @@ import { useApi } from "../useApi.js";
 import Records from "./Records.jsx";
 import { hydrateCards, hydrateTiles, keysFor } from "../legacy/hydrate.js";
 import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js";
+import { historyFor, remember } from "../askHistory.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -26,10 +27,6 @@ import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js
  * acceptable in this one place. Nothing from the API is ever written as HTML: the
  * hydrator sets textContent and builds elements.
  */
-// The conversation so far, so "and last month?" follows on from the last answer. Kept
-// for the page's life only: nothing about a question is stored in the browser.
-const askHistory = [];
-
 export default function LegacyView({ viewKey, scope, openDrawer }) {
   const ref = useRef(null);
   const html = views[viewKey];
@@ -71,13 +68,9 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
         const payload = await api.ask({
           question: q,
           business_code: scopeRef.current,
-          // Only this business's turns: a follow-up never carries another company's context.
-          history: askHistory.filter((h) => h.scope === scopeRef.current).slice(-4)
-            .map(({ q: hq, a }) => ({ q: hq, a })),
+          history: historyFor(scopeRef.current),
         });
-        if (payload?.answered && payload.answer) {
-          askHistory.push({ q, a: payload.answer, scope: scopeRef.current });
-        }
+        remember(scopeRef.current, q, payload);
         renderAnswer(out, payload, {
           onOpen: (records, title) =>
             openDrawer(

@@ -33,6 +33,21 @@ ANSWERABLE = [
 ]
 
 
+# What to suggest when the analyst is on: questions across every area, each answerable
+# from the loaded data or from ERPNext directly. Shown under the question bar, and the
+# list a client can be shown when agreeing what the assistant covers.
+ANALYST_EXAMPLES = [
+    {"q": "How did sales trend over the last 12 months, and where are we heading?", "area": "Sales"},
+    {"q": "Who owes us the most, and how long have they owed it?", "area": "Money owed"},
+    {"q": "Which suppliers do we depend on most, and what if one stopped?", "area": "Buying"},
+    {"q": "What stock is promised to customers but not on the shelves?", "area": "Stock"},
+    {"q": "Which installation jobs are running late, and who has them?", "area": "Projects"},
+    {"q": "Show our open quotations and their total value.", "area": "Sales"},
+    {"q": "Which customers buy the most from us, and what do they buy?", "area": "Customers"},
+    {"q": "What should I raise with UBUNTU before our call?", "area": "Briefing"},
+]
+
+
 def plan(question: str, business_code: str | None = None) -> tuple:
     """Pick the intent that applies, and report anything that broke trying.
 

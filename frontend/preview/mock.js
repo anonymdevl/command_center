@@ -196,7 +196,21 @@ const HANDLERS = {
     ],
     records: { fact: "fact_sales_invoice", filters: {} },
   }),
-  "command_center.api.ask.answerable": () => [],
+  // The same list engine.ANALYST_EXAMPLES serves on the site (copied: there is no
+  // server here to ask).
+  "command_center.api.ask.answerable": () => ({
+    mode: "analyst",
+    examples: [
+      { q: "How did sales trend over the last 12 months, and where are we heading?", area: "Sales" },
+      { q: "Who owes us the most, and how long have they owed it?", area: "Money owed" },
+      { q: "Which suppliers do we depend on most, and what if one stopped?", area: "Buying" },
+      { q: "What stock is promised to customers but not on the shelves?", area: "Stock" },
+      { q: "Which installation jobs are running late, and who has them?", area: "Projects" },
+      { q: "Show our open quotations and their total value.", area: "Sales" },
+      { q: "Which customers buy the most from us, and what do they buy?", area: "Customers" },
+      { q: "What should I raise with UBUNTU before our call?", area: "Briefing" },
+    ],
+  }),
   "command_center.api.ingest.status": () => [],
 };
 
@@ -222,7 +236,10 @@ window.fetch = async (input, init = {}) => {
     });
 
   // A short delay so loading states are visible, as they are on the real site.
-  await new Promise((r) => setTimeout(r, 120));
+  // ?slow=N holds answers for N seconds, to look at the analyst's waiting state.
+  const slow = Number(new URLSearchParams(window.location.search).get("slow") || 0);
+  await new Promise((r) => setTimeout(r, method.endsWith("ask.answer") && slow ? slow * 1000 : 120));
+  if (init.signal?.aborted) throw new DOMException("aborted", "AbortError");
 
   if (!handler) {
     console.warn(`[preview] no sample answer for ${method}`);

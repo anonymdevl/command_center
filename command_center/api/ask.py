@@ -36,7 +36,8 @@ def answerable():
         # Said plainly because someone will ask what the model is given -- and SE-07
         # requires it to be disclosed.
         return {
-            "questions": engine.ANSWERABLE,
+            "questions": [e["q"] for e in engine.ANALYST_EXAMPLES],
+            "examples": engine.ANALYST_EXAMPLES,
             "planner": "gemini",
             "mode": "analyst",
             "model": gemini.analyst_model(),
@@ -50,6 +51,7 @@ def answerable():
         }
     return {
         "questions": engine.ANSWERABLE,
+        "examples": [{"q": q, "area": ""} for q in engine.ANSWERABLE],
         "planner": "gemini" if gemini.configured() else "patterns",
         "mode": "router",
         "model": gemini.DEFAULT_MODEL if gemini.configured() else None,

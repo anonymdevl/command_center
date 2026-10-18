@@ -68,30 +68,12 @@ export default function App() {
 
   const ctx = useMemo(() => ({ scope, go, openDrawer: setDrawer }), [scope]);
 
-  // A question typed in the bar is answered on the Ask AI screen, by the same
-  // runSearch the screen's own box uses -- one engine, one place answers appear. The
-  // screen mounts on the next render, so wait for its answer slot before asking.
-  const ask = (question) => {
-    go("ask");
-    let tries = 0;
-    const run = () => {
-      const box = document.getElementById("askin");
-      if (box && document.getElementById("sout2") && window.runSearch) {
-        box.value = question;
-        window.runSearch(question);
-      } else if (tries++ < 120) {
-        requestAnimationFrame(run);
-      }
-    };
-    run();
-  };
-
   return (
     <div className={`shell${navOpen ? " navopen" : ""}`}>
       <Sidebar nav={nav} current={view} onGo={go} scope={scope} onScope={setScope} />
       {navOpen ? <div className="scrim-nav" onClick={() => setNavOpen(false)} /> : null}
       <div className="col">
-        <Topbar onAsk={ask} onMenu={() => setNavOpen((o) => !o)} />
+        <Topbar scope={scope} openDrawer={setDrawer} onMenu={() => setNavOpen((o) => !o)} />
         <main className="main" id="cc-main">
           {showBanner ? <IllustrativeNotice /> : null}
           {Ported ? <Ported {...ctx} /> : <LegacyView viewKey={view} {...ctx} />}
