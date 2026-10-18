@@ -289,6 +289,22 @@ div.work-table table.dt{min-width:560px}
 .alert-flash{box-shadow:0 0 0 3px var(--accent-bg2);border-color:var(--accent)!important;transition:box-shadow .3s}
 .alert-live-list{display:block}
 
+/* ---- Business Health: the data behind the figures (legacy/loads.js) ---- */
+.panel.loads{margin-top:16px}
+.loads-h{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+.loads-h h4{font-size:var(--fs-lg);font-weight:var(--fw-semibold);margin:0}
+.loads-h p{margin:4px 0 0;font-size:var(--fs-sm);color:var(--mut)}
+.loads-msg{font-size:var(--fs-sm);background:var(--ok-bg);color:var(--ok);border-radius:var(--r-sm);padding:9px 12px;
+ margin-bottom:10px}
+.loads-msg.bad{background:var(--crit-bg);color:var(--crit)}
+.loads-more{display:block;background:none;border:0;padding:0;margin-top:8px;cursor:pointer;font-size:var(--fs-sm);
+ color:var(--accent-ink)}
+.loads-list{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:var(--fs-sm)}
+.loads-list li{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.loads-list li b{min-width:7.5em;font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums}
+.loads-list li span{color:var(--mut)}
+.loads-list li.bad span{color:var(--crit)}
+
 /* ---- report schedules (legacy/schedules.js, ScheduleDialog.jsx) ---- */
 .sch-on{color:var(--ink);font-weight:var(--fw-medium)}
 .sch-off{color:var(--mut)}

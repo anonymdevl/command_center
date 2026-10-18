@@ -16,6 +16,7 @@ import { WORK_VIEWS, renderWork } from "../legacy/work.js";
 import { ALERT_VIEWS, renderAlerts } from "../legacy/alerts.js";
 import { renderHealthTiles, renderHome } from "../legacy/home.js";
 import { renderSchedules } from "../legacy/schedules.js";
+import { renderLoads } from "../legacy/loads.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -71,6 +72,21 @@ export default function LegacyView({ viewKey, scope, openDrawer }) {
     window.addEventListener("cc-alerts-changed", again);
     return () => window.removeEventListener("cc-alerts-changed", again);
   }, [hasAlerts, alerts.reload]);
+
+  // Business Health says how fresh the data is, and can refresh it.
+  const isHealth = viewKey === "health";
+  const loads = useApi(() => api.ingestHistory(scope), [viewKey, scope], { skip: !isHealth });
+  useEffect(() => {
+    if (!isHealth) return;
+    renderLoads(ref.current, loads.data, {
+      scope,
+      onRefreshed: () => {
+        loads.reload();
+        figures.reload();
+        window.dispatchEvent(new CustomEvent("cc-alerts-changed"));
+      },
+    });
+  }, [isHealth, loads.data, html, scope]);
 
   // The Reports screen says the schedule actually set for each report.
   const isReports = viewKey === "reports";

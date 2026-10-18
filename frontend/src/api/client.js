@@ -218,6 +218,8 @@ export const api = {
   reportStatus: (job_id) => call("command_center.api.reports.status", { job_id }),
 
   ingestStatus: () => call("command_center.api.ingest.status"),
+  ingestHistory: (business_code) => call("command_center.api.ingest.history", { business_code }),
+  ingestRefresh: (business_code) => call("command_center.api.ingest.refresh", { business_code }),
   reconcile: (business_code) =>
     call("command_center.api.ingest.reconcile", { business_code }),
 };

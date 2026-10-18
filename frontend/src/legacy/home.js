@@ -41,6 +41,19 @@ export function renderHome(root, { figures, alerts, scope, onOpen }) {
 export function renderHealthTiles(root, figures) {
   if (!root || !figures) return 0;
   let live = 0;
+  // The headline is Home's gauge: the plain average of the questions scored so far.
+  const parts = SCORES.map(([k]) => figures[k]).filter((f) => f && f.value !== null && f.value !== undefined);
+  const head = root.querySelector("#hh-score");
+  if (head && parts.length) {
+    const avg = Math.round(parts.reduce((s, f) => s + Number(f.value), 0) / parts.length);
+    head.textContent = String(avg);
+    head.style.color = `var(--${toneOf(avg).color})`;
+    const trend = root.querySelector("#hh-trend");
+    if (trend) {
+      trend.textContent = `average of the ${parts.length} questions scored`;
+      trend.style.color = "var(--mut)";
+    }
+  }
   root.querySelectorAll(".bk.q").forEach((tile) => {
     const label = tile.querySelector(".l")?.textContent?.trim();
     const key = { "Are we getting paid?": "score_paid", "Can we deliver what we sold?": "score_deliver",

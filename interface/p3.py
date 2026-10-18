@@ -84,9 +84,9 @@ V_HEALTH=f'''<div class="topbar"><div><h3>Business Health</h3>
 <div style="display:grid;grid-template-columns:190px 1fr;gap:16px;align-items:center;
 background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--crit);
 border-radius:var(--r);padding:18px 20px;margin-bottom:16px">
-<div style="text-align:center"><div style="font-size:var(--fs-5xl);font-weight:var(--fw-bold);color:var(--crit);line-height:1">39</div>
+<div style="text-align:center"><div id="hh-score" style="font-size:var(--fs-5xl);font-weight:var(--fw-bold);color:var(--crit);line-height:1">39</div>
 <div style="font-size:var(--fs-2xs);color:var(--dim); font-weight:var(--fw-semibold);margin-top:2px">Control health</div>
-<div style="font-size:var(--fs-2xs);color:var(--crit);margin-top:5px">▼ 6 since last week</div></div>
+<div id="hh-trend" style="font-size:var(--fs-2xs);color:var(--crit);margin-top:5px">▼ 6 since last week</div></div>
 <div><div style="font-size:var(--fs-md);line-height:1.6">Three things are going badly.
 <b>We cannot reliably deliver what we have sold</b> — 491 products are promised to customers but not
 on the shelf, and a third of everything we own is not in any warehouse.
@@ -98,6 +98,12 @@ straight through it in seconds.</div>
 It measures whether the records the business runs on can be trusted this week.</div></div></div>
 <div class="sect">The six questions</div>
 <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:10px">{fh}</div>
+<div class="panel loads" id="loads"><div class="loads-h"><div><h4>The data behind these figures</h4>
+<p id="loads-sub">When each kind of record was last read from ERPNext</p></div>
+<button type="button" class="btn pri" id="loads-refresh">Refresh now</button></div>
+<div id="loads-facts"><div class="home-wait">Reading the load history…</div></div>
+<button type="button" class="lnk loads-more" id="loads-more" aria-expanded="false">Show the load history</button>
+<div id="loads-hist" hidden></div></div>
 <div class="sect" style="margin-top:20px"><span>What is going wrong, largest first</span></div>
 {alert("crit","We have promised customers stock we do not physically have, across 491 products",
  "Any of those orders can fail the moment the warehouse goes to pick it.",

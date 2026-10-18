@@ -428,6 +428,18 @@ const HANDLERS = {
   "command_center.api.reports.save_schedule": ({ frequency, hour }) =>
     ({ name: "preview", says: `${frequency} at ${String(hour).padStart(2, "0")}:00 (preview)`, next_run: "2026-10-19 07:00" }),
   "command_center.api.reports.send_now": () => ({ queued: true }),
+  // Business Health's freshness panel: the state of each fact, and recent loads.
+  "command_center.api.ingest.history": () => {
+    const facts = [["fact_sales_invoice", "Sales invoices", 7853], ["fact_payment_allocation", "Payments received", 6812],
+      ["fact_stock_balance", "Stock on hand", 2375], ["fact_sales_order", "Sales orders", 912], ["fact_task", "Jobs and tasks", 57]];
+    return {
+      facts: facts.map(([fact, what, rows]) => ({ fact, what, rows_loaded: rows, status: "OK",
+        as_of_date: "2025-08-19", last_run: "2026-10-18 06:00:00" })),
+      loads: facts.map(([fact, what, rows], i) => ({ fact, what, started: `2026-10-18 06:0${i}:00`, seconds: 3.2 + i,
+        status: "OK", rows_loaded: i ? 0 : rows, mode: "Incremental", trigger: "Schedule" })),
+    };
+  },
+  "command_center.api.ingest.refresh": () => ({ as_of: "2025-08-19", loaded: [{ fact: "fact_sales_invoice", rows: 3 }] }),
   "command_center.api.ingest.status": () => [],
 };
 

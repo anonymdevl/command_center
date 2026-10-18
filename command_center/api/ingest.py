@@ -149,6 +149,70 @@ def _check(label, source, fact, money=True, tolerance=0.01):
             "reconciled": abs(diff) <= (tolerance if money else 0)}
 
 
+LOG = "Command Center Load Log"
+KEEP_LOG_DAYS = 90
+
+# What each fact is, in the words Business Health uses.
+FACT_WORDS = {
+    "fact_sales_invoice": "Sales invoices",
+    "fact_sales_invoice_line": "Invoice lines",
+    "fact_payment_allocation": "Payments received",
+    "fact_purchase_invoice": "Supplier invoices",
+    "fact_purchase_invoice_line": "Supplier invoice lines",
+    "fact_stock_balance": "Stock on hand",
+    "fact_sales_order": "Sales orders",
+    "fact_task": "Jobs and tasks",
+    "fact_person": "People",
+    "fact_case": "Customer issues",
+}
+
+
+@frappe.whitelist(methods=["POST"])
+def refresh(business_code: str | None = None):
+    """Load what has changed since the last run, now, for Business Health's button.
+
+    Incremental, so it reads only records modified since each fact's watermark and is
+    quick enough to run while the manager waits. A full rebuild stays a deliberate call
+    to run(full=True). The alerts are re-evaluated on their next read.
+    """
+    require_manager()
+    result = run(business_code=business_code)
+    for code in frappe.get_all("Connected Business", filters={"is_local": 1}, pluck="business_code"):
+        frappe.cache().delete_value(f"cc:alerts:evaluated:{code}")
+    return result
+
+
+@frappe.whitelist()
+def history(business_code: str | None = None, limit: int = 30):
+    """Each fact's current state, and the latest loads, for Business Health."""
+    require_manager()
+    filters = {"business_code": business_code} if business_code and business_code != "__all__" else {}
+    states = frappe.get_all("Command Center Ingest State", filters=filters,
+                            fields=["fact", "business_code", "as_of_date", "last_run",
+                                    "rows_loaded", "status", "last_error"], order_by="fact asc")
+    try:
+        loads = frappe.get_all(LOG, filters=filters,
+                               fields=["fact", "started", "seconds", "status", "rows_loaded",
+                                       "mode", "trigger", "run_by", "error"],
+                               order_by="started desc", limit=max(1, min(int(limit or 30), 200)))
+    except Exception:
+        loads = []  # not migrated yet: the states still say when each fact last loaded
+    for row in states + loads:
+        row["what"] = FACT_WORDS.get(row["fact"], row["fact"])
+        if row.get("run_by"):
+            row["run_by"] = frappe.utils.get_fullname(row["run_by"])
+    return {"facts": states, "loads": loads}
+
+
+def prune_load_log():
+    """Daily: the load history is kept for ninety days."""
+    try:
+        frappe.db.delete(LOG, {"started": ["<", frappe.utils.add_days(frappe.utils.now(), -KEEP_LOG_DAYS)]})
+        frappe.db.commit()
+    except Exception:
+        frappe.db.rollback()
+
+
 def scheduled_load():
     """Daily incremental load of every fact for the local business.
 

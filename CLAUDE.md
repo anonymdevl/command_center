@@ -371,8 +371,11 @@ Order of work:
    (`export.pdf_bytes`) via frappe.sendmail. Recipients must be enabled System Users of
    the site; the board report (rp04) cannot be scheduled. Needs workers and an outgoing
    email account on the site.
-10. **Refresh control and load history on Business Health** — where the trust panels I
-    wrongly put on Command belong.
+10. ~~**Refresh control and load history on Business Health**~~ Done (18 Oct 2026):
+    every load writes a `Command Center Load Log` row (kept 90 days; a missing table never
+    fails a load); `ingest.history` and `ingest.refresh` (incremental, in the request)
+    feed `legacy/loads.js`'s panel. The headline "Control health" is the same average as
+    Home's gauge; the live alerts replace the designed ones there too.
 11. **Click-through audit** of all 19 screens. Preflight checks source, not behaviour, so
     only clicking can answer "does everything work as expected".
 12. ~~**Alert engine**~~ Done (18 Oct 2026): `command_center/alerts/` -- seven rules over

@@ -122,6 +122,7 @@ class Ingestor:
                 "last_error": "",
             })
             state.save(ignore_permissions=True)
+            self._log(conn.code, started, "OK", len(rows), full)
             frappe.db.commit()
             return {"fact": self.fact, "business": conn.code,
                     "rows": len(rows), "watermark": str(watermark) if watermark else None}
@@ -136,6 +137,7 @@ class Ingestor:
                 state.update({"status": "Failed", "last_run": started,
                               "last_error": failure[-900:]})
                 state.save(ignore_permissions=True)
+                self._log(conn.code, started, "Failed", 0, full, failure[-600:])
                 frappe.db.commit()
             except Exception:
                 # Recording the failure must never replace the failure.
@@ -144,6 +146,28 @@ class Ingestor:
             raise
 
     # -- plumbing -------------------------------------------------------------
+    def _log(self, business_code, started, status, rows, full, error=""):
+        """One row in Command Center Load Log: the load history Business Health shows."""
+        user = frappe.session.user
+        try:
+            self._write_log(business_code, started, status, rows, full, error, user)
+        except Exception:
+            # The history is a record of the load, never a reason for it to fail -- a
+            # site not yet migrated has no log table, and its figures must still load.
+            frappe.log_error(title="Command Center: load log not written",
+                             message=frappe.get_traceback())
+
+    def _write_log(self, business_code, started, status, rows, full, error, user):
+        frappe.get_doc({
+            "doctype": "Command Center Load Log", "fact": self.fact,
+            "business_code": business_code, "started": started,
+            "seconds": round((now_datetime() - started).total_seconds(), 1),
+            "status": status, "rows_loaded": rows, "mode": "Full" if full else "Incremental",
+            "trigger": "Schedule" if user in ("Administrator", "Guest") else "Person",
+            "run_by": None if user in ("Administrator", "Guest") else user,
+            "error": error,
+        }).insert(ignore_permissions=True)
+
     def _state(self, business_code: str):
         name = f"{self.fact}-{business_code}"
         if frappe.db.exists("Command Center Ingest State", name):

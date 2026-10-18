@@ -15,7 +15,7 @@ import { api } from "../api/client.js";
 import { money, exact } from "../format.js";
 import { menu } from "./actions.js";
 
-export const ALERT_VIEWS = new Set(["command", "brief"]);
+export const ALERT_VIEWS = new Set(["command", "brief", "health"]);
 const WORDS = { crit: "Critical", high: "High", med: "Medium", info: "For information" };
 
 export function renderAlerts(root, view, data, { onOpen } = {}) {
