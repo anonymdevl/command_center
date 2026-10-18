@@ -619,6 +619,10 @@ table.dt tr:hover td{background:var(--hover)}
 .askbox,[data-theme="light"] .askbox{border:1px solid var(--line2);box-shadow:none;padding:14px 22px}
 .askbox{align-items:center}
 .askbox .askbox-i{color:var(--accent);flex:none}
+/* Whole questions as suggestions are longer than a phone is wide: they wrap there
+   rather than run off the screen or lose their ending. */
+#asksugg .btn{max-width:100%;text-align:left}
+@container panel (max-width:560px){#asksugg .btn{white-space:normal}}
 .askbox:focus-within{border-color:var(--accent-dim);box-shadow:0 0 0 5px var(--accent-bg)}
 
 /* ---- the signature card, on every screen (build.py signature_tiles) ---- */
