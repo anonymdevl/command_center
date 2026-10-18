@@ -49,7 +49,10 @@ def answer(question: str, business_code: str | None = None, history=None,
             contents.append({"role": "user", "parts": [{"text": (
                 "Answer now from what you have gathered. If it is incomplete, say what "
                 "you could not check.")}]})
-        content, err = gemini.chat(contents, None if final else tools.declarations(), system)
+        # The first round must look something up: an answer is only as good as what it
+        # read, and a model left free to answer at once can answer from memory.
+        content, err = gemini.chat(contents, None if final else tools.declarations(), system,
+                                   mode="ANY" if steps == 1 else "AUTO")
         if err:
             errors.append(err)
             break
@@ -61,8 +64,15 @@ def answer(question: str, business_code: str | None = None, history=None,
             break
 
         responses = []
-        for call in calls[:MAX_CALLS_PER_STEP]:
+        # Every call gets a response, in order: Gemini refuses the next turn if the counts
+        # differ. Beyond the cap, the response says to ask for it again.
+        for n, call in enumerate(calls):
             name, args = call.get("name", ""), call.get("args") or {}
+            if n >= MAX_CALLS_PER_STEP:
+                responses.append({"functionResponse": {"name": name, "response": {"result": {
+                    "error": f"Only {MAX_CALLS_PER_STEP} lookups run at once. Ask for this "
+                             f"one again in the next round."}}}})
+                continue
             if on_step:
                 try:
                     on_step(tools.describe(name, args))
@@ -152,11 +162,23 @@ def _system(business_code) -> str:
     as_of = _as_of(business_code)
     business = _business_name(business_code)
     data_sets = "\n".join(
-        f"- {f}: breakdowns {', '.join(DIMENSIONS.get(f, []))}; amounts "
-        f"{', '.join(MEASURES.get(f, []))}" for f in FACTS)
+        f"- {f} ({tools.FACT_WORDS.get(f, f)}): breakdowns {', '.join(DIMENSIONS.get(f, []))}; "
+        f"amounts {', '.join(MEASURES.get(f, []))}; dates {', '.join(_dates(f)) or 'none'}"
+        for f in FACTS)
     figures = "\n".join(f"- {k}: {v.label}" for k, v in sorted(load_all().items()))
     return SYSTEM.format(today=frappe.utils.today(), as_of=as_of or "unknown",
                          business=business, data_sets=data_sets, figures=figures)
+
+
+def _dates(fact: str) -> list:
+    """The date columns of a fact, so a trend or a period is asked on the right one."""
+    from command_center.facts.schema import FACTS
+    try:
+        meta = frappe.get_meta(FACTS[fact])
+        return [x.fieldname for x in meta.fields if x.fieldtype in ("Date", "Datetime")
+                and x.fieldname not in ("src_modified", "ingested_at", "as_of_date")]
+    except Exception:
+        return []
 
 
 def _as_of(business_code):

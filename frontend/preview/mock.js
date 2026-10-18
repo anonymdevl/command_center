@@ -208,10 +208,13 @@ const HANDLERS = {
       "- **Recommendation:** Finance to agree payment dates with the three largest debtors this week.",
       "- **Recommendation:** Hold new credit for customers more than 90 days overdue until a plan is agreed.",
     ].join("\n"),
+    // Said on the answer itself: on 18 Oct this fixed sample was read as the AI giving
+    // the same answer to every question. The server never sends a notice.
+    notice: "Preview only — no AI is connected on this laptop, so every question shows this " +
+      "same sample answer to demonstrate the layout. On the live site Gemini reads each " +
+      "question and looks up what that question needs.",
     checked: [
-      'get_figures({"keys":["ar_total","ar_count","ar_over_90"]})',
-      'query_data({"fact":"fact_sales_invoice","group_by":["customer"],"limit":10})',
-      'trend({"fact":"fact_payment_allocation","measure":"allocated_amount","period":"month"})',
+      "(sample) the live site lists the lookups Gemini actually made for this question",
     ],
     records: { fact: "fact_sales_invoice", filters: {} },
   }),

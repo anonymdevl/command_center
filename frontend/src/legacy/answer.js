@@ -66,6 +66,11 @@ function block(p, onOpen, onPdf) {
     q.textContent = p.question;
     wrap.append(q);
   }
+  if (p.notice) {
+    const n = div("ap-note info");
+    n.textContent = p.notice;
+    wrap.append(n);
+  }
   if (p.analyst_error) {
     const n = div("ap-note");
     n.append(text("The analyst could not answer this time, so this is the basic engine's answer."),

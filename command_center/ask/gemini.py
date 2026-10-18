@@ -47,7 +47,7 @@ def analyst_model() -> str:
     return frappe.conf.get("command_center_analyst_model") or "gemini-2.5-flash"
 
 
-def chat(contents: list, tools: list, system: str, timeout: int = 40) -> tuple:
+def chat(contents: list, tools: list, system: str, timeout: int = 40, mode: str = "AUTO") -> tuple:
     """One turn of a tool-using conversation: (content, error).
 
     The caller owns the loop: it appends the model's content unchanged (thinking
@@ -67,14 +67,24 @@ def chat(contents: list, tools: list, system: str, timeout: int = 40) -> tuple:
     body = {
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": contents,
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 8192},
+        # A bounded budget for the model's private reasoning: enough to plan the lookups,
+        # not so much that a question waits, or the reasoning eats the answer's tokens.
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 8192,
+                             "thinkingConfig": {"thinkingBudget": 2048}},
     }
     if tools:  # None for the final turn: answer from what has been gathered
         body["tools"] = [{"functionDeclarations": tools}]
-        body["toolConfig"] = {"functionCallingConfig": {"mode": "AUTO"}}
+        body["toolConfig"] = {"functionCallingConfig": {"mode": mode}}
     try:
         r = requests.post(ENDPOINT.format(model=analyst_model()),
                           params={"key": key}, json=body, timeout=timeout)
+        # Busy or a passing fault on Google's side: one retry, a moment later, before a
+        # question falls back to the basic engine.
+        if r.status_code in (429, 500, 502, 503, 504):
+            import time
+            time.sleep(1.5)
+            r = requests.post(ENDPOINT.format(model=analyst_model()),
+                              params={"key": key}, json=body, timeout=timeout)
         if r.status_code != 200:
             return None, f"Gemini refused: {r.status_code} {r.text[:900]}"
         payload = r.json()

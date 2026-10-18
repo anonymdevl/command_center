@@ -318,6 +318,7 @@ function Answer({ asked, result, scope, openDrawer, onReset }) {
           : "Answered from your ERPNext data"}
       </div>
       <div className="ap-q">{asked}</div>
+      {result.notice ? <div className="ap-note info">{result.notice}</div> : null}
       {result.analyst_error ? (
         // The analyst failed and the basic engine answered. Said, not hidden: a
         // fallback that passes for the analyst is how a broken one goes unnoticed.

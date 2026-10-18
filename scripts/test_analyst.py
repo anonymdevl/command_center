@@ -78,8 +78,10 @@ def script(*turns):
     calls = []
     it = iter(turns)
 
-    def chat(contents, decls, system, timeout=40):
-        calls.append({"tools": decls is not None, "n_contents": len(contents)})
+    def chat(contents, decls, system, timeout=40, mode="AUTO"):
+        last = contents[-1]["parts"] if contents else []
+        calls.append({"tools": decls is not None, "n_contents": len(contents), "mode": mode,
+                      "responses": sum(1 for p in last if "functionResponse" in p)})
         kind, payload = next(it)
         if kind == "err":
             return None, payload
@@ -184,6 +186,22 @@ reset()
 script(("call", [("find", {"text": "x"})]), ("text", "Still answered."))
 r = agent.answer("Q", "GIGMANN", on_step=lambda t: 1 / 0)
 check(r and r["answer"] == "Still answered.", "a failing progress reporter does not stop the answer")
+
+# 8c. The first round must look something up; later rounds may answer.
+reset()
+calls = script(("call", [("find", {"text": "x"})]), ("text", "ok"))
+agent.answer("Q", "GIGMANN")
+check(calls[0]["mode"] == "ANY" and calls[1]["mode"] == "AUTO",
+      f"round one forces a lookup, later rounds are free: {[c['mode'] for c in calls]}")
+
+# 8d. Every parallel call gets a response, even past the cap -- Gemini refuses the next
+#     turn when the counts differ.
+reset()
+many = [("find", {"text": str(i)}) for i in range(agent.MAX_CALLS_PER_STEP + 3)]
+calls = script(("call", many), ("text", "ok"))
+agent.answer("Q", "GIGMANN")
+check(calls[1]["responses"] == len(many),
+      f"{len(many)} calls, {calls[1]['responses']} responses")
 
 # 9. Every tool declaration is one Gemini accepts. One invalid schema -- an OBJECT with no
 #    properties is the usual one -- makes Gemini refuse the whole request, and with it
