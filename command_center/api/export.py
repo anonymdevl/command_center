@@ -484,3 +484,61 @@ def pdf_diagnostics():
         except Exception as e:
             out[f"test_{name}"] = f"failed: {e}"[:300]
     return out
+
+
+@frappe.whitelist(methods=["POST"])
+def pdf_probe(answer: str):
+    """The same answer drawn several ways, to find the setting that keeps the spaces
+    around bold text -- System Managers only, reads only, makes nothing.
+
+    Biomed's wkhtmltopdf (0.12.6, patched Qt) set the first Manrope reports with spaces
+    lost or doubled at the edges of bold words ("totaledGHS 15.45M"). It lays a line
+    out on a 96-dpi grid and prints it at full precision, so where each run of bold
+    starts can be off by a pixel; at 9pt a pixel is half a space. Each variant here
+    changes one thing; the PDFs come back for comparison, with the app's commit.
+    """
+    import base64
+    import os
+    import subprocess
+
+    from frappe.utils.html_utils import sanitize_html
+    from frappe.utils.pdf import get_pdf
+
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("System Managers only.", frappe.PermissionError)
+    _ensure_fonts()
+    base = _document_html("Spacing probe", answer, None, None, sanitize_html, frappe.utils.md_to_html)
+    nofaces = re.sub(r"@font-face\s*\{[^}]*\}", "", base)
+
+    def doubled(html):
+        return re.sub(r"(\d+(?:\.\d+)?)(pt|px)\b", lambda m: f"{float(m.group(1)) * 2:g}{m.group(2)}", html)
+
+    opts = {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "18mm", "margin-left": "15mm",
+            "margin-right": "15mm", "footer-center": "Page [page] of [topage]", "footer-font-size": "6",
+            "footer-font-name": "Manrope", "footer-spacing": "6", "encoding": "UTF-8"}
+    variants = {
+        "a_now": (base, {}),
+        "b_nofaces": (nofaces, {}),
+        "c_dpi300": (nofaces, {"dpi": "300"}),
+        "d_x2_zoom": (doubled(nofaces), {"zoom": "0.5"}),
+        "e_noshrink": (nofaces, {"disable-smart-shrinking": None}),
+        "f_legibility": (nofaces.replace("geometricPrecision", "optimizeLegibility"), {}),
+        "g_x4_zoom": (re.sub(r"(\d+(?:\.\d+)?)(pt|px)\b",
+                             lambda m: f"{float(m.group(1)) * 4:g}{m.group(2)}", nofaces), {"zoom": "0.25"}),
+    }
+    out = {}
+    try:
+        app = os.path.dirname(frappe.get_app_path("command_center"))
+        out["commit"] = subprocess.run(["git", "-C", app, "log", "-1", "--format=%h %s"],
+                                       capture_output=True, text=True, timeout=10).stdout.strip()
+    except Exception as e:
+        out["commit"] = f"n/a ({e})"
+    with _with_fonts():
+        conf = os.environ.get("FONTCONFIG_FILE")
+        out["conf"] = open(conf).read() if conf and os.path.exists(conf) else None
+        for name, (html, extra) in variants.items():
+            try:
+                out[name] = base64.b64encode(get_pdf(html, {**opts, **extra})).decode()
+            except Exception as e:
+                out[name] = f"failed: {e}"[:300]
+    return out
