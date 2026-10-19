@@ -68,6 +68,7 @@ def pdf_bytes(question: str, answer: str, checked=None, business_code: str | Non
         return get_pdf(html, {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "18mm",
                               "margin-left": "15mm", "margin-right": "15mm",
                               "footer-center": "Page [page] of [topage]", "footer-font-size": "6",
+                              "footer-font-name": "Manrope",
                               "footer-spacing": "6", "encoding": "UTF-8"})
 
 
@@ -140,7 +141,15 @@ def _fontconfig_file() -> str | None:
     body = ('<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n<fontconfig>\n'
             '  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>\n'
             f"  <dir>{os.path.abspath(fonts)}</dir>\n"
-            f"  <cachedir>{os.path.abspath(cache)}</cachedir>\n</fontconfig>\n")
+            f"  <cachedir>{os.path.abspath(cache)}</cachedir>\n"
+            # No hinting: Qt measures a line with hinted (screen) widths and prints it
+            # unhinted, so text came out wider than measured -- the header's time ran
+            # off the page and the space after a bold label vanished.
+            '  <match target="font">\n'
+            '    <edit name="hinting" mode="assign"><bool>false</bool></edit>\n'
+            '    <edit name="hintstyle" mode="assign"><const>hintnone</const></edit>\n'
+            '    <edit name="antialias" mode="assign"><bool>true</bool></edit>\n'
+            "  </match>\n</fontconfig>\n")
     if not os.path.exists(path) or open(path).read() != body:
         with open(path, "w") as f:
             f.write(body)
@@ -249,6 +258,8 @@ def _polish(body: str) -> str:
     body = re.sub(r"<table>(.*?)</table>", lambda m: f"<table>{_align(m.group(1))}</table>", body, flags=re.S)
     body = re.sub(r"<li>(\s*(?:<strong>)?\s*Recommendation)", r'<li class="rec">\1', body)
     body = re.sub(r"<p>(\s*(?:<strong>)?\s*Projection)", r'<p class="proj">\1', body)
+    # A bold label's following space is kept: the PDF engine sometimes drops it.
+    body = re.sub(r"</strong> (?=\S)", "</strong>&#160;", body)
     return body
 
 
@@ -354,12 +365,13 @@ PDF_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><style>
 {fonts}
 @page{{size:A4}}
 body{{font-family:'Manrope PDF','Manrope','Helvetica Neue',Helvetica,Arial,'Liberation Sans',sans-serif;
- color:#111317;font-size:9pt;line-height:1.6;margin:0;-webkit-font-smoothing:antialiased}}
+ color:#111317;font-size:9pt;line-height:1.6;margin:0;-webkit-font-smoothing:antialiased;
+ text-rendering:geometricPrecision}}
 .hd{{border-bottom:1px solid #e3e5ea;padding-bottom:10px;margin-bottom:22px}}
 .hd td{{border:0;padding:0;vertical-align:bottom;background:none}}
 .brand{{font-size:8pt;font-weight:700;color:#2443e8}}
 .biz{{font-size:7.5pt;color:#646973;margin-top:2px}}
-.meta{{font-size:7.5pt;color:#646973;text-align:right;line-height:1.5}}
+.meta{{font-size:7.5pt;color:#646973;text-align:right;line-height:1.5;white-space:nowrap;padding-right:2px}}
 h1{{font-size:18pt;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin:0 0 8px}}
 p{{margin:0 0 9px}}
 p.lead{{font-size:10pt;line-height:1.55;color:#24272d;margin-bottom:12px}}
