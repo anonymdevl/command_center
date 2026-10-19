@@ -64,10 +64,11 @@ def pdf_bytes(question: str, answer: str, checked=None, business_code: str | Non
     _ensure_fonts()
     html = _document_html(question, answer, business_code, model, sanitize_html,
                           frappe.utils.md_to_html)
-    return get_pdf(html, {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "18mm",
-                          "margin-left": "15mm", "margin-right": "15mm",
-                          "footer-center": "Page [page] of [topage]", "footer-font-size": "6",
-                          "footer-spacing": "6", "encoding": "UTF-8"})
+    with _with_fonts():
+        return get_pdf(html, {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "18mm",
+                              "margin-left": "15mm", "margin-right": "15mm",
+                              "footer-center": "Page [page] of [topage]", "footer-font-size": "6",
+                              "footer-spacing": "6", "encoding": "UTF-8"})
 
 
 def _document_html(question, answer, business_code, model, sanitize, md_to_html) -> str:
@@ -114,6 +115,59 @@ def _ensure_fonts():
 
     install_pdf_fonts(quiet=True)
     _ensure_fonts.done = True
+
+
+def _fontconfig_file() -> str | None:
+    """A fontconfig file of our own for the PDF engine: the server's usual configuration,
+    plus the app's Manrope folder.
+
+    Biomed's fontconfig searches no home folder at all, so fonts installed in ~/.fonts
+    or ~/.local/share/fonts were never seen, and wkhtmltopdf (0.12.6, patched Qt) also
+    ignores fonts embedded in the page. Frappe starts wkhtmltopdf from this process, so
+    pointing FONTCONFIG_FILE at this file while it runs hands it Manrope directly,
+    whatever the server's own settings are. Written once per worker into the site's
+    private files folder.
+    """
+    import os
+
+    fonts = os.path.join(os.path.dirname(__file__), "fonts")
+    if not os.path.isdir(fonts):
+        return None
+    folder = frappe.get_site_path("private", "command_center")
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, "pdf-fonts.conf")
+    cache = os.path.join(folder, "fontcache")
+    body = ('<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n<fontconfig>\n'
+            '  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>\n'
+            f"  <dir>{os.path.abspath(fonts)}</dir>\n"
+            f"  <cachedir>{os.path.abspath(cache)}</cachedir>\n</fontconfig>\n")
+    if not os.path.exists(path) or open(path).read() != body:
+        with open(path, "w") as f:
+            f.write(body)
+    return os.path.abspath(path)
+
+
+class _with_fonts:
+    """FONTCONFIG_FILE set to ours for the length of one PDF, then put back."""
+
+    def __enter__(self):
+        import os
+        self.before = os.environ.get("FONTCONFIG_FILE")
+        try:
+            conf = _fontconfig_file()
+        except Exception:
+            conf = None
+        if conf:
+            os.environ["FONTCONFIG_FILE"] = conf
+        return self
+
+    def __exit__(self, *exc):
+        import os
+        if self.before is None:
+            os.environ.pop("FONTCONFIG_FILE", None)
+        else:
+            os.environ["FONTCONFIG_FILE"] = self.before
+        return False
 
 
 def _font_css() -> str:
@@ -397,6 +451,18 @@ def pdf_diagnostics():
         "embedded_x": ("@font-face{font-family:'MPDF2';src:url(data:application/x-font-ttf;base64,%s) "
                        "format('truetype')} body{font-family:'MPDF2'}" % ttf),
     }
+    out["fc_scan"] = run("fc-scan", "--format", "%{family}|%{style}|%{weight}\n",
+                         os.path.join(os.path.dirname(__file__), "fonts", "manrope-regular.ttf"))
+    with _with_fonts():
+        out["our_conf"] = os.environ.get("FONTCONFIG_FILE")
+        out["fc_match_ours"] = run("fc-match", "Manrope:bold")
+        try:
+            pdf = get_pdf("<html><head><style>body{font-family:'Manrope';font-weight:700}</style>"
+                          "</head><body><p>Executive Summary 123</p></body></html>")
+            import re as _re
+            out["test_ours"] = sorted({x.decode() for x in _re.findall(rb"/BaseFont\s*/([A-Za-z0-9+_-]+)", pdf)})
+        except Exception as e:
+            out["test_ours"] = f"failed: {e}"[:300]
     for name, css in tests.items():
         try:
             pdf = get_pdf(f"<html><head><style>{css}</style></head><body><p>Executive Summary 123</p></body></html>")
