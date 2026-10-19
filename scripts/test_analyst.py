@@ -208,12 +208,18 @@ script(("call", [("find", {"text": "x"})]), ("text", "Still answered."))
 r = agent.answer("Q", "GIGMANN", on_step=lambda t: 1 / 0)
 check(r and r["answer"] == "Still answered.", "a failing progress reporter does not stop the answer")
 
-# 8c. The first round must look something up; later rounds may answer.
+# 8c. The model may reply without a lookup ("Hi"), but not with figures it never read.
 reset()
-calls = script(("call", [("find", {"text": "x"})]), ("text", "ok"))
-agent.answer("Q", "GIGMANN")
-check(calls[0]["mode"] == "ANY" and calls[1]["mode"] == "AUTO",
-      f"round one forces a lookup, later rounds are free: {[c['mode'] for c in calls]}")
+calls = script(("text", "Hi Michael. Ask me about sales, stock or who owes what."))
+r = agent.answer("Hi", "GIGMANN")
+check(r and r["answered"] and r["answer"].startswith("Hi Michael") and len(calls) == 1
+      and calls[0]["mode"] == "AUTO", f"a greeting is answered as one, no lookup: {calls}")
+reset()
+calls = script(("text", "Customers owe GHS 9.18M."), ("call", [("find", {"text": "x"})]),
+               ("text", "Customers owe GHS 9.18M (looked up)."))
+r = agent.answer("How much are we owed?", "GIGMANN")
+check([c["mode"] for c in calls] == ["AUTO", "ANY", "AUTO"] and r["answer"].endswith("(looked up)."),
+      f"figures with nothing looked up are sent back to look: {[c['mode'] for c in calls]}")
 
 # 8d. Every parallel call gets a response, even past the cap -- Gemini refuses the next
 #     turn when the counts differ.

@@ -21,6 +21,7 @@ goes dark because a third party is having a bad afternoon.
 from __future__ import annotations
 
 import json
+import re
 
 import frappe
 
@@ -35,6 +36,9 @@ MAX_RESULT_CHARS = 12000 # one tool result, as sent back to the model: big ones 
 # question ends in an answer rather than a timeout.
 DEADLINE = 100
 WRAP_UP_AT = 30
+# A figure in a reply: a money amount, a percentage, a k/M/B amount or a number of three
+# or more digits. A reply carrying one with nothing looked up came from memory.
+_FIGURE = re.compile(r"\d[\d,]*(?:\.\d+)?\s*(?:%|[kKMB]\b)|\b(?:GHS|USD|EUR|GBP)\s?\d|\d{3,}")
 
 
 def answer(question: str, business_code: str | None = None, history=None,
@@ -57,6 +61,7 @@ def answer(question: str, business_code: str | None = None, history=None,
         checked = []
     errors, drill = [], None
     text, steps, cut_short, snapshot = None, 0, False, None
+    force = None  # "ANY" when the model must look something up this round
     writes_before = _writes()
     import time
     started = time.monotonic()
@@ -89,11 +94,14 @@ def answer(question: str, business_code: str | None = None, history=None,
             contents.append({"role": "user", "parts": [{"text": (
                 "Answer now from what you have gathered. If it is incomplete, say what "
                 "you could not check.")}]})
-        # The first round must look something up: an answer is only as good as what it
-        # read, and a model left free to answer at once can answer from memory.
+        # The model chooses whether to look anything up: "Hi" deserves a reply, not a
+        # receivables summary (19 Oct 2026 -- every first round used to be forced to
+        # call a tool). What it may not do is state figures it has not read; that is
+        # caught below and sent back.
         content, err = gemini.chat(contents, None if final else tools.declarations(), system,
                                    timeout=int(max(5, min(60, left() - 3))),
-                                   mode="ANY" if steps == 1 and not resume else "AUTO")
+                                   mode=force or "AUTO")
+        force = None
         if err:
             errors.append(err)
             # Refused part-way, after lookups were made: what was gathered is not thrown
@@ -115,6 +123,14 @@ def answer(question: str, business_code: str | None = None, history=None,
         calls = [p["functionCall"] for p in parts if "functionCall" in p]
         if not calls:
             text = "".join(p.get("text", "") for p in parts if not p.get("thought")).strip()
+            if not checked and not final and steps <= max_steps and _FIGURE.search(text or ""):
+                # Figures, and nothing looked up: from memory. Once, it is sent back to
+                # look them up, and must call a tool this time.
+                contents.append({"role": "user", "parts": [{"text": (
+                    "You gave figures without looking anything up. Look them up with the "
+                    "tools first, then answer. Never state a figure from memory.")}]})
+                force, text = "ANY", None
+                continue
             break
 
         responses = []
@@ -378,7 +394,9 @@ The loaded sets count submitted documents only, as the screens do. For drafts or
 cancelled documents, filter src_docstatus yourself (0 draft, 2 cancelled).
 
 HOW TO WORK
-- Look before you answer.
+- Look before you answer a question about the business: every figure you give comes \
+from a lookup. A greeting, thanks or small talk needs no lookup -- reply naturally and \
+briefly, as a colleague would, and offer a question or two you could answer.
 - Check your totals before you answer. A table's total, or a count beside a defined \
 figure, must equal that figure: invoices behind GHS 9.18M owed are the unpaid ones \
 (ar_count), not every invoice. If they differ, your query is missing one of the \
