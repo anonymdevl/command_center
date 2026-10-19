@@ -206,7 +206,7 @@ CSS = f"""
 table.figs{{width:100%;border-collapse:separate;border-spacing:8px 0;margin:16px -8px 12px;table-layout:fixed}}
 table.figs td.fig{{border:0;border-radius:9px;padding:10px 12px 11px;vertical-align:top}}
 .fig-l{{font-size:7pt;font-weight:600;color:{INK2};line-height:1.3;height:2.6em;overflow:hidden}}
-.fig-v{{font-size:12.5pt;font-weight:700;letter-spacing:-.015em;line-height:1.15;margin-top:3px;white-space:nowrap}}
+.fig-v{{font-size:12.5pt;font-weight:700;line-height:1.15;margin-top:3px;white-space:nowrap}}
 .fig-n{{font-size:6.5pt;color:{MUT};margin-top:3px;line-height:1.35}}
 .ch{{border:1px solid {LINE};border-radius:10px;padding:13px 15px 11px;margin:14px 0;page-break-inside:avoid}}
 .ch-t{{font-size:8.5pt;font-weight:700;color:{INK};margin-bottom:8px}}

@@ -65,11 +65,23 @@ def pdf_bytes(question: str, answer: str, checked=None, business_code: str | Non
     html = _document_html(question, answer, business_code, model, sanitize_html,
                           frappe.utils.md_to_html)
     with _with_fonts():
-        return get_pdf(html, {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "18mm",
-                              "margin-left": "15mm", "margin-right": "15mm",
-                              "footer-center": "Page [page] of [topage]", "footer-font-size": "6",
-                              "footer-font-name": "Manrope",
-                              "footer-spacing": "6", "encoding": "UTF-8"})
+        return get_pdf(html, dict(PDF_OPTIONS))
+
+
+# The engine's settings for every PDF the app makes.
+#
+# dpi: wkhtmltopdf (0.12.6, patched Qt) lays a line out with each letter's width rounded
+# to a whole pixel, then draws the letters at their exact widths. At its usual 96 dpi
+# body text is 12 pixels high, the rounding adds up to several spaces across a line, and
+# wherever one run of text meets the next -- a bold figure, a link -- the second starts
+# where the layout said, not where the first ended: "totaledGHS 15.45M", "with   GHS".
+# At 1200 dpi the same text is 150 pixels high and the rounding comes to a few hundredths
+# of a space (measured against Manrope's own widths, 19 Oct 2026). Sizes on the page are
+# unchanged; only the grid the engine lays text out on is finer.
+PDF_OPTIONS = {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "18mm",
+               "margin-left": "15mm", "margin-right": "15mm", "dpi": "1200",
+               "footer-center": "Page [page] of [topage]", "footer-font-size": "6",
+               "footer-font-name": "Manrope", "footer-spacing": "6", "encoding": "UTF-8"}
 
 
 def _document_html(question, answer, business_code, model, sanitize, md_to_html) -> str:
@@ -142,9 +154,7 @@ def _fontconfig_file() -> str | None:
             '  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>\n'
             f"  <dir>{os.path.abspath(fonts)}</dir>\n"
             f"  <cachedir>{os.path.abspath(cache)}</cachedir>\n"
-            # No hinting: Qt measures a line with hinted (screen) widths and prints it
-            # unhinted, so text came out wider than measured -- the header's time ran
-            # off the page and the space after a bold label vanished.
+            # Unhinted outlines, as print should be. (Spacing is PDF_OPTIONS' dpi.)
             '  <match target="font">\n'
             '    <edit name="hinting" mode="assign"><bool>false</bool></edit>\n'
             '    <edit name="hintstyle" mode="assign"><const>hintnone</const></edit>\n'
@@ -258,8 +268,6 @@ def _polish(body: str) -> str:
     body = re.sub(r"<table>(.*?)</table>", lambda m: f"<table>{_align(m.group(1))}</table>", body, flags=re.S)
     body = re.sub(r"<li>(\s*(?:<strong>)?\s*Recommendation)", r'<li class="rec">\1', body)
     body = re.sub(r"<p>(\s*(?:<strong>)?\s*Projection)", r'<p class="proj">\1', body)
-    # A bold label's following space is kept: the PDF engine sometimes drops it.
-    body = re.sub(r"</strong> (?=\S)", "</strong>&#160;", body)
     return body
 
 
@@ -365,17 +373,16 @@ PDF_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><style>
 {fonts}
 @page{{size:A4}}
 body{{font-family:'Manrope PDF','Manrope','Helvetica Neue',Helvetica,Arial,'Liberation Sans',sans-serif;
- color:#111317;font-size:9pt;line-height:1.6;margin:0;-webkit-font-smoothing:antialiased;
- text-rendering:geometricPrecision}}
+ color:#111317;font-size:9pt;line-height:1.6;margin:0;-webkit-font-smoothing:antialiased}}
 .hd{{border-bottom:1px solid #e3e5ea;padding-bottom:10px;margin-bottom:22px}}
 .hd td{{border:0;padding:0;vertical-align:bottom;background:none}}
 .brand{{font-size:8pt;font-weight:700;color:#2443e8}}
 .biz{{font-size:7.5pt;color:#646973;margin-top:2px}}
 .meta{{font-size:7.5pt;color:#646973;text-align:right;line-height:1.5;white-space:nowrap;padding-right:2px}}
-h1{{font-size:18pt;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin:0 0 8px}}
+h1{{font-size:18pt;font-weight:700;letter-spacing:-.01em;line-height:1.2;margin:0 0 8px}}
 p{{margin:0 0 9px}}
 p.lead{{font-size:10pt;line-height:1.55;color:#24272d;margin-bottom:12px}}
-h2{{font-size:11.5pt;font-weight:700;margin:20px 0 7px;letter-spacing:-.01em;page-break-after:avoid}}
+h2{{font-size:11.5pt;font-weight:700;margin:20px 0 7px;page-break-after:avoid}}
 h3{{font-size:10pt;font-weight:700;margin:16px 0 5px;page-break-after:avoid}}
 h4{{font-size:9pt;font-weight:600;margin:12px 0 4px}}
 hr{{border:0;border-top:1px solid #e3e5ea;margin:18px 0}}
@@ -491,11 +498,9 @@ def pdf_probe(answer: str):
     """The same answer drawn several ways, to find the setting that keeps the spaces
     around bold text -- System Managers only, reads only, makes nothing.
 
-    Biomed's wkhtmltopdf (0.12.6, patched Qt) set the first Manrope reports with spaces
-    lost or doubled at the edges of bold words ("totaledGHS 15.45M"). It lays a line
-    out on a 96-dpi grid and prints it at full precision, so where each run of bold
-    starts can be off by a pixel; at 9pt a pixel is half a space. Each variant here
-    changes one thing; the PDFs come back for comparison, with the app's commit.
+    Biomed's wkhtmltopdf set the first Manrope reports with spaces lost or doubled at
+    the edges of bold words ("totaledGHS 15.45M"); see PDF_OPTIONS. The variants compare
+    resolutions. The PDFs come back with the app's commit and the engine's font file.
     """
     import base64
     import os
@@ -508,23 +513,11 @@ def pdf_probe(answer: str):
         frappe.throw("System Managers only.", frappe.PermissionError)
     _ensure_fonts()
     base = _document_html("Spacing probe", answer, None, None, sanitize_html, frappe.utils.md_to_html)
-    nofaces = re.sub(r"@font-face\s*\{[^}]*\}", "", base)
-
-    def doubled(html):
-        return re.sub(r"(\d+(?:\.\d+)?)(pt|px)\b", lambda m: f"{float(m.group(1)) * 2:g}{m.group(2)}", html)
-
-    opts = {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "18mm", "margin-left": "15mm",
-            "margin-right": "15mm", "footer-center": "Page [page] of [topage]", "footer-font-size": "6",
-            "footer-font-name": "Manrope", "footer-spacing": "6", "encoding": "UTF-8"}
     variants = {
         "a_now": (base, {}),
-        "b_nofaces": (nofaces, {}),
-        "c_dpi300": (nofaces, {"dpi": "300"}),
-        "d_x2_zoom": (doubled(nofaces), {"zoom": "0.5"}),
-        "e_noshrink": (nofaces, {"disable-smart-shrinking": None}),
-        "f_legibility": (nofaces.replace("geometricPrecision", "optimizeLegibility"), {}),
-        "g_x4_zoom": (re.sub(r"(\d+(?:\.\d+)?)(pt|px)\b",
-                             lambda m: f"{float(m.group(1)) * 4:g}{m.group(2)}", nofaces), {"zoom": "0.25"}),
+        "b_dpi2400": (base, {"dpi": "2400"}),
+        "c_dpi600": (base, {"dpi": "600"}),
+        "d_dpi96": (base, {"dpi": "96"}),
     }
     out = {}
     try:
@@ -538,7 +531,7 @@ def pdf_probe(answer: str):
         out["conf"] = open(conf).read() if conf and os.path.exists(conf) else None
         for name, (html, extra) in variants.items():
             try:
-                out[name] = base64.b64encode(get_pdf(html, {**opts, **extra})).decode()
+                out[name] = base64.b64encode(get_pdf(html, {**PDF_OPTIONS, **extra})).decode()
             except Exception as e:
                 out[name] = f"failed: {e}"[:300]
     return out
