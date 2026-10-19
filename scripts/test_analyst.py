@@ -503,5 +503,13 @@ REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S", timeout=60)
 check(asked and asked[0][0] != "gemini-3.8-flash", f"the slow model is skipped next time: {asked}")
 frappe.local.cc_on_step = None
 
+# 17. Undelivered orders are goods to deliver, never "money we owe" (19 Oct 2026).
+check("never \"we owe them\"" in agent.SYSTEM.replace("\\\n", ""),
+      "the analyst is told undelivered orders are not money we owe")
+_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "command_center",
+                         "ask", "intents.py")).read()
+check("owe them" not in _src.replace("we still owe them", ""),
+      "the built-in answers do not call undelivered orders money we owe")
+
 print(f"analyst: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

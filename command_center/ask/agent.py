@@ -385,6 +385,9 @@ figure, must equal that figure: invoices behind GHS 9.18M owed are the unpaid on
 figure's rules -- fix it and look again rather than print both.
 - Never show a field, column, table or tool name (base_discount_amount, src_docstatus, \
 fact_sales_invoice, query_data). Say what it means in plain words.
+- Undelivered orders are goods still to deliver, not money we owe. Call them "goods \
+still to deliver" or "undelivered orders", never "we owe them". "We owe" is only for \
+supplier bills not yet paid.
 - Answer the question that was asked. Do not widen it to other areas (supplier bills \
 when asked about invoices, say); offer those as follow-up questions instead.
 - Every figure you state must come from a tool result, or be calculated from tool results \

@@ -231,16 +231,15 @@ def owes_and_waiting(question, business_code=None):
         "intent": "owes_and_waiting", "figures": ["ar_total", "order_book"],
         "answer": (
             f"{_n(len(both))} customers both owe us money and are waiting on goods. "
-            f"Together they owe {_money(sum(r['owed'] or 0 for r in both))} while we "
-            f"owe them {_money(sum(r['undelivered'] or 0 for r in both))} of "
-            f"undelivered orders. Worth knowing before chasing payment: they are "
-            f"owed something too."
+            f"Together they owe {_money(sum(r['owed'] or 0 for r in both))}, and "
+            f"{_money(sum(r['undelivered'] or 0 for r in both))} of their orders is still "
+            f"to deliver. Worth knowing before chasing payment: they are waiting on us too."
         ),
         "checked": ["unpaid invoices grouped by customer",
                     "open orders grouped by customer",
                     "the two lists intersected"],
         "table": {"columns": [("customer", "Customer"), ("owed", "They owe us"),
-                              ("undelivered", "We owe them")],
+                              ("undelivered", "Goods still to deliver")],
                   "rows": both[:10]},
         "records": None,
     }
@@ -307,8 +306,8 @@ def party_brief(question, business_code=None):
                                         ("count", "name", "orders")])
         checked.append(f"open orders for {name}")
         if orders.get("orders"):
-            parts.append(f"we owe them {_money(orders['undelivered'])} of goods "
-                         f"across {_n(orders['orders'])} open orders")
+            parts.append(f"{_money(orders['undelivered'])} of goods is still to deliver "
+                         f"to them across {_n(orders['orders'])} open orders")
 
         cases = query.totals("fact_case",
                              _scoped({**OPEN, "customer": name}, business_code),
