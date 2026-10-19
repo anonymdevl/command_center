@@ -48,7 +48,7 @@ ANALYST_EXAMPLES = [
 ]
 
 
-def plan(question: str, business_code: str | None = None) -> tuple:
+def plan(question: str, business_code: str | None = None, use_router: bool = True) -> tuple:
     """Pick the intent that applies, and report anything that broke trying.
 
     The first intent that claims the question wins, and `refuses` is first in the list,
@@ -69,7 +69,7 @@ def plan(question: str, business_code: str | None = None) -> tuple:
     # rather than the ceiling.
     routed = None
     try:
-        routed = planner_llm.route(question, business_code)
+        routed = planner_llm.route(question, business_code) if use_router else None
     except Exception:
         frappe.log_error(title="Command Center ask: router",
                          message=frappe.get_traceback())
@@ -158,7 +158,12 @@ def answer(question: str, business_code: str | None = None, history=None, on_ste
             return result
         analyst_error = (result or {}).get("analyst_error") or "the analyst returned nothing"
 
-    fallback = _fallback(question, business_code)
+    # When the analyst failed because Gemini is not replying, the router -- Gemini again
+    # -- would only add its own wait before the patterns answer (19 Oct 2026: 60 seconds
+    # for the analyst, then the router's timeout, before anything was said).
+    slow = bool(getattr(frappe.local, "cc_gemini_slow", False)) or "did not reply in time" in (
+        analyst_error or "")
+    fallback = _fallback(question, business_code, use_router=not slow)
     if analyst_error:
         # Said on the answer: a fallback that looks like the analyst is how a broken
         # analyst went unnoticed on the live site.
@@ -168,18 +173,21 @@ def answer(question: str, business_code: str | None = None, history=None, on_ste
             # COMPANY but not what you are asking" in reply to a growth forecast reads
             # as the analyst being foolish; say plainly what happened instead.
             fallback.update({
-                "answer": "I could not finish working that out this time. Ask again in a "
-                          "moment -- if it keeps happening, the reason below is the thing "
-                          "to look at.",
+                "answer": ("Gemini, the AI model behind the analyst, is replying too slowly "
+                           "right now, so I could not work that out. Ask again in a few "
+                           "minutes." if slow else
+                           "I could not finish working that out this time. Ask again in a "
+                           "moment -- if it keeps happening, the reason below is the thing "
+                           "to look at."),
                 "suggestions": [], "entities": [],
                 "checked": ["the analyst stopped before it could answer"],
             })
     return fallback
 
 
-def _fallback(question: str, business_code: str | None = None) -> dict:
+def _fallback(question: str, business_code: str | None = None, use_router: bool = True) -> dict:
 
-    result, failures, note = plan(question, business_code)
+    result, failures, note = plan(question, business_code, use_router)
     if result:
         result.setdefault("figures", [])
         result.setdefault("checked", [])

@@ -189,9 +189,49 @@ def _listed() -> list:
 
 def _next_model(kind: str, tried: list) -> str | None:
     for name in ranked_models(_listed(), kind, allow_lite=True):
-        if name not in tried and not is_out(name):
+        if name not in tried and not is_out(name) and not is_slow(name):
             return name
     return None
+
+
+# ---------------------------------------------------------------------------
+# Slow replies. On the free tier a model can take half a minute to say "OK", or not
+# reply at all: on 19 Oct 2026 the first call of a question waited its full 60 seconds
+# on gemini-3.8-flash and timed out, and the question failed at two and a half minutes
+# without one lookup made. A model that does not reply within REPLY_WAIT seconds is left
+# for the next one the key may use, and remembered as slow for SLOW_FOR, so the next
+# question does not wait on it too. The last model available still gets the full time.
+#
+#     bench --site <site> set-config command_center_gemini_reply_wait 45
+# ---------------------------------------------------------------------------
+SLOW = "cc_gemini_slow::{kid}::{model}"
+SLOW_FOR = 600
+REPLY_WAIT = 35      # a round that may look things up
+WRITE_WAIT = 55      # the round that writes the answer: a long reply takes longer
+
+
+def is_slow(model: str) -> bool:
+    return bool(frappe.cache().get_value(SLOW.format(kid=_kid(), model=model)))
+
+
+def _mark_slow(model: str):
+    frappe.cache().set_value(SLOW.format(kid=_kid(), model=model), 1, expires_in_sec=SLOW_FOR)
+    frappe.local.cc_gemini_slow = True
+
+
+def label(model: str) -> str:
+    """gemini-2.5-flash-lite -> Gemini 2.5 Flash Lite, as a person would say it."""
+    return " ".join(w.capitalize() if not w[:1].isdigit() else w for w in (model or "").split("-"))
+
+
+def _say(text: str):
+    """Tell the person waiting, under the question bar (agent.py sets the listener)."""
+    tell = getattr(frappe.local, "cc_on_step", None)
+    if tell:
+        try:
+            tell(text)
+        except Exception:
+            pass
 
 
 def _quota_words(model: str, text: str, seconds: int) -> str:
@@ -225,25 +265,31 @@ def _post(kind: str, body: dict, timeout: int):
     def remaining():
         return (end - time.monotonic()) if end else 1e9
 
-    def send(model):
+    patience = int(frappe.conf.get("command_center_gemini_reply_wait") or 0) or (
+        REPLY_WAIT if "tools" in body else WRITE_WAIT)
+
+    def send(model, cap):
         return requests.post(ENDPOINT.format(model=model), params={"key": _key()}, json=body,
-                             timeout=max(3, min(timeout, remaining() - 1)))
+                             timeout=max(3, min(cap, remaining() - 1)))
 
     model = model_for(kind)
-    if is_out(model):
+    if is_out(model) or is_slow(model):
         model = _next_model(kind, [model]) or model
     tried, r = [], None
     while model and len(tried) < 6:
         tried.append(model)
-        r = send(model)
-        if r.status_code in (500, 502, 503, 504) and remaining() > 12:
-            time.sleep(1.5)
-            r = send(model)
-        if r.status_code == 429:
-            wait = retry_after(r.text)
-            if 0 < wait <= 8 and remaining() > wait + 10:  # a per-minute limit: wait it out
-                time.sleep(wait)
-                r = send(model)
+        # Another model to turn to: this one gets `patience`, not the whole budget.
+        cap = min(timeout, patience) if kind == "analyst" and _next_model(kind, tried) else timeout
+        try:
+            r = _attempt(lambda: send(model, cap), remaining)
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            _mark_slow(model)
+            nxt = _next_model(kind, tried) if remaining() > 15 else None
+            if not nxt:
+                raise
+            _say(f"{label(model)} did not reply within {cap} seconds -- asking {label(nxt)} instead")
+            model = nxt
+            continue
         if r.status_code == 429:
             wait = retry_after(r.text)
             _mark_out(model, wait, r.text)
@@ -257,6 +303,23 @@ def _post(kind: str, body: dict, timeout: int):
                 continue
         break
     frappe.local.cc_gemini_used = tried[-1] if tried else None
+    return r
+
+
+def _attempt(send, remaining):
+    """One model: sent, retried once on a passing fault, waited out on a per-minute
+    limit. Returns the response; a timeout or lost connection is raised to _post."""
+    import time
+
+    r = send()
+    if r.status_code in (500, 502, 503, 504) and remaining() > 12:
+        time.sleep(1.5)
+        r = send()
+    if r.status_code == 429:
+        wait = retry_after(r.text)
+        if 0 < wait <= 8 and remaining() > wait + 10:  # a per-minute limit: wait it out
+            time.sleep(wait)
+            r = send()
     return r
 
 
@@ -309,7 +372,8 @@ def chat(contents: list, tools: list, system: str, timeout: int = 40, mode: str 
         import requests
         exc = getattr(requests, "exceptions", None)
         if exc and isinstance(e, exc.Timeout):
-            return None, f"Gemini took longer than {timeout} seconds to reply."
+            return None, ("Gemini, the AI model, did not reply in time -- Google is answering "
+                          "slowly right now.")
         if exc and isinstance(e, exc.ConnectionError):
             return None, "Gemini could not be reached from the server (a network problem)."
         return None, f"Gemini could not be reached ({type(e).__name__}: {str(e)[:200]})."

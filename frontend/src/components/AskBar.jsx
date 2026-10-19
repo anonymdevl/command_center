@@ -244,9 +244,10 @@ export default function AskBar({ scope, openDrawer }) {
               <div>
                 <b>Looking into “{pending}”</b>
                 <span>
-                  {steps.length ? "Working through it" : "Reading the question"}
+                  {steps.length ? "Working through it"
+                    : elapsed >= 12 ? "Waiting for Gemini, the AI model, to reply" : "Reading the question"}
                   {elapsed >= 3 ? ` · ${elapsed}s` : ""}
-                  {elapsed >= 15 ? " — bigger questions take up to half a minute" : ""}
+                  {elapsed >= 40 ? " — Google is replying slowly; a model that stalls is swapped for another" : ""}
                 </span>
                 {steps.length ? (
                   <ol className="ap-steps">

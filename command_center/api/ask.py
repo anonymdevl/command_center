@@ -172,3 +172,40 @@ def answerable():
                           "entity names found in the question itself"],
         "can_change_records": False,
     }
+
+
+@frappe.whitelist()
+def model_speeds():
+    """How fast each Gemini model this key may use answers right now -- System Managers
+    only. Open while signed in: /api/method/command_center.api.ask.model_speeds
+
+    One short request per model (each counts against that model's daily allowance), so
+    a slow model can be told from a slow Google. Also lists which are marked slow or
+    out of allowance at the moment.
+    """
+    import time
+
+    import requests
+
+    from command_center.ask import gemini
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("System Managers only.", frappe.PermissionError)
+    if not gemini.configured():
+        return {"ok": False, "why": "No Gemini key on this site."}
+    names = gemini.ranked_models(gemini._listed(), "analyst", allow_lite=True)[:5]
+    body = {"contents": [{"role": "user", "parts": [{"text": "Reply with the word OK."}]}],
+            "generationConfig": {"maxOutputTokens": 256}}
+    out = []
+    for name in names:
+        t0 = time.monotonic()
+        try:
+            r = requests.post(gemini.ENDPOINT.format(model=name), params={"key": gemini._key()},
+                              json=body, timeout=40)
+            status = r.status_code
+        except requests.exceptions.Timeout:
+            status = "no reply in 40s"
+        except Exception as e:
+            status = f"failed: {type(e).__name__}"
+        out.append({"model": name, "seconds": round(time.monotonic() - t0, 1), "status": status,
+                    "marked_slow": gemini.is_slow(name), "out_of_allowance": gemini.is_out(name)})
+    return {"ok": True, "analyst_model": gemini.analyst_model(), "models": out}

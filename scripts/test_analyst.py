@@ -470,7 +470,38 @@ sys.modules["requests"] = _t.SimpleNamespace(
     post=_post_slow, get=lambda *a, **k: _R(200, {"models": listed}),
     exceptions=_t.SimpleNamespace(Timeout=_Timeout, ConnectionError=ConnectionError))
 content, err = REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S", timeout=40)
-check(content is None and err == "Gemini took longer than 40 seconds to reply.", f"timeout message: {err}")
+check(content is None and "did not reply in time" in (err or ""), f"timeout message: {err}")
+
+# 16. A model that stalls is left for the next, the person is told, and it is remembered
+# (19 Oct 2026: one call waited its full 60 seconds and the question failed).
+_cache.d.clear()
+frappe.conf.pop("command_center_analyst_model", None)
+gemini.PREFERRED["analyst"] = "gemini-3.8-flash"
+asked, said = [], []
+
+
+def _post_stall(url, params=None, json=None, timeout=None):
+    model = url.split("/models/")[1].split(":")[0]
+    asked.append((model, timeout))
+    if model == "gemini-3.8-flash":
+        raise _Timeout("read timed out")
+    return _R(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": "OK"}]}}]})
+
+
+sys.modules["requests"] = _t.SimpleNamespace(
+    post=_post_stall, get=lambda *a, **k: _R(200, {"models": listed}),
+    exceptions=_t.SimpleNamespace(Timeout=_Timeout, ConnectionError=ConnectionError))
+frappe.local.cc_on_step = said.append
+content, err = REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}],
+                         [{"name": "t", "description": "d"}], "S", timeout=60)
+check(err is None and [m for m, _ in asked][:2] == ["gemini-3.8-flash", "gemini-2.5-flash"],
+      f"a stalled model is swapped for the next: {asked}, {err}")
+check(asked[0][1] == gemini.REPLY_WAIT, f"it waits {gemini.REPLY_WAIT}s, not the whole budget: {asked}")
+check(said and "did not reply" in said[0] and "Gemini 2.5 Flash" in said[0], f"the person is told: {said}")
+asked.clear()
+REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S", timeout=60)
+check(asked and asked[0][0] != "gemini-3.8-flash", f"the slow model is skipped next time: {asked}")
+frappe.local.cc_on_step = None
 
 print(f"analyst: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

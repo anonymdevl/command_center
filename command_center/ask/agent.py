@@ -65,6 +65,9 @@ def answer(question: str, business_code: str | None = None, history=None,
     # retries or a heavy report inside one round could take minutes. On 18 Oct 2026 a
     # question ran for eleven minutes until the connection dropped.
     frappe.local.cc_deadline = started + deadline
+    # gemini.py says here when a model is slow and it turns to another.
+    frappe.local.cc_on_step = on_step
+    frappe.local.cc_gemini_slow = False
 
     def left():
         return deadline - (time.monotonic() - started)
@@ -156,6 +159,7 @@ def answer(question: str, business_code: str | None = None, history=None,
         contents.append({"role": "user", "parts": responses})
 
     frappe.local.cc_deadline = None
+    frappe.local.cc_on_step = None
     # The guard. Nothing above can write -- tools.py has no write path and preflight
     # holds it that way -- so a write here means something changed underneath us, and
     # it is undone before anyone can rely on it.
