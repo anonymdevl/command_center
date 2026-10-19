@@ -77,7 +77,8 @@ def pdf_bytes(question: str, answer: str, checked=None, business_code: str | Non
 # where the layout said, not where the first ended: "totaledGHS 15.45M", "with   GHS".
 # At 1200 dpi the same text is 150 pixels high and the rounding comes to a few hundredths
 # of a space (measured against Manrope's own widths, 19 Oct 2026). Sizes on the page are
-# unchanged; only the grid the engine lays text out on is finer.
+# unchanged; only the grid the engine lays text out on is finer. The PDF's styles use no
+# letter-spacing: at this resolution the engine applies it many times over.
 PDF_OPTIONS = {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "18mm",
                "margin-left": "15mm", "margin-right": "15mm", "dpi": "1200",
                "footer-center": "Page [page] of [topage]", "footer-font-size": "6",
@@ -379,7 +380,7 @@ body{{font-family:'Manrope PDF','Manrope','Helvetica Neue',Helvetica,Arial,'Libe
 .brand{{font-size:8pt;font-weight:700;color:#2443e8}}
 .biz{{font-size:7.5pt;color:#646973;margin-top:2px}}
 .meta{{font-size:7.5pt;color:#646973;text-align:right;line-height:1.5;white-space:nowrap;padding-right:2px}}
-h1{{font-size:18pt;font-weight:700;letter-spacing:-.01em;line-height:1.2;margin:0 0 8px}}
+h1{{font-size:18pt;font-weight:700;line-height:1.2;margin:0 0 8px}}
 p{{margin:0 0 9px}}
 p.lead{{font-size:10pt;line-height:1.55;color:#24272d;margin-bottom:12px}}
 h2{{font-size:11.5pt;font-weight:700;margin:20px 0 7px;page-break-after:avoid}}

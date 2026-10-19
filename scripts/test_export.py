@@ -127,6 +127,11 @@ check('<li class="rec">' in _pol and _pol.count('class="lead"') == 1,
 check("<script" not in export.pdf_blocks.figures([{"label": "<script>x</script>", "value": "1"}]),
       "a card's text is escaped")
 
+# the engine's settings: a fine layout grid, and no letter-spacing it would overdo
+check(int(export.PDF_OPTIONS["dpi"]) >= 1200, "PDFs lay text out at 1200 dpi or finer")
+check("letter-spacing" not in export.PDF_TEMPLATE and "letter-spacing" not in export.pdf_blocks.CSS,
+      "the PDF's styles use no letter-spacing")
+
 # _cell
 check(export._cell("GHS 1,234.50") == 1234.5 and export._cell("12%") == 0.12, "figure parsing")
 check(export._cell("Q3 2025") == "Q3 2025" and export._cell(None) == "", "non-figures untouched")
