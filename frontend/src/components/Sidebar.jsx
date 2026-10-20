@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import { boot } from "../api/boot.js";
-import { shortDate } from "../format.js";
 import Icon, { VIEW_ICON } from "./Icon.jsx";
 
 /**
@@ -159,33 +158,17 @@ function Business({ scope, onScope }) {
 }
 
 /**
- * What the figures describe, which is not necessarily today.
- *
- * Every ageing number on every screen is measured against this date. Reading it as
- * "today" on a restored dataset is exactly how a stale snapshot becomes a false
- * finding, so it is never hidden.
+ * Under the business name: nothing, while there are figures. The "Figures as at" line
+ * that sat here was removed on 20 Oct 2026 (Michael: it read as machine-made). The date
+ * the figures describe is still stated on every figure's explanation, every drawer, and
+ * every PDF and export. The warning below stays: with nothing loaded, every screen is
+ * empty, and the reason belongs where people look first.
  */
 function AsOf() {
-  const d = boot.as_of?.date;
-  if (!d) {
-    return (
-      <span className="asof none" title="Run the load before relying on anything here">
-        <i className="dot" /> No figures loaded yet
-      </span>
-    );
-  }
-  // The pulse means "current". Data more than two days behind today is a snapshot --
-  // a restored backup, a stopped load -- and a live-looking dot over it would be the
-  // same false signal as ageing against today.
-  const behind = Math.floor((Date.now() - new Date(`${d}T00:00:00`).getTime()) / 86400000);
+  if (boot.as_of?.date) return null;
   return (
-    <span
-      className={`asof${behind > 2 ? " stale" : ""}`}
-      title={`ERPNext connected${boot.site ? ` (${boot.site})` : ""}. The latest date the data covers -- ageing is measured against this, not today${
-        boot.as_of.last_run ? ` · last read ${boot.as_of.last_run}` : ""
-      }`}
-    >
-      <i className="dot" /> Figures as at {shortDate(d)}
+    <span className="asof none" title="Run the load before relying on anything here">
+      <i className="dot" /> No figures loaded yet
     </span>
   );
 }
