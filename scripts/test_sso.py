@@ -2,12 +2,14 @@
 
     python3 scripts/test_sso.py
 
-Frappe and requests are stood in for, and a fake ERPNext answers the token and profile
-requests, so what is under test is api/sso.py's own decisions: the sign-in must have
-started here in this browser and be used once; the business's ERPNext must vouch for the
-person; and the platform itself must already know them -- an enabled account holding
-Command Center Manager. A role someone gives themselves on their own ERPNext gets them
-nowhere, a refusal is recorded, and a success lands on /command-center only.
+Frappe and requests are stood in for, a fake ERPNext answers the token and profile
+requests, and a fake api/ingest.erp_members says who holds the access role there. What
+is under test is api/sso.py's own decisions: the sign-in must have started here in this
+browser and be used once; the business's ERPNext must vouch for the person; the role on
+that ERPNext lets them in (an account is made for a newcomer), a pause here keeps them
+out, taking the role away takes the platform away (at sign-in and in the 15-minute
+sync) -- but never from a manager added by hand or an administrator, and never because
+the business could not be reached. A success lands on /command-center only.
 """
 
 from __future__ import annotations
@@ -34,13 +36,27 @@ class _Cache:
         self.d.pop(k, None)
 
 
-USERS = {
-    "samuel@gigmann.com": {"enabled": 1, "user_type": "System User",
-                           "roles": ["Command Center Manager"]},
-    "clerk@gigmann.com": {"enabled": 1, "user_type": "System User", "roles": ["Accounts User"]},
-    "gone@gigmann.com": {"enabled": 0, "user_type": "System User",
-                         "roles": ["Command Center Manager"]},
-}
+# Accounts on the platform. samuel came in through Gigmann's ERPNext before (marked);
+# hand@ was added by hand (never marked); paused@ is disabled here; admin@ is a System
+# Manager who once came in through it.
+USERS, MARKS, SIGNED_OUT = {}, {}, []
+
+
+def seed():
+    USERS.clear()
+    MARKS.clear()
+    SIGNED_OUT.clear()
+    USERS.update({
+        "samuel@gigmann.com": {"enabled": 1, "email": "samuel@gigmann.com",
+                               "roles": ["Command Center Manager"]},
+        "hand@gigmann.com": {"enabled": 1, "email": "hand@gigmann.com",
+                             "roles": ["Command Center Manager"]},
+        "paused@gigmann.com": {"enabled": 0, "email": "paused@gigmann.com",
+                               "roles": ["Command Center Manager"]},
+        "admin@ultrasoft.com": {"enabled": 1, "email": "admin@ultrasoft.com",
+                                "roles": ["Command Center Manager", "System Manager"]},
+    })
+    MARKS.update({"samuel@gigmann.com": ["gms"], "admin@ultrasoft.com": ["gms"]})
 
 
 class Business:
@@ -55,6 +71,27 @@ class Business:
 BIZ = Business()
 
 
+class _UserDoc:
+    def __init__(self, name=None, data=None):
+        self.name = name
+        self.data = data or {}
+        self.flags = types.SimpleNamespace()
+
+    def insert(self, ignore_permissions=False):
+        self.name = self.data["email"]
+        USERS[self.name] = {"enabled": 1, "email": self.name, "roles": [],
+                            "first_name": self.data.get("first_name")}
+        return self
+
+    def add_roles(self, *roles):
+        for r in roles:
+            if r not in USERS[self.name]["roles"]:
+                USERS[self.name]["roles"].append(r)
+
+    def remove_roles(self, *roles):
+        USERS[self.name]["roles"] = [r for r in USERS[self.name]["roles"] if r not in roles]
+
+
 def get_value(doctype, filters, fields=None, as_dict=False, **kw):
     if doctype == "Connected Business":
         f = filters
@@ -65,16 +102,40 @@ def get_value(doctype, filters, fields=None, as_dict=False, **kw):
             key = filters.get("name") or filters.get("email")
             return key if key in USERS else None
         u = USERS.get(filters)
-        return {"enabled": u["enabled"], "user_type": u["user_type"]} if u else None
+        return u.get(fields) if u else None
     return None
+
+
+def get_all(doctype, filters=None, fields=None, pluck=None, **kw):
+    if doctype == "DefaultValue":
+        if "parent" in filters:
+            return list(MARKS.get(filters["parent"], []))
+        return [u for u, codes in MARKS.items() if filters.get("defvalue") in codes]
+    if doctype == "Connected Business":
+        return [types.SimpleNamespace(business_code="gms", sso_client_id="cid")]
+    return []
+
+
+def get_doc(arg, name=None):
+    if isinstance(arg, dict):
+        return _UserDoc(data=arg)
+    if arg == "Connected Business":
+        return BIZ
+    return _UserDoc(name=name)
 
 
 frappe = types.ModuleType("frappe")
 _cache = _Cache()
+frappe.conf = {}
 frappe.cache = lambda: _cache
 frappe.db = types.SimpleNamespace(get_value=get_value, commit=lambda: None)
-frappe.get_doc = lambda dt, name: BIZ
+frappe.get_doc = get_doc
+frappe.get_all = get_all
 frappe.get_roles = lambda user: USERS.get(user, {}).get("roles", [])
+frappe.defaults = types.SimpleNamespace(
+    add_default=lambda key, value, parent=None: MARKS.setdefault(parent, []).append(value),
+    clear_default=lambda key=None, value=None, parent=None: MARKS.__setitem__(
+        parent, [v for v in MARKS.get(parent, []) if v != value]))
 frappe.generate_hash = lambda length=32: "S" * length
 frappe.logged = []
 frappe.log_error = lambda title=None, message=None: frappe.logged.append((title, message))
@@ -87,6 +148,10 @@ frappe.utils = types.SimpleNamespace(get_url=lambda path: "https://platform.exam
                                      add_to_date=lambda d, seconds=0: d,
                                      now_datetime=lambda: "now")
 frappe.request = types.SimpleNamespace(cookies={})
+sys.modules["frappe"] = frappe
+_sessions = types.ModuleType("frappe.sessions")
+_sessions.clear_sessions = lambda user=None, force=False: SIGNED_OUT.append(user)
+sys.modules["frappe.sessions"] = _sessions
 
 
 class _Cookies:
@@ -107,10 +172,24 @@ class _Login:
 
 frappe.local = types.SimpleNamespace(response={}, cookie_manager=_Cookies(),
                                      login_manager=_Login(), request_ip="1.2.3.4")
-sys.modules["frappe"] = frappe
 _biz_mod = types.ModuleType("command_center.api.businesses")
 _biz_mod.ROLE = "Command Center Manager"
 sys.modules["command_center.api.businesses"] = _biz_mod
+
+# Who holds the access role on Gigmann's ERPNext (api/ingest.erp_members).
+ERP_MEMBERS = {"down": False, "asked": []}
+
+
+def erp_members(code, role):
+    ERP_MEMBERS["asked"].append(role)
+    if ERP_MEMBERS["down"]:
+        raise Exception("unreachable")
+    return set(ERP_MEMBERS["who"])
+
+
+_ing = types.ModuleType("command_center.api.ingest")
+_ing.erp_members = erp_members
+sys.modules["command_center.api.ingest"] = _ing
 
 ERP = {"email": "samuel@gigmann.com", "token_status": 200, "profile_status": 200,
        "posted": [], "profile_wrapped": False}
@@ -130,7 +209,7 @@ def _post(url, data=None, timeout=None):
 
 
 def _get(url, headers=None, timeout=None):
-    prof = {"sub": "x", "email": ERP["email"], "roles": ["Command Center Manager"]}
+    prof = {"sub": "x", "email": ERP["email"], "name": "New Person"}
     return _R(ERP["profile_status"], {"message": prof} if ERP["profile_wrapped"] else prof)
 
 
@@ -156,13 +235,16 @@ def fresh():
     frappe.local.cookie_manager = _Cookies()
     frappe.pages.clear()
     frappe.logged.clear()
+    SIGNED_OUT.clear()
     ERP.update({"email": "samuel@gigmann.com", "token_status": 200, "profile_status": 200,
                 "profile_wrapped": False})
     ERP["posted"].clear()
+    ERP_MEMBERS.update({"down": False, "who": {"samuel@gigmann.com", "new@gigmann.com",
+                                               "paused@gigmann.com"}})
 
 
 def begin():
-    """Press the Ask AI link: start() sets the state and the cookie; the browser keeps it."""
+    """Press the link: start() sets the state and the cookie; the browser keeps it."""
     fresh()
     sso.start(business="gms")
     state = frappe.local.cookie_manager.set[sso.COOKIE][0]
@@ -172,6 +254,13 @@ def begin():
     return state, loc
 
 
+def refused(text=None):
+    return (frappe.local.login_manager.who is None and frappe.pages
+            and frappe.pages[0][2] == 403 and (text is None or text in frappe.pages[0][1]))
+
+
+seed()
+
 # 1. The link sends the person to their own ERPNext's sign-in, with this site's callback.
 state, loc = begin()
 check(loc.startswith("https://erp.example.com/api/method/frappe.integrations.oauth2.authorize?")
@@ -180,19 +269,19 @@ check(loc.startswith("https://erp.example.com/api/method/frappe.integrations.oau
       f"start() redirects to the business's ERPNext: {loc}")
 check(frappe.local.cookie_manager.set[sso.COOKIE][1].get("httponly"), "the state cookie is httponly")
 
-# 2. A known manager, vouched for by ERPNext: signed in, sent to /command-center.
+# 2. Holds the role on their ERPNext, has an account here: signed in, sent home.
 sso.callback(code="c1", state=state)
 check(frappe.local.login_manager.who == "samuel@gigmann.com"
       and frappe.local.response.get("location") == "/command-center",
-      f"a known manager is signed in: {frappe.local.login_manager.who}, {frappe.local.response}")
+      f"a role holder is signed in: {frappe.local.login_manager.who}, {frappe.local.response}")
 check(ERP["posted"] and ERP["posted"][0][1].get("client_secret") == "csecret",
       "the code is exchanged with the client secret")
+check(ERP_MEMBERS["asked"][-1] == "Executive Insights", "the access role is Executive Insights")
 
 # 3. The same callback again is refused: a state is spent on first use.
 fresh()
 sso.callback(code="c1", state=state)
-check(frappe.local.login_manager.who is None and frappe.pages and frappe.pages[0][2] == 403,
-      "a replayed callback is refused")
+check(refused(), "a replayed callback is refused")
 check(frappe.logged and frappe.logged[0][0] == "Command Center sign-in refused",
       "a refusal is recorded in the Error Log")
 
@@ -200,51 +289,85 @@ check(frappe.logged and frappe.logged[0][0] == "Command Center sign-in refused",
 state, _ = begin()
 frappe.request.cookies = {}
 sso.callback(code="c1", state=state)
-check(frappe.local.login_manager.who is None and "different browser" in frappe.pages[0][1],
-      "a callback without this browser's cookie is refused")
+check(refused("different browser"), "a callback without this browser's cookie is refused")
 
-# 5. Someone who gave themselves a role on their ERPNext, unknown here: refused.
+# 5. A newcomer who holds the role there: an account is made here, a manager, signed in.
 state, _ = begin()
-ERP["email"] = "newcomer@gigmann.com"
+ERP["email"] = "new@gigmann.com"
 sso.callback(code="c1", state=state)
-check(frappe.local.login_manager.who is None and "has not been given access" in frappe.pages[0][1],
-      "an ERPNext account the platform does not know is refused, whatever its roles there")
+check(frappe.local.login_manager.who == "new@gigmann.com"
+      and "Command Center Manager" in USERS.get("new@gigmann.com", {}).get("roles", [])
+      and "gms" in MARKS.get("new@gigmann.com", []),
+      f"a role holder new to the platform gets an account and is signed in: {USERS.get('new@gigmann.com')}")
 
-# 6. Known here but not a manager: refused. Disabled: refused.
+# 6. Without the role on their ERPNext: refused, and no account is made.
 state, _ = begin()
 ERP["email"] = "clerk@gigmann.com"
 sso.callback(code="c1", state=state)
-check(frappe.local.login_manager.who is None and "not one of its managers" in frappe.pages[0][1],
-      "an account here without Command Center Manager is refused")
-state, _ = begin()
-ERP["email"] = "gone@gigmann.com"
-sso.callback(code="c1", state=state)
-check(frappe.local.login_manager.who is None and "disabled" in frappe.pages[0][1],
-      "a disabled account is refused")
+check(refused("does not hold the Executive Insights role") and "clerk@gigmann.com" not in USERS,
+      "someone without the role there is refused, and gets no account here")
 
-# 7. Email case does not matter; a wrapped profile (older Frappe) is read too.
+# 7. Paused here: refused, whatever their ERPNext says.
+state, _ = begin()
+ERP["email"] = "paused@gigmann.com"
+sso.callback(code="c1", state=state)
+check(refused("paused"), "an account paused on the platform stays out")
+
+# 8. The role taken away on their ERPNext: the next sign-in is refused, and the platform
+#    comes off -- the manager role, and every session.
+state, _ = begin()
+ERP_MEMBERS["who"] = {"new@gigmann.com"}
+sso.callback(code="c1", state=state)
+check(refused("does not hold"), "a role taken away there: sign-in refused")
+check("Command Center Manager" not in USERS["samuel@gigmann.com"]["roles"]
+      and "samuel@gigmann.com" in SIGNED_OUT,
+      f"and the platform taken away: {USERS['samuel@gigmann.com']}, signed out {SIGNED_OUT}")
+seed()
+
+# 9. A manager added by hand, without the role there: refused through this link, but
+#    their access here is the administrator's to change, not this sign-in's.
+state, _ = begin()
+ERP["email"] = "hand@gigmann.com"
+sso.callback(code="c1", state=state)
+check(refused("does not hold") and "Command Center Manager" in USERS["hand@gigmann.com"]["roles"],
+      "a hand-added manager without the role is refused here but keeps their access")
+
+# 10. Their ERPNext cannot be asked: fail closed, change nothing.
+state, _ = begin()
+ERP_MEMBERS["down"] = True
+sso.callback(code="c1", state=state)
+check(refused("could not check") and "Command Center Manager" in USERS["samuel@gigmann.com"]["roles"],
+      "with the business unreachable, sign-in fails closed and nobody loses anything")
+
+# 11. Email case does not matter; a wrapped profile (older Frappe) is read too.
 state, _ = begin()
 ERP["email"], ERP["profile_wrapped"] = "Samuel@Gigmann.com", True
 sso.callback(code="c1", state=state)
 check(frappe.local.login_manager.who == "samuel@gigmann.com", "email matched without regard to case")
 
-# 8. ERPNext will not vouch (bad code, revoked client): refused.
+# 12. ERPNext will not vouch (bad code, revoked client), or the sign-in was cancelled.
 state, _ = begin()
 ERP["token_status"] = 401
 sso.callback(code="bad", state=state)
-check(frappe.local.login_manager.who is None and "would not confirm" in frappe.pages[0][1],
-      "a code ERPNext will not exchange is refused")
+check(refused("would not confirm"), "a code ERPNext will not exchange is refused")
 state, _ = begin()
 sso.callback(error="access_denied", state=state)
-check(frappe.local.login_manager.who is None, "a sign-in cancelled at ERPNext is refused")
+check(refused(), "a sign-in cancelled at ERPNext is refused")
 
-# 9. Expired (not in the cache any more): refused.
+# 13. Expired (not in the cache any more): refused.
 state, _ = begin()
 _cache.d.clear()
 sso.callback(code="c1", state=state)
-check(frappe.local.login_manager.who is None and "expired" in frappe.pages[0][1], "an expired sign-in is refused")
+check(refused("expired"), "an expired sign-in is refused")
 
-# 10. A business without sign-in set up, or unknown: refused at the start, no redirect.
+# 14. Administrator cannot come in this way, whatever their ERPNext says.
+state, _ = begin()
+ERP["email"] = "Administrator"
+ERP_MEMBERS["who"] = {"administrator"}
+sso.callback(code="c1", state=state)
+check(refused(), "Administrator cannot sign in through a business's ERPNext")
+
+# 15. A business without sign-in set up, or unknown: refused at the start, no redirect.
 fresh()
 BIZ.secret = None
 sso.start(business="gms")
@@ -255,10 +378,39 @@ fresh()
 sso.start(business="someone-else")
 check(not frappe.local.response.get("location") and frappe.pages, "an unknown business is refused")
 
-# 11. No "return to" from the request: a success can only land on /command-center.
+# 16. No "return to" from the request: a success can only land on /command-center.
 state, _ = begin()
 sso.callback(code="c1", state=state, redirect_to="https://evil.example.com")
 check(frappe.local.response.get("location") == "/command-center", "no open redirect")
+
+# 17. The 15-minute sync: whoever lost the role there loses the platform; a System
+#     Manager keeps theirs; an unreachable business changes nothing.
+seed()
+fresh()
+ERP_MEMBERS["down"] = True
+sso.sync_members()
+check("Command Center Manager" in USERS["samuel@gigmann.com"]["roles"] and not SIGNED_OUT,
+      "an unreachable business: the sync changes nothing")
+ERP_MEMBERS.update({"down": False, "who": set()})
+sso.sync_members()
+check("Command Center Manager" not in USERS["samuel@gigmann.com"]["roles"]
+      and "samuel@gigmann.com" in SIGNED_OUT,
+      f"the sync takes the platform from someone who lost the role: {USERS['samuel@gigmann.com']}")
+check("Command Center Manager" in USERS["admin@ultrasoft.com"]["roles"]
+      and "admin@ultrasoft.com" not in SIGNED_OUT,
+      "but never from a System Manager")
+check("Command Center Manager" in USERS["hand@gigmann.com"]["roles"],
+      "nor from a manager added by hand")
+check(any(t == "Command Center access removed" for t, _ in frappe.logged),
+      "a removal is recorded in the Error Log")
+
+# 18. The access role can be renamed in site config.
+seed()
+state, _ = begin()
+frappe.conf["command_center_sso_role"] = "Intelligence Layer"
+sso.callback(code="c1", state=state)
+check(ERP_MEMBERS["asked"][-1] == "Intelligence Layer", "the access role is a site setting")
+frappe.conf.pop("command_center_sso_role")
 
 print(f"sso: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

@@ -1,40 +1,49 @@
-"""Sign in with the business's own ERPNext -- and only if this platform already knows you.
+"""Sign in with the business's own ERPNext. Who may come in is decided there, by a role.
 
-The "Ask AI" link on a business's ERPNext workspace points here. The person is sent to
-that ERPNext to sign in (they usually already are), ERPNext tells us who they are, and
-then this platform decides. ERPNext's answer is identity only; it is never permission:
+The link on a business's ERPNext points here. The person is sent to that ERPNext to
+sign in (they usually already are), ERPNext tells us who they are, and then:
 
     1. The sign-in must have started here, in this browser (state, single use, matched
        against a cookie set when it started), and come back within ten minutes.
     2. The business's ERPNext must vouch for the person (authorisation code exchanged
        with the client secret, then its OpenID profile read with that token).
-    3. The email it names must be an account on THIS platform, enabled, holding
-       Command Center Manager -- an account Michael created here. A role someone
-       gives themselves on their own ERPNext changes nothing: it can show them the
-       link, never let them in.
+    3. That person must hold the access role -- "Executive Insights" unless the site
+       config names another (command_center_sso_role) -- on the business's ERPNext,
+       and be enabled there. The platform reads this itself, with the business's
+       read-only service key (api/ingest.erp_members); the token's own claims are not
+       trusted for it.
+    4. A platform account that was paused here (disabled) stays out, whatever ERPNext
+       says: the platform's administrator can always stop one person.
 
-Anyone who fails any step is refused with a sentence saying why, and the refusal is
-recorded in the Error Log ("Command Center sign-in refused"). A success is a normal
-Frappe login (Activity Log records it) and lands on /command-center, nowhere else --
-no "return to" address is taken from the request, so the link cannot be turned into a
-redirect to another site.
+A person who passes and has no account here gets one on the spot: a System User with
+Command Center Manager, no password, no email. So adding someone is giving them the
+role in their own ERPNext -- nothing to do on this platform (Michael, 14 Nov 2026:
+"must Samuel come to me for a bench command to add a user? doesn't make sense").
+
+Taking the role away there takes the platform away too: the next sign-in is refused,
+and sync_members (every 15 minutes) removes Command Center Manager from anyone whose
+role is gone and ends their sessions. Only accounts this sign-in let in are touched
+(marked per business in DefaultValue, key cc_sso_business); a manager added by hand,
+a System Manager and Administrator are never changed by it. If the business's ERPNext
+cannot be reached, sign-in fails closed and the sync changes nothing.
+
+Who can hand out the role is whoever may edit roles on that ERPNext -- on Gigmann's,
+14 Nov 2026, only Powersoft's own accounts (demo@, Administrator, michael@). Holding
+the role is the permission; that administrator is trusted exactly as far as their
+ERPNext is.
+
+Anyone refused gets a sentence saying why, and the refusal is recorded in the Error Log
+("Command Center sign-in refused"). A success is a normal Frappe login (Activity Log
+records it) and lands on /command-center, nowhere else -- no "return to" address is
+taken from the request, so the link cannot be turned into a redirect to another site.
 
 On the business's ERPNext this needs one OAuth Client (configuration, nothing
 installed): grant type Authorization Code, response type Code, scopes "openid all",
 redirect URI = this site's /api/method/command_center.api.sso.callback, and Skip
-Authorization ticked so a signed-in manager is not asked to confirm each time. Its
-client id and secret go on the Connected Business (Sign-in section). The link is:
+Authorization ticked. Its client id and secret go on the Connected Business (Sign-in
+section). Frappe's OAuth provider is the same on v14, v15 and v16. The link is:
 
     https://<this site>/api/method/command_center.api.sso.start?business=<code>
-
-Frappe's OAuth provider is the same on v14, v15 and v16, so this works whatever
-version the business runs (Gigmann's live site is v14).
-
-What it cannot protect against: whoever administers the business's ERPNext can make
-an account there carry any email, and so could sign in as a manager whose email is on
-this platform. That administrator can already do anything in that ERPNext; the
-platform is exactly as trustworthy as they are, and no sign-in that relies on their
-ERPNext can be more.
 """
 
 from __future__ import annotations
@@ -44,8 +53,7 @@ from urllib.parse import urlencode
 
 import frappe
 
-# The manager role, defined once (api/businesses.py). Sign-in through a business's ERPNext
-# admits managers only -- not System Managers, who sign in with their own password.
+# The manager role, defined once (api/businesses.py).
 from command_center.api.businesses import ROLE  # noqa: E402
 
 STATE_TTL = 600
@@ -55,10 +63,18 @@ AUTHORIZE = "/api/method/frappe.integrations.oauth2.authorize"
 TOKEN = "/api/method/frappe.integrations.oauth2.get_token"
 PROFILE = "/api/method/frappe.integrations.oauth2.openid_profile"
 TIMEOUT = 15
+ACCESS_ROLE = "Executive Insights"
+MARK = "cc_sso_business"
+NEVER_TOUCHED = ("Administrator", "Guest")
 
 
 class Refused(Exception):
     """A sign-in this platform will not complete. The message is shown to the person."""
+
+
+def access_role() -> str:
+    """The role on a business's ERPNext that opens the platform."""
+    return frappe.conf.get("command_center_sso_role") or ACCESS_ROLE
 
 
 def _callback_url() -> str:
@@ -82,7 +98,7 @@ def _business(code: str):
 
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def start(business: str | None = None):
-    """Where the Ask AI link points: off to the business's ERPNext to say who you are."""
+    """Where the link points: off to the business's ERPNext to say who you are."""
     try:
         b, _ = _business(business or "")
     except Refused as e:
@@ -108,13 +124,15 @@ def callback(code: str | None = None, state: str | None = None, error: str | Non
         business = pending["business"]
         b, secret = _business(business)
         profile = _identify(b, secret, code)
-        user = _approved(profile)
+        user = _approved(profile, b)
     except Refused as e:
+        frappe.db.commit()  # an access taken away above stays taken away
         return _refuse(str(e), business)
     except Exception:
         frappe.log_error(title="Command Center sign-in failed", message=frappe.get_traceback())
         return _refuse("The sign-in could not be completed. Try the link again; if it keeps "
                        "failing, use the platform's own sign-in page.", business)
+    frappe.db.commit()
     _login(user)
     _redirect(HOME)
 
@@ -164,24 +182,114 @@ def _identify(b, secret: str, code: str | None) -> dict:
     profile = body.get("message") if isinstance(body.get("message"), dict) else body
     if not profile.get("email"):
         raise Refused(f"{b.business_name}'s ERPNext did not give an email for your account.")
-    profile["_business"] = b.business_name
     return profile
 
 
-def _approved(profile: dict) -> str:
-    """The platform's own decision: an enabled account here, holding the manager role."""
+def _approved(profile: dict, b) -> str:
+    """The role on their ERPNext lets them in; a pause here keeps them out."""
     email = str(profile["email"]).strip().lower()
-    user = frappe.db.get_value("User", {"name": email}) or frappe.db.get_value(
-        "User", {"email": email})
-    if not user or user in ("Administrator", "Guest"):
-        raise Refused(f"{email} has not been given access to the AI Business Intelligence "
-                      f"platform. Ask the platform's administrator to add you.")
-    row = frappe.db.get_value("User", user, ["enabled", "user_type"], as_dict=True) or {}
-    if not row.get("enabled"):
-        raise Refused(f"The platform account for {email} is disabled.")
-    if row.get("user_type") != "System User" or ROLE not in frappe.get_roles(user):
-        raise Refused(f"{email} is known to the platform but is not one of its managers.")
+    if email in ("administrator", "guest"):
+        raise Refused("That account cannot sign in this way.")
+    role = access_role()
+    try:
+        from command_center.api.ingest import erp_members
+        members = erp_members(b.business_code, role)
+    except Exception:
+        frappe.log_error(title="Command Center sign-in: role check failed",
+                         message=frappe.get_traceback())
+        raise Refused(f"The platform could not check your access on {b.business_name}'s "
+                      f"ERPNext just now. Try again in a minute.")
+    user = _platform_user(email)
+    if email not in members:
+        if user:
+            _unmark(user, b.business_code)
+        raise Refused(f"{email} does not hold the {role} role on {b.business_name}'s "
+                      f"ERPNext, so it cannot open the platform. Ask your ERPNext "
+                      f"administrator for it.")
+    if user:
+        if user in NEVER_TOUCHED:
+            raise Refused("That account cannot sign in this way.")
+        enabled = frappe.db.get_value("User", user, "enabled")
+        if not enabled:
+            raise Refused(f"The platform account for {email} has been paused. Ask the "
+                          f"platform's administrator.")
+    else:
+        user = _provision(email, profile)
+    if ROLE not in frappe.get_roles(user):
+        frappe.get_doc("User", user).add_roles(ROLE)
+    _mark(user, b.business_code)
     return user
+
+
+def _platform_user(email: str) -> str | None:
+    return (frappe.db.get_value("User", {"name": email})
+            or frappe.db.get_value("User", {"email": email}))
+
+
+def _provision(email: str, profile: dict) -> str:
+    """An account for someone their ERPNext let in: a manager, no password, no email."""
+    first = profile.get("given_name") or (profile.get("name") or email).split(" ")[0]
+    last = profile.get("family_name") or " ".join((profile.get("name") or "").split(" ")[1:])
+    user = frappe.get_doc({"doctype": "User", "email": email, "first_name": first,
+                           "last_name": last, "user_type": "System User",
+                           "send_welcome_email": 0})
+    user.flags.no_welcome_mail = True
+    user.insert(ignore_permissions=True)
+    return user.name
+
+
+def _marks(user: str) -> list:
+    return frappe.get_all("DefaultValue", filters={"parent": user, "defkey": MARK},
+                          pluck="defvalue")
+
+
+def _mark(user: str, code: str):
+    """Remember that this business's role let them in -- what the sync may undo."""
+    if code not in _marks(user):
+        frappe.defaults.add_default(MARK, code, parent=user)
+
+
+def _unmark(user: str, code: str):
+    """Their role on that business is gone. Without any business left, so is the
+    platform: the manager role comes off and they are signed out everywhere. A manager
+    added by hand (never marked) is not touched, nor an administrator."""
+    if code not in _marks(user):
+        return
+    frappe.defaults.clear_default(MARK, value=code, parent=user)
+    if _marks(user) or user in NEVER_TOUCHED or "System Manager" in frappe.get_roles(user):
+        return
+    frappe.get_doc("User", user).remove_roles(ROLE)
+    from frappe.sessions import clear_sessions
+    clear_sessions(user=user, force=True)
+    frappe.log_error(title="Command Center access removed",
+                     message=json.dumps({"user": user, "business": code,
+                                         "why": f"no longer holds {access_role()}"}))
+
+
+def sync_members():
+    """Every 15 minutes (hooks.py): whoever came in through a business's ERPNext and no
+    longer holds the role there loses the platform. A business that cannot be reached
+    changes nothing -- a network fault never locks anyone out."""
+    role = access_role()
+    from command_center.api.ingest import erp_members
+    for b in frappe.get_all("Connected Business",
+                            filters={"is_local": 0, "status": ["!=", "Paused"]},
+                            fields=["business_code", "sso_client_id"]):
+        if not b.sso_client_id:
+            continue
+        try:
+            members = erp_members(b.business_code, role)
+        except Exception:
+            frappe.log_error(title=f"Command Center access sync: {b.business_code} unreachable",
+                             message=frappe.get_traceback())
+            continue
+        for user in frappe.get_all("DefaultValue",
+                                   filters={"defkey": MARK, "defvalue": b.business_code},
+                                   pluck="parent"):
+            email = str(frappe.db.get_value("User", user, "email") or user).strip().lower()
+            if email not in members and user.lower() not in members:
+                _unmark(user, b.business_code)
+    frappe.db.commit()
 
 
 def _login(user: str):

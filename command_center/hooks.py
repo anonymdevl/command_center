@@ -105,7 +105,10 @@ scheduler_events = {
         # it modified since its watermarks, and those documents are reloaded. Reads
         # only, with that business's read-only service account. See
         # api/changes.refresh_peers and connectors/remote.py.
-        "*/15 * * * *": ["command_center.api.changes.refresh_peers"],
+        "*/15 * * * *": ["command_center.api.changes.refresh_peers",
+                         # Access follows the role on each business's ERPNext: whoever
+                         # lost it there loses the platform within 15 minutes.
+                         "command_center.api.sso.sync_members"],
     },
     # Alerts, from the KPIs. Also evaluated when they are read and the last pass is
     # stale, so they do not depend on the workers running.

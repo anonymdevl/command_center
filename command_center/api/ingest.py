@@ -114,6 +114,31 @@ WRITE_ROLES = {"System Manager", "Accounts User", "Accounts Manager", "Sales Use
                "Website Manager", "Administrator"}
 
 
+def erp_members(business_code: str, role: str) -> set:
+    """Who may open the platform from a business's ERPNext: its enabled users holding
+    `role` there, as lower-cased emails (and user names, which are emails on Frappe).
+
+    The business's own ERPNext decides, so adding a person is giving them the role in
+    their desk -- no step on this platform. Read with the service account (only ingest
+    takes one); api/sso.py asks at every sign-in and its 15-minute sync asks again, so
+    taking the role away there takes the platform away too.
+    """
+    conn = connector_for(business_code).as_system()
+    holders = {r["parent"] for r in conn.get_list(
+        "Has Role", filters={"role": role, "parenttype": "User"}, fields=["parent"],
+        limit=5000, parent_doctype="User") if r.get("parent")}
+    if not holders:
+        return set()
+    users = conn.get_list("User", filters={"name": ["in", sorted(holders)], "enabled": 1},
+                          fields=["name", "email"], limit=5000)
+    out = set()
+    for u in users:
+        for v in (u.get("email"), u.get("name")):
+            if v:
+                out.add(str(v).strip().lower())
+    return out
+
+
 def probe(business_code: str):
     """Who the service account is on the business's site, and its companies: the first
     proof a registration works (install.register_business)."""

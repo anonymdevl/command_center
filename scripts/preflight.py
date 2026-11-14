@@ -109,6 +109,9 @@ CONFIG_MODULES = (
     "command_center/ingest/",        # the platform's own derived tables
     "command_center/alerts/",        # Command Center Alert and Alert Rule only: the
                                      # engine runs from the scheduler, as no one
+    "command_center/api/sso.py",     # the platform account of someone their ERPNext's
+                                     # role lets in: made during the guest sign-in,
+                                     # as no one (the role check precedes it)
 )
 
 # The doctypes this app ships, read from the JSON on disk rather than listed by
@@ -1370,7 +1373,7 @@ check(_t.returncode == 0,
       "scripts/test_sso.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
 # Signing in with a business's ERPNext: identity from there, permission from here. The
 # only endpoints a signed-out visitor may call are the two halves of that sign-in, and
-# the decision must stay the platform's own (an enabled manager account here).
+# the decision is the role on the business's ERPNext, read by the platform itself.
 _guest = []
 for _py in sorted(_Path(ROOT).joinpath("command_center").rglob("*.py")):
     _src = _py.read_text()
@@ -1379,9 +1382,15 @@ for _py in sorted(_Path(ROOT).joinpath("command_center").rglob("*.py")):
 check(sorted(_guest) == ["command_center/api/sso.py:callback", "command_center/api/sso.py:start"],
       f"endpoints callable without signing in: {_guest}. Only api/sso.start and callback may be.")
 _sso = open(os.path.join(ROOT, "command_center", "api", "sso.py")).read()
-check('ROLE not in frappe.get_roles(user)' in _sso and 'if not row.get("enabled")' in _sso,
-      "api/sso.py no longer requires an enabled Command Center Manager account on this "
-      "platform: a role someone gives themselves on their own ERPNext would let them in")
+_appr = _sso.split("def _approved")[1].split("\ndef ")[0] if "def _approved" in _sso else ""
+check("erp_members(" in _appr and "if email not in members:" in _appr
+      and "if not enabled:" in _appr and 'raise Refused(f"The platform could not check' in _appr,
+      "api/sso.py must let a person in only if the platform itself reads the access role on "
+      "their ERPNext (ingest.erp_members), keep out an account paused here, and fail closed "
+      "when that ERPNext cannot be asked")
+check("sso.sync_members" in open(os.path.join(ROOT, "command_center", "hooks.py")).read(),
+      "hooks.py no longer runs api/sso.sync_members: a role taken away on a business's "
+      "ERPNext would leave the platform open to that person")
 check("_redirect(HOME)" in _sso and "redirect_to" not in _sso.split("def callback")[1].split("def ")[0],
       "api/sso.py must land a sign-in on /command-center only, never on an address from the request")
 _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_remote.py")],
