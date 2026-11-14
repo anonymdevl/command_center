@@ -241,6 +241,35 @@ def add_manager(email: str, full_name: str):
     return {"user": email, "reset_link": link, "roles": roles}
 
 
+def remove_manager(email: str):
+    """Take a person off the platform: the manager role goes, their sessions end, and
+    an account that was only ever a manager here (no other roles) is disabled too.
+    An account with other roles on this site -- an administrator's own login, say --
+    keeps them and stays enabled.
+
+        bench --site <site> execute command_center.install.remove_manager --kwargs "{'email': '...'}"
+    """
+    if not frappe.db.exists("User", email):
+        print(f"{email}: no such account here")
+        return {"user": email, "removed": False}
+    user = frappe.get_doc("User", email)
+    user.remove_roles("Command Center Manager")
+    left = sorted(set(frappe.get_roles(email)) - {"All", "Guest", "Desk User"})
+    disabled = False
+    if not left and email not in ("Administrator", "Guest"):
+        user.reload()
+        user.enabled = 0
+        user.save(ignore_permissions=True)
+        disabled = True
+    from frappe.sessions import clear_sessions
+    clear_sessions(user=email, force=True)
+    frappe.db.commit()
+    print(f"{email}: no longer a manager; signed out everywhere"
+          + ("; account disabled (it had no other roles)" if disabled
+             else f"; keeps its other roles: {', '.join(left)}"))
+    return {"user": email, "removed": True, "disabled": disabled, "roles_left": left}
+
+
 def install_pdf_fonts(quiet: bool = False):
     """Put Manrope where the server's PDF engine finds fonts.
 
