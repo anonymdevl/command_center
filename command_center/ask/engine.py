@@ -127,8 +127,11 @@ def plan(question: str, business_code: str | None = None, use_router: bool = Tru
 
 
 def analyst_enabled() -> bool:
-    """On unless a site opts out: bench --site <site> set-config command_center_ai_mode router"""
-    return gemini.configured() and (frappe.conf.get("command_center_ai_mode") or "analyst") != "router"
+    """On unless a site opts out: bench --site <site> set-config command_center_ai_mode router
+
+    Whichever provider ask/llm.py chooses (Claude or Gemini) needs its key on the site."""
+    from command_center.ask import llm
+    return llm.configured() and (frappe.conf.get("command_center_ai_mode") or "analyst") != "router"
 
 
 def answer(question: str, business_code: str | None = None, history=None, on_step=None) -> dict:
@@ -173,9 +176,9 @@ def answer(question: str, business_code: str | None = None, history=None, on_ste
             # COMPANY but not what you are asking" in reply to a growth forecast reads
             # as the analyst being foolish; say plainly what happened instead.
             fallback.update({
-                "answer": ("Gemini, the AI model behind the analyst, is replying too slowly "
-                           "right now, so I could not work that out. Ask again in a few "
-                           "minutes." if slow else
+                "answer": (f"{_model_name()}, the AI model behind the analyst, is replying "
+                           "too slowly right now, so I could not work that out. Ask again in "
+                           "a few minutes." if slow else
                            "I could not finish working that out this time. Ask again in a "
                            "moment -- if it keeps happening, the reason below is the thing "
                            "to look at."),
@@ -183,6 +186,11 @@ def answer(question: str, business_code: str | None = None, history=None, on_ste
                 "checked": ["the analyst stopped before it could answer"],
             })
     return fallback
+
+
+def _model_name() -> str:
+    from command_center.ask import llm
+    return "Claude" if llm.provider() == "claude" else "Gemini"
 
 
 def _fallback(question: str, business_code: str | None = None, use_router: bool = True) -> dict:

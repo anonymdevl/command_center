@@ -81,8 +81,10 @@ def _deep(ask_id: str, question: str, business_code, user: str):
         resume = frappe.cache().get_value(base + "::resume")
         if not resume:
             raise RuntimeError("the conversation to continue had expired")
+        # The deeper look runs on the deeper model (Claude Opus), carrying on from the
+        # everyday model's conversation exactly where it stopped.
         result = agent.answer(question, business_code, resume=resume, max_steps=DEEP_STEPS,
-                              deadline=DEEP_DEADLINE, on_step=step)
+                              deadline=DEEP_DEADLINE, on_step=step, deep=True)
         if not result or not result.get("answered"):
             raise RuntimeError((result or {}).get("analyst_error") or "no answer came back")
         result.pop("_resume", None)
@@ -118,20 +120,50 @@ def check_analyst():
     """Is the analyst working on this site? Open in a browser while signed in:
     /api/method/command_center.api.ask.check_analyst
 
-    Sends Gemini the real tool catalogue and a one-line question, so a declaration
-    Gemini will not accept, a wrong key or a retired model shows up here, in words.
+    Sends the model the real tool catalogue and a one-line question, so a declaration
+    it will not accept, a wrong key or a retired model shows up here, in words. For
+    Claude it also asks twice, to prove the fixed opening is read from the cache the
+    second time (cache_read > 0), and reports the key's rate limits and the questions a
+    minute they allow.
     """
     require_manager()
-    from command_center.ask import gemini, tools
-    if not gemini.configured():
-        return {"ok": False, "why": "No Gemini key on this site. bench --site <site> "
-                "set-config command_center_gemini_key \"...\""}
+    from command_center.ask import agent, claude, gemini, llm, tools
+    p = llm.provider()
+    if not p:
+        return {"ok": False, "why": "No AI key on this site. bench --site <site> set-config "
+                "command_center_anthropic_key \"...\" (Claude), or command_center_gemini_key "
+                "(Gemini)."}
+    if p == "claude":
+        static, dynamic = agent._system_parts(None)
+        msgs = [{"role": "user", "content": "Reply with the word OK."}]
+        frappe.local.cc_claude_usage = None
+        out = {"provider": p, "model": claude.model_for("analyst"),
+               "deep_model": claude.model_for("deep"), "tools": len(tools.declarations()),
+               "mode": "analyst" if engine.analyst_enabled() else "router"}
+        content, err = claude.chat(msgs, tools.declarations(), static, dynamic, timeout=60)
+        if err:
+            return {**out, "ok": False, "why": err[:900]}
+        first = dict(claude.usage() or {})
+        frappe.local.cc_claude_usage = None
+        content, err = claude.chat(msgs, tools.declarations(), static, dynamic, timeout=60)
+        second = dict(claude.usage() or {})
+        try:
+            lim = claude.limits()
+        except Exception as e:
+            lim = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+        text = "".join(b.get("text", "") for b in content or [] if b.get("type") == "text")
+        return {**out, "ok": not err, "reply": text[:80],
+                "cache": {"first_written": first.get("cache_write"),
+                          "second_read": second.get("cache_read"),
+                          "working": bool(second.get("cache_read"))},
+                "limits": lim}
     content, err = gemini.chat([{"role": "user", "parts": [{"text": "Reply with the word OK."}]}],
                                tools.declarations(), "You are a connectivity check.", timeout=30)
     if err:
-        return {"ok": False, "model": gemini.analyst_model(), "why": err[:900]}
-    text = "".join(p.get("text", "") for p in (content or {}).get("parts", []))
-    return {"ok": True, "model": gemini.analyst_model(), "tools": len(tools.declarations()),
+        return {"ok": False, "provider": p, "model": gemini.analyst_model(), "why": err[:900]}
+    text = "".join(x.get("text", "") for x in (content or {}).get("parts", []))
+    return {"ok": True, "provider": p, "model": gemini.analyst_model(),
+            "tools": len(tools.declarations()),
             "reply": text[:80], "mode": "analyst" if engine.analyst_enabled() else "router"}
 
 
@@ -143,21 +175,29 @@ def answerable():
     assistant covers, without anyone reading code.
     """
     require_manager()
-    from command_center.ask import gemini
+    from command_center.ask import gemini, llm
     if engine.analyst_enabled():
         # Said plainly because someone will ask what the model is given -- and SE-07
         # requires it to be disclosed.
         return {
             "questions": [e["q"] for e in engine.ANALYST_EXAMPLES],
             "examples": engine.ANALYST_EXAMPLES,
-            "planner": "gemini",
+            "planner": llm.provider(),
+            "provider": llm.name(),
             "mode": "analyst",
-            "model": gemini.analyst_model(),
+            "model": llm.analyst_model(),
+            "deep_model": llm.analyst_model(deep=True),
             "sent_to_model": [
                 "the question as typed, and the last few questions and answers",
                 "totals, breakdowns and records from the loaded data that the question needs",
                 "ERPNext documents the person asking is permitted to read, when needed",
                 "nothing from credential or system-configuration doctypes",
+            ],
+            "held_on_platform": [
+                "a summarised copy of each connected business's invoices, payments, "
+                "orders, stock balances, tasks, staff records and customer issues, "
+                "refreshed every fifteen minutes, on the platform's own server",
+                "each manager's saved conversations with the assistant",
             ],
             "can_change_records": False,
         }

@@ -101,8 +101,10 @@ doc_events = {
 
 scheduler_events = {
     "cron": {
-        # Peer refresh. Reads only: each site computes its own figures, peers
-        # read the conclusions. See connectors/remote.py.
+        # Peer refresh: every connected business on another site is polled for what
+        # it modified since its watermarks, and those documents are reloaded. Reads
+        # only, with that business's read-only service account. See
+        # api/changes.refresh_peers and connectors/remote.py.
         "*/15 * * * *": ["command_center.api.changes.refresh_peers"],
     },
     # Alerts, from the KPIs. Also evaluated when they are read and the last pass is
@@ -114,9 +116,18 @@ scheduler_events = {
     ],
     "daily": [
         "command_center.api.changes.prune_consumed_events",
+        "command_center.api.ingest.prune_load_log",
+    ],
+    # On the long queue: a peer is read over its API, page by page, and the default
+    # queue's five-minute limit is not enough for a first load or a rebuild.
+    "daily_long": [
         # Incremental by watermark, so a daily run is cheap. A full rebuild is a
         # deliberate call to command_center.api.ingest.run(full=True).
         "command_center.api.ingest.scheduled_load",
-        "command_center.api.ingest.prune_load_log",
+    ],
+    "weekly_long": [
+        # A peer is polled by modified stamps, which cannot see a deletion; the weekly
+        # rebuild can. See ingest.scheduled_full_load.
+        "command_center.api.ingest.scheduled_full_load",
     ],
 }

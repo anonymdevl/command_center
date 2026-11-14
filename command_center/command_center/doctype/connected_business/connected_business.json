@@ -43,7 +43,7 @@
 
   {"fieldname": "authority_section", "fieldtype": "Section Break", "label": "Owned Settings"},
   {"fieldname": "authority_note", "fieldtype": "HTML",
-   "options": "<div class=\"text-muted small\">A business's settings are owned by the site that holds its data. On a peer's record these are shown as they were last read and cannot be edited here — so no figure is ever writable in two places, and there is nothing to reconcile.</div>"},
+   "options": "<div class=\"text-muted small\">For a business reached over its API, the Site URL and the API key and secret of its read-only ERPNext user are all the platform needs. Its figures are loaded from that site every fifteen minutes and nothing is ever written back to it.</div>"},
   {"fieldname": "overdue_after_days", "fieldtype": "Int", "label": "Overdue After (Days)",
    "default": "90", "read_only_depends_on": "eval:!doc.is_local"},
   {"fieldname": "column_break_authority", "fieldtype": "Column Break"},

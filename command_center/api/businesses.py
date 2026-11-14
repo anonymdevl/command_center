@@ -62,10 +62,12 @@ def get_visible_businesses():
 
     for row in rows:
         # Reading is available wherever the platform can reach. Acting requires
-        # the manager's own account on the owning site, which is why a peer
-        # reports can_act as false until per-user authorisation is in place.
+        # the manager's own account on the owning site: a peer can be acted in once
+        # this manager has linked their own key for it (credentials.link_account).
         row["can_read"] = row["status"] == "Active"
-        row["can_act"] = bool(row["is_local"])
+        row["can_act"] = bool(row["is_local"]) or bool(frappe.db.exists(
+            "Command Center Site Credential",
+            {"user": frappe.session.user, "business_code": row["business_code"]}))
         row["acts_at"] = None if row["is_local"] else row["site_url"]
 
     return {
@@ -102,3 +104,28 @@ def currency_for(business_code: str | None) -> str | None:
         """select distinct currency from `tabConnected Business`
            where status = 'Active' and ifnull(currency, '') != ''""")}
     return found.pop() if len(found) == 1 else None
+
+
+def default_business_code() -> str | None:
+    """The business meant when none is named: this site's own, else the first active one.
+
+    On a client's own ERPNext that is the local business, as it always was. On the
+    hosted service (14 Nov 2026) no business lives on the site itself -- every one is
+    reached over its API -- so "the business" is the first active one. One definition,
+    because seven modules used to look for is_local=1 each in their own way, and each
+    would have found nothing on the hosted site.
+    """
+    code = frappe.db.get_value("Connected Business", {"is_local": 1, "status": ["!=", "Paused"]},
+                               "business_code")
+    if code:
+        return code
+    return frappe.db.get_value("Connected Business", {"status": "Active"}, "business_code",
+                               order_by="business_name asc")
+
+
+def loaded_codes() -> list[str]:
+    """Every business whose figures are computed here: local and remote alike, unless
+    paused. The scheduler loads these, and the alerts and reports run over them."""
+    return frappe.get_all("Connected Business", filters={"status": ["!=", "Paused"]},
+                          order_by="is_local desc, business_name asc",
+                          pluck="business_code")

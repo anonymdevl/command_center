@@ -102,8 +102,8 @@ def ensure_fresh(business_code: str):
 
 
 def scheduled():
-    for code in frappe.get_all("Connected Business", filters={"is_local": 1},
-                               pluck="business_code"):
+    from command_center.api.businesses import loaded_codes
+    for code in loaded_codes():
         # Through the same lock as a read, so the hourly pass cannot collide with one.
         frappe.cache().delete_value(f"cc:alerts:evaluated:{code}")
         ensure_fresh(code)

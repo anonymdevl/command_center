@@ -94,5 +94,5 @@ def act(name: str, action: str, reason: str = "", until: str | None = None,
 def _codes(business_code):
     if business_code and business_code != "__all__":
         return [business_code]
-    return frappe.get_all("Connected Business", filters={"is_local": 1},
-                          pluck="business_code") or []
+    from command_center.api.businesses import loaded_codes
+    return loaded_codes()

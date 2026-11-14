@@ -9,45 +9,164 @@ from __future__ import annotations
 import frappe
 from frappe.query_builder.functions import Count, Sum
 
-from command_center.api.businesses import require_manager
-from command_center.connectors.registry import connector_for, local_connector
+from command_center.api.businesses import default_business_code, loaded_codes, require_manager
+from command_center.connectors.registry import connector_for
 from command_center.ingest.registry import INGESTORS
 
 
 @frappe.whitelist()
 def run(fact: str | None = None, business_code: str | None = None,
         full: bool = False, limit: int | None = None):
-    """Load one fact, or all of them, for the local business.
+    """Load one fact, or all of them, for one business.
 
-    Only the local business is ingested. A peer's figures are read from the site
-    that computed them, so there is no version of this that reaches across sites
-    and quietly copies someone else's ledger here.
+    The business is this site's own, or -- on the hosted service -- one reached over
+    its API with its read-only service account (connectors/remote.py). Either way the
+    facts are this platform's own derived tables, rebuilt from the source on demand;
+    nothing in them is a second system of record.
     """
     require_manager()
-
-    conn = connector_for(business_code) if business_code else local_connector()
+    code = business_code or default_business_code()
+    if not code:
+        frappe.throw("No business is registered yet. Add one under Connected Business.")
     # Building a derived table is a system act. See BusinessConnector.as_system.
-    conn = conn.as_system() if conn else conn
-    if not conn:
-        frappe.throw("No local business is registered.")
-    if not conn.is_local:
-        frappe.throw(
-            f"{conn.name} is on another site, which computes its own figures. "
-            f"Ingestion only ever runs against the business whose data is here."
-        )
+    conn = connector_for(code).as_system()
+    full = frappe.parse_json(full) if isinstance(full, str) else bool(full)
+    with business_lock(code) as got:
+        if not got:
+            frappe.throw(f"{conn.name} is being loaded already. Try again in a few minutes.")
+        return load_business(conn, facts=[fact] if fact else None, full=full,
+                             limit=int(limit) if limit else None, raise_errors=True)
 
+
+def load_business(conn, facts=None, full: bool = False, limit: int | None = None,
+                  raise_errors: bool = False) -> dict:
+    """Every fact (or the ones named) for one business, from its own watermarks.
+
+    One definition for the button, the daily load, the fifteen-minute poll of a peer
+    and the weekly rebuild. A failing fact is logged and does not stop the others --
+    one broken grain should not leave every figure stale -- unless the caller is a
+    person who asked for it (raise_errors), who should see the failure.
+    """
     from command_center.ingest.base import resolve_as_of
-    as_of = resolve_as_of(conn)
 
-    names = [fact] if fact else list(INGESTORS)
+    as_of = resolve_as_of(conn)
+    names = facts or list(INGESTORS)
     out = []
     for f in names:
         cls = INGESTORS.get(f)
         if not cls:
             frappe.throw(f"Unknown fact '{f}'. Known: {', '.join(INGESTORS)}")
-        out.append(cls().load(conn, limit=limit, as_of=as_of,
-                              full=frappe.parse_json(full) if isinstance(full, str) else bool(full)))
-    return {"as_of": str(as_of), "loaded": out}
+        try:
+            out.append(cls().load(conn, limit=limit, as_of=as_of, full=full))
+        except Exception:
+            if raise_errors:
+                raise
+            frappe.log_error(title=f"Command Center ingest: {f} ({conn.code})",
+                             message=frappe.get_traceback())
+            out.append({"fact": f, "business": conn.code, "failed": True})
+    frappe.cache().delete_value(f"cc:alerts:evaluated:{conn.code}")
+    return {"business": conn.code, "as_of": str(as_of), "loaded": out}
+
+
+@frappe.whitelist()
+def run_all(full: bool = False):
+    """Every business, every fact: what deploy.sh and host.sh run. A failing business
+    or fact is logged and reported, and stops nothing else."""
+    require_manager()
+    full = frappe.parse_json(full) if isinstance(full, str) else bool(full)
+    out = []
+    for code in loaded_codes():
+        try:
+            conn = connector_for(code).as_system()
+            with business_lock(code) as got:
+                out.append(load_business(conn, full=full) if got else
+                           {"business": code, "skipped": "a load is already running"})
+        except Exception as e:
+            frappe.log_error(title=f"Command Center ingest: {code}", message=frappe.get_traceback())
+            out.append({"business": code, "failed": f"{type(e).__name__}: {str(e)[:300]}"})
+    for row in out:
+        bad = [x["fact"] for x in row.get("loaded", []) if x.get("failed")]
+        print(f"{row.get('business')}: "
+              + (row.get("failed") or row.get("skipped") or
+                 f"{sum(x.get('rows', 0) for x in row.get('loaded', []))} rows loaded"
+                 + (f"; FAILED: {', '.join(bad)} (see Error Log)" if bad else "")))
+    return out
+
+
+# What the platform reads on a business's site, for the access check. Child tables name
+# their parent: Frappe checks a child's permission through it.
+READS = [
+    ("Sales Invoice", None), ("Sales Invoice Item", "Sales Invoice"),
+    ("Payment Entry", None), ("Payment Entry Reference", "Payment Entry"),
+    ("Purchase Invoice", None), ("Purchase Invoice Item", "Purchase Invoice"),
+    ("Sales Order", None), ("Purchase Order", None), ("Quotation", None),
+    ("Bin", None), ("Item", None), ("Customer", None), ("Supplier", None),
+    ("Company", None), ("Task", None), ("Project", None), ("Employee", None),
+    ("Department", None), ("Issue", None), ("User", None), ("Has Role", "User"),
+    ("Version", None), ("Workflow", None), ("Journal Entry", None), ("GL Entry", None),
+]
+# Roles that can change records. The platform's user on a business's site must hold
+# none of them: it reads, and only reads.
+WRITE_ROLES = {"System Manager", "Accounts User", "Accounts Manager", "Sales User",
+               "Sales Manager", "Purchase User", "Purchase Manager", "Stock User",
+               "Stock Manager", "Item Manager", "HR User", "HR Manager", "Projects User",
+               "Projects Manager", "Support Team", "Manufacturing User", "Maintenance User",
+               "Website Manager", "Administrator"}
+
+
+def probe(business_code: str):
+    """Who the service account is on the business's site, and its companies: the first
+    proof a registration works (install.register_business)."""
+    conn = connector_for(business_code).as_system()
+    who = conn._call("frappe.auth.get_logged_user")
+    companies = conn.get_list("Company", fields=["name", "default_currency"], limit=20,
+                              order_by="creation asc")
+    return who, companies
+
+
+@frappe.whitelist()
+def check_access(business_code: str | None = None):
+    """Can the platform's service account read everything it needs on a business's
+    site -- and is it really read-only? Run by host.sh after registering a business;
+    open it again whenever a figure says "could not be read":
+
+        bench --site <site> execute command_center.api.ingest.check_access
+    """
+    require_manager()
+    code = business_code or default_business_code()
+    conn = connector_for(code).as_system()
+    rows = []
+    for doctype, parent in READS:
+        try:
+            got = conn.get_list(doctype, fields=["name"], limit=1, parent_doctype=parent)
+            rows.append({"doctype": doctype, "readable": True, "sample": bool(got)})
+        except Exception as e:
+            rows.append({"doctype": doctype, "readable": False, "why": str(e)[:200]})
+    me = None
+    roles = None
+    try:
+        me = conn._call("frappe.auth.get_logged_user")
+        roles = sorted({r["role"] for r in conn.get_list(
+            "Has Role", filters={"parent": me, "parenttype": "User"}, fields=["role"],
+            limit=500, parent_doctype="User")})
+    except Exception:
+        pass
+    writes = sorted(set(roles or []) & WRITE_ROLES)
+    out = {"business": code, "reads_as": me, "roles": roles,
+           "unreadable": [r["doctype"] for r in rows if not r["readable"]],
+           "read_only": (not writes) if roles is not None else None,
+           "write_capable_roles": writes, "checked": rows}
+    print(f"{code}: reads as {me}; "
+          f"{len(rows) - len(out['unreadable'])} of {len(rows)} doctypes readable"
+          + (f"; NOT readable: {', '.join(out['unreadable'])}" if out["unreadable"] else ""))
+    if roles is None:
+        print("   its roles could not be read -- confirm on that site that it holds read-only roles")
+    elif writes:
+        print(f"   WARNING: it holds roles that can change records: {', '.join(writes)}. "
+              f"Give it a read-only role instead.")
+    else:
+        print(f"   read-only: holds {', '.join(roles) or 'no roles'}")
+    return out
 
 
 @frappe.whitelist()
@@ -70,19 +189,17 @@ def reconcile(business_code: str | None = None):
     test that ran once on a laptop.
     """
     require_manager()
-    conn = connector_for(business_code) if business_code else local_connector()
+    code = business_code or default_business_code()
+    if not code:
+        frappe.throw("No business is registered yet.")
     # Building a derived table is a system act. See BusinessConnector.as_system.
-    conn = conn.as_system() if conn else conn
-    if not conn:
-        frappe.throw("No local business is registered.")
+    conn = connector_for(code).as_system()
 
     checks = []
 
-    src = conn.get_list("Sales Invoice",
-                        filters={"docstatus": 1, "outstanding_amount": [">", 0]},
-                        fields=[{"SUM": "outstanding_amount"}, {"COUNT": "name"}])
-    src_total = _first(src, "SUM(`outstanding_amount`)")
-    src_count = _first(src, "COUNT(`name`)")
+    src_total = _source_sum(conn, "Sales Invoice", "outstanding_amount",
+                            {"docstatus": 1, "outstanding_amount": [">", 0]})
+    src_count = conn.get_count("Sales Invoice", {"docstatus": 1, "outstanding_amount": [">", 0]})
 
     f_total, f_count = _fact_sum(
         "Command Center Fact Sales Invoice", "outstanding_amount", conn.code,
@@ -90,22 +207,18 @@ def reconcile(business_code: str | None = None):
     checks.append(_check("Outstanding receivables", src_total, f_total))
     checks.append(_check("Unpaid invoice count", src_count, f_count, money=False))
 
-    src_rev = conn.get_list("Sales Invoice Item",
-                            filters={"docstatus": 1},
-                            fields=[{"SUM": "base_net_amount"}])
+    src_rev = _source_sum(conn, "Sales Invoice Item", "base_net_amount", {"docstatus": 1},
+                          parent="Sales Invoice")
     f_rev, _ = _fact_sum("Command Center Fact Sales Invoice Line",
                          "base_net_amount", conn.code,
                          extra={"src_docstatus": 1})
-    checks.append(_check("Invoiced revenue (lines)",
-                         _first(src_rev, "SUM(`base_net_amount`)"), f_rev))
+    checks.append(_check("Invoiced revenue (lines)", src_rev, f_rev))
 
-    src_alloc = conn.get_list("Payment Entry Reference",
-                              filters={"docstatus": 1},
-                              fields=[{"SUM": "allocated_amount"}])
+    src_alloc = _source_sum(conn, "Payment Entry Reference", "allocated_amount",
+                            {"docstatus": 1}, parent="Payment Entry")
     f_alloc, _ = _fact_sum("Command Center Fact Payment Allocation",
                            "allocated_amount", conn.code)
-    checks.append(_check("Cash applied to documents",
-                         _first(src_alloc, "SUM(`allocated_amount`)"), f_alloc))
+    checks.append(_check("Cash applied to documents", src_alloc, f_alloc))
 
     return {"business": conn.code,
             "all_reconciled": all(c["reconciled"] for c in checks),
@@ -132,6 +245,23 @@ def _fact_sum(target, measure, business_code, extra=None):
     if not row or not row[0]:
         return 0, 0
     return (row[0][0] or 0), (row[0][1] or 0)
+
+
+def _source_sum(conn, doctype, field, filters, parent=None):
+    """SUM of one column at the source, in whichever dialect the source's Frappe speaks.
+
+    v16 takes an aggregate as {"SUM": field} and rejects SQL function strings; v15 and
+    earlier take only the string. A peer may be on either (Gigmann may move to v16 while
+    the platform is live), so the v16 form is tried first and the older one on refusal.
+    """
+    try:
+        rows = conn.get_list(doctype, filters=filters, fields=[{"SUM": field}],
+                             parent_doctype=parent, limit=1)
+        return _first(rows, f"SUM(`{field}`)")
+    except Exception:
+        rows = conn.get_list(doctype, filters=filters, fields=[f"sum({field}) as total"],
+                             parent_doctype=parent, limit=1)
+        return _first(rows, "total")
 
 
 def _first(rows, key):
@@ -176,10 +306,7 @@ def refresh(business_code: str | None = None):
     to run(full=True). The alerts are re-evaluated on their next read.
     """
     require_manager()
-    result = run(business_code=business_code)
-    for code in frappe.get_all("Connected Business", filters={"is_local": 1}, pluck="business_code"):
-        frappe.cache().delete_value(f"cc:alerts:evaluated:{code}")
-    return result
+    return run(business_code=business_code)
 
 
 @frappe.whitelist()
@@ -214,25 +341,99 @@ def prune_load_log():
 
 
 def scheduled_load():
-    """Daily incremental load of every fact for the local business.
+    """Daily incremental load of every fact for every business.
 
-    Runs without a user, so it uses the local connector directly rather than the
-    management-only entry point. Failures are logged per fact and do not stop the
-    others — one broken grain should not leave every figure stale.
+    Runs without a user, so it takes system connectors directly rather than the
+    management-only entry point: the local business read as the system, a peer read
+    with its read-only service account. Failures are logged per fact and per business
+    and stop nothing else.
     """
-    conn = local_connector()
-    if not conn:
-        return
-    # No user runs the scheduler, so there is no identity to scope this to.
-    conn = conn.as_system()
-    from command_center.ingest.base import resolve_as_of
-    as_of = resolve_as_of(conn)
-    for name, cls in INGESTORS.items():
+    _load_all(full=False)
+
+
+def scheduled_full_load():
+    """Weekly: rebuild every peer's facts from scratch.
+
+    A peer is polled by its modified stamps (changes.refresh_peers), which sees every
+    edit, submission and cancellation but not a deletion -- a deleted draft leaves no
+    row to be modified. A full load purges and reloads, so whatever was deleted on the
+    peer in the week is gone here too. The local business has the change feed and its
+    own daily load, and is not rebuilt.
+    """
+    _load_all(full=True, remote_only=True)
+
+
+def _load_all(full: bool, remote_only: bool = False):
+    for code in loaded_codes():
         try:
-            cls().load(conn, as_of=as_of)
+            conn = connector_for(code)
+            if remote_only and conn.is_local:
+                continue
+            # No user runs the scheduler, so there is no identity to scope this to.
+            conn = conn.as_system()
         except Exception:
-            frappe.log_error(title=f"Command Center ingest: {name}",
+            frappe.log_error(title=f"Command Center ingest: {code}",
                              message=frappe.get_traceback())
+            continue
+        with business_lock(code) as got:
+            if got:
+                load_business(conn, full=full)
+
+
+def poll_peers():
+    """Every fifteen minutes (changes.refresh_peers): each business on another site is
+    asked, fact by fact, for the documents modified after that fact's stored watermark
+    -- one small request per fact when nothing changed -- and only those are reloaded;
+    documents cancelled since are taken out (Ingestor.load). Read with the peer's
+    read-only service account. If one peer is unreachable the others still refresh: a
+    group of businesses should not lose its whole view because one server is down.
+    """
+    from frappe.utils import now_datetime
+
+    from command_center.connectors.base import ConnectorError
+
+    for code in loaded_codes():
+        try:
+            conn = connector_for(code, acting_user="Administrator")
+            if conn.is_local:
+                continue  # the local business has its change feed and the daily load
+            # No user runs the scheduler: a system read, i.e. the service account.
+            system = conn.as_system()
+            with business_lock(code) as got:
+                if not got:
+                    continue  # a load of this business is already running
+                load_business(system)
+            frappe.db.set_value("Connected Business", conn.business.name, "last_sync",
+                                now_datetime(), update_modified=False)
+            frappe.db.commit()
+        except (ConnectorError, ValueError) as e:
+            frappe.log_error(title=f"Command Center peer refresh: {code}", message=str(e))
+    frappe.db.commit()
+
+
+class business_lock:
+    """One load per business at a time. The fifteen-minute poll, the daily load, the
+    weekly rebuild and a manager's Refresh can otherwise overlap on a slow peer, and
+    two loads purging and inserting the same rows is one too many."""
+
+    def __init__(self, code):
+        self.lock = frappe.cache().lock(f"cc:ingest:{code}", timeout=3600)
+        self.got = False
+
+    def __enter__(self):
+        try:
+            self.got = self.lock.acquire(blocking=False)
+        except Exception:
+            self.got = True  # no lock available: load anyway, as before
+        return self.got
+
+    def __exit__(self, *exc):
+        if self.got:
+            try:
+                self.lock.release()
+            except Exception:
+                pass
+        return False
 
 
 @frappe.whitelist()

@@ -127,12 +127,46 @@ def _scope(fact: str, filters: dict, business_code) -> dict:
     return filters
 
 
-def _doctype_allowed(doctype: str) -> str:
-    if not doctype or not frappe.db.exists("DocType", doctype):
-        raise ToolError(f"There is no ERPNext doctype called {doctype!r}.")
+def _remote(business_code):
+    """The connector for a business on another site, or None for this site's own.
+
+    On the hosted service every business is remote: its documents, fields and reports
+    are read from its own ERPNext through frappe.client's read endpoints and
+    frappe.desk.query_report.run, with the asker's own key there when they have linked
+    one and the business's read-only service account otherwise. The connector's write
+    methods exist for people pressing buttons (api/actions.py); nothing here calls them,
+    and preflight holds that.
+    """
+    if not business_code or business_code == "__all__":
+        from command_center.api.businesses import default_business_code
+        business_code = default_business_code()
+    if not business_code or frappe.db.get_value("Connected Business",
+                                                {"business_code": business_code}, "is_local"):
+        return None
+    from command_center.connectors.registry import connector_for
+    return connector_for(business_code)
+
+
+def _far(call):
+    """Run a read on a peer; its refusals come back to the model as words."""
+    from command_center.connectors.base import ConnectorError
+    try:
+        return call()
+    except ConnectorError as e:
+        raise ToolError(str(e)[:400])
+
+
+def _doctype_allowed(doctype: str, business_code=None) -> str:
     if doctype in DENIED_DOCTYPES:
         raise ToolError(f"{doctype} holds credentials or system configuration and is not "
                         f"available to the assistant.")
+    if _remote(business_code):
+        # The far site decides whether it exists and who may read it, and says so.
+        if not doctype:
+            raise ToolError("Name the doctype to read.")
+        return doctype
+    if not doctype or not frappe.db.exists("DocType", doctype):
+        raise ToolError(f"There is no ERPNext doctype called {doctype!r}.")
     if not frappe.has_permission(doctype, "read"):
         raise ToolError(f"The person asking does not have read access to {doctype}.")
     return doctype
@@ -326,55 +360,79 @@ def trend(fact: str, measure: str, function: str = "sum", date_column: str | Non
     return out
 
 
-def erpnext_fields(doctype: str):
+def erpnext_fields(doctype: str, business_code=None):
     """The fields of an ERPNext doctype, so a list or a lookup can be asked correctly."""
-    _doctype_allowed(doctype)
-    meta = frappe.get_meta(doctype)
+    _doctype_allowed(doctype, business_code)
+    far = _remote(business_code)
+    if far:
+        # The business's own definition: its version, its custom fields.
+        m = _far(lambda: far.get_meta(doctype))
+        title, submittable, fields = (m.get("title_field"), m.get("is_submittable"),
+                                      [frappe._dict(f) for f in m.get("fields") or []])
+    else:
+        meta = frappe.get_meta(doctype)
+        title, submittable, fields = meta.title_field, meta.is_submittable, meta.fields
     return {
         "doctype": doctype,
-        "title_field": meta.title_field,
-        "is_submittable": bool(meta.is_submittable),
+        "title_field": title,
+        "is_submittable": bool(submittable),
         "fields": [{"field": f.fieldname, "label": f.label, "type": f.fieldtype,
                     "options": f.options if f.fieldtype in ("Link", "Select", "Table") else None}
-                   for f in meta.fields
+                   for f in fields
                    if f.fieldname and f.fieldtype not in ("Section Break", "Column Break",
                                                           "Tab Break", "HTML", "Button",
                                                           "Password")],
     }
 
 
-def erpnext_list(doctype: str, fields=None, filters=None, order_by: str | None = None,
-                 limit: int = 20):
-    """Rows of any ERPNext doctype the person asking may read, through their permissions."""
-    from frappe.client import get_list
+def _open_url(far, doctype, name) -> str:
+    if far:
+        return f"{far.base_url}/app/{frappe.scrub(doctype).replace('_', '-')}/{name}"
+    return frappe.utils.get_url_to_form(doctype, str(name))
 
-    _doctype_allowed(doctype)
-    rows = get_list(doctype, fields=(fields or ["name"])[:25], filters=_erp_filters(filters),
-                    order_by=order_by or "modified desc",
-                    limit_page_length=min(int(limit or 20), MAX_ROWS))
+
+def erpnext_list(doctype: str, fields=None, filters=None, order_by: str | None = None,
+                 limit: int = 20, business_code=None):
+    """Rows of any ERPNext doctype the person asking may read, through their permissions."""
+    _doctype_allowed(doctype, business_code)
+    far = _remote(business_code)
+    args = dict(fields=(fields or ["name"])[:25], filters=_erp_filters(filters),
+                order_by=order_by or "modified desc")
+    n = min(int(limit or 20), MAX_ROWS)
+    if far:
+        rows = _far(lambda: far.get_list(doctype, limit=n, **args))
+    else:
+        from frappe.client import get_list
+        rows = get_list(doctype, limit_page_length=n, **args)
     rows = [_clean(dict(r)) for r in rows]
     for r in rows:
         if r.get("name"):
-            r["open_url"] = frappe.utils.get_url_to_form(doctype, str(r["name"]))
+            r["open_url"] = _open_url(far, doctype, str(r["name"]))
     return {"doctype": doctype, "rows": rows}
 
 
-def erpnext_count(doctype: str, filters=None):
+def erpnext_count(doctype: str, filters=None, business_code=None):
     """How many records of a doctype match, through the asker's permissions."""
+    _doctype_allowed(doctype, business_code)
+    far = _remote(business_code)
+    if far:
+        return {"doctype": doctype,
+                "count": _far(lambda: far.get_count(doctype, _erp_filters(filters)))}
     from frappe.client import get_count
-
-    _doctype_allowed(doctype)
     return {"doctype": doctype, "count": get_count(doctype, filters=_erp_filters(filters))}
 
 
-def erpnext_document(doctype: str, name: str):
+def erpnext_document(doctype: str, name: str, business_code=None):
     """One ERPNext document with its lines, through the asker's permissions."""
-    from frappe.client import get
-
-    _doctype_allowed(doctype)
-    doc = get(doctype, name)  # permission-checked, field-level read rules applied
+    _doctype_allowed(doctype, business_code)
+    far = _remote(business_code)
+    if far:
+        doc = _far(lambda: far.get_doc(doctype, name))
+    else:
+        from frappe.client import get
+        doc = get(doctype, name)  # permission-checked, field-level read rules applied
     doc = _clean(doc)
-    doc["open_url"] = frappe.utils.get_url_to_form(doctype, str(name))
+    doc["open_url"] = _open_url(far, doctype, name)
     return doc
 
 
@@ -402,21 +460,26 @@ def _company(business_code) -> str | None:
     return frappe.defaults.get_user_default("Company")
 
 
-def _report_allowed(report: str) -> str:
+def _report_allowed(report: str, business_code=None) -> str:
     if report not in REPORTS:
         raise ToolError(f"{report!r} is not one of the reports available here: "
                         f"{', '.join(sorted(REPORTS))}")
-    if not frappe.db.exists("Report", report):
+    if not _remote(business_code) and not frappe.db.exists("Report", report):
         raise ToolError(f"This site has no report called {report!r}.")
     return report
 
 
 def report_filters(report: str, business_code=None):
     """The filters a report takes, read from its own definition."""
-    _report_allowed(report)
-    from frappe.desk.query_report import get_script
-
-    script = (get_script(report) or {}).get("script") or ""
+    _report_allowed(report, business_code)
+    far = _remote(business_code)
+    if far:
+        got = _far(lambda: far._call("frappe.desk.query_report.get_script",
+                                     {"report_name": report})) or {}
+    else:
+        from frappe.desk.query_report import get_script
+        got = get_script(report) or {}
+    script = got.get("script") or ""
     i = script.find("filters")
     return {"report": report, "company": _company(business_code),
             "filters_definition": script[max(0, i - 20): i + 3500] if i >= 0 else script[:3500]}
@@ -424,15 +487,21 @@ def report_filters(report: str, business_code=None):
 
 def run_report(report: str, filters=None, business_code=None):
     """Run a standard ERPNext report with the asker's permissions; rows, columns, summary."""
-    _report_allowed(report)  # before anything else: an unlisted report never loads
-    from frappe.desk.query_report import run
+    _report_allowed(report, business_code)  # before anything else: an unlisted report never loads
+    far = _remote(business_code)
 
     pairs = filters if isinstance(filters, list) else [{"field": k, "value": v}
                                                        for k, v in (filters or {}).items()]
     f = {p.get("field"): p.get("value") for p in pairs if p.get("field") and p.get("value") not in (None, "")}
     f.setdefault("company", _company(business_code))
     try:
-        res = run(report, filters=json.dumps(f), ignore_prepared_report=True) or {}
+        if far:
+            res = far.run_report(report, filters=f) or {}
+        else:
+            from frappe.desk.query_report import run
+            res = run(report, filters=json.dumps(f), ignore_prepared_report=True) or {}
+    except ToolError:
+        raise
     except frappe.PermissionError:
         raise ToolError(f"The person asking may not run {report}.")
     except Exception as e:  # a missing or wrong filter is the usual cause

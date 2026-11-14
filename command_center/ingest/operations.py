@@ -29,9 +29,9 @@ def _paged(conn, doctype, fields, filters, limit=None, order_by="modified asc"):
     """Walk a doctype in pages by its modified watermark.
 
     Every page is checked for the fields that were asked for. Frappe does not always
-    report an unknown field: asking Issue for resolution_date -- which this ERPNext
-    calls sla_resolution_date -- returned rows carrying only name and modified, with
-    no error. Sixty cases loaded with a blank status and no opening date, every one
+    report an unknown field: asking Issue for resolution_date -- which v16 calls
+    sla_resolution_date -- returned rows carrying only name and modified, with no
+    error. Sixty cases loaded with a blank status and no opening date, every one
     of them counted as open, and the screen looked plausible.
 
     A fact table that quietly loses a column is worse than one that fails to build.
@@ -57,6 +57,7 @@ def _paged(conn, doctype, fields, filters, limit=None, order_by="modified asc"):
 class SalesOrderIngestor(Ingestor):
     fact = "fact_sales_order"
     source_doctype = "Sales Order"
+    cancellable = "Sales Order"
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         from command_center.ingest.base import resolve_as_of
@@ -221,13 +222,20 @@ class CaseIngestor(Ingestor):
         if since:
             filters["modified"] = [">", since]
 
-        cases = _paged(conn, "Issue",
-                       ["name", "modified", "subject", "status", "priority",
-                        "issue_type", "customer", "raised_by", "opening_date",
-                        # sla_resolution_date, not resolution_date: the latter does
-                        # not exist on Issue in ERPNext v16.
-                        "sla_resolution_date", "_assign"],
-                       filters, limit)
+        # When it was resolved has two names: sla_resolution_date on v15/v16 (Biomed),
+        # resolution_date on v14 (Gigmann's live site, checked 14 Nov 2026 -- v14
+        # rejects the other name with "Field not permitted in query"). Asked for by the
+        # newer name first, and by the older one if the site does not know it.
+        base = ["name", "modified", "subject", "status", "priority", "issue_type",
+                "customer", "raised_by", "opening_date", "_assign"]
+        resolved_field = "sla_resolution_date"
+        try:
+            cases = _paged(conn, "Issue", base + [resolved_field], filters, limit)
+        except Exception as e:
+            if "sla_resolution_date" not in str(e):
+                raise
+            resolved_field = "resolution_date"
+            cases = _paged(conn, "Issue", base + [resolved_field], filters, limit)
 
         rows = []
         for c in cases:
@@ -235,7 +243,7 @@ class CaseIngestor(Ingestor):
             is_open = 0 if status in CLOSED_CASE else 1
             opened = c.get("opening_date")
             # An open case has waited until the horizon; a closed one until it closed.
-            resolved = c.get("sla_resolution_date")
+            resolved = c.get(resolved_field)
             until = as_of if is_open else (resolved or as_of)
             days = date_diff(until, opened) if opened else None
             who = _first_assignee(c.get("_assign"))

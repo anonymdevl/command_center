@@ -8,9 +8,12 @@ dynamic = ["version"]
 
 # Deliberately minimal. `requests` ships with Frappe and is declared here only so
 # the dependency is visible; it is left unpinned so pip resolves to whatever
-# version the bench already has rather than pulling a second copy.
+# version the bench already has rather than pulling a second copy. `anthropic` is
+# Claude's official SDK (the analyst, from 14 Nov 2026); 0.125 is the first with
+# server-side refusal fallbacks, and later majors keep the calls ask/claude.py makes.
 dependencies = [
     "requests",
+    "anthropic>=0.125",
 ]
 
 [build-system]
@@ -20,6 +23,8 @@ build-backend = "flit_core.buildapi"
 [tool.flit.module]
 name = "command_center"
 
+# The platform's own site runs Frappe v16. ERPNext is not needed there: on the hosted
+# service every business is reached over its API, whatever version it runs (Gigmann's
+# is v14 as of 14 Nov 2026).
 [tool.bench.frappe-dependencies]
 frappe = ">=16.0.0,<17.0.0"
-erpnext = ">=16.0.0,<17.0.0"

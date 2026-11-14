@@ -18,9 +18,11 @@ they handed out, which tags the To-Do Accepted or reopens it with their reason. 
 assistant never calls either; approving a document is api/actions.apply_workflow_action,
 pressed by a person.
 
-This site's own business only. A connected peer's workflows run on that site under the
-manager's credential there, which is the multi-site work not yet tried with a real
-second site; the screens say so rather than showing this site's queue under its name.
+For a business on another site (the hosted service, 14 Nov 2026) the same reads go to
+that site under the manager's own API key there (credentials.link_account): "waiting on
+you" only means something for the person's own account on that ERPNext, so it is never
+read with the platform's shared service account. Without a linked key the screens say
+what to do rather than showing someone else's queue under their name.
 """
 
 from __future__ import annotations
@@ -36,27 +38,36 @@ VALUE_FIELDS = ("base_grand_total", "grand_total", "base_total", "total", "amoun
                 "total_amount", "paid_amount")
 
 
-def _local(business_code):
-    if business_code and business_code != "__all__":
-        is_local = frappe.db.get_value("Connected Business", {"business_code": business_code},
-                                       "is_local")
-        if not is_local:
-            return False
-    return True
+def _source(business_code):
+    """Where the work is read: this site, or the business's own site as this manager.
+
+    Returns (source, reason): a _Local or _Remote, or None with the sentence the screen
+    shows when it cannot be read."""
+    from command_center.api.businesses import default_business_code
+    code = business_code if business_code and business_code != "__all__" else default_business_code()
+    if not code or frappe.db.get_value("Connected Business", {"business_code": code}, "is_local"):
+        return _Local(), None
+    from command_center.api.credentials import credential_for
+    if not credential_for(code):
+        name = frappe.db.get_value("Connected Business", {"business_code": code},
+                                   "business_name") or code
+        return None, (f"Approvals and tasks are read from {name}'s ERPNext under your own "
+                      f"account there, so that what is waiting on you is yours. Link your "
+                      f"ERPNext API key for {name} once, and they appear here.")
+    from command_center.connectors.registry import connector_for
+    return _Remote(connector_for(code)), None
 
 
 @frappe.whitelist()
 def summary(business_code: str | None = None):
     require_manager()
-    if not _local(business_code):
-        return {"available": False,
-                "reason": "Approvals and tasks are read from this site's own ERPNext. "
-                          "For a connected business they will come from that site, which "
-                          "is not switched on yet."}
-    user = frappe.session.user
-    approvals = _approvals(user)
-    handed = _handed_out(user)
-    mine = _mine(user)
+    src, reason = _source(business_code)
+    if not src:
+        return {"available": False, "reason": reason}
+    user = src.me()
+    approvals = _approvals(user, src)
+    handed = _handed_out(user, src)
+    mine = _mine(user, src)
     now = getdate(today())
 
     open_ = [t for t in handed if t["status"] == "Open"]
@@ -66,28 +77,29 @@ def summary(business_code: str | None = None):
     due_today = [t for t in mine if t["date"] and getdate(t["date"]) <= now]
     value = sum(a["value"] or 0 for a in approvals)
     oldest = max((t["late_days"] for t in late), default=0)
-    currency = frappe.defaults.get_global_default("currency") or ""
+    currency = src.currency(business_code)
 
+    site = src.site()
     figures = {
         "work_awaiting": _fig("work_awaiting", "Awaiting you", len(approvals),
                               f"{currency} {value:,.0f} involved".strip() if value else
                               "nothing with a value on it",
-                              "/app/workflow-action?status=Open"),
+                              site + "/app/workflow-action?status=Open"),
         "work_due_today": _fig("work_due_today", "Due today", len(due_today),
                                "on your own list, today or earlier",
-                               f"/app/todo?status=Open&allocated_to={user}"),
+                               f"{site}/app/todo?status=Open&allocated_to={user}"),
         "work_to_check": _fig("work_to_check", "Evidence to check", len(check),
                               f"marked done in the last {CHECK_DAYS} days",
-                              f"/app/todo?status=Closed&assigned_by={user}"),
+                              f"{site}/app/todo?status=Closed&assigned_by={user}"),
         "work_unkept": _fig("work_unkept", "Promises unkept", len(late),
                             f"oldest is {_age(oldest)} late" if late else "none past its date",
-                            f"/app/todo?status=Open&assigned_by={user}"),
+                            f"{site}/app/todo?status=Open&assigned_by={user}"),
         "work_open": _fig("work_open", "Still open", len(open_), "work you handed out",
-                          f"/app/todo?status=Open&assigned_by={user}"),
+                          f"{site}/app/todo?status=Open&assigned_by={user}"),
         "work_late": _fig("work_late", "Late", len(late), "past the date you set",
-                          f"/app/todo?status=Open&assigned_by={user}"),
+                          f"{site}/app/todo?status=Open&assigned_by={user}"),
         "work_high": _fig("work_high", "High risk", len(high), "marked high priority",
-                          f"/app/todo?status=Open&priority=High&assigned_by={user}"),
+                          f"{site}/app/todo?status=Open&priority=High&assigned_by={user}"),
     }
     return {"available": True, "user": user, "today": str(now), "currency": currency,
             "approvals": approvals, "open": open_, "late": late, "check": check,
@@ -95,14 +107,26 @@ def summary(business_code: str | None = None):
 
 
 @frappe.whitelist()
-def review(todo: str, verdict: str, note: str = ""):
+def review(todo: str, verdict: str, note: str = "", business_code: str | None = None):
     """The manager's verdict on work they handed out and the assignee closed.
 
     accept   tags the To-Do Accepted, so it leaves "Evidence to check", and records a
              comment saying so.
     return   reopens it, with the manager's reason as a comment the assignee sees.
+
+    On a business on another site, made there under the manager's own key, so that
+    site records them as the person who did it.
     """
     require_manager()
+    if verdict not in ("accept", "return"):
+        frappe.throw("The verdict is accept or return.")
+    if verdict == "return" and not (note or "").strip():
+        frappe.throw("Say what is still needed, so they know what to do.")
+    src, reason = _source(business_code)
+    if not src:
+        frappe.throw(reason)
+    if isinstance(src, _Remote):
+        return _review_remote(src, todo, verdict, note)
     doc = frappe.get_doc("ToDo", todo)
     if doc.assigned_by != frappe.session.user:
         frappe.throw("Only the person who handed this out can accept it or send it back.",
@@ -114,72 +138,84 @@ def review(todo: str, verdict: str, note: str = ""):
         add_tag(ACCEPTED_TAG, "ToDo", doc.name)
         doc.add_comment("Comment", f"Accepted by {who}." + (f" {note}" if note else ""))
         return {"ok": True, "status": doc.status}
-    if verdict == "return":
-        if not (note or "").strip():
-            frappe.throw("Say what is still needed, so they know what to do.")
-        doc.status = "Open"
-        doc.save()
-        doc.add_comment("Comment", f"Sent back by {who}: {note.strip()}")
-        return {"ok": True, "status": doc.status}
-    frappe.throw("The verdict is accept or return.")
+    doc.status = "Open"
+    doc.save()
+    doc.add_comment("Comment", f"Sent back by {who}: {note.strip()}")
+    return {"ok": True, "status": doc.status}
+
+
+def _review_remote(src, todo, verdict, note):
+    conn = src.conn
+    me = src.me()
+    row = conn.get_list("ToDo", filters={"name": todo}, fields=["name", "assigned_by", "status"],
+                        limit=1)
+    if not row or row[0].get("assigned_by") != me:
+        frappe.throw("Only the person who handed this out can accept it or send it back.",
+                     frappe.PermissionError)
+    who = src.fullname(me)
+    if verdict == "accept":
+        conn._call("frappe.desk.doctype.tag.tag.add_tag",
+                   {"tag": ACCEPTED_TAG, "dt": "ToDo", "dn": todo}, write=True)
+        text, status = f"Accepted by {who}." + (f" {note}" if note else ""), row[0].get("status")
+    else:
+        conn.set_value("ToDo", todo, "status", "Open")
+        text, status = f"Sent back by {who}: {note.strip()}", "Open"
+    conn.insert({"doctype": "Comment", "comment_type": "Comment", "reference_doctype": "ToDo",
+                 "reference_name": todo, "content": text})
+    return {"ok": True, "status": status}
 
 
 # ---------------------------------------------------------------------------
-def _approvals(user):
-    from frappe.model.workflow import get_transitions
-
+def _approvals(user, src):
     out = []
-    roles = set(frappe.get_roles(user))
-    for wf in frappe.get_all("Workflow", filters={"is_active": 1},
-                             fields=["name", "document_type", "workflow_state_field"]):
-        field = wf.workflow_state_field or "workflow_state"
-        states = {t.state for t in frappe.get_all(
-            "Workflow Transition", filters={"parent": wf.name},
-            fields=["state", "allowed"]) if t.allowed in roles}
+    roles = src.roles(user)
+    for wf in src.workflows():
+        field = wf.get("workflow_state_field") or "workflow_state"
+        states = {t["state"] for t in src.transitions(wf["name"])
+                  if roles is None or t["allowed"] in roles}
         if not states:
             continue
-        meta = frappe.get_meta(wf.document_type)
-        vfield = next((f for f in VALUE_FIELDS if meta.has_field(f)), None)
-        tfield = meta.title_field if meta.title_field and meta.has_field(meta.title_field) else None
-        fields = ["name", "owner", "creation", "modified", field] + [f for f in (vfield, tfield) if f]
+        has, title_field = src.fields(wf["document_type"])
+        vfield = next((f for f in VALUE_FIELDS if f in has), None)
+        tfield = title_field if title_field and title_field in has else None
+        fields = ["name", "owner", "creation", "modified", "docstatus", field] + \
+            [f for f in (vfield, tfield) if f]
         try:
-            docs = frappe.get_list(wf.document_type,
-                                   filters={field: ["in", list(states)], "docstatus": ["<", 2]},
-                                   fields=fields, order_by="creation asc", limit=100)
-        except frappe.PermissionError:
-            continue
+            docs = src.list(wf["document_type"],
+                            filters={field: ["in", list(states)], "docstatus": ["<", 2]},
+                            fields=fields, order_by="creation asc", limit=100)
+        except Exception:
+            continue  # not readable by this person
         for d in docs:
-            try:
-                actions = [t.action for t in get_transitions(frappe.get_doc(wf.document_type, d.name))]
-            except Exception:
-                actions = []
+            actions = src.actions(wf["document_type"], d)
             if not actions:
                 continue
             out.append({
-                "doctype": wf.document_type,
-                "name": d.name,
-                "title": (d.get(tfield) if tfield else None) or d.name,
+                "doctype": wf["document_type"],
+                "name": d["name"],
+                "title": (d.get(tfield) if tfield else None) or d["name"],
                 "state": d.get(field),
                 "actions": list(dict.fromkeys(actions)),
                 "value": float(d.get(vfield) or 0) if vfield else None,
-                "raised_by": frappe.utils.get_fullname(d.owner),
-                "raised": str(d.creation)[:10],
-                "waiting_days": date_diff(today(), d.modified),
-                "url": f"/app/{frappe.scrub(wf.document_type).replace('_', '-')}/{d.name}",
+                "raised_by": src.fullname(d.get("owner")),
+                "raised": str(d.get("creation"))[:10],
+                "waiting_days": date_diff(today(), d.get("modified")),
+                "url": src.url(wf["document_type"], d["name"]),
             })
     out.sort(key=lambda a: -(a["waiting_days"] or 0))
     return out
 
 
-def _todos(filters, limit=200):
-    rows = frappe.get_list("ToDo", filters=filters,
-                           fields=["name", "description", "status", "priority", "date",
-                                   "allocated_to", "assigned_by", "reference_type",
-                                   "reference_name", "modified", "creation", "_user_tags"],
-                           order_by="date asc", limit=limit)
+def _todos(filters, src, limit=200):
+    rows = src.list("ToDo", filters=filters,
+                    fields=["name", "description", "status", "priority", "date",
+                            "allocated_to", "assigned_by", "reference_type",
+                            "reference_name", "modified", "creation", "_user_tags"],
+                    order_by="date asc", limit=limit)
     now = getdate(today())
     out = []
     for r in rows:
+        r = frappe._dict(r)
         text = frappe.utils.strip_html(r.description or "").strip()
         first, _, rest = text.partition("\n")
         out.append({
@@ -191,26 +227,147 @@ def _todos(filters, limit=200):
             "date": str(r.date) if r.date else None,
             "late_days": max(date_diff(now, r.date), 0) if r.date and r.status == "Open" else 0,
             "to": r.allocated_to,
-            "to_name": frappe.utils.get_fullname(r.allocated_to) if r.allocated_to else "",
+            "to_name": src.fullname(r.allocated_to) if r.allocated_to else "",
             "reference": ({"doctype": r.reference_type, "name": r.reference_name}
                           if r.reference_type and r.reference_name else None),
             "closed_on": str(r.modified)[:10] if r.status == "Closed" else None,
             "accepted": ACCEPTED_TAG in (r._user_tags or ""),
-            "url": f"/app/todo/{r.name}",
+            "url": src.url("ToDo", r.name),
         })
     return out
 
 
-def _handed_out(user):
+def _handed_out(user, src):
     since = add_days(today(), -CHECK_DAYS)
-    open_ = _todos({"assigned_by": user, "status": "Open", "allocated_to": ["!=", user]})
+    open_ = _todos({"assigned_by": user, "status": "Open", "allocated_to": ["!=", user]}, src)
     closed = _todos({"assigned_by": user, "status": "Closed", "allocated_to": ["!=", user],
-                     "modified": [">=", since]})
+                     "modified": [">=", since]}, src)
     return open_ + closed
 
 
-def _mine(user):
-    return _todos({"allocated_to": user, "status": "Open"}, limit=100)
+def _mine(user, src):
+    return _todos({"allocated_to": user, "status": "Open"}, src, limit=100)
+
+
+# ---------------------------------------------------------------------------
+# The two places work is read from. Same questions, asked of this site's Frappe or of
+# the business's own site over its API.
+# ---------------------------------------------------------------------------
+class _Local:
+    def site(self):
+        return ""
+
+    def me(self):
+        return frappe.session.user
+
+    def roles(self, user):
+        return set(frappe.get_roles(user))
+
+    def currency(self, business_code):
+        return frappe.defaults.get_global_default("currency") or ""
+
+    def workflows(self):
+        return frappe.get_all("Workflow", filters={"is_active": 1},
+                              fields=["name", "document_type", "workflow_state_field"])
+
+    def transitions(self, workflow):
+        return frappe.get_all("Workflow Transition", filters={"parent": workflow},
+                              fields=["state", "allowed"])
+
+    def fields(self, doctype):
+        meta = frappe.get_meta(doctype)
+        return {f.fieldname for f in meta.fields}, meta.title_field
+
+    def list(self, doctype, **kw):
+        return [dict(r) for r in frappe.get_list(doctype, **kw)]
+
+    def actions(self, doctype, row):
+        from frappe.model.workflow import get_transitions
+        try:
+            return [t.action for t in get_transitions(frappe.get_doc(doctype, row["name"]))]
+        except Exception:
+            return []
+
+    def fullname(self, user):
+        return frappe.utils.get_fullname(user)
+
+    def url(self, doctype, name):
+        return f"/app/{frappe.scrub(doctype).replace('_', '-')}/{name}"
+
+
+class _Remote:
+    """The business's own site, read under this manager's own key there."""
+
+    def __init__(self, conn):
+        self.conn = conn
+        self._names = {}
+
+    def site(self):
+        return self.conn.base_url
+
+    def me(self):
+        return self.conn._call("frappe.auth.get_logged_user")
+
+    def roles(self, user):
+        # The person's roles there, when that site lets them read their own; None means
+        # "not known", and the far site's own get_transitions then decides per document.
+        try:
+            rows = self.conn.get_list("Has Role", filters={"parent": user, "parenttype": "User"},
+                                      fields=["role"], limit=500, parent_doctype="User")
+            return {r["role"] for r in rows} or None
+        except Exception:
+            return None
+
+    def currency(self, business_code):
+        from command_center.api.businesses import currency_for
+        return currency_for(self.conn.code) or ""
+
+    def workflows(self):
+        try:
+            return self.conn.get_list("Workflow", filters={"is_active": 1},
+                                      fields=["name", "document_type", "workflow_state_field"],
+                                      limit=100)
+        except Exception:
+            return []
+
+    def transitions(self, workflow):
+        try:
+            return self.conn.get_list("Workflow Transition", filters={"parent": workflow},
+                                      fields=["state", "allowed"], limit=500,
+                                      parent_doctype="Workflow")
+        except Exception:
+            return []
+
+    def fields(self, doctype):
+        meta = self.conn.get_meta(doctype)
+        return {f.get("fieldname") for f in meta.get("fields") or []}, meta.get("title_field")
+
+    def list(self, doctype, filters=None, fields=None, order_by=None, limit=100):
+        return self.conn.get_list(doctype, filters=filters, fields=fields,
+                                  order_by=order_by, limit=limit)
+
+    def actions(self, doctype, row):
+        try:
+            res = self.conn._call("frappe.model.workflow.get_transitions",
+                                  {"doc": {**row, "doctype": doctype}})
+            return [t.get("action") for t in res or [] if t.get("action")]
+        except Exception:
+            return []
+
+    def fullname(self, user):
+        if not user:
+            return ""
+        if user not in self._names:
+            try:
+                row = self.conn.get_list("User", filters={"name": user},
+                                         fields=["full_name"], limit=1)
+                self._names[user] = (row[0].get("full_name") if row else None) or user
+            except Exception:
+                self._names[user] = user
+        return self._names[user]
+
+    def url(self, doctype, name):
+        return f"{self.conn.base_url}/app/{frappe.scrub(doctype).replace('_', '-')}/{name}"
 
 
 def _fig(key, label, value, note, href):

@@ -809,13 +809,22 @@ check("def as_system" in _base, "connectors/base.py has no as_system")
 # there. A check that is wrong about the code is as bad as one that cannot fail.
 _as_sys = _base.split("def as_system")[1]
 _as_sys = _as_sys[: _as_sys.find("\n    def ")] if "\n    def " in _as_sys else _as_sys
-check("if not self.is_local" in _as_sys,
-      "as_system does not refuse a remote connector, so a caller could believe they had "
-      "escalated on a peer when nothing changed")
+check("if not self.is_local and not self.service_credential_configured()" in _as_sys,
+      "as_system does not refuse a remote connector that has no read-only service account, "
+      "so a caller could believe they were reading as the system when nothing changed")
+# A system read of a peer (the hosted service) is its read-only service account and
+# nothing else: never a manager's own key, which could carry write rights, and never a
+# write at all.
+_rem = open(os.path.join(ROOT, "command_center", "connectors", "remote.py")).read()
+_hdr = _rem.split("def _headers")[1].split("\n    def ")[0]
+check("if self.system:" in _hdr and "RemotePermissionDenied" in _hdr
+      and "cred = self._service_credential()" in _hdr.split("if self.system:")[1].split("else:")[0],
+      "connectors/remote.py: a system connector must use the service account only and "
+      "refuse every write")
 check("frappe.get_all if self.system else frappe.get_list" in _loc,
       "local connector does not switch to an unfiltered read for a system connector, so "
       "a doctype readable by no role still returns rows with every field stripped")
-for _fn in ("def run(", "def reconcile(", "def scheduled_load("):
+for _fn in ("def run(", "def reconcile(", "def _load_all(", "def poll_peers("):
     _body = _ing_api.split(_fn)[1][:1200] if _fn in _ing_api else ""
     check("as_system()" in _body,
           f"api/ingest.py {_fn.strip('def (')} does not take a system connector, so its "
@@ -909,6 +918,45 @@ for _path in sorted(_Path(ROOT).rglob("*")):
     check(not _KEYISH.search(_text),
           f"{_rel} contains something shaped like a Google API key. Keys belong in "
           f"site_config.json on the server, never in a tracked file.")
+
+# Anthropic keys too (Claude is the analyst from 14 Nov 2026): sk-ant- and a long tail.
+_ANTKEY = re.compile(r"sk-ant-[A-Za-z0-9_\-]{24,}")
+for _path in sorted(_Path(ROOT).rglob("*")):
+    if not _path.is_file():
+        continue
+    _rel = _path.relative_to(_Path(ROOT)).as_posix()
+    if (_rel.startswith(("node_modules/", ".git/"))
+            or "/node_modules/" in _rel or _path.suffix in (".png", ".jpg", ".woff2")):
+        continue
+    try:
+        _text = _path.read_text(errors="ignore")
+    except Exception:
+        continue
+    check(not _ANTKEY.search(_text),
+          f"{_rel} contains something shaped like an Anthropic API key. Keys belong in "
+          f"site_config.json on the server, never in a tracked file.")
+
+# Claude: key from site_config, a timeout on every call, pinned models, no forced tool
+# use (Sonnet 5.5 and Opus 5.5 reject it), and the fixed opening cached.
+_cl = open(os.path.join(ROOT, "command_center", "ask", "claude.py")).read()
+check('frappe.conf.get("command_center_anthropic_key")' in _cl,
+      "claude.py does not read the key from site_config")
+check("with_options(timeout=" in _cl,
+      "claude.py calls the API with no timeout of its own, so a slow reply would hang the "
+      "screen a manager is waiting on")
+check('"analyst": "claude-sonnet-5-5"' in _cl and '"deep": "claude-opus-5-5"' in _cl
+      and "-latest" not in _cl.split("MODELS =")[1][:120],
+      "claude.py's models must be pinned: Sonnet 5.5 for questions, Opus 5.5 for the deeper look")
+check('"type": "any"' not in _cl and '"type": "tool"' not in _cl,
+      "claude.py forces tool use, which Sonnet 5.5 and Opus 5.5 reject with a 400")
+check('"cache_control": marker' in _cl,
+      "claude.py does not mark the fixed opening for caching, so every round pays for it in full")
+_ag = open(os.path.join(ROOT, "command_center", "ask", "agent.py")).read()
+_static = _ag.split('SYSTEM = """')[1].split('"""')[0]
+for _ph in ("{today}", "{as_of}", "{business}", "{currency}"):
+    check(_ph not in _static,
+          f"ask/agent.py's fixed instructions contain {_ph}: anything that varies must go in "
+          f"CONTEXT, after the cache marker, or Claude's cache never hits")
 
 _gem = open(os.path.join(ROOT, "command_center", "ask", "gemini.py")).read()
 _llm = open(os.path.join(ROOT, "command_center", "ask", "planner_llm.py")).read()
@@ -1158,10 +1206,14 @@ _WRITE = re.compile(
     r"frappe\.(delete_doc|new_doc|get_doc|rename_doc|set_value|enqueue|call)\b|"
     r"frappe\.db\.(sql|set_value|delete|insert|commit|set_single_value|bulk_insert|truncate)\b|"
     r"frappe\.client\.(insert|save|submit|cancel|delete|set_value|insert_many|bulk_update|rename_doc)\b|"
+    # A connector's write methods, and a raw remote call asked to write (a peer is read
+    # through the connector on the hosted service; its writes are for people only).
+    r"(?<!cache\(\))\.(set_value|apply_workflow)\(|write=True|"
     r"from\s+frappe\.client\s+import[^\n]*\b(insert|save|submit|cancel|delete|set_value|"
     r"insert_many|bulk_update|rename_doc)\b")
 _READ_PATH = [os.path.join(APP, "ask", f) for f in sorted(os.listdir(os.path.join(APP, "ask")))
               if f.endswith(".py")] + [os.path.join(APP, "kpi", "engine.py"),
+                                       os.path.join(APP, "kpi", "live.py"),
                                        os.path.join(APP, "kpi", "registry.py"),
                                        os.path.join(APP, "facts", "schema.py")]
 # One statement is allowed by name: agent.py's time limit on a lookup's queries
@@ -1312,6 +1364,10 @@ _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_analyst.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,
       "scripts/test_analyst.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+_t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_remote.py")],
+             capture_output=True, text=True, timeout=120)
+check(_t.returncode == 0,
+      "scripts/test_remote.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
 _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_schedule.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,

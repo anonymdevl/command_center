@@ -82,27 +82,16 @@ def get_changes(since: str | None = None, limit: int = 500):
 
 
 def refresh_peers():
-    """Scheduled: ask every peer what has changed since we last looked.
+    """Scheduled every fifteen minutes: bring each peer's facts up to date.
 
-    Peers are read for their conclusions, not their ledgers. If one is
-    unreachable the others still refresh — a group of businesses should not lose
-    its whole view because one server is down.
+    A peer on the hosted service has nothing of ours installed, so there is no change
+    feed to read there (record_event above only fires where this app is installed).
+    It is polled instead, by ERPNext's own `modified` stamps -- see
+    api/ingest.poll_peers, which owns it because reading a peer as the system is an
+    ingest act and nothing else may do it.
     """
-    from command_center.connectors.base import BusinessUnreachable
-    from command_center.connectors.registry import all_connectors
-
-    for conn in all_connectors():
-        if conn.is_local:
-            continue
-        try:
-            conn.fetch_changes(since=conn.business.last_sync, limit=500)
-            frappe.db.set_value("Connected Business", conn.business.name,
-                                "last_sync", now_datetime(),
-                                update_modified=False)
-        except BusinessUnreachable as e:
-            frappe.log_error(title=f"Command Center peer refresh: {conn.name}",
-                             message=str(e))
-    frappe.db.commit()
+    from command_center.api.ingest import poll_peers
+    poll_peers()
 
 
 def prune_consumed_events(keep_days: int = 14):

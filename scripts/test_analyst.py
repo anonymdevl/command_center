@@ -76,7 +76,7 @@ from command_center.ask import agent, gemini, tools  # noqa: E402
 
 REAL_CHAT = gemini.chat  # the scripted tests replace it; the model tests need the real one
 
-agent._system = lambda business_code: "SYSTEM"
+agent._system_parts = lambda business_code: ("SYSTEM", "")
 seen = {}
 
 
@@ -516,6 +516,126 @@ _src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "comm
                          "ask", "intents.py")).read()
 check("owe them" not in _src.replace("we still owe them", ""),
       "the built-in answers do not call undelivered orders money we owe")
+
+# 18. Claude (14 Nov 2026). The same loop on Anthropic's message shapes: the session's
+# scope still wins, every tool_use gets its tool_result by id, an instruction after the
+# results joins that unsent turn rather than editing a sent one, and the provider is
+# Claude once its key is on the site.
+from command_center.ask import claude, llm  # noqa: E402
+
+REAL_CLAUDE_CHAT = claude.chat
+check(llm.provider() == "gemini", "with only a Gemini key, Gemini answers")
+frappe.conf["command_center_anthropic_key"] = "test"
+check(llm.provider() == "claude", "with an Anthropic key, Claude answers")
+frappe.conf["command_center_ai_provider"] = "gemini"
+check(llm.provider() == "gemini", "a provider named in site_config is the one used")
+frappe.conf["command_center_ai_provider"] = "claude"
+_k = frappe.conf.pop("command_center_anthropic_key")
+check(llm.provider() is None, "a provider named without its key is not used")
+frappe.conf["command_center_anthropic_key"] = _k
+
+
+def claude_script(*turns):
+    sent = []
+    it = iter(turns)
+
+    def chat(messages, decls, static, dynamic, kind="analyst", timeout=60, final=False):
+        sent.append({"messages": json.loads(json.dumps(messages)), "decls": decls,
+                     "kind": kind, "final": final})
+        kind_, payload = next(it)
+        if kind_ == "err":
+            return None, payload
+        if kind_ == "text":
+            return [{"type": "thinking", "thinking": "", "signature": "sig"},
+                    {"type": "text", "text": payload}], None
+        return [{"type": "thinking", "thinking": "", "signature": "sig"}] + [
+            {"type": "tool_use", "id": f"tu_{i}", "name": n, "input": a}
+            for i, (n, a) in enumerate(payload)], None
+    claude.chat = chat
+    return sent
+
+
+import json  # noqa: E402
+
+reset()
+sent = claude_script(("call", [("find", {"text": "ubuntu", "business_code": "SOMEONE-ELSE"}),
+                               ("find", {"text": "akai"})]),
+                     ("text", "UBUNTU owes **GHS 636,675**."))
+r = agent.answer("How much does Ubuntu owe?", "GIGMANN")
+check(r and r["answered"] and r["planner"] == "claude" and "636,675" in r["answer"],
+      f"Claude answers after a tool call: {r}")
+check(seen.get("find") == "GIGMANN", "Claude's call runs in the session's scope, not the model's")
+_second = sent[1]["messages"]
+_results = _second[-1]["content"]
+check(_second[-2]["role"] == "assistant" and _second[-2]["content"][0]["type"] == "thinking",
+      "the reply goes back unchanged, thinking block included")
+check([b["tool_use_id"] for b in _results] == ["tu_0", "tu_1"]
+      and all(b["type"] == "tool_result" for b in _results),
+      f"every tool_use gets its tool_result, by id, in order: {_results}")
+check(sent[0]["decls"] == sent[1]["decls"] and sent[0]["decls"],
+      "the same tool list goes on every round (changing it edits the history)")
+
+reset()
+sent = claude_script(*([("call", [("find", {"text": "x"})])] * agent.MAX_STEPS
+                       + [("text", "Done, from what I have.")]))
+r = agent.answer("Q", "GIGMANN")
+check(r and r["answered"] and sent[-1]["final"] and sent[-1]["decls"],
+      "out of rounds, the last request asks for the answer, tools still declared")
+_last = sent[-1]["messages"][-1]
+check(_last["role"] == "user" and _last["content"][0]["type"] == "tool_result"
+      and _last["content"][-1]["type"] == "text",
+      "the 'answer now' instruction joins the unsent tool-result turn, after the results")
+
+reset()
+sent = claude_script(("text", "We are owed GHS 9,177,568.91."), ("call", [("find", {"text": "x"})]),
+                     ("text", "Looked up: GHS 1."))
+r = agent.answer("How much are we owed?", "GIGMANN")
+check(len(sent) == 3 and "without looking anything up" in json.dumps(sent[1]["messages"][-1]),
+      "a figure stated from memory is sent back to be looked up")
+
+reset()
+sent = claude_script(("call", [("find", {"text": "x"})]), ("text", "ok"))
+r = agent.answer("Q", "GIGMANN", deep=True)
+check(sent and all(x["kind"] == "deep" for x in sent), "the deeper look runs on the deep model")
+check(claude.model_for("deep") == "claude-opus-5-5" and claude.model_for("analyst") == "claude-sonnet-5-5",
+      "Sonnet 5.5 for everyday questions, Opus 5.5 for the deeper look")
+
+reset()
+sent = claude_script(("call", [("writes_underneath", {})]), ("text", "Done."))
+r = agent.answer("Q", "GIGMANN")
+check(frappe.db.rolled_back == 1, "a write while Claude answers is rolled back too")
+
+# The request itself: the fixed opening is cached, what varies comes after the marker,
+# no forced tool use, and nothing in the opening that changes between questions.
+claude.chat = REAL_CLAUDE_CHAT
+_decls = tools.declarations()
+b1 = claude.request([{"role": "user", "content": "a"}], _decls, "STATIC", "Today is 1", "analyst")
+b2 = claude.request([{"role": "user", "content": "b"}], _decls, "STATIC", "Today is 2", "analyst",
+                    final=True)
+check(b1["system"][0]["text"] == "STATIC" and "cache_control" in b1["system"][0]
+      and "cache_control" not in b1["system"][1],
+      "the cache marker is on the fixed instructions, and the dated line comes after it")
+check(json.dumps(b1["tools"]) == json.dumps(b2["tools"]) and b1["system"][0] == b2["system"][0],
+      "two questions send a byte-identical opening (tools, then the fixed instructions)")
+check("tool_choice" not in b1 and b2["tool_choice"] == {"type": "none"},
+      "no forced tool use; the last round asks for the answer with tool_choice none")
+check(b1["thinking"] == {"type": "adaptive"} and b1["output_config"]["effort"] == "medium",
+      "adaptive thinking at medium effort for everyday questions")
+check(all(t.get("input_schema", {}).get("type") == "object" for t in b1["tools"]),
+      "every tool has an object input schema, the ones that take nothing too")
+check({t["name"] for t in b1["tools"]} == set(tools.TOOLS),
+      "Claude is offered exactly the read tools in the registry, nothing else")
+check(not ({"{today}", "{as_of}", "{business}"} & set(
+    x for x in ("{today}", "{as_of}", "{business}") if x in agent.SYSTEM)),
+      "the fixed instructions carry no date, horizon or business name (they would defeat the cache)")
+check(claude.label("claude-sonnet-5-5") == "Claude Sonnet 5.5", claude.label("claude-sonnet-5-5"))
+check(claude.questions_per_minute({"requests_per_minute": 50, "input_tokens_per_minute": 30000,
+                                   "output_tokens_per_minute": 8000}) == 1,
+      "questions a minute are the tightest of the three limits")
+frappe.conf.pop("command_center_anthropic_key", None)
+frappe.conf.pop("command_center_ai_provider", None)
+_r = REAL_CLAUDE_CHAT([], [], "S", "D")
+check(_r == (None, "no Anthropic key configured"), f"no key, no call: {_r}")
 
 print(f"analyst: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

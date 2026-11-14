@@ -149,7 +149,7 @@ function checkedList(items, p) {
     const li = document.createElement("li");
     li.textContent =
       p.mode === "analyst"
-        ? `answered by Gemini (${p.model}) from the lookups above. It reads the business `
+        ? `answered by ${p.planner === "claude" ? "Claude" : "Gemini"} (${p.model}) from the lookups above. It reads the business `
           + "within your permissions; it cannot change anything in ERPNext"
         : p.planner === "gemini"
           ? "the wording was read by Gemini, which chose what to look up — the figures "

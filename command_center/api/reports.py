@@ -85,8 +85,8 @@ def generate(code: str, business_code: str | None = None):
     if code not in REPORTS:
         frappe.throw(f"Unknown report {code!r}")
     if not engine.analyst_enabled():
-        frappe.throw("Reports are written by the analyst, which needs the Gemini key on "
-                     "this site (bench --site <site> set-config command_center_gemini_key ...).")
+        frappe.throw("Reports are written by the analyst, which needs an AI key on this "
+                     "site (bench --site <site> set-config command_center_anthropic_key ...).")
     job_id = uuid.uuid4().hex[:12]
     frappe.cache().set_value(_key(job_id), {"state": "running", "code": code},
                              expires_in_sec=KEEP_SECONDS)
@@ -116,7 +116,8 @@ def _run(report_id: str, code: str, business_code: str | None, user: str):
         brief = BRIEF.format(title=title, business=_business(business_code),
                              sections=sections, as_of=_as_of())
         # A job, not a web request: room for a report's sixteen rounds.
-        result = agent.answer(brief, business_code, max_steps=REPORT_STEPS, deadline=1200)
+        result = agent.answer(brief, business_code, max_steps=REPORT_STEPS, deadline=1200,
+                              deep=True)
         if not result:
             raise RuntimeError("the analyst could not be reached or returned nothing")
         result.update({"title": title, "code": code,
@@ -259,10 +260,11 @@ def send_scheduled(schedule: str):
     frappe.set_user(doc.run_as or "Administrator")
     try:
         if not engine.analyst_enabled():
-            raise RuntimeError("the analyst needs the Gemini key on this site")
+            raise RuntimeError("the analyst needs an AI key on this site")
         brief = BRIEF.format(title=title, business=_business(doc.business_code),
                              sections=sections, as_of=_as_of())
-        result = agent.answer(brief, doc.business_code, max_steps=REPORT_STEPS, deadline=1200)
+        result = agent.answer(brief, doc.business_code, max_steps=REPORT_STEPS, deadline=1200,
+                              deep=True)
         if not result or not result.get("answer"):
             raise RuntimeError("the analyst returned nothing")
         pdf = pdf_bytes(title, result["answer"], result.get("checked"), doc.business_code,
@@ -301,9 +303,10 @@ def _recipients(text) -> list:
 def _local_code(business_code):
     if business_code and business_code != "__all__":
         return business_code
-    code = frappe.db.get_value("Connected Business", {"is_local": 1}, "business_code")
+    from command_center.api.businesses import default_business_code
+    code = default_business_code()
     if not code:
-        frappe.throw("No business on this site is marked as local.")
+        frappe.throw("No business is registered yet.")
     return code
 
 

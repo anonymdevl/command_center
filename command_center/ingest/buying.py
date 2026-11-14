@@ -21,6 +21,7 @@ PAGE = 2000
 class PurchaseInvoiceIngestor(Ingestor):
     fact = "fact_purchase_invoice"
     source_doctype = "Purchase Invoice"
+    cancellable = "Purchase Invoice"
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         from command_center.ingest.base import resolve_as_of
@@ -75,6 +76,7 @@ class PurchaseInvoiceIngestor(Ingestor):
 class PurchaseInvoiceLineIngestor(Ingestor):
     fact = "fact_purchase_invoice_line"
     source_doctype = "Purchase Invoice Item"
+    cancellable = "Purchase Invoice"
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         """Lines, with the supplier carried down from the parent.

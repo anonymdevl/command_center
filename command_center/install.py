@@ -66,6 +66,120 @@ def seed_local_business():
     return doc.name
 
 
+def prepare_hosted_site(time_zone: str = "Africa/Accra", country: str = "Ghana",
+                        currency: str = "GHS", language: str = "en"):
+    """A plain Frappe site that hosts the platform for businesses on other sites.
+
+    It has no ERPNext and no business of its own -- every business is reached over its
+    API -- so the setup wizard has nothing to set up. Marked complete here, with the
+    site's time zone and currency, so the desk opens for the administrator instead of
+    asking about a company that does not exist. Run once by host.sh.
+    """
+    create_manager_role()
+    for field, value in (("time_zone", time_zone), ("country", country),
+                         ("currency", currency), ("language", language)):
+        try:
+            frappe.db.set_single_value("System Settings", field, value)
+        except Exception:
+            pass
+    try:
+        frappe.db.set_single_value("System Settings", "setup_complete", 1)
+    except Exception:
+        pass
+    try:  # v15+: setup state is per installed app
+        frappe.db.set_value("Installed Application", {"app_name": "frappe"},
+                            "is_setup_complete", 1)
+    except Exception:
+        pass
+    frappe.defaults.set_global_default("currency", currency)
+    frappe.db.commit()
+    return {"ok": True, "time_zone": time_zone, "currency": currency}
+
+
+def register_business(business_name: str, site_url: str, api_key: str, api_secret: str,
+                      erpnext_company: str | None = None, business_code: str | None = None,
+                      currency: str | None = None, timezone: str | None = None,
+                      overdue_after_days: int = 90):
+    """Add (or update) a business reached over its API: its URL and the key and secret
+    of its read-only ERPNext user. The company and currency are read from that site
+    when not given. Then the connection is tried, so a wrong URL or key is found here
+    rather than at the first load. Run by host.sh; safe to rerun.
+    """
+    name = frappe.db.get_value("Connected Business", {"business_name": business_name})
+    doc = frappe.get_doc("Connected Business", name) if name else frappe.new_doc("Connected Business")
+    doc.update({"business_name": business_name,
+                "business_code": business_code or doc.business_code or frappe.scrub(business_name)[:40],
+                "is_local": 0, "status": "Active", "site_url": site_url,
+                "api_key": api_key, "api_secret": api_secret,
+                "overdue_after_days": doc.overdue_after_days or overdue_after_days})
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    # Tried with the read-only account, as every load will be (api/ingest.probe).
+    from command_center.api.ingest import probe
+    who, companies = probe(doc.business_code)
+    company = erpnext_company or doc.erpnext_company
+    if not company and companies:
+        company = companies[0]["name"]
+    if company and not currency:
+        currency = next((c.get("default_currency") for c in companies if c["name"] == company), None)
+    doc.reload()
+    doc.update({"erpnext_company": company, "currency": currency or doc.currency,
+                "timezone": timezone or doc.timezone})
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return {"business": doc.name, "code": doc.business_code, "reads_as": who,
+            "company": company, "currency": doc.currency}
+
+
+def register_from_env():
+    """register_business with the secret read from the environment (host.sh), so the
+    key and secret never appear in a command line, the shell history or `ps`."""
+    import os
+    out = register_business(
+        business_name=os.environ["CC_BUSINESS_NAME"], site_url=os.environ["CC_SITE_URL"],
+        api_key=os.environ["CC_API_KEY"], api_secret=os.environ["CC_API_SECRET"],
+        erpnext_company=os.environ.get("CC_COMPANY") or None)
+    print(f"registered {out['business']} ({out['code']}): reads as {out['reads_as']}, "
+          f"company {out['company']}, currency {out['currency']}")
+    return out
+
+
+def set_secret_from_env(key: str, env: str):
+    """A site_config value from the environment (host.sh), never from a command line."""
+    import os
+
+    from frappe.installer import update_site_config
+    value = os.environ.get(env)
+    if not value:
+        print(f"{key}: not set (nothing in {env})")
+        return False
+    update_site_config(key, value)
+    print(f"{key}: set")
+    return True
+
+
+def add_manager(email: str, full_name: str):
+    """A person who may use the platform: a System User holding Command Center Manager
+    and nothing else. No email is sent; they set their password from the reset link
+    an administrator sends from the desk, or one given to them."""
+    create_manager_role()
+    if frappe.db.exists("User", email):
+        user = frappe.get_doc("User", email)
+    else:
+        first, _, last = (full_name or email).partition(" ")
+        user = frappe.get_doc({"doctype": "User", "email": email, "first_name": first,
+                               "last_name": last, "user_type": "System User",
+                               "send_welcome_email": 0})
+        user.flags.no_welcome_mail = True
+        user.insert(ignore_permissions=True)
+    user.add_roles("Command Center Manager")
+    frappe.db.commit()
+    link = user.reset_password(send_email=False)
+    print(f"{email}: Command Center Manager. Password link (valid for a limited time): {link}")
+    return {"user": email, "reset_link": link}
+
+
 def install_pdf_fonts(quiet: bool = False):
     """Put Manrope where the server's PDF engine finds fonts.
 

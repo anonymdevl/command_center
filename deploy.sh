@@ -15,6 +15,8 @@
 #
 # Run it from the app directory on the server:
 #   cd ~/frappe-bench-16/apps/command_center && ./deploy.sh
+#   ./deploy.sh --site=intelligence.ultrasoft-systems.com     the hosted service
+# (or CC_SITE=... in the environment). A new hosted site is set up by host.sh, once.
 set -euo pipefail
 
 SITE="${CC_SITE:-biomed.ultrasoft-systems.com}"
@@ -45,6 +47,16 @@ git -C "$APP_DIR" pull --ff-only
 echo "   now at $(git -C "$APP_DIR" log -1 --format='%h %s') (branch $(git -C "$APP_DIR" rev-parse --abbrev-ref HEAD))"
 
 cd "$BENCH_DIR"
+
+# Claude's SDK, the one Python package this app adds to the bench. Installed only when
+# missing, so a deploy does not touch the bench's environment otherwise.
+step "checking the anthropic package"
+if "$BENCH_DIR/env/bin/python" -c "import anthropic" 2>/dev/null; then
+  echo "   present ($("$BENCH_DIR/env/bin/python" -c 'import anthropic; print(anthropic.__version__)'))"
+else
+  "$BENCH_DIR/env/bin/pip" install -q "anthropic>=0.125"
+  echo "   installed ($("$BENCH_DIR/env/bin/python" -c 'import anthropic; print(anthropic.__version__)'))"
+fi
 
 # Always. It is idempotent, and it is the step whose absence produces a missing-table
 # error twenty minutes later rather than now.
@@ -104,11 +116,12 @@ if [ "$RESEED" = "1" ]; then
   FULL=1
 fi
 
+# Every connected business: the site's own and every one reached over its API.
 step "loading facts$([ "$FULL" = 1 ] && echo ' (full rebuild)')"
 if [ "$FULL" = "1" ]; then
-  bench --site "$SITE" execute command_center.api.ingest.run --kwargs "{'full': True}"
+  bench --site "$SITE" execute command_center.api.ingest.run_all --kwargs "{'full': True}"
 else
-  bench --site "$SITE" execute command_center.api.ingest.run
+  bench --site "$SITE" execute command_center.api.ingest.run_all
 fi
 
 step "what the figures now rest on"

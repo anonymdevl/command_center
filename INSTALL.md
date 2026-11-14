@@ -1,5 +1,15 @@
 # Installing `command_center` on ERPNext v16
 
+> **The hosted service (from 14 Nov 2026).** The usual install is no longer on a
+> client's ERPNext: the app runs on its own plain Frappe v16 site and each business's
+> ERPNext (any version; Gigmann's is v14) is registered by URL and a read-only API user.
+> One command sets that site up:
+>
+>     cd ~/frappe-bench-16/apps/command_center && ./host.sh intelligence.ultrasoft-systems.com
+>
+> and `./deploy.sh --site=<site>` deploys to it afterwards. The rest of this page
+> describes the original install on an ERPNext site of its own.
+
 ## Requirements
 
 | | Needs |

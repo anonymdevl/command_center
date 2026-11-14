@@ -12,6 +12,15 @@ Powersoft**. Demo site: `biomed.ultrasoft-systems.com`.
 
 Management-only. The interface is at `/command-center`.
 
+**Since 14 Nov 2026 it is a hosted service** (Gigmann paid; delivery 20 Nov 2026): the app
+runs on its own plain-Frappe v16 site on the UTS server, and each of Gigmann's businesses'
+ERPNext sites plugs in over the standard REST API with a read-only API user. Nothing is
+installed on a client's ERPNext, and its version does not matter -- Gigmann's live site
+(gigmann.powersoftsystem.com) is **v14**, which already differs from v16 (Issue's
+`resolution_date` vs `sla_resolution_date`; v14 has no `{"SUM": ...}` field syntax).
+`host.sh <site>` sets a hosted site up once; `./deploy.sh --site=<site>` thereafter. The
+analyst is Claude (`ask/claude.py`), Gemini kept as the alternative.
+
 ---
 
 ## The five rules that would have prevented every mistake so far
@@ -53,14 +62,17 @@ writing, not after deploying.
   back from the live site.
 
 `frappe.client.get_list` validates field names and names the bad one. Use it as the check.
+For the hosted service, check the business's **own** site (Kraken connection `GMS` for
+Gigmann), not Biomed: Biomed is a v16 copy and hides v14 differences.
 
 **A doctype can be readable by nobody, and Frappe will not say so.** Issue on this site
 has `Custom DocPerm` rows granting read to no role, and Custom DocPerms *replace* the
 standard ones. `frappe.get_list` does not raise: it strips every field the acting roles
 cannot read and returns rows carrying only `name` and `modified`. That is why sixty
 complaints loaded blank. Ingest therefore reads as the system, via
-`BusinessConnector.as_system()` — only ingest, only the local business, and preflight
-enforces both. It widens nothing: facts are read back through `api/kpi` and `api/facts`,
+`BusinessConnector.as_system()` — only ingest (api/ingest.py), and preflight enforces it.
+For a business on another site, "the system" is its read-only service account and nothing
+else: never a manager's own key, never a write (connectors/remote.py `_headers`). It widens nothing: facts are read back through `api/kpi` and `api/facts`,
 which call `require_manager()` first.
 
 ### 3. Every new module gets the guards its siblings have.
@@ -218,6 +230,28 @@ departments; 57 tasks in flight, 24 past due.
 
 ---
 
+## The hosted service (14 Nov 2026)
+
+- **Remote ingest.** `api/ingest.load_business` is the one loader (button, daily
+  `daily_long`, 15-minute `changes.refresh_peers` -> `ingest.poll_peers`, weekly
+  `scheduled_full_load` for peers, which catches deletions polling cannot see).
+  `RemoteConnector.get_list` pages by `limit_start` (500, `command_center_remote_page`),
+  pauses between pages (250 ms, `command_center_remote_pace_ms`), retries 429/502-504 (never
+  a write), and goes by POST when the query is long. One load per business at a time
+  (`ingest.business_lock`). Incremental loads drop documents cancelled since the watermark
+  (`Ingestor.cancellable`).
+- **Change feed for peers** is modified-watermark polling; `record_event` only fires where
+  the app is installed.
+- **Every other read goes through the connector for a remote business**: `kpi/live.py`
+  (`_Reader`), `ask/tools.py` (`_remote`), `api/work.py` (`_Remote`, under the manager's
+  OWN linked key -- "waiting on you" means nothing under a shared account; without one the
+  screens say how to link it). `api/businesses.default_business_code()` / `loaded_codes()`
+  replace every `is_local=1` lookup.
+- **Nothing writes mid-question**: the connector does not record reachability while
+  `frappe.local.cc_deadline` is set, because the analyst's write guard would roll it back.
+- `api/ingest.check_access` lists what the service user can read and whether it holds any
+  role that can write. `scripts/test_remote.py` tests the connector offline (in preflight).
+
 ## The question box
 
 **Decision of 18 Oct 2026 (Michael), replacing "Gemini routes; the facts answer":**
@@ -225,6 +259,19 @@ Gemini is used to its full capacity for anything informational -- it reads the f
 and records a question needs, reasons over them, explains, compares, projects and
 recommends -- and it may never create, edit, submit, cancel or delete anything in
 ERPNext, with or without anyone's approval.
+
+**Claude (14 Nov 2026).** `ask/llm.py` picks the provider (`command_center_ai_provider`,
+else whichever key exists, Claude first). `ask/claude.py`: official `anthropic` SDK,
+Sonnet 5.5 for questions, Opus 5.5 for the deeper look and the reports (`deep=True`),
+adaptive thinking with effort medium/high, no forced tool_choice (400 on these models;
+the final round uses tool_choice none and the SAME tool list), refusal fallbacks
+"default". Key in `command_center_anthropic_key`. The fixed opening (tools, then
+`agent.SYSTEM`) carries a 1-hour cache marker; the date, data horizon, business and
+currency are in `agent.CONTEXT`, after it -- preflight fails a placeholder in SYSTEM. The
+loop in agent.py is one loop for both providers (`_Gemini`, `_Claude` adapters); a reply is
+appended unchanged (thinking blocks included) and an instruction after tool results goes
+into that unsent turn. `api/ask.check_analyst` proves the cache (second call reads it) and
+reports the key's rate limits and questions a minute.
 
 **The analyst** (`ask/agent.py`) runs Gemini (`gemini-3.8-flash` by default -- Google retired
 2.5 Flash for new keys on 18 Oct 2026; on a 404 `gemini.py` asks Google for the newest stable

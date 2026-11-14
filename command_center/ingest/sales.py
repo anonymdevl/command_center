@@ -25,6 +25,7 @@ PAGE = 2000
 class SalesInvoiceIngestor(Ingestor):
     fact = "fact_sales_invoice"
     source_doctype = "Sales Invoice"
+    cancellable = "Sales Invoice"
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         from command_center.ingest.base import resolve_as_of
@@ -80,6 +81,7 @@ class SalesInvoiceIngestor(Ingestor):
 class SalesInvoiceLineIngestor(Ingestor):
     fact = "fact_sales_invoice_line"
     source_doctype = "Sales Invoice Item"
+    cancellable = "Sales Invoice"
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         """Lines, with the parent's party context carried down.
@@ -155,6 +157,7 @@ class SalesInvoiceLineIngestor(Ingestor):
 class PaymentAllocationIngestor(Ingestor):
     fact = "fact_payment_allocation"
     source_doctype = "Payment Entry Reference"
+    cancellable = "Payment Entry"
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         """Cash, and what it was matched against.

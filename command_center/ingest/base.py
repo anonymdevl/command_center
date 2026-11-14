@@ -17,10 +17,11 @@ rule: the prohibition on going round ERPNext exists to protect records ERPNext
 owns. These are ours, they hold no business truth of their own, and a rebuild that
 takes an hour is a rebuild nobody runs.
 
-Only the local business is ingested. A peer's figures are read from the site that
-computed them — §3.3 of the blueprint. Nothing of another company's ledger is
-stored here, which is why `business_code` is single-valued in practice even though
-every query is written to group by it.
+Which businesses are ingested. Originally only the site's own; since the hosted
+service (14 Nov 2026) also every business reached over its API, read page by page with
+its read-only service account (connectors/remote.py). The facts are a summarised,
+rebuildable copy held on the platform's site -- which is what the client's data
+disclosure must say. Every row carries business_code, so businesses never mix.
 """
 
 from __future__ import annotations
@@ -43,6 +44,11 @@ class Ingestor:
 
     fact: str = ""
     source_doctype: str = ""
+    # The submittable document a row belongs to (src_name), when there is one. An
+    # incremental load reads drafts and submitted documents only, so a document
+    # cancelled since the last load would otherwise keep its rows here as if it still
+    # stood. Its cancellation is found by the same watermark and its rows removed.
+    cancellable: str | None = None
 
     @property
     def target(self) -> str:
@@ -99,6 +105,7 @@ class Ingestor:
             rows = self.extract(conn, since=since, limit=limit, as_of=as_of)
             rows = [self.stamp(r, conn.code) for r in rows]
 
+            withdrawn = set() if full or not since else self.withdrawn(conn, since)
             if full:
                 # A full load means the table is rebuilt from what the source holds
                 # now. Purging only the batch leaves rows behind for documents that
@@ -106,8 +113,8 @@ class Ingestor:
                 # deleted complaints would have stayed in the figures with nothing to
                 # show they were gone. "Full" has to mean full.
                 self._purge_all(conn.code)
-            elif rows:
-                self._purge(conn.code, {r["src_name"] for r in rows})
+            elif rows or withdrawn:
+                self._purge(conn.code, {r["src_name"] for r in rows} | withdrawn)
             if rows:
                 self._insert(rows)
 
@@ -144,6 +151,15 @@ class Ingestor:
                 frappe.log_error(title=f"Command Center ingest {self.fact}",
                                  message=failure)
             raise
+
+    def withdrawn(self, conn, since) -> set:
+        """Documents cancelled after `since`, whose rows must leave the fact."""
+        if not self.cancellable:
+            return set()
+        rows = conn.get_list(self.cancellable,
+                             filters={"docstatus": 2, "modified": [">", since]},
+                             fields=["name"], order_by="modified asc", limit=100000)
+        return {r["name"] for r in rows}
 
     # -- plumbing -------------------------------------------------------------
     def _log(self, business_code, started, status, rows, full, error=""):

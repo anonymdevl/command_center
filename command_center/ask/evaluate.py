@@ -45,7 +45,8 @@ def run(limit: int | None = None, business_code: str | None = None) -> dict:
     from command_center.kpi.engine import evaluate_set
 
     if not business_code:
-        business_code = frappe.db.get_value("Connected Business", {"is_local": 1}, "business_code")
+        from command_center.api.businesses import default_business_code
+        business_code = default_business_code()
     keys = sorted({k for _, ks, _ in QUESTIONS for k in ks})
     truth = evaluate_set(keys, business_code)
 

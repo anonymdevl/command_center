@@ -34,12 +34,13 @@ def _conn(business_code: str):
 
 
 def _business(business_code: str | None) -> str:
-    """"All businesses" is a view, not a place to put work: that means this site's own."""
+    """"All businesses" is a view, not a place to put work: that means the default one."""
+    from command_center.api.businesses import default_business_code
     if business_code and business_code != "__all__":
         return business_code
-    code = frappe.db.get_value("Connected Business", {"is_local": 1}, "business_code")
+    code = default_business_code()
     if not code:
-        frappe.throw("No business on this site is marked as local, so there is nowhere to put the work.")
+        frappe.throw("No business is registered, so there is nowhere to put the work.")
     return code
 
 

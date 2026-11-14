@@ -221,7 +221,7 @@ function Decision({ req, scope, note, setNote, close }) {
                                until: req.verb === "defer" ? until : null })
         : req.kind === "decide"
           ? await api.decide({ business_code: scope, doctype: req.doctype, name: req.name, action: req.action })
-          : await api.review({ todo: req.todo, verdict: req.verdict, note });
+          : await api.review({ business_code: scope, todo: req.todo, verdict: req.verdict, note });
       setResult(res || {});
       setState("done");
       window.dispatchEvent(new CustomEvent(alertVerb ? "cc-alerts-changed" : "cc-work-changed"));

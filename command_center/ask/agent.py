@@ -25,7 +25,7 @@ import re
 
 import frappe
 
-from command_center.ask import gemini, tools
+from command_center.ask import claude, gemini, tools
 
 MAX_STEPS = 12           # rounds of tool use; the deadline below is what really bounds it
 MAX_CALLS_PER_STEP = 6   # parallel tool calls honoured in one round
@@ -43,7 +43,7 @@ _FIGURE = re.compile(r"\d[\d,]*(?:\.\d+)?\s*(?:%|[kKMB]\b)|\b(?:GHS|USD|EUR|GBP)
 
 def answer(question: str, business_code: str | None = None, history=None,
            max_steps: int = MAX_STEPS, on_step=None, deadline: int = DEADLINE,
-           resume: dict | None = None) -> dict | None:
+           resume: dict | None = None, deep: bool = False) -> dict | None:
     """max_steps: rounds of tool use. A question gets twelve; a report (api/reports.py)
     gathers across every area and gets more. on_step(text) is told each lookup, in plain
     words, as it starts -- the live "what it is doing" under the question bar.
@@ -51,31 +51,45 @@ def answer(question: str, business_code: str | None = None, history=None,
     resume: the conversation a cut-short answer stopped at ({"contents", "checked"}),
     to carry on from exactly there in a background job (api/ask.py) rather than start
     again. A cut-short answer -- the budget ran out while the analyst still wanted to
-    look further -- comes back with cut_short and _resume for that purpose."""
-    system = _system(business_code)
-    if resume:
+    look further -- comes back with cut_short and _resume for that purpose.
+
+    deep: the deeper look and the reports, which run on the provider's deeper model
+    (Claude Opus rather than Sonnet; Gemini has one model for both)."""
+    ad = _adapter(deep)
+    if ad is None:
+        return {"answered": False, "analyst_error": "no AI model is configured on this site"}
+    static, dynamic = _system_parts(business_code)
+    if resume and resume.get("provider", "gemini") == ad.name:
         contents = list(resume.get("contents") or [])
         checked = list(resume.get("checked") or [])
     else:
-        contents = _history(history) + [{"role": "user", "parts": [{"text": question}]}]
+        # A conversation in one provider's shape cannot be carried on by the other.
+        contents = ad.history(history) + [ad.user(question)]
         checked = []
     errors, drill = [], None
     text, steps, cut_short, snapshot = None, 0, False, None
-    force = None  # "ANY" when the model must look something up this round
+    force = None  # "ANY" when the model must look something up this round (Gemini only)
     writes_before = _writes()
     import time
     started = time.monotonic()
-    # One deadline for the whole question, which gemini.py and the lookups below also
-    # read: the budget used to be checked only between rounds, so a slow reply, a run of
-    # retries or a heavy report inside one round could take minutes. On 18 Oct 2026 a
-    # question ran for eleven minutes until the connection dropped.
+    # One deadline for the whole question, which the model clients and the lookups
+    # below also read: the budget used to be checked only between rounds, so a slow
+    # reply, a run of retries or a heavy report inside one round could take minutes. On
+    # 18 Oct 2026 a question ran for eleven minutes until the connection dropped.
     frappe.local.cc_deadline = started + deadline
     # gemini.py says here when a model is slow and it turns to another.
     frappe.local.cc_on_step = on_step
     frappe.local.cc_gemini_slow = False
+    frappe.local.cc_claude_usage = None
+    # One model call may take this long: a minute inside a web request, longer in a
+    # background job where a long report is written in one go.
+    call_cap = 60 if deadline <= DEADLINE else 240
 
     def left():
         return deadline - (time.monotonic() - started)
+
+    def call_time():
+        return int(max(5, min(call_cap, left() - 3)))
 
     for steps in range(1, max_steps + 2):
         remaining = left()
@@ -91,16 +105,13 @@ def answer(question: str, business_code: str | None = None, history=None,
             cut_short, snapshot = True, json.loads(json.dumps(contents, default=str))
         if final:
             # Out of budget: answer from what has been gathered, and say if incomplete.
-            contents.append({"role": "user", "parts": [{"text": (
-                "Answer now from what you have gathered. If it is incomplete, say what "
-                "you could not check.")}]})
+            ad.say(contents, ANSWER_NOW)
         # The model chooses whether to look anything up: "Hi" deserves a reply, not a
         # receivables summary (19 Oct 2026 -- every first round used to be forced to
         # call a tool). What it may not do is state figures it has not read; that is
         # caught below and sent back.
-        content, err = gemini.chat(contents, None if final else tools.declarations(), system,
-                                   timeout=int(max(5, min(60, left() - 3))),
-                                   mode=force or "AUTO")
+        reply, err = ad.chat(contents, static, dynamic, timeout=call_time(), final=final,
+                             force=force)
         force = None
         if err:
             errors.append(err)
@@ -108,48 +119,43 @@ def answer(question: str, business_code: str | None = None, history=None,
             # away. One last turn asks for the answer from it (gemini falls over to
             # another model if this one is out of allowance).
             if checked and not final:
-                contents.append({"role": "user", "parts": [{"text": (
-                    "Answer now from what you have gathered. If it is incomplete, say "
-                    "what you could not check.")}]})
-                content, err2 = gemini.chat(contents, None, system,
-                                            timeout=int(max(5, min(60, left() - 3))))
-                if not err2 and content:
-                    contents.append(content)
-                    text = "".join(p.get("text", "") for p in (content.get("parts") or [])
-                                   if not p.get("thought")).strip()
+                ad.say(contents, ANSWER_NOW)
+                reply, err2 = ad.chat(contents, static, dynamic, timeout=call_time(),
+                                      final=True)
+                if not err2 and reply:
+                    contents.append(ad.message(reply))
+                    text = ad.text(reply)
             break
-        contents.append(content)
-        parts = content.get("parts") or []
-        calls = [p["functionCall"] for p in parts if "functionCall" in p]
+        contents.append(ad.message(reply))
+        calls = ad.calls(reply)
         if not calls:
-            text = "".join(p.get("text", "") for p in parts if not p.get("thought")).strip()
+            text = ad.text(reply)
             if not checked and not final and steps <= max_steps and _FIGURE.search(text or ""):
                 # Figures, and nothing looked up: from memory. Once, it is sent back to
                 # look them up, and must call a tool this time.
-                contents.append({"role": "user", "parts": [{"text": (
-                    "You gave figures without looking anything up. Look them up with the "
-                    "tools first, then answer. Never state a figure from memory.")}]})
+                ad.say(contents, ("You gave figures without looking anything up. Look them "
+                                  "up with the tools first, then answer. Never state a "
+                                  "figure from memory."))
                 force, text = "ANY", None
                 continue
             break
 
-        responses = []
-        # Every call gets a response, in order: Gemini refuses the next turn if the counts
-        # differ. Beyond the cap, the response says to ask for it again.
-        for n, call in enumerate(calls):
-            name, args = call.get("name", ""), call.get("args") or {}
+        results = []
+        # Every call gets a result, in order: both providers refuse the next turn if a
+        # call goes unanswered. Beyond the cap, the result says to ask for it again.
+        for n, (call_id, name, args) in enumerate(calls):
             if n >= MAX_CALLS_PER_STEP:
-                responses.append({"functionResponse": {"name": name, "response": {"result": {
+                results.append((call_id, name, {
                     "error": f"Only {MAX_CALLS_PER_STEP} lookups run at once. Ask for this "
-                             f"one again in the next round."}}}})
+                             f"one again in the next round."}))
                 continue
             # A lookup started with too little time left would run past the deadline, and
             # an ERPNext report can take a minute on its own.
             need = 45 if name == "run_report" else 12
             if left() < need:
-                responses.append({"functionResponse": {"name": name, "response": {"result": {
+                results.append((call_id, name, {
                     "error": "Out of time for more lookups. Answer from what you have, and "
-                             "say what you could not check."}}}})
+                             "say what you could not check."}))
                 continue
             if on_step:
                 try:
@@ -170,9 +176,8 @@ def answer(question: str, business_code: str | None = None, history=None,
                 result = {"error": "That lookup failed. Try a different way to answer, or "
                                    "say the figure could not be checked."}
                 checked.append(tools.summary(name, args) + " -- failed")
-            responses.append({"functionResponse": {"name": name,
-                                                   "response": {"result": _fit(result)}}})
-        contents.append({"role": "user", "parts": responses})
+            results.append((call_id, name, _fit(result)))
+        contents.append(ad.results(results))
 
     frappe.local.cc_deadline = None
     frappe.local.cc_on_step = None
@@ -191,22 +196,142 @@ def answer(question: str, business_code: str | None = None, history=None,
         # did not answer instead of letting the fallback pass for the analyst.
         return {"answered": False, "analyst_error": (errors[-1] if errors else
                 "the model returned no answer")[:400]}
+    used = ad.used()
     return {
         "answered": True,
         "answer": text,
         "format": "markdown",
         "question": question,
         "checked": checked or ["nothing -- answered from the conversation so far"],
-        "planner": "gemini",
+        "planner": ad.name,
         "mode": "analyst",
-        "model": gemini.analyst_model(),
+        "model": used.get("model") or ad.model(),
+        "usage": used.get("usage"),
         "steps": steps,
         "records": drill,
         "figures": [],
         "degraded": errors or None,
         "cut_short": cut_short,
-        "_resume": {"contents": snapshot, "checked": checked} if cut_short else None,
+        "_resume": ({"contents": snapshot, "checked": checked, "provider": ad.name}
+                    if cut_short else None),
     }
+
+
+ANSWER_NOW = ("Answer now from what you have gathered. If it is incomplete, say what you "
+              "could not check.")
+
+
+# ---------------------------------------------------------------------------
+# The two providers. The loop above is one loop; these turn its rounds into each
+# provider's message shapes. Neither can reach anything but tools.declarations() and
+# the replies' own text and tool calls.
+# ---------------------------------------------------------------------------
+def _adapter(deep: bool = False):
+    from command_center.ask import llm
+    p = llm.provider()
+    if p == "claude":
+        return _Claude(deep)
+    if p == "gemini":
+        return _Gemini()
+    return None
+
+
+class _Gemini:
+    name = "gemini"
+
+    def model(self):
+        return gemini.analyst_model()
+
+    def used(self):
+        return {"model": getattr(frappe.local, "cc_gemini_used", None)}
+
+    def user(self, text):
+        return {"role": "user", "parts": [{"text": text}]}
+
+    def say(self, contents, text):
+        contents.append(self.user(text))
+
+    def history(self, turns):
+        return _history(turns)
+
+    def chat(self, contents, static, dynamic, timeout, final=False, force=None):
+        system = static + ("\n\n" + dynamic if dynamic else "")
+        return gemini.chat(contents, None if final else tools.declarations(), system,
+                           timeout=timeout, mode=force or "AUTO")
+
+    def message(self, reply):
+        return reply  # Gemini's content, unchanged (thinking signatures must come back)
+
+    def calls(self, reply):
+        return [(None, p["functionCall"].get("name", ""), p["functionCall"].get("args") or {})
+                for p in (reply.get("parts") or []) if "functionCall" in p]
+
+    def text(self, reply):
+        return "".join(p.get("text", "") for p in (reply.get("parts") or [])
+                       if not p.get("thought")).strip()
+
+    def results(self, results):
+        return {"role": "user", "parts": [
+            {"functionResponse": {"name": name, "response": {"result": result}}}
+            for _, name, result in results]}
+
+
+class _Claude:
+    name = "claude"
+
+    def __init__(self, deep=False):
+        self.kind = "deep" if deep else "analyst"
+
+    def model(self):
+        return claude.model_for(self.kind)
+
+    def used(self):
+        u = claude.usage()
+        return {"model": (u or {}).get("model"), "usage": u}
+
+    def user(self, text):
+        return {"role": "user", "content": [{"type": "text", "text": text}]}
+
+    def say(self, contents, text):
+        # An instruction after the tool results goes in the same user turn, as a text
+        # block after them: that turn has not been sent yet, so nothing sent is edited.
+        last = contents[-1] if contents else None
+        if last and last.get("role") == "user" and isinstance(last.get("content"), list):
+            last["content"].append({"type": "text", "text": text})
+        else:
+            contents.append(self.user(text))
+
+    def history(self, turns):
+        out = []
+        for turn in (turns or [])[-4:]:
+            q, a = (turn or {}).get("q"), (turn or {}).get("a")
+            if q and a:
+                out.append({"role": "user", "content": str(q)[:2000]})
+                out.append({"role": "assistant", "content": str(a)[:4000]})
+        return out
+
+    def chat(self, contents, static, dynamic, timeout, final=False, force=None):
+        # The tool list goes on every round, the last one too: changing it would edit the
+        # conversation's history. tool_choice "none" asks for the answer instead.
+        return claude.chat(contents, tools.declarations(), static, dynamic, kind=self.kind,
+                           timeout=timeout, final=final)
+
+    def message(self, reply):
+        return {"role": "assistant", "content": reply}  # unchanged, thinking included
+
+    def calls(self, reply):
+        return [(b.get("id"), b.get("name", ""), b.get("input") or {})
+                for b in reply if b.get("type") == "tool_use"]
+
+    def text(self, reply):
+        return "".join(b.get("text", "") for b in reply if b.get("type") == "text").strip()
+
+    def results(self, results):
+        return {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": call_id,
+             "content": json.dumps(result, default=str),
+             **({"is_error": True} if isinstance(result, dict) and result.get("error") else {})}
+            for call_id, _, result in results]}
 
 
 class _statement_limit:
@@ -267,18 +392,35 @@ def _history(history) -> list:
 
 
 def _system(business_code) -> str:
+    """The whole system prompt as one text (Gemini, and anyone reading it)."""
+    static, dynamic = _system_parts(business_code)
+    return static + "\n\n" + dynamic
+
+
+def _system_parts(business_code) -> tuple:
+    """(fixed, dated): the instructions, data sets and figure rules, which are the same
+    on every request of every question -- Claude caches them, so they must not contain
+    a date, a name or anything else that varies -- and the few lines that do vary,
+    sent after them."""
     from command_center.facts.schema import DIMENSIONS, FACTS, MEASURES
     from command_center.kpi.registry import load_all
 
-    as_of = _as_of(business_code)
-    business = _business_name(business_code)
     data_sets = "\n".join(
         f"- {f} ({tools.FACT_WORDS.get(f, f)}): breakdowns {', '.join(DIMENSIONS.get(f, []))}; "
         f"amounts {', '.join(MEASURES.get(f, []))}; dates {', '.join(_dates(f)) or 'none'}"
         for f in FACTS)
     figures = _definitions(load_all())
-    return SYSTEM.format(today=frappe.utils.today(), as_of=as_of or "unknown",
-                         business=business, data_sets=data_sets, figures=figures)
+    static = SYSTEM.format(data_sets=data_sets, figures=figures)
+    dynamic = CONTEXT.format(today=frappe.utils.today(),
+                             as_of=_as_of(business_code) or "unknown",
+                             business=_business_name(business_code),
+                             currency=_currency(business_code))
+    return static, dynamic
+
+
+def _currency(business_code) -> str:
+    from command_center.api.businesses import currency_for
+    return currency_for(business_code) or "GHS"
 
 
 def _definitions(registry) -> str:
@@ -346,14 +488,20 @@ def _business_name(business_code) -> str:
     return "all connected businesses"
 
 
-SYSTEM = """You are the analyst inside the Command Center, the executive platform over \
-Gigmann Medical Supplies' ERPNext. The people asking are directors and senior managers. \
-They want straight answers, the reasons behind them, and what to do next.
+# The dated part, sent after the fixed instructions (see _system_parts).
+CONTEXT = """TODAY AND SCOPE
+Today is {today}. The loaded data runs up to {as_of} -- that is the data horizon.
+Scope: {business}. Amounts are in {currency} unless a result says otherwise."""
 
-Today is {today}. The loaded data runs up to {as_of}. Measure ageing, "this month", \
-"recent" and "overdue" against {as_of} unless the person says otherwise, and say so when \
-it matters -- a restored snapshot measured against today produces false findings.
-Scope: {business}. Amounts are in Ghana cedis (GHS) unless a result says otherwise.
+SYSTEM = """You are the analyst inside the Command Center, the executive platform over \
+the ERPNext of Gigmann Medical Supplies and its connected businesses. The people asking \
+are directors and senior managers. They want straight answers, the reasons behind them, \
+and what to do next.
+
+Today's date, the data horizon (the last date the loaded data runs to) and the business \
+in scope are given at the end of these instructions. Measure ageing, "this month", \
+"recent" and "overdue" against the data horizon unless the person says otherwise, and say \
+so when it matters -- a restored snapshot measured against today produces false findings.
 
 WHERE THE DATA IS
 1. Loaded data sets -- fast, complete, for totals, breakdowns and trends:
@@ -373,7 +521,8 @@ supplier_concentration, owes_and_waiting, party_brief.
 balance sheet, cash flow, trial balance, general ledger, receivables and payables, gross \
 profit, sales and purchase analytics, purchase order analysis, stock balance, ledger and \
 ageing. Use them for finance, purchase orders and stock movements -- the loaded sets do \
-not hold the ledger. Date filters must fall within the data, which ends {as_of}.
+not hold the ledger. Date filters must fall within the data, which ends at the data \
+horizon.
 
 HOW TO FIND THE ANSWER -- in this order, stopping as soon as you have it
 1. A defined figure answers it: get_figures, one call with every key you need.
@@ -398,7 +547,7 @@ HOW TO WORK
 from a lookup. A greeting, thanks or small talk needs no lookup -- reply naturally and \
 briefly, as a colleague would, and offer a question or two you could answer.
 - Check your totals before you answer. A table's total, or a count beside a defined \
-figure, must equal that figure: invoices behind GHS 9.18M owed are the unpaid ones \
+figure, must equal that figure: the invoices behind the amount owed are the unpaid ones \
 (ar_count), not every invoice. If they differ, your query is missing one of the \
 figure's rules -- fix it and look again rather than print both.
 - Never show a field, column, table or tool name (base_discount_amount, src_docstatus, \
@@ -446,7 +595,8 @@ means. This line is shown as the headline.
 2. When the answer turns on two to four headline numbers, put them right after the \
 opening in a figures block (JSON, exactly this shape; tone is good, bad, warn or omitted):
 ```figures
-[{{"label": "Owed to us", "value": "GHS 9.18M", "note": "806 unpaid invoices", "tone": "bad"}}]
+[{{"label": "Owed to us", "value": "GHS 1.25M", "note": "120 unpaid invoices", "tone": "bad"}}]
+(The numbers in these examples are made up; yours come from the tools.)
 ```
 3. When a picture says it faster, add a chart block -- bar to compare up to twelve names \
 (largest first), line for change over time, donut for shares of a whole:

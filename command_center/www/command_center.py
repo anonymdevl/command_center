@@ -126,7 +126,19 @@ def _boot(user: str) -> dict:
         "businesses": scope.get("businesses", []),
         "scopes": scope.get("scopes", []),
         "as_of": _as_of(),
+        # Which AI model answers, so the question bar names the right one while it waits.
+        "ai": _ai(),
     }
+
+
+def _ai() -> dict:
+    try:
+        from command_center.ask import llm
+        p = llm.provider()
+        return {"provider": p, "name": {"claude": "Claude", "gemini": "Gemini"}.get(p),
+                "company": {"claude": "Anthropic", "gemini": "Google"}.get(p)}
+    except Exception:
+        return {"provider": None, "name": None, "company": None}
 
 
 def _initials(fullname: str) -> str:

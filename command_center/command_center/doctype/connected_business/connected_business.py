@@ -31,14 +31,16 @@ class ConnectedBusiness(Document):
             self.api_key = None
 
     def _protect_owned_settings(self):
-        """A peer's settings are read, never written.
+        """Who owns a business's judgement settings (overdue_after_days, approval_threshold).
 
-        Without this, two administrators on two sites could set different values
-        for the same business and the platform would disagree with itself about
-        what "overdue" means. The rule is that the site holding the data owns the
-        judgement applied to it.
+        Where the business's own site runs this app, that site owns them and a copy here
+        is never edited -- otherwise two administrators could set different values for
+        the same business and the platform would disagree with itself about what
+        "overdue" means. On the hosted service (14 Nov 2026) the business's site runs
+        nothing of ours, so this record is the only place they live, and they are edited
+        here. Flag a peer that runs the app with command_center_peer_owns_settings.
         """
-        if self.is_local or self.is_new():
+        if self.is_local or self.is_new() or not frappe.conf.get("command_center_peer_owns_settings"):
             return
         owned = ("overdue_after_days", "approval_threshold")
         before = self.get_doc_before_save()
