@@ -214,6 +214,11 @@ try:
 except Exception:
     pass
 check(frappe.writes, "outside a question, an unreachable peer is recorded")
+reset()
+conn.get_list("Sales Invoice", limit=5)
+check(any(w[2].get("status") == "Active" for w in frappe.writes if len(w) > 2),
+      f"the next call that succeeds marks it Active again: {frappe.writes}")
+biz.status = "Active"
 
 # 7. The change feed of a peer is its modified stamps, per tracked doctype.
 reset()

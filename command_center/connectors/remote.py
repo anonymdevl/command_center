@@ -167,12 +167,16 @@ class RemoteConnector(BusinessConnector):
         frappe.db.set_value("Connected Business", self.business.name,
                             {"status": "Unreachable", "last_error": error[:500]},
                             update_modified=False)
+        # Remember it here too, so the next call that succeeds marks it Active again
+        # (_mark_reachable reads this copy, not the database).
+        self.business.status = "Unreachable"
 
     def _mark_reachable(self):
         if self.business.status == "Unreachable" and not _in_question():
             frappe.db.set_value("Connected Business", self.business.name,
                                 {"status": "Active", "last_error": ""},
                                 update_modified=False)
+            self.business.status = "Active"
 
     # -- reads -------------------------------------------------------------
     def get_list(self, doctype, filters=None, fields=None, limit=20,

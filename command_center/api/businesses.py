@@ -119,8 +119,11 @@ def default_business_code() -> str | None:
                                "business_code")
     if code:
         return code
-    return frappe.db.get_value("Connected Business", {"status": "Active"}, "business_code",
-                               order_by="business_name asc")
+    # Not "Active" only: a business marked Unreachable after one failed call is still
+    # the business meant -- a load is how it becomes reachable again. Paused is the only
+    # state that takes a business out (as in loaded_codes).
+    return frappe.db.get_value("Connected Business", {"status": ["!=", "Paused"]},
+                               "business_code", order_by="business_name asc")
 
 
 def loaded_codes() -> list[str]:
