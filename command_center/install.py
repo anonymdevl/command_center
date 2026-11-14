@@ -224,9 +224,21 @@ def add_manager(email: str, full_name: str):
         user.insert(ignore_permissions=True)
     user.add_roles("Command Center Manager")
     frappe.db.commit()
-    link = user.reset_password(send_email=False)
-    print(f"{email}: Command Center Manager. Password link (valid for a limited time): {link}")
-    return {"user": email, "reset_link": link}
+    # They sign in with their business's ERPNext (api/sso.py), so no password is needed.
+    # A reset link is a fallback for the platform's own login page; Frappe v16 no longer
+    # has User.reset_password, so it is offered only where the version still does.
+    link = None
+    reset = getattr(user, "reset_password", None)
+    if reset:
+        try:
+            link = reset(send_email=False)
+        except Exception:
+            link = None
+    roles = sorted(set(frappe.get_roles(email)) - {"All", "Guest", "Desk User"})
+    print(f"{email}: Command Center Manager. They sign in with the button in their ERPNext."
+          + (f" Password link if ever needed: {link}" if link else "")
+          + f"\n   roles on this site: {', '.join(roles)}")
+    return {"user": email, "reset_link": link, "roles": roles}
 
 
 def install_pdf_fonts(quiet: bool = False):
