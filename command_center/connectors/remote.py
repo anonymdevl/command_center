@@ -48,10 +48,13 @@ PAGE = 500
 PACE_MS = 250
 RETRIES = 3
 REPORT_TIMEOUT = 90
-# Above this many characters of query string a read goes by POST: a filter of three
-# hundred invoice names fits in a GET on no nginx default. frappe.client's read
-# methods accept POST on every version (v15 and v16 alike: no methods= restriction).
-MAX_GET_QUERY = 6000
+# Above this many characters of query string a read goes by POST. The binding limit is
+# gunicorn's, behind the site's nginx: limit_request_line defaults to 4094 for the
+# whole request line (method, path, query, protocol), and Gigmann's site refused a
+# 5,963-character one with "Request Line is too large" (14 Nov 2026). 2,000 leaves room
+# for the path and for a server tuned tighter still. frappe.client's read methods
+# accept POST on every version (v14 to v16: no methods= restriction).
+MAX_GET_QUERY = 2000
 
 
 class RemoteConnector(BusinessConnector):
