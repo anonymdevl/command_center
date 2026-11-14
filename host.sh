@@ -57,7 +57,16 @@ fi
 if ! bench --site "$SITE" list-apps 2>/dev/null | grep -q '^command_center'; then
   bench --site "$SITE" install-app command_center
 fi
-bench --site "$SITE" migrate
+if ! bench --site "$SITE" migrate; then
+  [ "$EXISTED" = "1" ] || exit 1
+  echo "   The migration stopped on a patch. On a reused site that is usually an ERPNext"
+  echo "   patch for old data the platform never reads (on Biomed: its 2025 copy of"
+  echo "   Gigmann's ERPNext, which has patches from the v14 era still pending)."
+  [ "$(ask 'Migrate again, skipping the patches that fail? (y/n)' y)" = "y" ] || exit 1
+  bench --site "$SITE" migrate --skip-failing
+  # Skipping is only for the old data: every one of this app's own patches must have run.
+  bench --site "$SITE" execute command_center.install.own_patches_applied
+fi
 bench --site "$SITE" execute command_center.install.prepare_hosted_site
 bench --site "$SITE" enable-scheduler
 bench --site "$SITE" set-config command_center_ai_provider claude

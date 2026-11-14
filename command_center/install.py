@@ -164,6 +164,23 @@ def register_from_env():
     return out
 
 
+def own_patches_applied():
+    """After a migration that skipped failing patches (host.sh, on a reused site whose
+    old ERPNext data trips an ERPNext patch), prove this app's own patches all ran --
+    skipping one of ours would be a real fault, so this stops host.sh if any is missing.
+
+        bench --site <site> execute command_center.install.own_patches_applied
+    """
+    path = frappe.get_app_path("command_center", "patches.txt")
+    with open(path) as f:
+        ours = [line.split("#")[0].strip() for line in f]
+    ours = [p for p in ours if p and not p.startswith("[")]
+    missing = [p for p in ours if not frappe.db.exists("Patch Log", {"patch": p})]
+    if missing:
+        raise Exception("command_center patches did not run: " + ", ".join(missing))
+    print(f"   command_center: all {len(ours)} of its patches have run")
+
+
 def sign_in_links():
     """The Ask AI link for each business whose ERPNext sign-in is set up -- the address
     to put on that business's workspace (api/sso.py)."""
