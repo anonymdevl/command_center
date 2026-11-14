@@ -360,8 +360,11 @@ assistant itself never reads or writes these.
 Shown everywhere people look as **AI Business Intelligence**, with the line **Executive
 Intelligence Platform** under it (Michael, 18 Oct 2026: "Command Center" read as an
 aviation term). Internal names stay: the app `command_center`, the `/command-center`
-address, the doctypes, error-log titles and the `Command Center Manager` role (shown in
-the top bar as "Management"). Never rename those without a migration plan.
+address, the doctypes and error-log titles. The platform's role was renamed once, with a
+migration (patches/rename_manager_role.py, 14 Nov 2026): "Command Center Manager" became
+`Insights Dashboard Manager` (shown in the top bar as "Management"). Not "Dashboard
+Manager": that is Frappe's own standard role, and anyone holding it would have walked in.
+Never rename these without a migration plan.
 
 ## Home and the health score
 

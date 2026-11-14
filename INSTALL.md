@@ -33,13 +33,13 @@ bench --site <site> migrate
 bench --site <site> clear-cache
 ```
 
-Then give each manager the **Command Center Manager** role. There is no general
+Then give each manager the **Insights Dashboard Manager** role. There is no general
 staff role — the platform is management-only by design, and adding one is a
 decision, not an oversight.
 
 ## What install does
 
-1. Creates the `Command Center Manager` role (`install.py`).
+1. Creates the `Insights Dashboard Manager` role (`install.py`).
 2. Creates three doctypes: `Connected Business`, `Command Center Site Credential`,
    `Command Center Change Event`.
 3. Runs `seed_local_business`, which registers this site as **connector number
@@ -65,8 +65,8 @@ import frappe
 frappe.get_all("Connected Business", fields=["business_name", "business_code", "is_local"])
 # → one row, is_local = 1
 
-frappe.get_doc("Role", "Command Center Manager").name
-# → 'Command Center Manager'
+frappe.get_doc("Role", "Insights Dashboard Manager").name
+# → 'Insights Dashboard Manager'
 ```
 
 Then visit `/command-center`. You should get the placeholder page, not a 404.

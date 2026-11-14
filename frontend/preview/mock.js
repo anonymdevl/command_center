@@ -44,7 +44,7 @@ window.CC_BOOT = {
     id: "preview@gigmann.local",
     name: "Kofi Mensah",
     initials: "KM",
-    roles: ["Command Center Manager"],
+    roles: ["Insights Dashboard Manager"],
   },
   site: "preview",
   businesses: [

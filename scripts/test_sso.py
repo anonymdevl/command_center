@@ -48,13 +48,13 @@ def seed():
     SIGNED_OUT.clear()
     USERS.update({
         "samuel@gigmann.com": {"enabled": 1, "email": "samuel@gigmann.com",
-                               "roles": ["Command Center Manager"]},
+                               "roles": ["Insights Dashboard Manager"]},
         "hand@gigmann.com": {"enabled": 1, "email": "hand@gigmann.com",
-                             "roles": ["Command Center Manager"]},
+                             "roles": ["Insights Dashboard Manager"]},
         "paused@gigmann.com": {"enabled": 0, "email": "paused@gigmann.com",
-                               "roles": ["Command Center Manager"]},
+                               "roles": ["Insights Dashboard Manager"]},
         "admin@ultrasoft.com": {"enabled": 1, "email": "admin@ultrasoft.com",
-                                "roles": ["Command Center Manager", "System Manager"]},
+                                "roles": ["Insights Dashboard Manager", "System Manager"]},
     })
     MARKS.update({"samuel@gigmann.com": ["gms"], "admin@ultrasoft.com": ["gms"]})
 
@@ -173,7 +173,7 @@ class _Login:
 frappe.local = types.SimpleNamespace(response={}, cookie_manager=_Cookies(),
                                      login_manager=_Login(), request_ip="1.2.3.4")
 _biz_mod = types.ModuleType("command_center.api.businesses")
-_biz_mod.ROLE = "Command Center Manager"
+_biz_mod.ROLE = "Insights Dashboard Manager"
 sys.modules["command_center.api.businesses"] = _biz_mod
 
 # Who holds the access role on Gigmann's ERPNext (api/ingest.erp_members).
@@ -301,7 +301,7 @@ state, _ = begin()
 ERP["email"] = "new@gigmann.com"
 sso.callback(code="c1", state=state)
 check(frappe.local.login_manager.who == "new@gigmann.com"
-      and "Command Center Manager" in USERS.get("new@gigmann.com", {}).get("roles", [])
+      and "Insights Dashboard Manager" in USERS.get("new@gigmann.com", {}).get("roles", [])
       and "gms" in MARKS.get("new@gigmann.com", []),
       f"a role holder new to the platform gets an account and is signed in: {USERS.get('new@gigmann.com')}")
 
@@ -324,7 +324,7 @@ state, _ = begin()
 ERP_MEMBERS["who"] = {"new@gigmann.com"}
 sso.callback(code="c1", state=state)
 check(refused("no_role"), "a role taken away there: sign-in refused")
-check("Command Center Manager" not in USERS["samuel@gigmann.com"]["roles"]
+check("Insights Dashboard Manager" not in USERS["samuel@gigmann.com"]["roles"]
       and "samuel@gigmann.com" in SIGNED_OUT,
       f"and the platform taken away: {USERS['samuel@gigmann.com']}, signed out {SIGNED_OUT}")
 seed()
@@ -334,14 +334,14 @@ seed()
 state, _ = begin()
 ERP["email"] = "hand@gigmann.com"
 sso.callback(code="c1", state=state)
-check(refused("no_role") and "Command Center Manager" in USERS["hand@gigmann.com"]["roles"],
+check(refused("no_role") and "Insights Dashboard Manager" in USERS["hand@gigmann.com"]["roles"],
       "a hand-added manager without the role is refused here but keeps their access")
 
 # 10. Their ERPNext cannot be asked: fail closed, change nothing.
 state, _ = begin()
 ERP_MEMBERS["down"] = True
 sso.callback(code="c1", state=state)
-check(refused("unreachable") and "Command Center Manager" in USERS["samuel@gigmann.com"]["roles"],
+check(refused("unreachable") and "Insights Dashboard Manager" in USERS["samuel@gigmann.com"]["roles"],
       "with the business unreachable, sign-in fails closed and nobody loses anything")
 
 # 11. Email case does not matter; a wrapped profile (older Frappe) is read too.
@@ -393,17 +393,17 @@ seed()
 fresh()
 ERP_MEMBERS["down"] = True
 sso.sync_members()
-check("Command Center Manager" in USERS["samuel@gigmann.com"]["roles"] and not SIGNED_OUT,
+check("Insights Dashboard Manager" in USERS["samuel@gigmann.com"]["roles"] and not SIGNED_OUT,
       "an unreachable business: the sync changes nothing")
 ERP_MEMBERS.update({"down": False, "who": set()})
 sso.sync_members()
-check("Command Center Manager" not in USERS["samuel@gigmann.com"]["roles"]
+check("Insights Dashboard Manager" not in USERS["samuel@gigmann.com"]["roles"]
       and "samuel@gigmann.com" in SIGNED_OUT,
       f"the sync takes the platform from someone who lost the role: {USERS['samuel@gigmann.com']}")
-check("Command Center Manager" in USERS["admin@ultrasoft.com"]["roles"]
+check("Insights Dashboard Manager" in USERS["admin@ultrasoft.com"]["roles"]
       and "admin@ultrasoft.com" not in SIGNED_OUT,
       "but never from a System Manager")
-check("Command Center Manager" in USERS["hand@gigmann.com"]["roles"],
+check("Insights Dashboard Manager" in USERS["hand@gigmann.com"]["roles"],
       "nor from a manager added by hand")
 check(any(t == "Command Center access removed" for t, _ in frappe.logged),
       "a removal is recorded in the Error Log")

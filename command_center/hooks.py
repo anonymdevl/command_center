@@ -40,7 +40,7 @@ website_route_rules = [
 # ---------------------------------------------------------------------------
 # Access is management-only. There is deliberately no general staff role.
 fixtures = [
-    {"dt": "Role", "filters": [["role_name", "in", ["Command Center Manager"]]]},
+    {"dt": "Role", "filters": [["role_name", "in", ["Insights Dashboard Manager"]]]},
     {"dt": "Custom Field", "filters": [["name", "like", "%-icc_%"]]},
 ]
 

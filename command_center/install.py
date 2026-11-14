@@ -24,11 +24,11 @@ def create_manager_role():
     staff member's view of the business is ERPNext itself — this app exists to
     answer questions staff are not asked.
     """
-    if frappe.db.exists("Role", "Command Center Manager"):
+    if frappe.db.exists("Role", "Insights Dashboard Manager"):
         return
     frappe.get_doc({
         "doctype": "Role",
-        "role_name": "Command Center Manager",
+        "role_name": "Insights Dashboard Manager",
         "desk_access": 1,
     }).insert(ignore_permissions=True)
 
@@ -209,7 +209,7 @@ def set_secret_from_env(key: str, env: str):
 
 
 def add_manager(email: str, full_name: str):
-    """A person who may use the platform: a System User holding Command Center Manager
+    """A person who may use the platform: a System User holding Insights Dashboard Manager
     and nothing else. No email is sent; they set their password from the reset link
     an administrator sends from the desk, or one given to them."""
     create_manager_role()
@@ -222,7 +222,7 @@ def add_manager(email: str, full_name: str):
                                "send_welcome_email": 0})
         user.flags.no_welcome_mail = True
         user.insert(ignore_permissions=True)
-    user.add_roles("Command Center Manager")
+    user.add_roles("Insights Dashboard Manager")
     frappe.db.commit()
     # They sign in with their business's ERPNext (api/sso.py), so no password is needed.
     # A reset link is a fallback for the platform's own login page; Frappe v16 no longer
@@ -235,7 +235,7 @@ def add_manager(email: str, full_name: str):
         except Exception:
             link = None
     roles = sorted(set(frappe.get_roles(email)) - {"All", "Guest", "Desk User"})
-    print(f"{email}: Command Center Manager. They sign in with the button in their ERPNext."
+    print(f"{email}: Insights Dashboard Manager. They sign in with the button in their ERPNext."
           + (f" Password link if ever needed: {link}" if link else "")
           + f"\n   roles on this site: {', '.join(roles)}")
     return {"user": email, "reset_link": link, "roles": roles}
@@ -253,7 +253,7 @@ def remove_manager(email: str):
         print(f"{email}: no such account here")
         return {"user": email, "removed": False}
     user = frappe.get_doc("User", email)
-    user.remove_roles("Command Center Manager")
+    user.remove_roles("Insights Dashboard Manager")
     left = sorted(set(frappe.get_roles(email)) - {"All", "Guest", "Desk User"})
     disabled = False
     if not left and email not in ("Administrator", "Guest"):

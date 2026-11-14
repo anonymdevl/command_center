@@ -100,9 +100,9 @@ BYPASS = ("ignore_permissions", "ignore_validate", "ignore_mandatory")
 # there and wrong everywhere else.
 #
 # This is an explicit list rather than a pattern, because the previous version
-# passed install.py only by coincidence: the string "Command Center Manager"
-# happened to contain "Command Center". A guard that passes by accident is not a
-# guard.
+# passed install.py only by coincidence: the role's old name, "Command Center
+# Manager", happened to contain "Command Center". A guard that passes by accident is
+# not a guard.
 CONFIG_MODULES = (
     "command_center/install.py",     # the manager role, the local business
     "command_center/patches/",       # upgrade steps
@@ -184,7 +184,7 @@ for py in sorted(glob.glob(os.path.join(APP, "**", "*.py"), recursive=True)):
 # api/businesses.py owns ALLOWED_ROLES. Everything else reads it. A second
 # hardcoded role check is how an access rule ends up true in one place and false
 # in another -- the apps tile showing a door the page then refuses, or worse.
-ROLE_LITERAL = "Command Center Manager"
+ROLE_LITERAL = "Insights Dashboard Manager"
 MAY_NAME_THE_ROLE = (
     "command_center/api/businesses.py",  # defines it
     "command_center/install.py",         # creates it

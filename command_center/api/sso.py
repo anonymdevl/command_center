@@ -16,12 +16,12 @@ sign in (they usually already are), ERPNext tells us who they are, and then:
        says: the platform's administrator can always stop one person.
 
 A person who passes and has no account here gets one on the spot: a System User with
-Command Center Manager, no password, no email. So adding someone is giving them the
+Insights Dashboard Manager, no password, no email. So adding someone is giving them the
 role in their own ERPNext -- nothing to do on this platform (Michael, 14 Nov 2026:
 "must Samuel come to me for a bench command to add a user? doesn't make sense").
 
 Taking the role away there takes the platform away too: the next sign-in is refused,
-and sync_members (every 15 minutes) removes Command Center Manager from anyone whose
+and sync_members (every 15 minutes) removes Insights Dashboard Manager from anyone whose
 role is gone and ends their sessions. Only accounts this sign-in let in are touched
 (marked per business in DefaultValue, key cc_sso_business); a manager added by hand,
 a System Manager and Administrator are never changed by it. If the business's ERPNext

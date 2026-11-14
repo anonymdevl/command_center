@@ -16,7 +16,7 @@ bench --site <site> install-app command_center
 bench --site <site> migrate
 ```
 
-Give each manager the **Command Center Manager** role. There is no general staff role —
+Give each manager the **Insights Dashboard Manager** role. There is no general staff role —
 the platform is management-only by design.
 
 ## Architecture
@@ -78,7 +78,7 @@ command_center/
 ├── pyproject.toml
 └── command_center/
     ├── hooks.py                  doc_events → change feed · SPA route · scheduler
-    ├── install.py                creates the Command Center Manager role
+    ├── install.py                creates the Insights Dashboard Manager role
     ├── connectors/
     │   ├── base.py               the seam — identity travels with every call
     │   ├── local.py              this site, via frappe.*, under the acting user

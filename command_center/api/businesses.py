@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import frappe
 
-ROLE = "Command Center Manager"
+ROLE = "Insights Dashboard Manager"
 
 # The only definition of who may enter. The apps-screen tile, the page guard and
 # every endpoint read this one set, so a change here cannot leave a door open

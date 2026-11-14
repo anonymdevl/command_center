@@ -44,7 +44,7 @@
 
   {"fieldname": "sso_section", "fieldtype": "Section Break", "label": "Sign-in with this ERPNext",
    "depends_on": "eval:!doc.is_local", "collapsible": 1,
-   "description": "Lets managers open the platform from this business's ERPNext and sign in with their account there. Who may enter is still decided here: only enabled accounts on this platform holding Command Center Manager."},
+   "description": "Lets managers open the platform from this business's ERPNext and sign in with their account there. Who may enter is decided on that ERPNext: whoever holds its access role (Executive Insights) gets in, and is let in as an Insights Dashboard Manager here."},
   {"fieldname": "sso_client_id", "fieldtype": "Data", "label": "OAuth Client ID",
    "depends_on": "eval:!doc.is_local",
    "description": "From the OAuth Client created on that ERPNext (grant type Authorization Code, scopes \"openid all\", Skip Authorization ticked)."},
@@ -76,7 +76,7 @@
  "permissions": [
   {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1,
    "report": 1, "export": 1, "share": 1, "print": 1, "email": 1},
-  {"role": "Command Center Manager", "read": 1, "write": 1, "create": 1,
+  {"role": "Insights Dashboard Manager", "read": 1, "write": 1, "create": 1,
    "report": 1, "share": 1, "print": 1}
  ],
  "sort_field": "modified",

@@ -32,7 +32,7 @@
  "owner": "Administrator",
  "permissions": [
   {"role": "System Manager", "read": 1, "delete": 1, "report": 1, "export": 1},
-  {"role": "Command Center Manager", "read": 1, "report": 1}
+  {"role": "Insights Dashboard Manager", "read": 1, "report": 1}
  ],
  "sort_field": "occurred_at",
  "sort_order": "DESC",

@@ -61,7 +61,7 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "role": "Command Center Manager",
+   "role": "Insights Dashboard Manager",
    "read": 1,
    "write": 1,
    "delete": 1,
