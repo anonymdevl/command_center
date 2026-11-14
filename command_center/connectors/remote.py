@@ -128,7 +128,12 @@ class RemoteConnector(BusinessConnector):
         for attempt in range(RETRIES + 1):
             try:
                 if post:
-                    r = requests.post(url, headers=headers, data=data, timeout=_timeout(timeout))
+                    # As JSON, not as a form: Gigmann's site (v14, behind its proxy)
+                    # refused long form-encoded POSTs with a bare 400/417, while the
+                    # same request as JSON is answered. Frappe reads a JSON body into
+                    # form_dict on every version, and the string-encoded values are
+                    # parsed exactly as a form's would be.
+                    r = requests.post(url, headers=headers, json=data, timeout=_timeout(timeout))
                 else:
                     r = requests.get(url, headers=headers, params=data, timeout=_timeout(timeout))
             except requests.RequestException as e:

@@ -46,9 +46,9 @@ class _R:
         return self._body
 
 
-def _answer(method, url, headers, params):
+def _answer(method, url, headers, params, body=None):
     calls.append({"method": method, "url": url, "auth": headers["Authorization"],
-                  "params": params})
+                  "params": params, "body": body})
     if script:
         code = script.pop(0)
         return _R(code, headers={"Retry-After": "1"})
@@ -70,7 +70,7 @@ class _Exc(Exception):
 
 requests = types.ModuleType("requests")
 requests.get = lambda url, headers=None, params=None, timeout=None: _answer("GET", url, headers, params or {})
-requests.post = lambda url, headers=None, data=None, timeout=None: _answer("POST", url, headers, data or {})
+requests.post = lambda url, headers=None, data=None, json=None, timeout=None: _answer("POST", url, headers, json if json is not None else (data or {}), body="json" if json is not None else "form")
 requests.RequestException = _Exc
 sys.modules["requests"] = requests
 
@@ -148,6 +148,7 @@ check(len(calls) == 1, "a grouped read is one request")
 reset()
 conn.get_list("Sales Invoice", filters={"name": ["in", [r["name"] for r in ROWS[:600]]]}, limit=20)
 check(calls[0]["method"] == "POST", "a long query goes by POST")
+check(calls[0]["body"] == "json", "and as JSON: a long form-encoded POST was refused by Gigmann's site")
 reset()
 conn.get_list("Sales Invoice", filters={"docstatus": 1}, limit=20)
 check(calls[0]["method"] == "GET", "a short one by GET")
