@@ -1384,7 +1384,7 @@ check(sorted(_guest) == ["command_center/api/sso.py:callback", "command_center/a
 _sso = open(os.path.join(ROOT, "command_center", "api", "sso.py")).read()
 _appr = _sso.split("def _approved")[1].split("\ndef ")[0] if "def _approved" in _sso else ""
 check("erp_members(" in _appr and "if email not in members:" in _appr
-      and "if not enabled:" in _appr and 'raise Refused(f"The platform could not check' in _appr,
+      and "if not enabled:" in _appr and 'raise Refused("unreachable"' in _appr,
       "api/sso.py must let a person in only if the platform itself reads the access role on "
       "their ERPNext (ingest.erp_members), keep out an account paused here, and fail closed "
       "when that ERPNext cannot be asked")

@@ -254,9 +254,14 @@ def begin():
     return state, loc
 
 
-def refused(text=None):
-    return (frappe.local.login_manager.who is None and frappe.pages
-            and frappe.pages[0][2] == 403 and (text is None or text in frappe.pages[0][1]))
+def refused(why=None):
+    """Not signed in, and sent to the platform's access page with a reference whose
+    reason is `why` (the page's wording is fixed per reason; nothing else travels)."""
+    loc = frappe.local.response.get("location", "")
+    if frappe.local.login_manager.who is not None or not loc.startswith(sso.ACCESS_PAGE + "?ref="):
+        return False
+    held = _cache.get_value(sso.ACCESS_KEY + loc.split("ref=", 1)[1]) or {}
+    return why is None or held.get("why") == why
 
 
 seed()
@@ -289,7 +294,7 @@ check(frappe.logged and frappe.logged[0][0] == "Command Center sign-in refused",
 state, _ = begin()
 frappe.request.cookies = {}
 sso.callback(code="c1", state=state)
-check(refused("different browser"), "a callback without this browser's cookie is refused")
+check(refused("other_browser"), "a callback without this browser's cookie is refused")
 
 # 5. A newcomer who holds the role there: an account is made here, a manager, signed in.
 state, _ = begin()
@@ -304,7 +309,7 @@ check(frappe.local.login_manager.who == "new@gigmann.com"
 state, _ = begin()
 ERP["email"] = "clerk@gigmann.com"
 sso.callback(code="c1", state=state)
-check(refused("does not hold the Executive Insights role") and "clerk@gigmann.com" not in USERS,
+check(refused("no_role") and "clerk@gigmann.com" not in USERS,
       "someone without the role there is refused, and gets no account here")
 
 # 7. Paused here: refused, whatever their ERPNext says.
@@ -318,7 +323,7 @@ check(refused("paused"), "an account paused on the platform stays out")
 state, _ = begin()
 ERP_MEMBERS["who"] = {"new@gigmann.com"}
 sso.callback(code="c1", state=state)
-check(refused("does not hold"), "a role taken away there: sign-in refused")
+check(refused("no_role"), "a role taken away there: sign-in refused")
 check("Command Center Manager" not in USERS["samuel@gigmann.com"]["roles"]
       and "samuel@gigmann.com" in SIGNED_OUT,
       f"and the platform taken away: {USERS['samuel@gigmann.com']}, signed out {SIGNED_OUT}")
@@ -329,14 +334,14 @@ seed()
 state, _ = begin()
 ERP["email"] = "hand@gigmann.com"
 sso.callback(code="c1", state=state)
-check(refused("does not hold") and "Command Center Manager" in USERS["hand@gigmann.com"]["roles"],
+check(refused("no_role") and "Command Center Manager" in USERS["hand@gigmann.com"]["roles"],
       "a hand-added manager without the role is refused here but keeps their access")
 
 # 10. Their ERPNext cannot be asked: fail closed, change nothing.
 state, _ = begin()
 ERP_MEMBERS["down"] = True
 sso.callback(code="c1", state=state)
-check(refused("could not check") and "Command Center Manager" in USERS["samuel@gigmann.com"]["roles"],
+check(refused("unreachable") and "Command Center Manager" in USERS["samuel@gigmann.com"]["roles"],
       "with the business unreachable, sign-in fails closed and nobody loses anything")
 
 # 11. Email case does not matter; a wrapped profile (older Frappe) is read too.
@@ -349,7 +354,7 @@ check(frappe.local.login_manager.who == "samuel@gigmann.com", "email matched wit
 state, _ = begin()
 ERP["token_status"] = 401
 sso.callback(code="bad", state=state)
-check(refused("would not confirm"), "a code ERPNext will not exchange is refused")
+check(refused("unconfirmed"), "a code ERPNext will not exchange is refused")
 state, _ = begin()
 sso.callback(error="access_denied", state=state)
 check(refused(), "a sign-in cancelled at ERPNext is refused")
@@ -371,12 +376,11 @@ check(refused(), "Administrator cannot sign in through a business's ERPNext")
 fresh()
 BIZ.secret = None
 sso.start(business="gms")
-check(not frappe.local.response.get("location") and "not set up" in frappe.pages[0][1],
-      "a business with no OAuth client is refused")
+check(refused("not_setup"), "a business with no OAuth client is refused, with no trip to ERPNext")
 BIZ.secret = "csecret"
 fresh()
 sso.start(business="someone-else")
-check(not frappe.local.response.get("location") and frappe.pages, "an unknown business is refused")
+check(refused("unknown_business"), "an unknown business is refused")
 
 # 16. No "return to" from the request: a success can only land on /command-center.
 state, _ = begin()
@@ -411,6 +415,46 @@ frappe.conf["command_center_sso_role"] = "Intelligence Layer"
 sso.callback(code="c1", state=state)
 check(ERP_MEMBERS["asked"][-1] == "Intelligence Layer", "the access role is a site setting")
 frappe.conf.pop("command_center_sso_role")
+
+# 19. The access page: fixed wording per reason, the business named from the platform's
+#     own record, "Try again" only where trying again can help, and nothing from the
+#     address shown -- an unknown reference reads as the general message.
+_www = types.ModuleType("command_center.www.command_center")
+_www._assets = lambda: {"css": None}
+sys.modules["command_center.www.command_center"] = _www
+from command_center.www import command_center_access as page  # noqa: E402
+
+
+def _get_value(doctype, filters, fields=None, as_dict=False, **kw):
+    if doctype == "Connected Business" and filters.get("business_code") == "gms":
+        return types.SimpleNamespace(business_name="Gigmann Medical Supplies Ltd",
+                                     site_url="https://erp.example.com/")
+    return get_value(doctype, filters, fields, as_dict, **kw)
+
+
+frappe.db.get_value = _get_value
+
+
+def show(why=None, business="gms", ref="R1"):
+    if why:
+        _cache.set_value(sso.ACCESS_KEY + ref, {"why": why, "business": business})
+    frappe.form_dict = {"ref": ref}
+    return page.get_context(types.SimpleNamespace())
+
+
+c = show("no_role")
+check("Gigmann Medical Supplies Ltd" in c.sentence and c.heading == "You don't have access yet"
+      and not c.retry_url and c.erp_url == "https://erp.example.com/app",
+      f"no role: says so, names the business, offers ERPNext, no retry: {vars(c)}")
+c = show("unreachable")
+check(c.retry_url and "sso.start?business=gms" in c.retry_url, "unreachable: offers Try again")
+c = show(ref="made-up<script>")
+check(c.heading == "Something went wrong" and "script" not in c.sentence,
+      "an unknown reference shows the general message; nothing from the address is shown")
+c = show("no_role", business=None, ref="R2")
+check(c.sentence.startswith("Your account on your company's ERPNext") and c.own_sign_in,
+      f"without a business it still reads well, and offers the platform sign-in: {c.sentence}")
+frappe.db.get_value = get_value
 
 print(f"sso: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

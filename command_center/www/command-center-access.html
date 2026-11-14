@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-accent="cobalt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>{{ heading }} · AI Business Intelligence</title>
+<link rel="icon" href="/assets/command_center/images/command-center.svg">
+<script>
+(function(){var d=document.documentElement,t=null,a=null;try{t=localStorage.getItem('icc-theme');a=localStorage.getItem('icc-accent')}catch(e){}
+if(t!=='light'&&t!=='dark')t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';
+d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
+</script>
+{% if assets.css %}<link rel="stylesheet" href="{{ assets.css }}">{% endif %}
+</head>
+<body class="cc-auth">
+<main class="auth single">
+  <section class="auth-card">
+    <div class="auth-lock" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7"
+           stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/>
+        <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
+    </div>
+    <span class="auth-eyebrow">AI Business Intelligence</span>
+    <h1>{{ heading }}</h1>
+    <p class="auth-sub">{{ sentence }}</p>
+
+    <div class="auth-acts">
+      {% if retry_url %}<a class="auth-go" href="{{ retry_url }}">Try again</a>{% endif %}
+      {% if erp_url %}<a class="{{ 'auth-alt' if retry_url else 'auth-go' }}" href="{{ erp_url }}"
+         style="display:inline-flex;align-items:center;text-decoration:none">Back to ERPNext</a>{% endif %}
+      {% if own_sign_in %}<a class="auth-alt" href="/command-center-login"
+         style="display:inline-flex;align-items:center;text-decoration:none">Platform sign-in</a>{% endif %}
+    </div>
+  </section>
+</main>
+</body>
+</html>

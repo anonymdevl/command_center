@@ -66,10 +66,17 @@ TIMEOUT = 15
 ACCESS_ROLE = "Executive Insights"
 MARK = "cc_sso_business"
 NEVER_TOUCHED = ("Administrator", "Guest")
+ACCESS_PAGE = "/command-center-access"
+ACCESS_KEY = "cc:sso:refused:"
 
 
 class Refused(Exception):
-    """A sign-in this platform will not complete. The message is shown to the person."""
+    """A sign-in this platform will not complete. `why` picks the sentence the person
+    reads (www/command_center_access.py, fixed wording); `detail` is for the log."""
+
+    def __init__(self, why: str, detail: str = ""):
+        super().__init__(detail or why)
+        self.why, self.detail = why, detail or why
 
 
 def access_role() -> str:
@@ -87,11 +94,11 @@ def _business(code: str):
                                {"business_code": code, "status": ["!=", "Paused"],
                                 "is_local": 0})
     if not name:
-        raise Refused("This sign-in link names a business the platform does not connect to.")
+        raise Refused("unknown_business", "This sign-in link names a business the platform does not connect to.")
     b = frappe.get_doc("Connected Business", name)
     secret = b.get_password("sso_client_secret", raise_exception=False)
     if not (b.site_url and b.sso_client_id and secret):
-        raise Refused(f"Signing in with {b.business_name}'s ERPNext is not set up yet. "
+        raise Refused("not_setup", f"Signing in with {b.business_name}'s ERPNext is not set up yet. "
                       f"Use the platform's own sign-in page for now.")
     return b, secret
 
@@ -102,7 +109,7 @@ def start(business: str | None = None):
     try:
         b, _ = _business(business or "")
     except Refused as e:
-        return _refuse(str(e), business)
+        return _refuse(e, business)
     state = frappe.generate_hash(length=32)
     frappe.cache().set_value(_key(state), {"business": b.business_code},
                              expires_in_sec=STATE_TTL)
@@ -119,7 +126,7 @@ def callback(code: str | None = None, state: str | None = None, error: str | Non
     business = None
     try:
         if error:
-            raise Refused("The ERPNext sign-in was cancelled or refused there.")
+            raise Refused("cancelled", "The ERPNext sign-in was cancelled or refused there.")
         pending = _take_state(state)
         business = pending["business"]
         b, secret = _business(business)
@@ -127,11 +134,10 @@ def callback(code: str | None = None, state: str | None = None, error: str | Non
         user = _approved(profile, b)
     except Refused as e:
         frappe.db.commit()  # an access taken away above stays taken away
-        return _refuse(str(e), business)
+        return _refuse(e, business)
     except Exception:
         frappe.log_error(title="Command Center sign-in failed", message=frappe.get_traceback())
-        return _refuse("The sign-in could not be completed. Try the link again; if it keeps "
-                       "failing, use the platform's own sign-in page.", business)
+        return _refuse(Refused("failed", "The sign-in could not be completed."), business)
     frappe.db.commit()
     _login(user)
     _redirect(HOME)
@@ -146,14 +152,14 @@ def _take_state(state: str | None) -> dict:
     """The state must be one this site issued, to this browser, in the last ten
     minutes -- and it is spent on first use, so a replayed callback is refused."""
     if not state:
-        raise Refused("The sign-in did not come back with its reference. Start again from the link.")
+        raise Refused("expired", "The sign-in did not come back with its reference. Start again from the link.")
     cookie = (frappe.request.cookies.get(COOKIE) if getattr(frappe, "request", None) else None)
     pending = frappe.cache().get_value(_key(state))
     frappe.cache().delete_value(_key(state))
     if not pending:
-        raise Refused("This sign-in has expired or was already used. Start again from the link.")
+        raise Refused("expired", "This sign-in has expired or was already used. Start again from the link.")
     if cookie != state:
-        raise Refused("This sign-in was started in a different browser. Start again from the link.")
+        raise Refused("other_browser", "This sign-in was started in a different browser. Start again from the link.")
     return pending
 
 
@@ -162,26 +168,26 @@ def _identify(b, secret: str, code: str | None) -> dict:
     import requests
 
     if not code:
-        raise Refused("The business's ERPNext did not confirm who you are.")
+        raise Refused("unconfirmed", "The business's ERPNext did not confirm who you are.")
     base = b.site_url.rstrip("/")
     r = requests.post(base + TOKEN, data={
         "grant_type": "authorization_code", "code": code, "redirect_uri": _callback_url(),
         "client_id": b.sso_client_id, "client_secret": secret}, timeout=TIMEOUT)
     if not r.ok:
-        raise Refused(f"{b.business_name}'s ERPNext would not confirm the sign-in "
+        raise Refused("unconfirmed", f"{b.business_name}'s ERPNext would not confirm the sign-in "
                       f"(HTTP {r.status_code}).")
     token = (r.json() or {}).get("access_token")
     if not token:
-        raise Refused(f"{b.business_name}'s ERPNext did not issue a sign-in token.")
+        raise Refused("unconfirmed", f"{b.business_name}'s ERPNext did not issue a sign-in token.")
     p = requests.get(base + PROFILE, headers={"Authorization": f"Bearer {token}"},
                      timeout=TIMEOUT)
     if not p.ok:
-        raise Refused(f"{b.business_name}'s ERPNext would not say who you are (HTTP {p.status_code}).")
+        raise Refused("unconfirmed", f"{b.business_name}'s ERPNext would not say who you are (HTTP {p.status_code}).")
     body = p.json() or {}
     # Frappe answers with the profile itself; some versions wrap it in "message".
     profile = body.get("message") if isinstance(body.get("message"), dict) else body
     if not profile.get("email"):
-        raise Refused(f"{b.business_name}'s ERPNext did not give an email for your account.")
+        raise Refused("unconfirmed", f"{b.business_name}'s ERPNext did not give an email for your account.")
     return profile
 
 
@@ -189,7 +195,7 @@ def _approved(profile: dict, b) -> str:
     """The role on their ERPNext lets them in; a pause here keeps them out."""
     email = str(profile["email"]).strip().lower()
     if email in ("administrator", "guest"):
-        raise Refused("That account cannot sign in this way.")
+        raise Refused("not_allowed", "That account cannot sign in this way.")
     role = access_role()
     try:
         from command_center.api.ingest import erp_members
@@ -197,21 +203,21 @@ def _approved(profile: dict, b) -> str:
     except Exception:
         frappe.log_error(title="Command Center sign-in: role check failed",
                          message=frappe.get_traceback())
-        raise Refused(f"The platform could not check your access on {b.business_name}'s "
+        raise Refused("unreachable", f"The platform could not check your access on {b.business_name}'s "
                       f"ERPNext just now. Try again in a minute.")
     user = _platform_user(email)
     if email not in members:
         if user:
             _unmark(user, b.business_code)
-        raise Refused(f"{email} does not hold the {role} role on {b.business_name}'s "
+        raise Refused("no_role", f"{email} does not hold the {role} role on {b.business_name}'s "
                       f"ERPNext, so it cannot open the platform. Ask your ERPNext "
                       f"administrator for it.")
     if user:
         if user in NEVER_TOUCHED:
-            raise Refused("That account cannot sign in this way.")
+            raise Refused("not_allowed", "That account cannot sign in this way.")
         enabled = frappe.db.get_value("User", user, "enabled")
         if not enabled:
-            raise Refused(f"The platform account for {email} has been paused. Ask the "
+            raise Refused("paused", f"The platform account for {email} has been paused. Ask the "
                           f"platform's administrator.")
     else:
         user = _provision(email, profile)
@@ -314,11 +320,18 @@ def _redirect(location: str):
     frappe.local.response["location"] = location
 
 
-def _refuse(why: str, business: str | None):
-    """Said to the person, and recorded for whoever watches the platform's security."""
+def _refuse(e: Refused, business: str | None):
+    """Recorded for whoever watches the platform's security, then the person is sent to
+    the platform's own page for it (/command-center-access) -- a designed page in plain
+    words, not a bare 403. What it shows travels as a one-time reference into the cache,
+    never in the address, so nobody can make that page say something else or use it to
+    learn which businesses the platform connects."""
     ip = getattr(frappe.local, "request_ip", None)
     frappe.log_error(title="Command Center sign-in refused",
-                     message=json.dumps({"why": why, "business": business, "ip": ip}))
+                     message=json.dumps({"why": e.why, "detail": e.detail,
+                                         "business": business, "ip": ip}))
+    ref = frappe.generate_hash(length=24)
+    frappe.cache().set_value(f"{ACCESS_KEY}{ref}", {"why": e.why, "business": business},
+                             expires_in_sec=STATE_TTL)
     frappe.db.commit()
-    frappe.respond_as_web_page("Sign-in not completed", why, http_status_code=403,
-                               indicator_color="red")
+    _redirect(f"{ACCESS_PAGE}?ref={ref}")
