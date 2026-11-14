@@ -906,8 +906,15 @@ check('k === "search"' in open(os.path.join(ROOT, "frontend", "src",
 # A key committed to git is a key that has leaked. This scans every tracked text file,
 # not just the ask/ package, because the likeliest place for one to end up is a script
 # or a note somebody wrote while testing.
+# Tracked and to-be-committed files only (git ls-files, plus anything not yet added
+# that is not ignored): a local virtualenv or the untracked insights.json holding this
+# machine's own keys is not something git will ever publish.
+import subprocess as _sp0
+_ls = _sp0.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+               cwd=ROOT, capture_output=True, text=True)
+_TRACKED = sorted(_Path(ROOT) / p for p in _ls.stdout.splitlines() if p.strip())
 _KEYISH = re.compile(r"AIza[0-9A-Za-z_\-]{30,}")
-for _path in sorted(_Path(ROOT).rglob("*")):
+for _path in _TRACKED:
     if not _path.is_file():
         continue
     _rel = _path.relative_to(_Path(ROOT)).as_posix()
@@ -924,7 +931,7 @@ for _path in sorted(_Path(ROOT).rglob("*")):
 
 # Anthropic keys too (Claude is the analyst from 14 Nov 2026): sk-ant- and a long tail.
 _ANTKEY = re.compile(r"sk-ant-[A-Za-z0-9_\-]{24,}")
-for _path in sorted(_Path(ROOT).rglob("*")):
+for _path in _TRACKED:
     if not _path.is_file():
         continue
     _rel = _path.relative_to(_Path(ROOT)).as_posix()

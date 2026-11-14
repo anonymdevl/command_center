@@ -10,3 +10,10 @@ node_modules/
 # .vite/manifest.json IS committed: the page reads it to find the hashed
 # bundle. Without it the template has no way to know the filename.
 frontend/dist/
+
+# the standalone platform (Django)
+.venv-platform/
+insights.json
+*.sqlite3
+staticfiles/
+files/
