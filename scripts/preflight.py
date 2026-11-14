@@ -1364,6 +1364,26 @@ _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_analyst.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,
       "scripts/test_analyst.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+_t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_sso.py")],
+             capture_output=True, text=True, timeout=120)
+check(_t.returncode == 0,
+      "scripts/test_sso.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+# Signing in with a business's ERPNext: identity from there, permission from here. The
+# only endpoints a signed-out visitor may call are the two halves of that sign-in, and
+# the decision must stay the platform's own (an enabled manager account here).
+_guest = []
+for _py in sorted(_Path(ROOT).joinpath("command_center").rglob("*.py")):
+    _src = _py.read_text()
+    for _m in re.finditer(r"@frappe\.whitelist\([^)]*allow_guest=True[^)]*\)\s*\ndef (\w+)", _src):
+        _guest.append(f"{_py.relative_to(_Path(ROOT)).as_posix()}:{_m.group(1)}")
+check(sorted(_guest) == ["command_center/api/sso.py:callback", "command_center/api/sso.py:start"],
+      f"endpoints callable without signing in: {_guest}. Only api/sso.start and callback may be.")
+_sso = open(os.path.join(ROOT, "command_center", "api", "sso.py")).read()
+check('ROLE not in frappe.get_roles(user)' in _sso and 'if not row.get("enabled")' in _sso,
+      "api/sso.py no longer requires an enabled Command Center Manager account on this "
+      "platform: a role someone gives themselves on their own ERPNext would let them in")
+check("_redirect(HOME)" in _sso and "redirect_to" not in _sso.split("def callback")[1].split("def ")[0],
+      "api/sso.py must land a sign-in on /command-center only, never on an address from the request")
 _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_remote.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,

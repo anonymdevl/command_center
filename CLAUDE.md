@@ -249,6 +249,19 @@ departments; 57 tasks in flight, 24 past due.
   replace every `is_local=1` lookup.
 - **Nothing writes mid-question**: the connector does not record reachability while
   `frappe.local.cc_deadline` is set, because the analyst's write guard would roll it back.
+- **The host is Biomed** (Michael, 14 Nov 2026): `host.sh biomed.ultrasoft-systems.com`
+  switches its "Gigmann Medical Supplies Ltd" record from local to remote
+  (`install.register_business`; "This Site" is set-only-once on the form, so that is the
+  one deliberate path) and reloads everything from the live site. Biomed's 2025 copy of
+  Gigmann's ERPNext data is no longer read by anything.
+- **Sign in with the business's ERPNext** (`api/sso.py`): the Ask AI link on their
+  workspace calls `sso.start?business=<code>`; their ERPNext (Frappe's OAuth provider, same
+  on v14-v16) says who the person is; the platform admits them only if that email is an
+  enabled account HERE holding Command Center Manager. Identity from there, permission
+  from here: a role someone gives themselves on their ERPNext shows them the link and
+  nothing more. State is single-use, cookie-bound, 10 minutes; success lands on
+  /command-center only; refusals go to the Error Log. The only guest endpoints in the app
+  are `sso.start` and `sso.callback` (preflight). `scripts/test_sso.py` in preflight.
 - `api/ingest.check_access` lists what the service user can read and whether it holds any
   role that can write. `scripts/test_remote.py` tests the connector offline (in preflight).
 

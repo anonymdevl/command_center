@@ -10,6 +10,7 @@
   "business_name", "business_code", "is_local", "status",
   "connection_section", "site_url", "api_key", "api_secret",
   "column_break_connection", "erpnext_company", "currency", "timezone",
+  "sso_section", "sso_client_id", "column_break_sso", "sso_client_secret",
   "authority_section", "authority_note", "overdue_after_days",
   "column_break_authority", "approval_threshold",
   "sync_section", "last_sync", "last_error"
@@ -41,6 +42,16 @@
   {"fieldname": "currency", "fieldtype": "Data", "label": "Currency"},
   {"fieldname": "timezone", "fieldtype": "Data", "label": "Time Zone"},
 
+  {"fieldname": "sso_section", "fieldtype": "Section Break", "label": "Sign-in with this ERPNext",
+   "depends_on": "eval:!doc.is_local", "collapsible": 1,
+   "description": "Lets managers open the platform from this business's ERPNext and sign in with their account there. Who may enter is still decided here: only enabled accounts on this platform holding Command Center Manager."},
+  {"fieldname": "sso_client_id", "fieldtype": "Data", "label": "OAuth Client ID",
+   "depends_on": "eval:!doc.is_local",
+   "description": "From the OAuth Client created on that ERPNext (grant type Authorization Code, scopes \"openid all\", Skip Authorization ticked)."},
+  {"fieldname": "column_break_sso", "fieldtype": "Column Break"},
+  {"fieldname": "sso_client_secret", "fieldtype": "Password", "label": "OAuth Client Secret",
+   "depends_on": "eval:!doc.is_local"},
+
   {"fieldname": "authority_section", "fieldtype": "Section Break", "label": "Owned Settings"},
   {"fieldname": "authority_note", "fieldtype": "HTML",
    "options": "<div class=\"text-muted small\">For a business reached over its API, the Site URL and the API key and secret of its read-only ERPNext user are all the platform needs. Its figures are loaded from that site every fifteen minutes and nothing is ever written back to it.</div>"},
@@ -57,7 +68,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-09-19 00:00:00.000000",
+ "modified": "2026-11-14 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Command Center",
  "name": "Connected Business",

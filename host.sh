@@ -4,7 +4,12 @@
 # sites plug into over their API. Run once per hosted site; safe to run again (each
 # step checks before it acts). After this, deploys are ./deploy.sh --site=<site>.
 #
-#   cd ~/frappe-bench-16/apps/command_center && ./host.sh intelligence.ultrasoft-systems.com
+#   cd ~/frappe-bench-16/apps/command_center && ./host.sh biomed.ultrasoft-systems.com
+#
+# Biomed is the hosted site (Michael, 14 Nov 2026): the app is already installed there,
+# and registering "Gigmann Medical Supplies Ltd" switches its record from Biomed's own
+# 2025 copy of their data to their live ERPNext, keeping the business's conversations,
+# alerts and schedules. A new site name works too; the site is then created.
 #
 # It asks for what it needs as it goes -- the site's administrator password (bench
 # asks), the Anthropic API key, and for each business its ERPNext URL and the API key
@@ -41,8 +46,10 @@ fi
 echo "   anthropic $("$BENCH_DIR/env/bin/python" -c 'import anthropic; print(anthropic.__version__)')"
 
 step "the site $SITE"
+EXISTED=0
 if [ -d "$BENCH_DIR/sites/$SITE" ]; then
-  echo "   exists"
+  EXISTED=1
+  echo "   exists -- reused (nothing on it is removed)"
 else
   echo "   creating it (bench asks for the MariaDB root password and the Administrator password)"
   bench new-site "$SITE"
@@ -71,14 +78,22 @@ step "connected businesses"
 while true; do
   more="$(ask 'Register a business? (y/n)' y)"
   [ "$more" = "y" ] || break
-  export CC_BUSINESS_NAME CC_SITE_URL CC_API_KEY CC_API_SECRET CC_COMPANY
+  export CC_BUSINESS_NAME CC_SITE_URL CC_API_KEY CC_API_SECRET CC_COMPANY \
+    CC_SSO_CLIENT_ID CC_SSO_CLIENT_SECRET
   CC_BUSINESS_NAME="$(ask 'Business name' 'Gigmann Medical Supplies Ltd')"
   CC_SITE_URL="$(ask 'Its ERPNext URL' 'https://gigmann.powersoftsystem.com')"
   CC_COMPANY="$(ask 'Its ERPNext company (blank: read from the site)' '')"
   CC_API_KEY="$(ask 'API key of its read-only user' '')"
   CC_API_SECRET="$(secret 'API secret of its read-only user')"
+  echo "   Sign-in with that ERPNext (blank to set up later). Its OAuth Client must have the"
+  echo "   redirect URI https://$SITE/api/method/command_center.api.sso.callback"
+  CC_SSO_CLIENT_ID="$(ask 'OAuth Client ID' '')"
+  CC_SSO_CLIENT_SECRET=""
+  if [ -n "$CC_SSO_CLIENT_ID" ]; then
+    CC_SSO_CLIENT_SECRET="$(secret 'OAuth Client Secret')"
+  fi
   bench --site "$SITE" execute command_center.install.register_from_env
-  unset CC_API_SECRET CC_API_KEY
+  unset CC_API_SECRET CC_API_KEY CC_SSO_CLIENT_SECRET
   echo "   what that user may read, and whether it is read-only:"
   bench --site "$SITE" execute command_center.api.ingest.check_access
 done
@@ -106,7 +121,8 @@ step "checking Claude (two short requests: the second must read the cache)"
 bench --site "$SITE" execute command_center.api.ask.check_analyst || true
 
 step "web server"
-if [ "$(ask 'Set up nginx for the site now? Needs sudo, and DNS already pointing here (y/n)' y)" = "y" ]; then
+if [ "$EXISTED" = "1" ]; then NGINX_DEFAULT=n; else NGINX_DEFAULT=y; fi
+if [ "$(ask 'Set up nginx for the site now? Needs sudo, and DNS already pointing here (y/n)' "$NGINX_DEFAULT")" = "y" ]; then
   bench setup nginx --yes
   sudo service nginx reload
   if [ "$(ask 'Issue its HTTPS certificate with Lets Encrypt now? (y/n)' y)" = "y" ]; then
@@ -119,4 +135,6 @@ bench --site "$SITE" clear-cache
 bench restart
 
 printf '\n== done. https://%s/command-center\n' "$SITE"
+echo "   The Ask AI link for each business's ERPNext workspace:"
+bench --site "$SITE" execute command_center.install.sign_in_links || true
 echo "   From now on: ./deploy.sh --site=$SITE"

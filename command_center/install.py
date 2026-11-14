@@ -106,6 +106,16 @@ def register_business(business_name: str, site_url: str, api_key: str, api_secre
     rather than at the first load. Run by host.sh; safe to rerun.
     """
     name = frappe.db.get_value("Connected Business", {"business_name": business_name})
+    if name and frappe.db.get_value("Connected Business", name, "is_local"):
+        # The one switch of a business from "its data is on this site" to "read over its
+        # API" -- Biomed, which held a 2025 copy of Gigmann's ERPNext and becomes the
+        # hosted service (14 Nov 2026). "This Site" is set-only-once on the form, so that
+        # nobody flips it by accident; this is the deliberate path. The business keeps its
+        # code, so its conversations, alerts and schedules stay with it, and the full load
+        # that follows replaces every fact with the live site's.
+        frappe.db.set_value("Connected Business", name, "is_local", 0, update_modified=False)
+        frappe.cache().delete_value("cc_local_business_code")
+        print(f"{name}: switched from this site's own data to its live ERPNext at {site_url}")
     doc = frappe.get_doc("Connected Business", name) if name else frappe.new_doc("Connected Business")
     doc.update({"business_name": business_name,
                 "business_code": business_code or doc.business_code or frappe.scrub(business_name)[:40],
@@ -142,6 +152,28 @@ def register_from_env():
         erpnext_company=os.environ.get("CC_COMPANY") or None)
     print(f"registered {out['business']} ({out['code']}): reads as {out['reads_as']}, "
           f"company {out['company']}, currency {out['currency']}")
+    client_id = os.environ.get("CC_SSO_CLIENT_ID")
+    if client_id:
+        doc = frappe.get_doc("Connected Business", out["business"])
+        doc.sso_client_id = client_id
+        if os.environ.get("CC_SSO_CLIENT_SECRET"):
+            doc.sso_client_secret = os.environ["CC_SSO_CLIENT_SECRET"]
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
+        print(f"   sign-in with its ERPNext: set up (client {client_id})")
+    return out
+
+
+def sign_in_links():
+    """The Ask AI link for each business whose ERPNext sign-in is set up -- the address
+    to put on that business's workspace (api/sso.py)."""
+    out = {}
+    for b in frappe.get_all("Connected Business", filters={"is_local": 0, "status": ["!=", "Paused"]},
+                            fields=["business_name", "business_code", "sso_client_id"]):
+        link = frappe.utils.get_url(f"/api/method/command_center.api.sso.start?business={b.business_code}")
+        out[b.business_name] = link if b.sso_client_id else None
+        print(f"   {b.business_name}: " + (link if b.sso_client_id else
+                                            "sign-in not set up (add its OAuth client)"))
     return out
 
 
