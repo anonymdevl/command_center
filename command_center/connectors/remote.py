@@ -373,6 +373,12 @@ def _server_message(r) -> str:
     try:
         body = r.json()
     except Exception:
+        # Not Frappe's JSON -- a proxy or web server answered. Its first words say who.
+        import re
+        text = re.sub(r"<[^>]+>", " ", getattr(r, "text", "") or "")
+        text = " ".join(text.split())[:300]
+        return f" ({text})" if text else ""
+    if not isinstance(body, dict):
         return ""
     msg = body.get("exception") or body.get("exc_type") or ""
     if not msg and body.get("_server_messages"):
