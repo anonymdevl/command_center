@@ -1,0 +1,17 @@
+# The platform's scheduled work (15-minute refresh, hourly alerts and reports, nightly
+# load, weekly rebuild). Installed by deploy/platform.sh.
+[Unit]
+Description=Insights platform (scheduler)
+After=network.target mariadb.service
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+Environment=INSIGHTS_CONFIG=__DIR__/insights.json
+Environment=DJANGO_SETTINGS_MODULE=insights.settings
+ExecStart=__DIR__/.venv-platform/bin/python manage.py scheduler
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -498,3 +498,17 @@ AI/model providers. Neither is on record.
 
 Open decisions for Michael: pricing, hosting region, Gigmann's approval of Gemini
 (AI-01/SE-07), approval thresholds, cross-site write-back scope.
+
+## The standalone platform (branch `standalone`, from 14 Nov 2026)
+
+Michael's decision: the intelligence layer is its own service, not a Frappe site and
+not an app on a client's ERPNext. `insights/` is a Django project (PLATFORM.md):
+- `insights/compat` answers to the name `frappe` so `command_center/` runs unchanged.
+  Extend it there when the business logic needs a Frappe call it does not have yet;
+  never install Frappe, never fork the business logic into a second copy.
+- Models are GENERATED from the doctype JSON (`python -m insights.tools.gen_models`,
+  then `manage.py makemigrations core`); never edit models_generated.py by hand.
+- People are Django users (username = email); managers hold the group "Insights
+  Dashboard Manager"; the administrator is a superuser (seen as "System Manager").
+- Secrets: encrypted in core.Secret with `encryption_key` from insights.json.
+- `manage.py test insights` (in preflight) is the end-to-end check; keep it passing.

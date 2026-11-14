@@ -393,10 +393,25 @@ def _server_message(r) -> str:
 
 
 def _encode(params: dict) -> dict:
-    """Frappe's REST layer wants dicts and lists as JSON strings."""
+    """Frappe's REST layer wants dicts and lists as JSON strings. A watermark read back
+    from the platform's own database is a datetime, and an amount may be a Decimal:
+    both go as the text Frappe expects ("2026-11-13 17:15:54.460895"), never fail."""
     out = {}
     for k, v in params.items():
         if v is None:
             continue
-        out[k] = json.dumps(v) if isinstance(v, (dict, list)) else v
+        if isinstance(v, (dict, list)):
+            out[k] = json.dumps(v, default=_plain)
+        else:
+            out[k] = _plain(v) if not isinstance(v, (str, int, float, bool)) else v
     return out
+
+
+def _plain(v):
+    import datetime
+    import decimal
+    if isinstance(v, (datetime.datetime, datetime.date, datetime.time)):
+        return str(v)
+    if isinstance(v, decimal.Decimal):
+        return float(v)
+    return str(v)

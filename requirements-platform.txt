@@ -1,0 +1,13 @@
+# The standalone platform (insights/). Installed by deploy/platform.sh into .venv-platform.
+Django>=5.2,<5.3
+PyPika==0.51.1
+requests>=2.32
+anthropic>=2.8,<3
+openpyxl>=3.1
+APScheduler>=3.11,<4
+Markdown>=3.7
+nh3>=0.3
+cryptography>=44
+gunicorn>=23
+PyMySQL>=1.1
+Jinja2>=3.1

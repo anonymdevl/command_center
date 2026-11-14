@@ -92,6 +92,9 @@ _db = CONFIG.get("db") or {}
 if _db.get("engine") == "mysql":
     import pymysql
 
+    # Django 5.2 checks the MySQLdb driver's version; PyMySQL, a pure-Python driver that
+    # needs no compiler or client library on the server, stands in for it.
+    pymysql.version_info = (2, 2, 7, "final", 0)
     pymysql.install_as_MySQLdb()
     DATABASES = {"default": {
         "ENGINE": "django.db.backends.mysql",

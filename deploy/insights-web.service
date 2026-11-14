@@ -1,0 +1,21 @@
+# The platform's web service. Installed by deploy/platform.sh as
+# /etc/systemd/system/insights-web.service (USER and DIR filled in).
+[Unit]
+Description=Insights platform (web)
+After=network.target mariadb.service
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+Environment=INSIGHTS_CONFIG=__DIR__/insights.json
+Environment=DJANGO_SETTINGS_MODULE=insights.settings
+# Two processes, eight threads each: a question can hold a thread for up to 150 s while
+# Claude answers; reports run in background threads. Timeout above the longest call.
+ExecStart=__DIR__/.venv-platform/bin/gunicorn insights.wsgi:application \
+    --bind 127.0.0.1:__PORT__ --workers 2 --threads 8 --timeout 240 --graceful-timeout 30 \
+    --access-logfile - --error-logfile -
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

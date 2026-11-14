@@ -1404,6 +1404,35 @@ _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_remote.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,
       "scripts/test_remote.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+
+# --------------------------------------------------------------------------
+# The standalone platform (insights/, Django): its models are generated from the
+# doctype JSON and must match it, and its end-to-end test -- register a business, load
+# every fact from a fake ERPNext, the figures' cross-checks, the screens' calls as a
+# signed-in manager -- must pass. Both need the platform's virtualenv (.venv-platform,
+# created by deploy/platform.sh or `python3.12 -m venv .venv-platform`).
+_vpy = os.path.join(ROOT, ".venv-platform", "bin", "python")
+check(os.path.exists(_vpy),
+      "no .venv-platform: create it (python3.12 -m venv .venv-platform && "
+      ".venv-platform/bin/pip install -r requirements-platform.txt) so the platform's "
+      "own checks can run")
+if os.path.exists(_vpy):
+    _t = _sp.run([_vpy, "-m", "insights.tools.gen_models", "--check"], cwd=ROOT,
+                 capture_output=True, text=True, timeout=60)
+    check(_t.returncode == 0,
+          "insights/core/models_generated.py is out of date with the doctype JSON: run "
+          ".venv-platform/bin/python -m insights.tools.gen_models, then "
+          "manage.py makemigrations core")
+    _t = _sp.run([_vpy, "manage.py", "makemigrations", "core", "--check", "--dry-run"],
+                 cwd=ROOT, capture_output=True, text=True, timeout=120)
+    check(_t.returncode == 0,
+          "the platform's models changed without a migration: run "
+          "manage.py makemigrations core\n" + (_t.stdout + _t.stderr)[-600:])
+    _t = _sp.run([_vpy, "manage.py", "test", "insights", "-v", "1"], cwd=ROOT,
+                 capture_output=True, text=True, timeout=900)
+    check(_t.returncode == 0,
+          "the platform's end-to-end test (manage.py test insights) failed:\n"
+          + (_t.stdout + _t.stderr)[-2000:])
 _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_schedule.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,
