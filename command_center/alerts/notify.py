@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import frappe
 
+from command_center import branding
+
 SEVERITY = {"crit": "Critical", "high": "High", "med": "Medium", "info": "For information"}
 
 
@@ -82,10 +84,12 @@ def notify(business_code: str, docs: list) -> str:
         frappe.sendmail(
             recipients=to,
             subject=f"{n} new alert{'s' if n != 1 else ''} · {name}",
-            message=(f"<p>The alert rules raised {n} new alert{'s' if n != 1 else ''} for "
-                     f"{esc(name)}:</p><ul>{items}</ul>"
-                     f"<p>Open the platform's Home screen to assign, defer or dismiss them.</p>"
-                     f"<p style='color:#777'>Sent by AI Business Intelligence to its managers.</p>"),
+            message=branding.email_html(
+                f"<p>The alert rules raised {n} new alert{'s' if n != 1 else ''} for "
+                f"{esc(name)}:</p><ul>{items}</ul>"
+                f"<p>Open the platform's Home screen to assign, defer or dismiss them.</p>"
+                f"<p style='color:#777'>Sent by {esc(branding.branding()['product'])} to its "
+                f"managers.</p>", business_code),
             now=True)
     except Exception as e:
         # The mail layer has already logged why ("Email not sent"); the alert stands.

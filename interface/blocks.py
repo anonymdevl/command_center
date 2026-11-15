@@ -484,6 +484,22 @@ div.work-table table.dt{min-width:560px}
 .rp-acts{margin-left:auto;display:flex;gap:8px}
 .rp-body{font-size:var(--fs-md);line-height:1.62;color:var(--ink2)}
 .rp-body b{color:var(--ink)}
+/* The report as a document: its kind, title, who it is for and as at when, sections set
+   off by a rule, the recommendations numbered, the vendor's line at the foot -- as the PDF. */
+.rp-title{display:flex;flex-direction:column;min-width:0}
+.rp-kick{font-size:var(--fs-2xs);font-weight:var(--fw-semibold);letter-spacing:.06em;text-transform:uppercase;
+ color:var(--accent);margin-bottom:4px}
+.rp-for{font-size:var(--fs-xs);color:var(--mut);margin-top:3px}
+.rp-body .md h4{border-bottom:1px solid var(--line);padding-bottom:6px;margin-top:26px}
+.rp-body .md-table table.dt th{font-weight:var(--fw-semibold)}
+.md ol.md-recs,.md ul.md-recs{list-style:none;padding-left:0;counter-reset:rec}
+.md .md-recs li{position:relative;background:var(--accent-bg);border-radius:var(--r-sm);padding:11px 14px 11px 42px;
+ margin:0 0 8px;color:var(--ink)}
+.md ol.md-recs li::before{counter-increment:rec;content:counter(rec);position:absolute;left:15px;top:11px;
+ font-weight:var(--fw-bold);color:var(--accent)}
+.md ul.md-recs li::before{content:"";position:absolute;left:17px;top:18px;width:7px;height:7px;border-radius:50%;
+ background:var(--accent)}
+.rp-foot{margin-top:18px;padding-top:10px;border-top:1px solid var(--line);font-size:var(--fs-2xs);color:var(--dim)}
 
 /* ---- the analyst's answers (markdown.js, charts.js) ---- */
 /* The same sizes as the screens: body text at --fs-sm, the headline one step up. */

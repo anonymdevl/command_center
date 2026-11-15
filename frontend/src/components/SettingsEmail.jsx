@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { settingsApi } from "../api/client.js";
+import { brand } from "../api/boot.js";
 import { useApi } from "../useApi.js";
 import { Failed, Loading } from "./States.jsx";
 import { Msg, act, when } from "./SettingsParts.jsx";
@@ -155,7 +156,7 @@ function EmailServer({ data, error, loading, reload, onSaved }) {
           </div>
           <div>
             <label htmlFor="em-name">From name</label>
-            <input id="em-name" autoComplete="off" value={f.sender_name} onChange={set("sender_name")} placeholder="AI Business Intelligence" />
+            <input id="em-name" autoComplete="off" value={f.sender_name} onChange={set("sender_name")} placeholder={brand.product} />
           </div>
           <div>
             <button type="submit" className="btn pri" disabled={st.busy || !f.host.trim()}>

@@ -3,8 +3,10 @@
 Three downloads, all management-only, all reads -- nothing here creates a record.
 Files are streamed back as the response; no File document is written to the site.
 
-    answer_pdf     an Ask AI answer as a PDF: Gigmann's header, the question, the
-                   answer, what it checked, as-of date, who generated it and when
+    answer_pdf     an Ask AI answer or a written report as a PDF: the product's brand
+                   (and the business's co-brand) at the top, the title, business,
+                   as-of date, who it was prepared for and when, the answer, and the
+                   vendor's line and "Page X of Y" at the foot of every page
     tables_xlsx    one or more tables (from an answer or a screen) as an .xlsx, one
                    sheet each
     records_xlsx   every record behind a figure -- not just the top rows the drawer
@@ -23,7 +25,8 @@ import re
 import frappe
 from frappe.utils import escape_html
 
-from command_center.api import pdf_blocks
+from command_center import branding as brand
+from command_center.api import pdf_blocks, report_text
 from command_center.api.businesses import require_manager
 
 EXPORT_CAP = 20000
@@ -32,7 +35,8 @@ MAX_ROWS = 5000
 
 
 def _name(title: str, ext: str) -> str:
-    stem = re.sub(r"[^\w\- ]+", "", (title or "AI Business Intelligence")).strip()[:60] or "AI Business Intelligence"
+    product = brand.branding()["product"]
+    stem = re.sub(r"[^\w\- ]+", "", (title or product)).strip()[:60] or product
     return f"{stem} {frappe.utils.today()}.{ext}"
 
 
@@ -49,7 +53,7 @@ def _as_of() -> str:
 
 
 def pdf_bytes(question: str, answer: str, checked=None, business_code: str | None = None,
-              model: str | None = None) -> bytes:
+              model: str | None = None, kind: str = "answer") -> bytes:
     """An answer or a report as a PDF: the download, and the scheduled email's attachment.
 
     It reads like the screen it came from: the figure cards and charts drawn as they are
@@ -63,9 +67,9 @@ def pdf_bytes(question: str, answer: str, checked=None, business_code: str | Non
 
     _ensure_fonts()
     html = _document_html(question, answer, business_code, model, sanitize_html,
-                          frappe.utils.md_to_html)
+                          frappe.utils.md_to_html, kind=kind)
     with _with_fonts():
-        return get_pdf(html, dict(PDF_OPTIONS))
+        return get_pdf(html, pdf_options(business_code))
 
 
 # The engine's settings for every PDF the app makes.
@@ -81,12 +85,75 @@ def pdf_bytes(question: str, answer: str, checked=None, business_code: str | Non
 # letter-spacing: at this resolution the engine applies it many times over.
 PDF_OPTIONS = {"page-size": "A4", "margin-top": "16mm", "margin-bottom": "18mm",
                "margin-left": "15mm", "margin-right": "15mm", "dpi": "1200",
-               "footer-center": "Page [page] of [topage]", "footer-font-size": "6",
+               "footer-right": "Page [page] of [topage]", "footer-font-size": "6",
                "footer-font-name": "Manrope", "footer-spacing": "6", "encoding": "UTF-8"}
+FOOTER_CHARS = 150  # what fits beside "Page X of Y" at the footer's size on A4
 
 
-def _document_html(question, answer, business_code, model, sanitize, md_to_html) -> str:
+def pdf_options(business_code: str | None = None) -> dict:
+    """PDF_OPTIONS with the vendor's line at the foot of every page, left, and "Page X of
+    Y" right (command_center/branding.py). Any other PDF the platform makes -- a
+    financial statement, a people report -- should be made with these."""
+    line = brand.branding(business_code)["footer"]
+    if len(line) > FOOTER_CHARS:
+        line = line[:FOOTER_CHARS - 1].rstrip(" ·") + "…"
+    return {**PDF_OPTIONS, "footer-left": line}
+
+
+def _logo(name: str | None, cls: str) -> str:
+    """A stored logo inside the PDF, or nothing. The PDF engine draws PNG and JPEG; a
+    WebP logo is left out of PDFs (the name is printed instead) and still shown on screen."""
+    if not name or not name.endswith((".png", ".jpg")):
+        return ""
+    uri = brand.logo_data_uri(name)
+    return f'<img class="{cls}" src="{uri}" alt="">' if uri else ""
+
+
+def brand_header(title: str, business_code: str | None = None, kicker: str = "",
+                 subtitle: str = "") -> str:
+    """The top of every PDF the platform makes: the product's logo (or name) and the
+    business's co-brand, then the title block -- the kind of document, its title, the
+    business, the period it covers, who it was prepared for and when. `title` and
+    `subtitle` are plain text; they are escaped here."""
+    b = brand.branding(business_code)
+    business = _business(business_code)
+    client = brand.for_business_name(b, business)
+    mark = _logo(b["logo_light"], "hd-logo") or f'<div class="brand">{escape_html(b["product"])}</div>'
+    tag = f'<div class="hd-tag">{escape_html(b["tagline"])}</div>' if b["tagline"] else ""
+    client_logo = _logo(b["client_logo"], "hd-client")
+    who = frappe.utils.get_fullname(frappe.session.user)
+    when = frappe.utils.format_datetime(frappe.utils.now_datetime(), "d MMMM yyyy, HH:mm")
+    return (
+        '<table class="hd"><tr>'
+        f'<td class="hd-l">{mark}{tag}</td>'
+        f'<td class="hd-r">{client_logo}<div class="hd-for">Prepared for <b>{escape_html(client)}</b></div></td>'
+        '</tr></table>'
+        '<div class="tb">'
+        + (f'<div class="kicker">{escape_html(kicker)}</div>' if kicker else "")
+        + f'<h1>{escape_html(title or "")}</h1>'
+        + (f'<div class="tb-sub">{escape_html(subtitle)}</div>' if subtitle else "")
+        + '<table class="tb-facts"><tr>'
+        f'<td><span>Business</span>{escape_html(business)}</td>'
+        f'<td><span>Period</span>Figures as at {escape_html(_pretty_date(_as_of()))}</td>'
+        f'<td><span>Requested by</span>{escape_html(who)}</td>'
+        f'<td><span>Generated</span>{escape_html(when)}</td>'
+        '</tr></table></div>')
+
+
+def brand_footer(business_code: str | None = None, note: str = "") -> str:
+    """The closing block of a PDF: `note` (escaped HTML the caller wrote), then the
+    vendor's line."""
+    b = brand.branding(business_code)
+    return (f'<div class="ft">{note}'
+            f'<div class="ft-by">{escape_html(b["footer"])}</div></div>')
+
+
+def _document_html(question, answer, business_code, model, sanitize, md_to_html,
+                   kind: str = "answer") -> str:
     """The PDF's HTML. Separate from get_pdf so it can be looked at in a browser."""
+    report = kind == "report"
+    answer = report_text.tidy(answer or "", question or "", _business(business_code),
+                              report=report)
     blocks = []
 
     def keep(m):
@@ -106,18 +173,21 @@ def _document_html(question, answer, business_code, model, sanitize, md_to_html)
     for i, drawn in enumerate(blocks):
         body = re.sub(rf"<p>\s*CCBLOCK{i}X\s*</p>|CCBLOCK{i}X", lambda _m, d=drawn: d, body, count=1)
     body = _polish(body)
-    who = frappe.utils.get_fullname(frappe.session.user)
-    when = frappe.utils.format_datetime(frappe.utils.now_datetime(), "d MMMM yyyy, HH:mm")
+    b = brand.branding(business_code)
+    business = escape_html(_business(business_code))
+    note = (f"Prepared by {escape_html(b['product'])} from {business}'s ERPNext records, using "
+            f"{escape_html(model or 'the analyst')}. It reads the records the person who asked "
+            f"may see and cannot change anything in ERPNext. Projections are indicative; "
+            f"recommendations are for management to decide on.")
     return PDF_TEMPLATE.format(
         fonts=_font_css(),
         css=pdf_blocks.CSS,
-        business=escape_html(_business(business_code)),
-        question=escape_html(question or ""),
+        page_css=PAGE_CSS,
+        header=brand_header(question or "", business_code,
+                            kicker="Management Report" if report else "Analysis"),
         body=body,
-        as_of=escape_html(_pretty_date(_as_of())),
-        who=escape_html(who),
-        when=escape_html(when),
-        model=escape_html(model or "the analyst"),
+        footer=brand_footer(business_code, note),
+        doc_class="report" if report else "answer",
     )
 
 
@@ -234,6 +304,15 @@ _NUMBER = re.compile(r"^\s*(?:<strong>)?\s*[-+(]?(?:GHS|USD|\$|€|£)?\s*[-+]?[
 _BLANK = re.compile(r"^\s*(?:—|–|-|n/a|N/A)?\s*$")
 
 
+def _thousands(cell: str) -> str:
+    """A bare figure of five digits or more gets its thousands separators: 1234567.5 ->
+    1,234,567.5. Anything already formatted, or with words, is left as written."""
+    m = re.fullmatch(r"(\s*(?:<strong>)?\s*(?:GHS\s*)?)(-?)(\d{5,})(\.\d+)?(\s*(?:</strong>)?\s*)", cell)
+    if not m:
+        return cell
+    return f"{m.group(1)}{m.group(2)}{int(m.group(3)):,}{m.group(4) or ''}{m.group(5)}"
+
+
 def _align(table: str) -> str:
     """A column whose every value is a number (or a dash) is right-aligned, heading
     included, so a heading sits over its figures rather than across the page from them."""
@@ -256,6 +335,8 @@ def _align(table: str) -> str:
             tag, attrs, text = m.group(1), m.group(2), m.group(3)
             if i < len(numeric) and numeric[i]:
                 attrs = re.sub(r'\s*style="[^"]*"', "", attrs) + ' class="n"'
+                if tag == "d":
+                    text = _thousands(text)
             return f"<t{tag}{attrs}>{text}</t{tag}>"
         return "<tr>" + re.sub(r"<t([hd])([^>]*)>(.*?)</t[hd]>", cell, r, flags=re.S) + "</tr>"
 
@@ -264,21 +345,42 @@ def _align(table: str) -> str:
 
 def _polish(body: str) -> str:
     """Small things a well-made document does: the first paragraph is the lead, numbers
-    in tables line up on the right, and each recommendation stands out."""
+    in tables line up on the right, each recommendation stands out, the document's title
+    is the only top-level heading, and a heading never ends a page on its own."""
     body = re.sub(r"<p>", '<p class="lead">', body, count=1)
+    body = re.sub(r"<h1\b([^>]*)>(.*?)</h1>", r"<h2\1>\2</h2>", body, flags=re.S)
     body = re.sub(r"<table>(.*?)</table>", lambda m: f"<table>{_align(m.group(1))}</table>", body, flags=re.S)
     body = re.sub(r"<li>(\s*(?:<strong>)?\s*Recommendation)", r'<li class="rec">\1', body)
     body = re.sub(r"<p>(\s*(?:<strong>)?\s*Projection)", r'<p class="proj">\1', body)
-    return body
+    # The list under a Recommendations heading: numbered, set off from the text.
+    body = re.sub(r"(<h[23][^>]*>\s*(?:Recommendations?|Recommended Actions?|Next Steps|Actions)\b[^<]*</h[23]>\s*)<(ol|ul)>",
+                  r'\1<\2 class="recs">', body, flags=re.I)
+    return _keep_with_next(body)
+
+
+def _keep_with_next(body: str) -> str:
+    """A heading and the paragraph (or short list or table) after it, kept on one page:
+    the engine ignores page-break-after:avoid, but keeps a block whole."""
+    def keep(m):
+        head, nxt, tag = m.group(1), m.group(3), m.group(4)
+        if tag in ("ul", "ol") and (re.search(r"<(ul|ol)\b", nxt[3:]) or nxt.count("<li") > 6):
+            return m.group(0)
+        if tag == "table" and nxt.count("<tr") > 12:
+            return m.group(0)
+        return f'<div class="keep">{head}{nxt}</div>'
+    return re.sub(r"(<h([234])\b[^>]*>.*?</h\2>)\s*(<(p|ul|ol|table)\b.*?</\4>)", keep, body, flags=re.S)
 
 
 @frappe.whitelist(methods=["POST"])
 def answer_pdf(question: str, answer: str, checked=None, business_code: str | None = None,
-               model: str | None = None):
-    """The answer as a PDF. The answer text is the one the analyst returned."""
+               model: str | None = None, kind: str = "answer"):
+    """The answer (or, with kind="report", a written report) as a PDF. The text is the one
+    the analyst returned."""
     require_manager()
+    kind = "report" if kind == "report" else "answer"
     frappe.local.response.filename = _name(question[:60] if question else "Answer", "pdf")
-    frappe.local.response.filecontent = pdf_bytes(question, answer, checked, business_code, model)
+    frappe.local.response.filecontent = pdf_bytes(question, answer, checked, business_code, model,
+                                                  kind=kind)
     frappe.local.response.type = "pdf"
 
 
@@ -331,6 +433,26 @@ def _cell(v):
     return s
 
 
+def brand_rows_head(title: str, business_code, note: str | None = None) -> list:
+    """The rows above a sheet's table: its title, then "<product> · <business> · figures
+    as at ... · exported by ... on ...", then a blank row (the table's headings are row 4).
+    For any other workbook the platform makes, so every sheet starts the same way."""
+    b = brand.branding(business_code)
+    business = _business(business_code)
+    return [[title],
+            [f"{b['product']} · {brand.for_business_name(b, business)} · figures as at {_as_of()} · "
+             f"exported by {frappe.utils.get_fullname(frappe.session.user)} on "
+             f"{frappe.utils.format_datetime(frappe.utils.now_datetime(), 'd MMM yyyy, HH:mm')}"
+             + (f" · {note}" if note else "")],
+            []]
+
+
+def brand_rows_foot(business_code) -> list:
+    """The rows under a sheet's table: a blank row, then "Prepared with <product> by
+    <company> · <email> · <phone> · <website>"."""
+    return [[], [brand.branding(business_code)["prepared"]]]
+
+
 def _send_xlsx(title: str, sheets: list, business_code, note: str | None = None):
     from openpyxl import Workbook
     from openpyxl.styles import Font
@@ -338,6 +460,7 @@ def _send_xlsx(title: str, sheets: list, business_code, note: str | None = None)
 
     wb = Workbook()
     wb.remove(wb.active)
+    wb.properties.creator = brand.branding(business_code)["product"]
     used = set()
     for name, cols, rows in sheets or [("Empty", [], [])]:
         sheet = re.sub(r"[\[\]\*\?/\\:]", " ", str(name))[:28].strip() or "Sheet"
@@ -347,19 +470,24 @@ def _send_xlsx(title: str, sheets: list, business_code, note: str | None = None)
             k += 1
         used.add(sheet)
         ws = wb.create_sheet(sheet)
-        ws.append([title])
+        for row in brand_rows_head(title, business_code, note):
+            ws.append(row)
         ws["A1"].font = Font(bold=True, size=13)
-        ws.append([f"{_business(business_code)} · figures as at {_as_of()} · exported by "
-                   f"{frappe.utils.get_fullname(frappe.session.user)} on "
-                   f"{frappe.utils.format_datetime(frappe.utils.now_datetime(), 'd MMM yyyy, HH:mm')}"
-                   + (f" · {note}" if note else "")])
-        ws.append([])
+        ws["A2"].font = Font(size=9, color="646973")
         ws.append(cols)
         for c in ws[4]:
             c.font = Font(bold=True)
         for r in rows:
             ws.append(r)
+        for row in brand_rows_foot(business_code):
+            ws.append(row)
+        ws.cell(row=ws.max_row, column=1).font = Font(size=9, italic=True, color="7a808a")
         ws.freeze_panes = "A5"
+        # The same lines when the sheet is printed.
+        ws.oddHeader.left.text = brand.branding(business_code)["product"]
+        ws.oddHeader.right.text = _business(business_code)
+        ws.oddFooter.left.text = brand.branding(business_code)["prepared"][:250]
+        ws.oddFooter.right.text = "Page &P of &N"
         for i, col in enumerate(cols, start=1):
             width = max([len(str(col))] + [len(str(r[i - 1])) for r in rows[:200] if len(r) >= i])
             ws.column_dimensions[get_column_letter(i)].width = min(max(10, width + 2), 60)
@@ -370,50 +498,74 @@ def _send_xlsx(title: str, sheets: list, business_code, note: str | None = None)
     frappe.local.response.type = "binary"
 
 
+# The document's typography, one family throughout (the charts' SVG text included), on
+# one scale: 18pt title, 12pt sections, 10pt sub-sections, 9pt text, 8pt tables, 7pt notes.
+PAGE_CSS = """
+@page{size:A4}
+body{font-family:'Manrope PDF','Manrope','Helvetica Neue',Helvetica,Arial,'Liberation Sans',sans-serif;
+ color:#111317;font-size:9pt;line-height:1.6;margin:0;-webkit-font-smoothing:antialiased}
+svg text{font-family:'Manrope PDF','Manrope','Helvetica Neue',Helvetica,Arial,sans-serif}
+table.hd{width:100%;border-collapse:collapse;margin:0 0 14px}
+table.hd td{border:0;padding:0;vertical-align:middle;background:none}
+.hd-logo{height:26px;max-width:200px;display:block}
+.hd-client{height:22px;max-width:150px;display:block;margin:0 0 3px auto}
+.brand{font-size:10pt;font-weight:700;color:#2443e8;line-height:1.2}
+.hd-tag{font-size:7pt;color:#646973;margin-top:2px}
+.hd-r{text-align:right}
+.hd-for{font-size:7pt;color:#646973}
+.hd-for b{color:#24272d;font-weight:600}
+.tb{border-top:2px solid #2443e8;border-bottom:1px solid #e3e5ea;padding:12px 0 10px;margin:0 0 20px;
+ page-break-inside:avoid}
+.kicker{font-size:7pt;font-weight:700;color:#2443e8;text-transform:uppercase;margin-bottom:4px}
+h1{font-size:18pt;font-weight:700;line-height:1.2;margin:0 0 6px}
+.tb-sub{font-size:9pt;color:#3b3f47;margin-bottom:6px}
+table.tb-facts{width:100%;border-collapse:collapse;margin:8px 0 0;font-size:7.5pt}
+table.tb-facts td{border:0;padding:0 12px 0 0;background:none;vertical-align:top;color:#24272d;width:25%}
+table.tb-facts td span{display:block;font-size:6.5pt;font-weight:600;color:#8a8f99;text-transform:uppercase}
+p{margin:0 0 9px}
+p.lead{font-size:10pt;line-height:1.55;color:#24272d;margin-bottom:12px}
+h2{font-size:12pt;font-weight:700;line-height:1.3;margin:20px 0 7px;padding-top:2px;page-break-after:avoid;color:#111317}
+h3{font-size:10pt;font-weight:700;margin:16px 0 5px;page-break-after:avoid}
+h4{font-size:9pt;font-weight:600;margin:12px 0 4px;page-break-after:avoid}
+.keep{page-break-inside:avoid}
+hr{border:0;border-top:1px solid #e3e5ea;margin:18px 0}
+ul,ol{margin:4px 0 12px;padding-left:18px}
+li{margin:4px 0}
+li.rec{list-style:none;margin:7px 0 7px -18px;padding:8px 12px;border-left:3px solid #2443e8;background:#f4f6fe;
+ border-radius:0 8px 8px 0}
+ol.recs,ul.recs{padding-left:0;margin-left:0;list-style:none;counter-reset:rec}
+ol.recs li,ul.recs li{position:relative;margin:0 0 7px;padding:8px 12px 8px 34px;border-left:3px solid #2443e8;
+ background:#f4f6fe;border-radius:0 8px 8px 0;page-break-inside:avoid}
+ol.recs li:before{counter-increment:rec;content:counter(rec);position:absolute;left:11px;top:8px;
+ font-weight:700;color:#2443e8}
+ul.recs li:before{content:"";position:absolute;left:13px;top:14px;width:6px;height:6px;border-radius:3px;
+ background:#2443e8}
+p.proj{padding:9px 13px;border-left:3px solid #a85a0a;background:#fbf5ec;border-radius:0 8px 8px 0}
+strong,b{font-weight:700}
+em{color:#3b3f47}
+table{border-collapse:collapse;width:100%;margin:8px 0 14px;font-size:8pt;page-break-inside:auto}
+tr{page-break-inside:avoid}
+thead{display:table-header-group}
+th{text-align:left;color:#24272d;font-weight:600;background:#eef0f4;border-bottom:1.5px solid #c9cdd5;padding:7px 8px;
+ font-size:7.5pt}
+td{border-bottom:1px solid #eceef1;padding:6px 8px;vertical-align:top}
+td.n,th.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+th.n{white-space:normal}
+tbody tr:nth-child(even) td{background:#f8f9fb}
+code{font-family:Menlo,Consolas,monospace;font-size:8.5pt}
+.ft{margin-top:26px;border-top:1px solid #e3e5ea;padding-top:9px;font-size:6.5pt;color:#8a8f99;line-height:1.55;
+ page-break-inside:avoid}
+.ft-by{margin-top:5px;color:#646973;font-weight:600}
+"""
+
 PDF_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><style>
 {fonts}
-@page{{size:A4}}
-body{{font-family:'Manrope PDF','Manrope','Helvetica Neue',Helvetica,Arial,'Liberation Sans',sans-serif;
- color:#111317;font-size:9pt;line-height:1.6;margin:0;-webkit-font-smoothing:antialiased}}
-.hd{{border-bottom:1px solid #e3e5ea;padding-bottom:10px;margin-bottom:22px}}
-.hd td{{border:0;padding:0;vertical-align:bottom;background:none}}
-.brand{{font-size:8pt;font-weight:700;color:#2443e8}}
-.biz{{font-size:7.5pt;color:#646973;margin-top:2px}}
-.meta{{font-size:7.5pt;color:#646973;text-align:right;line-height:1.5;white-space:nowrap;padding-right:2px}}
-h1{{font-size:18pt;font-weight:700;line-height:1.2;margin:0 0 8px}}
-p{{margin:0 0 9px}}
-p.lead{{font-size:10pt;line-height:1.55;color:#24272d;margin-bottom:12px}}
-h2{{font-size:11.5pt;font-weight:700;margin:20px 0 7px;page-break-after:avoid}}
-h3{{font-size:10pt;font-weight:700;margin:16px 0 5px;page-break-after:avoid}}
-h4{{font-size:9pt;font-weight:600;margin:12px 0 4px}}
-hr{{border:0;border-top:1px solid #e3e5ea;margin:18px 0}}
-ul,ol{{margin:4px 0 12px;padding-left:18px}}
-li{{margin:4px 0}}
-li.rec{{list-style:none;margin:7px 0 7px -18px;padding:8px 12px;border-left:3px solid #2443e8;background:#f4f6fe;
- border-radius:0 8px 8px 0}}
-p.proj{{padding:9px 13px;border-left:3px solid #a85a0a;background:#fbf5ec;border-radius:0 8px 8px 0}}
-strong,b{{font-weight:700}}
-em{{color:#3b3f47}}
-table{{border-collapse:collapse;width:100%;margin:8px 0 14px;font-size:8pt;page-break-inside:auto}}
-tr{{page-break-inside:avoid}}
-th{{text-align:left;color:#3b3f47;font-weight:600;background:#f2f3f5;border-bottom:1px solid #d9dce2;padding:7px 8px;
- font-size:7.5pt}}
-td{{border-bottom:1px solid #eceef1;padding:6px 8px;vertical-align:top}}
-td.n,th.n{{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}}
-th.n{{white-space:normal}}
-tbody tr:nth-child(even) td{{background:#fafbfc}}
-code{{font-family:Menlo,Consolas,monospace;font-size:8.5pt}}
-.ft{{margin-top:26px;border-top:1px solid #e3e5ea;padding-top:9px;font-size:6.5pt;color:#8a8f99;line-height:1.55}}
+{page_css}
 {css}
-</style></head><body>
-<table class="hd" style="width:100%;border-collapse:collapse"><tr>
-<td><div class="brand">AI Business Intelligence</div><div class="biz">{business}</div></td>
-<td class="meta">Figures as at {as_of}<br>Prepared for {who} · {when}</td></tr></table>
-<h1>{question}</h1>
+</style></head><body class="{doc_class}">
+{header}
 {body}
-<div class="ft">Prepared by AI Business Intelligence from {business}'s ERPNext records, using {model}.
-It reads the records the person who asked may see and cannot change anything in ERPNext.
-Projections are indicative; recommendations are for management to decide on.</div>
+{footer}
 </body></html>"""
 
 

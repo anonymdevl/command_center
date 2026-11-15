@@ -421,6 +421,7 @@ frappe.conf.pop("command_center_sso_role")
 #     address shown -- an unknown reference reads as the general message.
 _www = types.ModuleType("command_center.www.command_center")
 _www._assets = lambda: {"css": None}
+_www._brand = lambda: {"product": "Ultrasoft Insights"}
 sys.modules["command_center.www.command_center"] = _www
 from command_center.www import command_center_access as page  # noqa: E402
 

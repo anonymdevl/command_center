@@ -22,6 +22,13 @@ body.cc-auth{overflow:auto;min-height:100vh;background:var(--bg);display:grid;pl
 .auth-mark{width:44px;height:44px;border-radius:13px;background:var(--ink);display:grid;place-items:center}
 .auth-mark i{width:18px;height:18px;border-radius:50%;border:3.5px solid var(--accent);display:block;
  box-shadow:7px 0 0 -1px var(--t3)}
+/* The product's own logo (Settings -> Branding), one for each background. */
+.auth-logo{display:block;height:44px;width:auto;max-width:240px;object-fit:contain}
+.auth-logo.dk{display:none}
+[data-theme="dark"] .auth-logo.lt{display:none}
+[data-theme="dark"] .auth-logo.dk{display:block}
+.auth-tag{display:block;font-size:var(--fs-sm);color:var(--mut);margin-top:2px}
+.auth-by{font-size:var(--fs-2xs);color:var(--dim);line-height:1.5}
 .auth-card{padding:48px 44px;display:flex;flex-direction:column;justify-content:center}
 .auth-card h1{font-size:var(--fs-3xl);font-weight:var(--fw-semibold);letter-spacing:-.03em;line-height:1.15;color:var(--ink)}
 .auth-sub{color:var(--mut);font-size:var(--fs-md);margin-top:8px;line-height:1.55}

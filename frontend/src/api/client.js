@@ -287,3 +287,33 @@ Object.assign(settingsApi, {
   testEmail: (to) => call(`${PS}.test_email`, { to }),
   notifications: () => call(`${PS}.notifications`),
 });
+
+/* Branding (administrator only) and a business's co-brand (Businesses). Logos are sent
+   as data: URLs; the server checks what they are, never trusting the file's name. */
+Object.assign(settingsApi, {
+  brand: () => call(`${PS}.brand`),
+  setBrand: (args) => call(`${PS}.set_brand`, args),
+  uploadBrandLogo: (kind, data) => call(`${PS}.upload_brand_logo`, { kind, data }),
+  removeBrandLogo: (kind) => call(`${PS}.remove_brand_logo`, { kind }),
+  setBusinessBrand: (name, display_name) => call(`${PS}.set_business_brand`, { name, display_name }),
+  uploadBusinessLogo: (name, data) => call(`${PS}.upload_business_logo`, { name, data }),
+  removeBusinessLogo: (name) => call(`${PS}.remove_business_logo`, { name }),
+});
+
+/** A chosen file as a data: URL, refused here first if it is plainly too large or not
+ *  a PNG, JPEG or WebP (the server checks again, by content). */
+export function readImage(file, maxKb = 1024) {
+  return new Promise((resolve, reject) => {
+    if (!file) return reject(new Error("Choose an image file."));
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      return reject(new Error("Choose a PNG, JPEG or WebP image. SVG is not accepted."));
+    }
+    if (file.size > maxKb * 1024) {
+      return reject(new Error(`That image is too large. The most it may be is ${maxKb} KB.`));
+    }
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ""));
+    r.onerror = () => reject(new Error("That file could not be read."));
+    r.readAsDataURL(file);
+  });
+}

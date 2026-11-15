@@ -43,6 +43,7 @@ def get_context(context):
 
     context.no_cache = 1
     context.assets = _assets()
+    context.brand = _brand()
     context.boot = _payload(_boot(user))
     # The interface posts to /api/method, so it needs the token for this session.
     context.csrf_token = _payload(frappe.sessions.get_csrf_token())
@@ -79,6 +80,19 @@ def _assets() -> dict:
         frappe.log_error(title="Command Center assets",
                          message=f"No usable manifest at {manifest_path}")
         return {"js": url + "command-center.js", "css": url + "command-center.css"}
+
+
+def _brand() -> dict:
+    """The product's name, tagline, logos and footer for a page (command_center/branding.py).
+    A broken configuration never blanks a page: the defaults are used."""
+    from command_center import branding
+    try:
+        return branding.public()
+    except Exception:
+        frappe.log_error(title="Command Center branding", message=frappe.get_traceback())
+        return {**branding.DEFAULTS, "product": branding.DEFAULTS["product_name"],
+                "logo_light_url": None, "logo_dark_url": None,
+                "favicon_url": "/assets/command_center/images/command-center.svg"}
 
 
 def _payload(value) -> str:
@@ -143,7 +157,19 @@ def _boot(user: str) -> dict:
         # The Settings sections this person may open ([] = no Settings in the sidebar):
         # all for the administrator, the given ones for a delegate.
         "settings_sections": _settings_sections(user),
+        # The product's name, logos and the vendor's footer (Settings -> Branding), and
+        # each business's co-brand for "Prepared for" on what is printed or exported.
+        "brand": _brand(),
+        "clients": _clients(),
     }
+
+
+def _clients() -> dict:
+    from command_center import branding
+    try:
+        return branding.clients()
+    except Exception:
+        return {}
 
 
 def _settings_sections(user: str) -> list:

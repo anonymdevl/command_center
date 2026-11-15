@@ -1,6 +1,6 @@
 import React from "react";
 import { api } from "../api/client.js";
-import { boot } from "../api/boot.js";
+import { boot, brand, clientBrand } from "../api/boot.js";
 import { shortDate } from "../format.js";
 import { tablesFrom } from "../exportTables.js";
 import ExportButton from "./ExportButton.jsx";
@@ -22,20 +22,22 @@ export default function ViewTools({ caption, scope }) {
     const main = document.getElementById("cc-main");
     const biz = (boot.scopes || []).find((s) => s.code === scope)?.label || "All businesses";
 
-    const head = document.createElement("div");
-    head.className = "print-head";
-    head.textContent =
-      `${biz} · ${caption} · figures as at ${shortDate(boot.as_of?.date) || "—"} · ` +
-      `printed by ${boot.user?.name || ""} on ${new Date().toLocaleString("en-GB", {
-        day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
-      })}`;
+    const client = clientBrand(scope);
+    const head = printHead(caption, client?.display_name || biz, client?.logo_url,
+      `Figures as at ${shortDate(boot.as_of?.date) || "—"} · printed by ${boot.user?.name || ""} on ${
+        new Date().toLocaleString("en-GB", {
+          day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+        })}`);
+    const foot = node("div", "print-foot", brand.footer || brand.product);
     main?.prepend(head);
+    main?.append(foot);
     root.setAttribute("data-theme", "light");
     // The browser offers the title as the PDF's file name.
     document.title = `${caption} – ${biz} – ${new Date().toISOString().slice(0, 10)}`;
 
     const restore = () => {
       head.remove();
+      foot.remove();
       if (theme) root.setAttribute("data-theme", theme);
       document.title = title;
       window.removeEventListener("afterprint", restore);
@@ -61,4 +63,35 @@ export default function ViewTools({ caption, scope }) {
       <ExportButton label="Excel" title="Download the tables on this screen as Excel" run={excel} />
     </div>
   );
+}
+
+/** The printed page's header: the product's logo (or name), the screen, who it is for,
+ *  and as at when -- built from nodes, never HTML. */
+function printHead(caption, forName, clientLogo, meta) {
+  const head = node("div", "print-head");
+  if (brand.logo_light_url) {
+    const img = document.createElement("img");
+    img.src = brand.logo_light_url;
+    img.alt = "";
+    head.append(img);
+  }
+  const title = node("div", "");
+  title.append(node("b", "", caption), document.createElement("br"),
+    document.createTextNode(`${brand.product} · Prepared for ${forName}`));
+  head.append(title);
+  if (clientLogo) {
+    const img = document.createElement("img");
+    img.src = clientLogo;
+    img.alt = "";
+    head.append(img);
+  }
+  head.append(node("div", "ph-meta", meta));
+  return head;
+}
+
+function node(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text) n.textContent = text;
+  return n;
 }

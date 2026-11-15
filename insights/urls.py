@@ -18,4 +18,5 @@ urlpatterns = [
     path("command-center-access", views.command_center_access),
     re_path(r"^command-center(?:/(?P<path>.*))?$", views.command_center),
     re_path(r"^assets/command_center/(?P<path>.+)$", views.assets),
+    re_path(r"^branding/(?P<name>[^/]+)$", views.branding_file),
 ]

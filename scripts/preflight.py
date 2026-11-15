@@ -1183,7 +1183,7 @@ if os.path.exists(CSS_FILE):
 # Its rules were spread over four generator files, each overriding the last, so a
 # change in one was undone by another further down. shell.py now owns them, and no
 # other generator may style a shell class again.
-_SHELL_CLASSES = ("shell", "col", "side", "brand", "logo", "nav", "navsec", "navgrp", "navi",
+_SHELL_CLASSES = ("shell", "col", "side", "brand", "brand-logo", "logo", "nav", "navsec", "navgrp", "navi",
                   "biz", "biz-row", "biz-sw", "biz-menu", "biz-opt", "topnav", "ask", "ask-go",
                   "pill", "ib", "who", "av", "whotxt", "appearmenu", "swatches", "dnote")
 _shell_sel = re.compile(r"\.(%s)(?![\w-])" % "|".join(map(re.escape, _SHELL_CLASSES)))

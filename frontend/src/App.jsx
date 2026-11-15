@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { boot } from "./api/boot.js";
+import { boot, brand } from "./api/boot.js";
 import { initAppearance } from "./appearance.js";
 import Topbar from "./components/Topbar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
@@ -124,7 +124,7 @@ function captionOf(key) {
     const it = g.items.find((i) => i.key === key);
     if (it) return it.label;
   }
-  return "AI Business Intelligence";
+  return brand.product;
 }
 
 /**

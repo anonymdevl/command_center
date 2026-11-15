@@ -20,6 +20,7 @@
  *   Approve, Defer, Dismiss in an alert's menu  ->  removed: they need the alert engine
  *       to remember a decision, and a button that pretends to is worse than none.
  */
+import { brand } from "../api/boot.js";
 
 const TO_DIALOG = {
   "assign": "assign", "request evidence": "evidence", "escalate": "escalate",
@@ -111,11 +112,11 @@ function contextFor(b) {
   if (row) {
     const cells = Array.from(row.querySelectorAll("td")).map((td) => (td.textContent || "").trim())
       .filter((t) => t && t.length < 300 && !/^(raise it|open|give it an owner)$/i.test(t));
-    return { title: cells[0] || "From AI Business Intelligence", detail: cells.slice(1).join(" · ") };
+    return { title: cells[0] || `From ${brand.product}`, detail: cells.slice(1).join(" · ") };
   }
   const card = b.closest(".alert, .panel, .kpi, .bk") || b.parentElement;
   const head = card?.querySelector(".awhat, .ph b, h4, b");
-  return { title: (head?.textContent || "From AI Business Intelligence").trim(),
+  return { title: (head?.textContent || `From ${brand.product}`).trim(),
            detail: text(card, ".awhy") };
 }
 

@@ -23,9 +23,15 @@ SHELL_CSS = """
 .logo i{width:14px;height:14px;border-radius:50%;border:3px solid var(--accent);display:block;
  box-shadow:6px 0 0 -1px var(--bg)}
 .brand-t{min-width:0}
-/* "AI Business Intelligence" is longer than the old name: a step smaller so it fits. */
+/* The product's own logo (Settings -> Branding) in place of the mark, one for each
+   background. The name is set by the administrator, so a long one is cut, not wrapped. */
+.brand-logo{height:34px;max-width:72px;flex:none;display:flex;align-items:center}
+.brand-logo img{max-height:34px;max-width:72px;width:auto;object-fit:contain;display:block}
+.brand-logo img.dk{display:none}
+[data-theme="dark"] .brand-logo img.lt{display:none}
+[data-theme="dark"] .brand-logo img.dk{display:block}
 .brand-t b{display:block;font-size:var(--fs-md);font-weight:var(--fw-semibold);letter-spacing:-.03em;
- white-space:nowrap;line-height:1.25}
+ white-space:nowrap;line-height:1.25;overflow:hidden;text-overflow:ellipsis}
 .brand-t span{display:block;font-size:var(--fs-2xs);color:var(--mut);letter-spacing:-.005em;line-height:1.35}
 .brand{padding-right:2px}
 .nav{flex:1;min-height:0;overflow-y:auto;padding:12px 6px 18px;
@@ -249,7 +255,7 @@ SHELL_CSS = """
 .ap-act.failed{border-color:var(--crit-line);color:var(--crit)}
 .ap-act:disabled{opacity:.7;cursor:default}
 .dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-.print-head{display:none}
+.print-head,.print-foot{display:none}
 
 /* ---- paper: a screen printed or saved as PDF ---- */
 @media print{
@@ -259,8 +265,14 @@ SHELL_CSS = """
  .side,.topnav,.vtools,.askpop,.drawer,.scrim-nav,.cc-preview-tag,.dnote{display:none!important}
  .col{display:block}
  .main{overflow:visible;box-shadow:none;border-radius:0;padding:0;background:#fff}
- .print-head{display:block;font-size:var(--fs-xs);color:var(--mut);border-bottom:1px solid var(--line2);
-  padding-bottom:6px;margin-bottom:14px}
+ .print-head{display:flex;align-items:center;gap:14px;font-size:var(--fs-xs);color:var(--mut);
+  border-bottom:1px solid var(--line2);padding-bottom:8px;margin-bottom:14px}
+ .print-head img{max-height:28px;max-width:160px;object-fit:contain}
+ .print-head b{color:var(--ink);font-size:var(--fs-sm);font-weight:var(--fw-semibold)}
+ .print-head .ph-meta{margin-left:auto;text-align:right;line-height:1.45}
+ .print-foot{display:block;font-size:var(--fs-2xs);color:var(--mut);border-top:1px solid var(--line2);
+  padding-top:6px;margin-top:18px}
+ @page{@bottom-right{content:"Page " counter(page) " of " counter(pages)}}
  .kpi,.bk,.panel,.alert,.note,.chartwrap,table.dt tr{break-inside:avoid}
  .kpi:hover,.bk:hover{transform:none;box-shadow:none}
  .tabpane:not(.on){display:none!important}

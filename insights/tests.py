@@ -992,7 +992,7 @@ class SettingsDelegation(TransactionTestCase):
 
     def test_boot_and_a_plain_manager(self):
         self.assertEqual(self._boot(self.admin)["settings_sections"],
-                         ["people", "businesses", "claude", "email", "keys", "changes"])
+                         ["people", "businesses", "claude", "email", "branding", "keys", "changes"])
         self.assertEqual(self._boot(self.manager)["settings_sections"], [])
         for fn in ("people", "businesses", "credentials", "email", "notifications",
                    "set_email", "test_email", "set_settings_access", "changes"):
@@ -1695,3 +1695,199 @@ class SettingsReachEveryProcess(TransactionTestCase):
             settings.CONFIG.clear(); settings.CONFIG.update(saved)
             compat.conf.clear(); compat.conf.update(saved)
             compat._config_stamp[0] = None
+
+
+def _png(w=4, h=2) -> bytes:
+    """A real, tiny PNG."""
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        return (struct.pack(">I", len(data)) + kind + data
+                + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF))
+    raw = b"".join(b"\x00" + b"\xff\x00\x00" * w for _ in range(h))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+def _data_url(raw: bytes, mime="image/png") -> str:
+    import base64
+    return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
+
+
+class Branding(TransactionTestCase):
+    """Settings -> Branding (command_center/branding.py, platform_settings): the product's
+    name, tagline, logos and the vendor's footer are the administrator's alone; uploads
+    are PNG, JPEG or WebP by content, at most 1 MB, never SVG, stored under a name made
+    from the content and served with a long cache; the sign-in page, the boot payload,
+    answer and report PDFs and the workbooks all carry the configured brand; a
+    business's co-brand ("Prepared for") is set from Businesses."""
+
+    databases = {"default", "aux"}
+    MOD = SettingsPage.MOD
+    SECRET = SettingsPage.SECRET
+    _call = SettingsPage._call
+    _ok = SettingsPage._ok
+    _refused = SettingsPage._refused
+
+    def setUp(self):
+        import tempfile
+        from django.conf import settings
+        SettingsPage.setUp(self)
+        self.files = tempfile.TemporaryDirectory()
+        settings.CONFIG["files_root"] = self.files.name  # undone by SettingsPage's patch.dict
+
+    def tearDown(self):
+        SettingsPage.tearDown(self)
+        self.files.cleanup()
+
+    def _boot(self, client) -> dict:
+        page = client.get("/command-center").content.decode()
+        return json.loads(re.search(r"window\.CC_BOOT = (.*?);\s*$", page, re.M).group(1))
+
+    def test_only_the_administrator(self):
+        for fn, args in (("brand", {}), ("set_brand", {"product_name": "X"}),
+                         ("upload_brand_logo", {"kind": "logo_light", "data": _data_url(_png())}),
+                         ("remove_brand_logo", {"kind": "logo_light"})):
+            r = self._call(self.manager, fn, **args)
+            self.assertEqual(r.status_code, 403, f"{fn} answered a manager")
+        # a Businesses delegate may set a business's co-brand, never the product's brand
+        self._ok("set_settings_access", username="manager@test.com", sections=["businesses"])
+        self.assertEqual(self._call(self.manager, "set_brand", product_name="X").status_code, 403)
+        self.assertNotIn("branding", self._boot(self.manager)["settings_sections"])
+        self.assertIn("branding", self._boot(self.admin)["settings_sections"])
+        shipped = self._ok("brand")
+        self.assertEqual((shipped["product_name"], shipped["tagline"], shipped["company"]),
+                         ("Ultrasoft Insights", "Advanced AI-Powered Business Intelligence for ERPNext",
+                          "Ultrasoft Systems"))
+
+    def test_name_everywhere(self):
+        out = self._ok("set_brand", product_name="Acme Insight", tagline="Board Intelligence",
+                       company="Acme Systems", person="A. Person, Director",
+                       email="hello@acme.test", phone="+233 20 000 0000", website="www.acme.test")
+        self.assertEqual(out["preview"]["footer"],
+                         "Acme Insight · built by Acme Systems — A. Person, Director · "
+                         "hello@acme.test · +233 20 000 0000 · www.acme.test")
+        self.assertIn("Nothing was changed", self._refused("set_brand", product_name="Acme Insight",
+                      tagline="Board Intelligence", company="Acme Systems",
+                      person="A. Person, Director", email="hello@acme.test",
+                      phone="+233 20 000 0000", website="www.acme.test"))
+        self.assertIn("not an email", self._refused("set_brand", product_name="Acme Insight",
+                                                     email="nope"))
+        self.assertIn("cannot contain", self._refused("set_brand", product_name="<b>x</b>"))
+        whats = " | ".join(c["what"] for c in self._ok("changes"))
+        self.assertIn("changed the branding: product name, tagline, company", whats)
+        # the sign-in page, the app page and the boot payload
+        login = Client().get("/command-center-login").content.decode()
+        self.assertIn("<title>Sign in · Acme Insight</title>", login)
+        self.assertIn("<b>Acme Insight</b>", login)
+        self.assertIn("Acme Insight · built by Acme Systems", login)
+        self.assertNotIn("AI Business Intelligence", login)
+        app = self.admin.get("/command-center").content.decode()
+        self.assertIn("<title>Acme Insight</title>", app)
+        boot = self._boot(self.manager)
+        self.assertEqual((boot["brand"]["product"], boot["brand"]["tagline"]),
+                         ("Acme Insight", "Board Intelligence"))
+        # a blank name goes back to the default
+        self._ok("set_brand", product_name="", company="")
+        self.assertEqual(self._boot(self.manager)["brand"]["product"], "Ultrasoft Insights")
+
+    def test_uploads(self):
+        from command_center import branding
+        png = _png()
+        out = self._ok("upload_brand_logo", kind="logo_light", data=_data_url(png))
+        url = out["logo_light_url"]
+        self.assertRegex(url, r"^/branding/logo_light-[0-9a-f]{16}\.png$")
+        got = Client().get(url)
+        self.assertEqual(got.status_code, 200)
+        self.assertEqual(got["Content-Type"], "image/png")
+        self.assertIn("immutable", got["Cache-Control"])
+        self.assertEqual(got["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(b"".join(got.streaming_content), png)
+        self.assertEqual(self._boot(self.manager)["brand"]["logo_dark_url"], url,
+                         "one logo serves both backgrounds")
+        # refused: SVG (whatever it is called), too large, not an image, a damaged PNG
+        svg = b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+        self.assertIn("SVG images are not accepted",
+                      self._refused("upload_brand_logo", kind="logo_dark", data=_data_url(svg)))
+        self.assertIn("SVG images are not accepted",
+                      self._refused("upload_brand_logo", kind="logo_dark", data=_data_url(b"  <svg/>")))
+        big = png + b"\x00" * (branding.MAX_BYTES + 10)
+        self.assertIn("too large", self._refused("upload_brand_logo", kind="logo_dark", data=_data_url(big)))
+        self.assertIn("not a PNG, JPEG or WebP",
+                      self._refused("upload_brand_logo", kind="logo_dark",
+                                    data=_data_url(b"MZ\x90\x00 plainly not a picture")))
+        self.assertIn("damaged", self._refused("upload_brand_logo", kind="logo_dark",
+                                               data=_data_url(b"\x89PNG\r\n\x1a\n" + b"\x00" * 40)))
+        self.assertIn("Choose which logo", self._refused("upload_brand_logo", kind="../../x",
+                                                          data=_data_url(png)))
+        # nothing but the platform's own names is served
+        for bad in ("/branding/../insights.json", "/branding/logo_light-zz.png",
+                    "/branding/x.svg", "/branding/logo_light-0123456789abcdef.svg"):
+            self.assertEqual(Client().get(bad).status_code, 404, bad)
+        # replaced: the old file goes; removed: back to the mark
+        jpg = b"\xff\xd8\xff\xe0" + b"\x00\x10JFIF\x00" + b"\xff\xc0\x00\x11\x08\x00\x02\x00\x04" + b"\x00" * 20 + b"\xff\xd9"
+        out = self._ok("upload_brand_logo", kind="logo_light", data=_data_url(jpg, "image/jpeg"))
+        self.assertTrue(out["logo_light_url"].endswith(".jpg"))
+        self.assertEqual(Client().get(url).status_code, 404, "the replaced logo is deleted")
+        self._ok("remove_brand_logo", kind="logo_light")
+        self.assertIsNone(self._boot(self.manager)["brand"]["logo_light_url"])
+
+    def test_outputs_carry_the_brand(self):
+        import io
+        import sys
+
+        from openpyxl import load_workbook
+        self._ok("set_brand", product_name="Acme Insight", company="Acme Systems",
+                 email="hello@acme.test")
+        self._ok("upload_brand_logo", kind="logo_light", data=_data_url(_png()))
+        b = self._ok("add_business", business_name="Test Medical Ltd", site_url="https://erp.test/",
+                     api_key="key-abcd1234", api_secret=self.SECRET)["business"]
+        # co-brand, from Businesses
+        row = self._ok("set_business_brand", name=b["name"], display_name="Test Medical Group")
+        self.assertEqual(row["client_name"], "Test Medical Group")
+        row = self._ok("upload_business_logo", name=b["name"], data=_data_url(_png(3, 3)))
+        self.assertRegex(row["client_logo_url"], r"^/branding/client-[0-9a-f]{16}\.png$")
+        self.assertEqual(self._boot(self.manager)["clients"][b["business_code"]]["display_name"],
+                         "Test Medical Group")
+
+        seen = []
+        pdfmod = sys.modules["frappe.utils.pdf"]
+        report = ("# Executive Summary: Test Medical Ltd\n\nSales rose to GHS 1.2M.\n\n"
+                  "## cash and receivables\n\n| Customer | Owed |\n|---|---|\n| UBUNTU | 636675 |\n\n"
+                  "## Recommendations\n\n- **Recommendation:** Reconcile the receipts by 30 November.\n")
+        with mock.patch.object(pdfmod, "get_pdf", lambda html, options=None: (seen.append((html, options)), b"%PDF")[1]), \
+                mock.patch("command_center.api.export._ensure_fonts", lambda: None):
+            for kind in ("answer", "report"):
+                r = self.manager.post("/api/method/command_center.api.export.answer_pdf", json.dumps(
+                    {"question": "Executive Summary", "answer": report, "business_code": b["business_code"],
+                     "model": "m", "kind": kind}), content_type="application/json")
+                self.assertEqual(r.status_code, 200, r.content[:300])
+        for (html, options), kind in zip(seen, ("answer", "report")):
+            self.assertIn("data:image/png;base64,", html, f"{kind}: the product's logo is in the PDF")
+            self.assertIn('class="hd-client"', html, f"{kind}: and the client's")
+            self.assertIn("Prepared for <b>Test Medical Group</b>", html)
+            self.assertIn("Acme Insight · built by Acme Systems · hello@acme.test", html)
+            self.assertEqual(options["footer-left"], "Acme Insight · built by Acme Systems · hello@acme.test")
+            self.assertEqual(options["footer-right"], "Page [page] of [topage]")
+            self.assertNotIn("AI Business Intelligence", html)
+        html = seen[1][0]
+        self.assertIn("Management Report", html)
+        self.assertEqual(html.count("Executive Summary"), 1, "the repeated title is dropped")
+        self.assertIn("Cash and Receivables</h2>", html)
+        self.assertIn('<ol class="recs">', html)
+        self.assertIn("<li>Reconcile the receipts by 30 November.</li>", html)
+        self.assertIn('<td class="n">636,675</td>', html)
+
+        r = self.manager.post("/api/method/command_center.api.export.tables_xlsx", json.dumps(
+            {"title": "Who owes us", "business_code": b["business_code"],
+             "tables": [{"name": "T", "columns": ["A", "B"], "rows": [["x", "1"]]}]}),
+            content_type="application/json")
+        ws = load_workbook(io.BytesIO(r.content)).active
+        self.assertTrue(ws["A2"].value.startswith("Acme Insight · Test Medical Group · figures as at"))
+        self.assertEqual(ws.cell(row=ws.max_row, column=1).value,
+                         "Prepared with Acme Insight by Acme Systems · hello@acme.test")
+        # removing the co-brand puts the business's own name back
+        self._ok("set_business_brand", name=b["name"], display_name="")
+        self._ok("remove_business_logo", name=b["name"])
+        self.assertNotIn(b["business_code"], self._boot(self.manager)["clients"])

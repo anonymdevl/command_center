@@ -68,10 +68,11 @@ def get_context(context):
             if retry:
                 retry_url = f"/api/method/command_center.api.sso.start?business={code}"
 
-    from command_center.www.command_center import _assets
+    from command_center.www.command_center import _assets, _brand
 
     context.no_cache = 1
     context.assets = _assets()
+    context.brand = _brand()
     context.heading = heading
     text = sentence.format(business=business_name)
     context.sentence = text[:1].upper() + text[1:]

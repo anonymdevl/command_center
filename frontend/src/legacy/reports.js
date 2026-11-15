@@ -10,6 +10,8 @@
 import { api } from "../api/client.js";
 import { renderMarkdown } from "./markdown.js";
 import { tablesFrom } from "../exportTables.js";
+import { boot, brand, clientBrand } from "../api/boot.js";
+import { shortDate } from "../format.js";
 
 const POLL_MS = 2500;
 const GIVE_UP_MS = 22 * 60 * 1000;
@@ -66,17 +68,26 @@ export async function runReport(code, scope) {
 function render(box, r, scope) {
   box.textContent = "";
   const head = el("div", "rp-head");
-  head.append(
+  // The same title block as the PDF: kind, title, who it is for, as at when.
+  const biz = (boot.scopes || []).find((x) => x.code === scope)?.label || "All businesses";
+  const forName = clientBrand(scope)?.display_name || biz;
+  const title = el("div", "rp-title");
+  title.append(
+    el("span", "rp-kick", "Management Report"),
     el("b", "", r.title),
+    el("span", "rp-for", `Prepared for ${forName} · figures as at ${shortDate(boot.as_of?.date) || "—"}`),
     el("span", "rp-sub", `Written ${new Date(r.generated || Date.now()).toLocaleString("en-GB", {
       day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · ${r.model || "the analyst"} · reads only`),
   );
+  head.append(title);
   const acts = el("div", "rp-acts");
   const body = el("div", "rp-body");
-  body.append(renderMarkdown(r.answer));
+  const md = renderMarkdown(r.answer);
+  markRecommendations(md);
+  body.append(md);
   acts.append(
     button("PDF", () => api.answerPdf({ question: r.title, answer: r.answer, checked: r.checked,
-      business_code: scope, model: r.model })),
+      business_code: scope, model: r.model, kind: "report" })),
     button("Excel", () => {
       const tables = tablesFrom(body);
       if (!tables.length) return Promise.reject(new Error("This report has no tables."));
@@ -85,7 +96,7 @@ function render(box, r, scope) {
     button("Copy", () => navigator.clipboard.writeText(`${r.title}\n\n${r.answer}`)),
   );
   head.append(acts);
-  box.append(head, body);
+  box.append(head, body, el("div", "rp-foot", brand.footer || brand.product));
   if (r.checked?.length) {
     const d = el("details", "ap-checked");
     d.append(el("summary", "", `What it checked (${r.checked.length})`));
@@ -93,6 +104,15 @@ function render(box, r, scope) {
     r.checked.forEach((c) => ul.append(el("li", "", c)));
     d.append(ul);
     box.append(d);
+  }
+}
+
+/** The list under the Recommendations heading, numbered and set off as in the PDF. */
+export function markRecommendations(root) {
+  for (const h of root.querySelectorAll("h4, h5")) {
+    if (!/^(recommendations?|recommended actions?|next steps|actions)\b/i.test((h.textContent || "").trim())) continue;
+    const list = h.nextElementSibling;
+    if (list && (list.tagName === "OL" || list.tagName === "UL")) list.classList.add("md-recs");
   }
 }
 
