@@ -4,6 +4,10 @@
  * Read from what is rendered, so the sheet has exactly the figures the manager is
  * looking at -- hydrated values included -- in the same order and with the same
  * headings. Each table is named after the panel or heading it sits under.
+ *
+ * Every row, not only the page showing: an answer's long table shows ten rows at a
+ * time (legacy/markdown.js enhanceTable) by hiding the others, and they are still read
+ * here -- in the order the manager has sorted them.
  */
 export function tablesFrom(root) {
   if (!root) return [];
@@ -13,7 +17,7 @@ export function tablesFrom(root) {
     .map((t, i) => ({
       name: titleFor(t) || `Table ${i + 1}`,
       columns: Array.from(t.querySelectorAll("thead th")).map(clean),
-      rows: Array.from(t.querySelectorAll("tbody tr")).map((tr) =>
+      rows: Array.from(t.querySelectorAll("tbody tr")).map((tr) => // hidden rows included
         Array.from(tr.querySelectorAll("td")).map(clean)),
     }))
     .filter((t) => t.rows.length);

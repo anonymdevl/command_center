@@ -1444,3 +1444,59 @@ body.cc-auth{overflow:auto;min-height:100vh;background:var(--bg);display:grid;pl
  .av{width:38px;height:38px}
  .main{padding:20px 16px 56px;border-radius:var(--r)}
 }
+
+/* ======================================================================
+   Answer charts and tables, second set (legacy/charts.js, legacy/markdown.js):
+   column, ranked, combo and scatter charts; hover figures; the Download control;
+   sortable, paged answer tables. New rules only -- nothing above is changed.
+   ====================================================================== */
+.md-chart{position:relative}
+.md-cols,.md-scatter{width:100%;height:auto;display:block;overflow:visible}
+.md-rect.c0,.md-dot.c0{fill:var(--accent)}
+.md-rect.c1{fill:var(--ok)}
+.md-rect.c2{fill:var(--high)}
+.md-rect.c3{fill:var(--dim)}
+.md-base{stroke:var(--ink2);stroke-width:1;opacity:.55}
+.md-unit{font-weight:var(--fw-semibold)}
+.md-val{fill:var(--ink2);font-size:var(--fs-3xs);font-weight:var(--fw-semibold);font-family:var(--sans)}
+.md-plab{fill:var(--ink2);font-size:var(--fs-3xs);font-family:var(--sans)}
+.md-dot{stroke:var(--surface);stroke-width:1.5}
+.md-hit{fill:transparent;stroke:none}
+.md-cols .md-hit:hover,.md-line .md-hit:hover{fill:var(--hover)}
+.md-legend i.ln{height:3px;width:14px;border-radius:2px}
+.md-hbars{display:flex;flex-direction:column;gap:10px}
+.md-hbar{display:flex;flex-direction:column;gap:5px;font-size:var(--fs-sm)}
+.md-hbar-h{display:flex;align-items:baseline;gap:8px;min-width:0}
+.md-hbar-r{flex:none;min-width:18px;color:var(--dim);font-size:var(--fs-xs);font-variant-numeric:tabular-nums}
+.md-hbar-l{flex:1;min-width:0;color:var(--ink2);overflow-wrap:anywhere}
+.md-hbar-v{flex:none;font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);color:var(--ink);white-space:nowrap}
+.md-hbar-t{position:relative;display:block;height:8px;margin-left:26px;background:var(--raised);
+ border-radius:var(--r-pill);overflow:hidden}
+.md-hbar-t i{position:absolute;top:0;bottom:0;background:var(--accent);border-radius:var(--r-pill)}
+.md-hbar-t i.neg{background:var(--crit)}
+.md-chart-note{font-size:var(--fs-xs);color:var(--mut);margin-top:8px}
+.md-tip{position:absolute;z-index:5;pointer-events:none;max-width:280px;white-space:pre-line;
+ background:var(--surface);color:var(--ink);border:1px solid var(--line2);border-radius:var(--r-sm);
+ box-shadow:var(--shadow);padding:7px 10px;font-size:var(--fs-xs);line-height:1.45;font-variant-numeric:tabular-nums}
+.md-tip[hidden]{display:none}
+.md-chart-f,.md-pager{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px;margin-top:10px}
+.md-dl-t,.md-pager-i{font-size:var(--fs-xs);color:var(--mut);margin-right:2px}
+.md-dl{background:var(--surface);border:1px solid var(--line2);color:var(--ink);border-radius:var(--r-pill);
+ padding:4px 11px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);font-family:inherit;cursor:pointer;
+ white-space:nowrap;transition:border-color .15s}
+.md-dl:hover:not(:disabled){border-color:var(--ink2)}
+.md-dl:disabled{opacity:.45;cursor:default}
+.md-dl[hidden]{display:none}
+.md-dl:focus-visible,.md-sort:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.md-pager{padding:8px 12px;margin:0;border-top:1px solid var(--line)}
+table.dt th[aria-sort]{cursor:pointer;user-select:none}
+.md-sort{all:unset;cursor:pointer;border-radius:3px}
+table.dt th[aria-sort]::after{content:"";display:inline-block;width:0;height:0;margin-left:6px;vertical-align:middle;
+ border-left:4px solid transparent;border-right:4px solid transparent;opacity:0}
+table.dt th[aria-sort="none"]:hover::after{border-top:5px solid currentColor;opacity:.35}
+table.dt th[aria-sort="descending"]::after{border-top:5px solid currentColor;opacity:.8}
+table.dt th[aria-sort="ascending"]::after{border-bottom:5px solid currentColor;opacity:.8}
+@media print{
+ .md-chart-f,.md-pager,.md-tip{display:none!important}
+ table.dt tbody tr[hidden]{display:table-row!important}
+}

@@ -1449,6 +1449,18 @@ _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_export.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,
       "scripts/test_export.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+# The answer's charts and tables (legacy/charts.js, markdown.js): each chart type draws a
+# valid block and refuses a broken one; long tables sort and page with every row kept.
+# Needs Node, which the frontend build needs anyway.
+import shutil as _shutil
+_node = _shutil.which("node")
+check(bool(_node), "no node on PATH: scripts/test_charts.mjs (the answer's charts and "
+      "tables) cannot run. Install Node 20+, as the frontend build needs.")
+if _node:
+    _t = _sp.run([_node, os.path.join(ROOT, "scripts", "test_charts.mjs")],
+                 capture_output=True, text=True, timeout=120)
+    check(_t.returncode == 0,
+          "scripts/test_charts.mjs failed:\n" + (_t.stdout + _t.stderr)[-1500:])
 
 # --------------------------------------------------------------------------
 print(f"preflight: {checks} checks")
