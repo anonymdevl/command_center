@@ -3,6 +3,7 @@ import { settingsApi } from "../api/client.js";
 import { useApi } from "../useApi.js";
 import { Failed, Loading } from "./States.jsx";
 import { Dialog, Msg, act, when } from "./SettingsParts.jsx";
+import { LogoSlot } from "./SettingsBranding.jsx";
 
 const STATUS_TAG = { Active: "t-ok", Paused: "t-dr", Unreachable: "t-od" };
 
@@ -343,9 +344,47 @@ function ManageBusiness({ b, onClose, onDone }) {
         </div>
       ) : null}
 
+      <CoBrand b={b} onDone={onDone} />
+
       <div className="dlg-acts">
         <button type="button" className="ap-act pri" onClick={onClose}>Done</button>
       </div>
     </Dialog>
+  );
+}
+
+/** The name and logo this business's PDFs, workbooks and printouts are prepared for. */
+function CoBrand({ b, onDone }) {
+  const [name, setName] = useState(b.client_name || "");
+  const [st, setSt] = useState({});
+  const save = async (e) => {
+    e.preventDefault();
+    const out = await act(setSt, () => settingsApi.setBusinessBrand(b.name, name),
+      name.trim() ? "Saved. Its documents are prepared for this name from now on." : "Cleared. Its documents use its own name.");
+    if (out) onDone();
+  };
+  return (
+    <div className="dlg-sec">
+      <h4>Co-Branding</h4>
+      <p className="dlg-hint">
+        Optional. Its PDFs, workbooks and printed screens say "Prepared for" this name, with its logo beside the product's.
+      </p>
+      <div className="st-cobrand">
+        <form onSubmit={save}>
+          <label htmlFor="mb-client">Display name</label>
+          <input id="mb-client" autoComplete="off" value={name} maxLength={100}
+            onChange={(e) => setName(e.target.value)} placeholder={b.business_name} />
+          <div className="dlg-acts" style={{ justifyContent: "flex-start" }}>
+            <button type="submit" className="ap-act" disabled={st.busy || name === (b.client_name || "")}>Save Name</button>
+          </div>
+          <Msg tone="ok">{st.ok}</Msg>
+          <Msg tone="bad">{st.bad}</Msg>
+        </form>
+        <LogoSlot label="Client logo" hint="PNG or JPEG, on a light background." url={b.client_logo_url}
+          onUpload={(dataUrl) => settingsApi.uploadBusinessLogo(b.name, dataUrl)}
+          onRemove={() => settingsApi.removeBusinessLogo(b.name)}
+          onSaved={onDone} />
+      </div>
+    </div>
   );
 }

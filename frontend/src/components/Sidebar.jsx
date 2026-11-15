@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { boot } from "../api/boot.js";
+import { boot, brand } from "../api/boot.js";
 import Icon, { VIEW_ICON } from "./Icon.jsx";
 import { canOpenSettings, settingsSections } from "./Settings.jsx";
 
@@ -15,12 +15,19 @@ export default function Sidebar({ nav, current, onGo, scope, onScope }) {
   return (
     <aside className="side">
       <div className="brand">
-        <div className="logo" aria-hidden="true">
-          <i />
-        </div>
+        {brand.logo_light_url ? (
+          <span className="brand-logo" aria-hidden="true">
+            <img className="lt" src={brand.logo_light_url} alt="" />
+            <img className="dk" src={brand.logo_dark_url || brand.logo_light_url} alt="" />
+          </span>
+        ) : (
+          <div className="logo" aria-hidden="true">
+            <i />
+          </div>
+        )}
         <div className="brand-t">
-          <b>AI Business Intelligence</b>
-          <span>Executive Intelligence Platform</span>
+          <b title={brand.product}>{brand.product}</b>
+          {brand.tagline ? <span>{brand.tagline}</span> : null}
         </div>
       </div>
 

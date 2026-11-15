@@ -39,7 +39,8 @@ def require_manager():
     window into the business is ERPNext itself.
     """
     if not ALLOWED_ROLES.intersection(frappe.get_roles()):
-        frappe.throw("AI Business Intelligence is available to management only.",
+        from command_center.branding import branding
+        frappe.throw(f"{branding()['product']} is available to management only.",
                      frappe.PermissionError)
 
 

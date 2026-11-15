@@ -135,6 +135,7 @@ def pdf(business_code: str | None = None, period: str = "ytd", from_date: str | 
         to_date: str | None = None):
     """The four statements as one PDF, from the same answers the screen shows."""
     require_manager()
+    from command_center import branding as brand
     from command_center.api import export
     parts = {s: get(business_code, period, from_date, to_date, s) for s in SECTIONS}
     head = parts["summary"]
@@ -146,7 +147,8 @@ def pdf(business_code: str | None = None, period: str = "ytd", from_date: str | 
     frappe.local.response.filename = export._name(title, "pdf")
     frappe.local.response.filecontent = export.html_pdf(
         title, body, head.get("business_code"),
-        footer=(f"Drawn by AI Business Intelligence from {head.get('business') or 'the business'}'s "
+        footer=(f"Drawn by {brand.branding(head.get('business_code'))['product']} from "
+                f"{head.get('business') or 'the business'}'s "
                 f"own ERPNext reports (Profit and Loss Statement, Balance Sheet, Trial Balance, "
                 f"Cash Flow) on {head.get('as_of')}. It reads those reports and cannot change "
                 f"anything in ERPNext."))

@@ -373,9 +373,22 @@ assistant itself never reads or writes these.
 
 ## The product's name
 
-Shown everywhere people look as **AI Business Intelligence**, with the line **Executive
-Intelligence Platform** under it (Michael, 18 Oct 2026: "Command Center" read as an
-aviation term). Internal names stay: the app `command_center`, the `/command-center`
+**A setting, not code** (15 Nov 2026): the owner sells the platform under his own
+product name, default **Ultrasoft Insights** / "Advanced AI-Powered Business Intelligence for
+ERPNext" (owner, 15 Nov 2026), set by
+the administrator in Settings → Branding with the logos (light and dark backgrounds,
+favicon; PNG/JPEG/WebP checked by content, 1 MB, never SVG, stored in the files folder
+under content-hash names, served at `/branding/<name>`) and the vendor's footer (company,
+person, email, phone, website -- free text, never hard-coded). A business may carry a
+co-brand (display name and logo, "Prepared for ...") from Settings → Businesses → Manage.
+`command_center/branding.py` is the one source: every page, the boot payload, every PDF
+(`export.brand_header`, `export.pdf_options` -- the vendor's line and "Page X of Y" on
+every page), every workbook (`export.brand_rows_head/foot`) and every email
+(`branding.email_html`) asks it; a new export must too. Reports are tidied by
+`api/report_text.py` (no repeated title, no emoji or chat, Title Case headings, numbered
+recommendations) on the server, so the screen, PDF and email agree. It was **AI Business
+Intelligence** from 18 Oct 2026 ("Command Center" read as an aviation term). Internal
+names stay: the app `command_center`, the `/command-center`
 address, the doctypes and error-log titles. The platform's role was renamed once, with a
 migration (patches/rename_manager_role.py, 14 Nov 2026): "Command Center Manager" became
 `Insights Dashboard Manager` (shown in the top bar as "Management"). Not "Dashboard

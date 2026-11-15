@@ -20,10 +20,11 @@ def get_context(context):
         frappe.local.flags.redirect_location = "/command-center"
         raise frappe.Redirect
 
-    from command_center.www.command_center import _assets, _payload
+    from command_center.www.command_center import _assets, _brand, _payload
 
     context.no_cache = 1
     context.assets = _assets()
+    context.brand = _brand()
     context.full_name = frappe.utils.get_fullname(user)
     context.user_id = user
     context.csrf_token = _payload(frappe.sessions.get_csrf_token())

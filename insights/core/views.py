@@ -8,6 +8,7 @@
   /command-center[/...]                  the interface (management only)
   /command-center-login, /management-only, /command-center-access
   /assets/command_center/<path>          the built interface and the app's images
+  /branding/<name>                       the product's and the businesses' logos
 
 Each request runs as its person, in one transaction (insights.compat.run_as).
 """
@@ -320,6 +321,23 @@ def assets(request, path):
                             content_type=mimetypes.guess_type(full)[0] or "application/octet-stream")
     if "/command-center/" in full and os.path.basename(full).count(".") >= 2:
         response["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
+def branding_file(request, name):
+    """A logo set under Settings -> Branding (command_center/branding.py). Only names the
+    platform made itself -- kind, content hash, the type the content proved to be -- are
+    served, from the files folder only, as that type and nothing else. The name changes
+    with the content, so it may be cached for ever. Open to anyone: the sign-in page
+    shows the product's logo."""
+    from command_center import branding
+    full = branding.path_of(name)
+    if not full:
+        raise Http404()
+    response = FileResponse(open(full, "rb"), content_type=branding.TYPES[name.rsplit(".", 1)[1]])
+    response["Cache-Control"] = "public, max-age=31536000, immutable"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Content-Security-Policy"] = "default-src 'none'; sandbox"
     return response
 
 

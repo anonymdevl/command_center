@@ -17,8 +17,10 @@ Who may use it:
                                                 managers -- not of administrators
   everyone else       refused (403), whatever the screen shows.
 
-The Claude key, Email (and its Notifications status), Recommendations, the Changes list
-and giving Settings access stay with the administrator. Every call starts with _require(section)
+The Claude key, Email (and its Notifications status), Branding, Recommendations, the
+Changes list and giving Settings access stay with the administrator. A business's own
+co-brand (the name and logo its documents are prepared for) is part of Businesses.
+Every call starts with _require(section)
 or _require_admin(); the boot payload's settings_sections (sections_for) tells the
 screen which sections to show.
 
@@ -38,6 +40,7 @@ The Django administration (/admin) keeps working alongside; this is the everyday
 from __future__ import annotations
 
 import frappe  # insights.compat
+from command_center import branding
 from insights.compat import users as _users
 from insights.compat.state import PermissionError, ValidationError, local
 
@@ -52,7 +55,8 @@ GRANTS = {"businesses": "Settings: Businesses", "people": "Settings: People",
           "keys": "Settings: Personal Keys"}
 GRANT_WORDS = {"businesses": "Businesses", "people": "People", "keys": "Personal ERPNext Keys"}
 # What the administrator sees, in the screen's order.
-ALL_SECTIONS = ["people", "businesses", "claude", "email", "keys", "recommend", "changes"]
+ALL_SECTIONS = ["people", "businesses", "claude", "email", "branding", "keys", "recommend",
+                "changes"]
 
 
 def _grants(u) -> list:
@@ -457,7 +461,7 @@ def _business_row(b) -> dict:
             "last_load": st["last"], "facts_ok": st["ok"], "facts_failed": st["failed"],
             "facts_total": len(INGESTORS), "last_sync": b.last_sync,
             "last_error": (b.last_error or "")[:300], "loading": _loading(b.business_code),
-            "reload": reload}
+            "reload": reload, **_client_brand(b.business_code)}
 
 
 @frappe.whitelist()
@@ -956,10 +960,11 @@ def test_email(to: str = ""):
                                      "and save it first."}
     try:
         runtime.sendmail(
-            recipients=[to], subject="Test email from AI Business Intelligence",
-            message=("<p>This is a test from AI Business Intelligence.</p>"
-                     "<p>Email is working: scheduled reports will be sent from this "
-                     "address.</p>"))
+            recipients=[to], subject=f"Test email from {_product()}",
+            message=branding.email_html(
+                f"<p>This is a test from {frappe.utils.escape_html(_product())}.</p>"
+                "<p>Email is working: scheduled reports will be sent from this "
+                "address.</p>"))
     except runtime.MailError as e:
         return {"ok": False, "says": str(e)}
     _audit(f"sent a test email to {to}")
@@ -1115,3 +1120,176 @@ def write_brief_now(business_code: str = ""):
     _audit(f"wrote the Daily Brief for {b.business_name} now")
     return {"ok": bool(out.get("text")), "says": "Written." if out.get("text") else out.get("error"),
             **_rec_view(b, rows)}
+
+
+# --- branding --------------------------------------------------------------------------
+# The product's name, tagline, logos and the vendor's footer (command_center/branding.py
+# reads them for every page, PDF, workbook and email), kept in insights.json "branding".
+# The administrator's alone. A business's co-brand -- the client name and logo its
+# documents are "Prepared for" -- is set from Businesses, by whoever may edit businesses.
+def _product() -> str:
+    return branding.branding()["product"]
+
+
+def _brand_cfg() -> dict:
+    return dict(branding._conf())
+
+
+def _save_brand(cfg: dict) -> None:
+    from frappe.installer import update_site_config
+    update_site_config(branding.CONFIG_KEY, cfg)
+
+
+def _brand_view() -> dict:
+    s = branding.stored()
+    return {**{k: s[k] for k in branding.TEXT_FIELDS},
+            "defaults": dict(branding.DEFAULTS),
+            "max_len": dict(branding.MAX_LEN),
+            "max_kb": branding.MAX_BYTES // 1024,
+            **{f"{k}_url": branding.url_for(s[k]) for k in branding.LOGO_KINDS},
+            "preview": branding.public()}
+
+
+def _brand_image(kind: str, raw: bytes) -> str:
+    """The stored file's name, or a refusal in plain words."""
+    try:
+        return branding.store_image(kind, raw)
+    except branding.BrandError as e:
+        _say(str(e))
+
+
+def _decoded(data) -> bytes:
+    try:
+        return branding.decode_upload(data)
+    except branding.BrandError as e:
+        _say(str(e))
+
+
+@frappe.whitelist()
+def brand():
+    """The product's branding as saved, with the defaults and the logos' addresses."""
+    _require_admin()
+    return _brand_view()
+
+
+@frappe.whitelist(methods=["POST"])
+def set_brand(product_name: str = "", tagline: str = "", company: str = "", person: str = "",
+              email: str = "", phone: str = "", website: str = ""):
+    """Save the product's name and tagline and the vendor's footer details. A blank
+    product name or company goes back to the default; the others may be left blank."""
+    _require_admin()
+    given = {"product_name": product_name, "tagline": tagline, "company": company,
+             "person": person, "email": email, "phone": phone, "website": website}
+    words = {"product_name": "product name", "tagline": "tagline", "company": "company",
+             "person": "name and role", "email": "email", "phone": "phone number",
+             "website": "website"}
+    clean = {}
+    for k, v in given.items():
+        v = " ".join(str(v or "").split())
+        if any(c in v for c in "<>{}"):
+            _say(f"The {words[k]} cannot contain < > {{ or }}.")
+        if len(v) > branding.MAX_LEN[k]:
+            _say(f"The {words[k]} is too long: at most {branding.MAX_LEN[k]} characters.")
+        clean[k] = v
+    if clean["email"]:
+        _valid_email(clean["email"], "email")
+    if clean["website"] and (" " in clean["website"] or "." not in clean["website"]):
+        _say("The website should be an address such as www.example.com.")
+    cfg = _brand_cfg()
+    changed = [words[k] for k, v in clean.items() if (cfg.get(k) or "") != v]
+    if not changed:
+        _say("Nothing was changed.")
+    cfg.update(clean)
+    _save_brand(cfg)
+    _audit("changed the branding: " + ", ".join(changed))
+    return _brand_view()
+
+
+@frappe.whitelist(methods=["POST"])
+def upload_brand_logo(kind: str = "", data: str = ""):
+    """A logo for light backgrounds, one for dark backgrounds, or the favicon: PNG, JPEG
+    or WebP, at most branding.MAX_BYTES, checked by its content (never SVG)."""
+    _require_admin()
+    if kind not in branding.LOGO_KINDS:
+        _say("Choose which logo this is.")
+    name = _brand_image(kind, _decoded(data))
+    cfg = _brand_cfg()
+    old = cfg.get(kind)
+    cfg[kind] = name
+    _save_brand(cfg)
+    branding.forget(old, cfg)
+    _audit(f"uploaded a new {kind.replace('_', ' ')}")
+    return _brand_view()
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_brand_logo(kind: str = ""):
+    _require_admin()
+    if kind not in branding.LOGO_KINDS:
+        _say("Choose which logo to remove.")
+    cfg = _brand_cfg()
+    old = cfg.pop(kind, None)
+    if not old:
+        _say("There is no such logo to remove.")
+    _save_brand(cfg)
+    branding.forget(old, cfg)
+    _audit(f"removed the {kind.replace('_', ' ')}")
+    return _brand_view()
+
+
+def _client_brand(code: str) -> dict:
+    c = (branding.stored().get("businesses") or {}).get(code) or {}
+    return {"client_name": c.get("display_name") or "",
+            "client_logo_url": branding.url_for(c.get("logo"))}
+
+
+def _set_client(b, **changes) -> dict:
+    cfg = _brand_cfg()
+    clients = dict(cfg.get("businesses") or {})
+    mine = dict(clients.get(b.business_code) or {})
+    old_logo = mine.get("logo")
+    mine.update(changes)
+    mine = {k: v for k, v in mine.items() if v}
+    if mine:
+        clients[b.business_code] = mine
+    else:
+        clients.pop(b.business_code, None)
+    cfg["businesses"] = clients
+    _save_brand(cfg)
+    if old_logo and old_logo != mine.get("logo"):
+        branding.forget(old_logo, cfg)
+    return _business_row(_get_business(b.pk))
+
+
+@frappe.whitelist(methods=["POST"])
+def set_business_brand(name: str = "", display_name: str = ""):
+    """The name this business's documents are prepared for ("Prepared for ..."); blank
+    goes back to its own name."""
+    _require("businesses")
+    b = _get_business(name)
+    display = " ".join(str(display_name or "").split())
+    if any(c in display for c in "<>{}"):
+        _say("The display name cannot contain < > { or }.")
+    if len(display) > 100:
+        _say("The display name is too long: at most 100 characters.")
+    _audit(f"set {b.business_name}'s display name to {display}" if display
+           else f"cleared {b.business_name}'s display name", b)
+    return _set_client(b, display_name=display)
+
+
+@frappe.whitelist(methods=["POST"])
+def upload_business_logo(name: str = "", data: str = ""):
+    """The business's own logo, shown beside the product's on its documents."""
+    _require("businesses")
+    b = _get_business(name)
+    logo = _brand_image(branding.CLIENT_KIND, _decoded(data))
+    _audit(f"uploaded a logo for {b.business_name}", b)
+    return _set_client(b, logo=logo)
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_business_logo(name: str = ""):
+    _require("businesses")
+    b = _get_business(name)
+    _audit(f"removed {b.business_name}'s logo", b)
+    return _set_client(b, logo=None)

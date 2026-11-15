@@ -1086,6 +1086,22 @@ div.work-table table.dt{min-width:560px}
 .rp-acts{margin-left:auto;display:flex;gap:8px}
 .rp-body{font-size:var(--fs-md);line-height:1.62;color:var(--ink2)}
 .rp-body b{color:var(--ink)}
+/* The report as a document: its kind, title, who it is for and as at when, sections set
+   off by a rule, the recommendations numbered, the vendor's line at the foot -- as the PDF. */
+.rp-title{display:flex;flex-direction:column;min-width:0}
+.rp-kick{font-size:var(--fs-2xs);font-weight:var(--fw-semibold);letter-spacing:.06em;text-transform:uppercase;
+ color:var(--accent);margin-bottom:4px}
+.rp-for{font-size:var(--fs-xs);color:var(--mut);margin-top:3px}
+.rp-body .md h4{border-bottom:1px solid var(--line);padding-bottom:6px;margin-top:26px}
+.rp-body .md-table table.dt th{font-weight:var(--fw-semibold)}
+.md ol.md-recs,.md ul.md-recs{list-style:none;padding-left:0;counter-reset:rec}
+.md .md-recs li{position:relative;background:var(--accent-bg);border-radius:var(--r-sm);padding:11px 14px 11px 42px;
+ margin:0 0 8px;color:var(--ink)}
+.md ol.md-recs li::before{counter-increment:rec;content:counter(rec);position:absolute;left:15px;top:11px;
+ font-weight:var(--fw-bold);color:var(--accent)}
+.md ul.md-recs li::before{content:"";position:absolute;left:17px;top:18px;width:7px;height:7px;border-radius:50%;
+ background:var(--accent)}
+.rp-foot{margin-top:18px;padding-top:10px;border-top:1px solid var(--line);font-size:var(--fs-2xs);color:var(--dim)}
 
 /* ---- the analyst's answers (markdown.js, charts.js) ---- */
 /* The same sizes as the screens: body text at --fs-sm, the headline one step up. */
@@ -1266,6 +1282,13 @@ body.cc-auth{overflow:auto;min-height:100vh;background:var(--bg);display:grid;pl
 .auth-mark{width:44px;height:44px;border-radius:13px;background:var(--ink);display:grid;place-items:center}
 .auth-mark i{width:18px;height:18px;border-radius:50%;border:3.5px solid var(--accent);display:block;
  box-shadow:7px 0 0 -1px var(--t3)}
+/* The product's own logo (Settings -> Branding), one for each background. */
+.auth-logo{display:block;height:44px;width:auto;max-width:240px;object-fit:contain}
+.auth-logo.dk{display:none}
+[data-theme="dark"] .auth-logo.lt{display:none}
+[data-theme="dark"] .auth-logo.dk{display:block}
+.auth-tag{display:block;font-size:var(--fs-sm);color:var(--mut);margin-top:2px}
+.auth-by{font-size:var(--fs-2xs);color:var(--dim);line-height:1.5}
 .auth-card{padding:48px 44px;display:flex;flex-direction:column;justify-content:center}
 .auth-card h1{font-size:var(--fs-3xl);font-weight:var(--fw-semibold);letter-spacing:-.03em;line-height:1.15;color:var(--ink)}
 .auth-sub{color:var(--mut);font-size:var(--fs-md);margin-top:8px;line-height:1.55}
@@ -1320,9 +1343,15 @@ body.cc-auth{overflow:auto;min-height:100vh;background:var(--bg);display:grid;pl
 .logo i{width:14px;height:14px;border-radius:50%;border:3px solid var(--accent);display:block;
  box-shadow:6px 0 0 -1px var(--bg)}
 .brand-t{min-width:0}
-/* "AI Business Intelligence" is longer than the old name: a step smaller so it fits. */
+/* The product's own logo (Settings -> Branding) in place of the mark, one for each
+   background. The name is set by the administrator, so a long one is cut, not wrapped. */
+.brand-logo{height:34px;max-width:72px;flex:none;display:flex;align-items:center}
+.brand-logo img{max-height:34px;max-width:72px;width:auto;object-fit:contain;display:block}
+.brand-logo img.dk{display:none}
+[data-theme="dark"] .brand-logo img.lt{display:none}
+[data-theme="dark"] .brand-logo img.dk{display:block}
 .brand-t b{display:block;font-size:var(--fs-md);font-weight:var(--fw-semibold);letter-spacing:-.03em;
- white-space:nowrap;line-height:1.25}
+ white-space:nowrap;line-height:1.25;overflow:hidden;text-overflow:ellipsis}
 .brand-t span{display:block;font-size:var(--fs-2xs);color:var(--mut);letter-spacing:-.005em;line-height:1.35}
 .brand{padding-right:2px}
 .nav{flex:1;min-height:0;overflow-y:auto;padding:12px 6px 18px;
@@ -1546,7 +1575,7 @@ body.cc-auth{overflow:auto;min-height:100vh;background:var(--bg);display:grid;pl
 .ap-act.failed{border-color:var(--crit-line);color:var(--crit)}
 .ap-act:disabled{opacity:.7;cursor:default}
 .dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-.print-head{display:none}
+.print-head,.print-foot{display:none}
 
 /* ---- paper: a screen printed or saved as PDF ---- */
 @media print{
@@ -1556,8 +1585,14 @@ body.cc-auth{overflow:auto;min-height:100vh;background:var(--bg);display:grid;pl
  .side,.topnav,.vtools,.askpop,.drawer,.scrim-nav,.cc-preview-tag,.dnote{display:none!important}
  .col{display:block}
  .main{overflow:visible;box-shadow:none;border-radius:0;padding:0;background:#fff}
- .print-head{display:block;font-size:var(--fs-xs);color:var(--mut);border-bottom:1px solid var(--line2);
-  padding-bottom:6px;margin-bottom:14px}
+ .print-head{display:flex;align-items:center;gap:14px;font-size:var(--fs-xs);color:var(--mut);
+  border-bottom:1px solid var(--line2);padding-bottom:8px;margin-bottom:14px}
+ .print-head img{max-height:28px;max-width:160px;object-fit:contain}
+ .print-head b{color:var(--ink);font-size:var(--fs-sm);font-weight:var(--fw-semibold)}
+ .print-head .ph-meta{margin-left:auto;text-align:right;line-height:1.45}
+ .print-foot{display:block;font-size:var(--fs-2xs);color:var(--mut);border-top:1px solid var(--line2);
+  padding-top:6px;margin-top:18px}
+ @page{@bottom-right{content:"Page " counter(page) " of " counter(pages)}}
  .kpi,.bk,.panel,.alert,.note,.chartwrap,table.dt tr{break-inside:avoid}
  .kpi:hover,.bk:hover{transform:none;box-shadow:none}
  .tabpane:not(.on){display:none!important}

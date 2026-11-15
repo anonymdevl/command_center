@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Sign in · AI Business Intelligence</title>
-<link rel="icon" href="/assets/command_center/images/command-center.svg">
+<title>Sign in · {{ brand.product }}</title>
+<link rel="icon" href="{{ brand.favicon_url }}">
 <script>
 /* The person's own theme and accent, before first paint -- the same rule as the app. */
 (function(){var d=document.documentElement,t=null,a=null;try{t=localStorage.getItem('icc-theme');a=localStorage.getItem('icc-accent')}catch(e){}
@@ -17,9 +17,15 @@ d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
 <body class="cc-auth">
 <main class="auth">
   <section class="auth-brand" aria-hidden="true">
-    <div class="auth-mark"><i></i></div>
+    {% if brand.logo_light_url %}
     <div>
-      <b>AI Business Intelligence</b>
+      <img class="auth-logo lt" src="{{ brand.logo_light_url }}" alt="">
+      <img class="auth-logo dk" src="{{ brand.logo_dark_url }}" alt="">
+    </div>
+    {% else %}<div class="auth-mark"><i></i></div>{% endif %}
+    <div>
+      <b>{{ brand.product }}</b>
+      {% if brand.tagline %}<span class="auth-tag">{{ brand.tagline }}</span>{% endif %}
       <p>The whole business in one place, for the management team.</p>
     </div>
     <ul>
@@ -27,6 +33,7 @@ d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
       <li>Ask anything, in your own words</li>
       <li>The AI only reads &mdash; it never creates, changes or deletes a record</li>
     </ul>
+    <div class="auth-by">{{ brand.footer }}</div>
   </section>
 
   <section class="auth-card">
@@ -51,7 +58,7 @@ d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
 
     <div class="auth-foot">
       <a href="/login#forgot">Forgotten your password?</a>
-      <span>Only the management team can open AI Business Intelligence.</span>
+      <span>Only the management team can open {{ brand.product }}.</span>
     </div>
   </section>
 </main>

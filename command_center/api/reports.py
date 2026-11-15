@@ -18,6 +18,7 @@ import uuid
 
 import frappe
 
+from command_center import branding
 from command_center.api.businesses import require_manager
 
 REPORT_STEPS = 30
@@ -64,12 +65,46 @@ BRIEF = """Write the {title} for {business}.
 It covers {sections}.
 
 Gather the figures with your tools first -- several rounds, across every area this \
-covers -- then write the report. Structure: a two-to-three sentence summary at the top; \
-then a short section per area with a heading, the key figures (a markdown table where \
-there are several), and what they mean; then "Recommendations" -- specific, each tied to \
-the figures behind it. Measure periods against the end of the data ({as_of}). Where the \
-records do not hold something this report should cover, say so in its section rather \
-than leaving it out. Aim for one to two pages."""
+covers -- then write the report. Measure periods against the end of the data ({as_of}). \
+Where the records do not hold something this report should cover, say so in its section \
+rather than leaving it out. Aim for one to two pages.
+
+THIS IS A FORMAL DOCUMENT FOR DIRECTORS, NOT A CHAT REPLY. It is printed under its own \
+title block, which already gives the report's name ({title}), the business, the period \
+and the date, so:
+- Do not start with a heading or a line that repeats the title or the business's name. \
+Start with the summary paragraph itself.
+- Write formal business English in the third person: complete sentences, no emoji, no \
+exclamation marks, and no conversational phrases ("Here's", "Here is", "Let's", "Great", \
+"I have", "Below is", "Let me know", "I hope this helps").
+- Structure: a summary of two or three sentences at the top, with no heading; then one \
+section per area, each under a "##" heading in Title Case (for example "## Cash and \
+Receivables"), with the key figures (a markdown table where there are several, amounts \
+with the currency and thousands separators) and what they mean; then a final section \
+headed exactly "## Recommendations".
+- Recommendations: a numbered list ("1.", "2.", ...), three to six items, each a single \
+formal sentence that starts with a verb, states the action precisely with the figure \
+behind it, and names the responsible function and the date or timeframe where the data \
+supports one -- for example "1. Reconcile the GHS 7.25M of unmatched customer receipts \
+in ERPNext's Payment Reconciliation, led by the Finance Manager, by 30 November." Do \
+not label the items "Recommendation:" and do not use bold inside them.
+- No follow-up questions block in a report, and no closing remarks after the \
+recommendations."""
+
+
+def _tidy(answer, title: str, business_code) -> str:
+    """The report as a document: no repeated title, no emoji or chat, Title Case
+    headings, numbered recommendations (api/report_text.py)."""
+    from command_center.api.export import _business
+    from command_center.api.report_text import tidy
+    return tidy(answer or "", title, _business(business_code), report=True)
+
+
+def _title(title: str) -> str:
+    """The report's name as a document title: "Weekly management report" -> "Weekly
+    Management Report"."""
+    from command_center.api.report_text import title_case
+    return title_case(title)
 
 
 def _key(job_id: str) -> str:
@@ -120,7 +155,8 @@ def _run(report_id: str, code: str, business_code: str | None, user: str):
                               deep=True)
         if not result:
             raise RuntimeError("the analyst could not be reached or returned nothing")
-        result.update({"title": title, "code": code,
+        result["answer"] = _tidy(result.get("answer"), title, business_code)
+        result.update({"title": _title(title), "code": code,
                        "generated": frappe.utils.now_datetime().isoformat(timespec="minutes")})
         frappe.cache().set_value(key, {"state": "done", "report": result},
                                  expires_in_sec=KEEP_SECONDS)
@@ -257,6 +293,7 @@ def send_scheduled(schedule: str):
 
     doc = frappe.get_doc(SCHEDULE, schedule)
     title, sections = REPORTS[doc.report]
+    heading = _title(title)
     frappe.set_user(doc.run_as or "Administrator")
     try:
         if not engine.analyst_enabled():
@@ -267,21 +304,25 @@ def send_scheduled(schedule: str):
                               deep=True)
         if not result or not result.get("answer"):
             raise RuntimeError("the analyst returned nothing")
-        pdf = pdf_bytes(title, result["answer"], result.get("checked"), doc.business_code,
-                        result.get("model"))
+        answer = _tidy(result["answer"], title, doc.business_code)
+        pdf = pdf_bytes(heading, answer, result.get("checked"), doc.business_code,
+                        result.get("model"), kind="report")
         business = _business(doc.business_code)
         when = frappe.utils.format_date(frappe.utils.today(), "d MMM yyyy")
-        lead = (result["answer"].split("\n\n", 1)[0] or "")[:1200]
+        lead = (answer.split("\n\n", 1)[0] or "")[:1200]
+        esc = frappe.utils.escape_html
         frappe.sendmail(
             recipients=_recipients(doc.recipients),
-            subject=f"{title} · {business} · {when}",
-            message=(f"<p>{frappe.utils.escape_html(lead)}</p>"
-                     f"<p>The full report is attached. It was written from the records as at "
-                     f"{frappe.utils.escape_html(_as_of())}, with the permissions of "
-                     f"{frappe.utils.escape_html(frappe.utils.get_fullname(doc.run_as))}.</p>"
-                     f"<p style='color:#777'>Sent by AI Business Intelligence on its "
-                     f"{frappe.utils.escape_html(describe(doc))} schedule.</p>"),
-            attachments=[{"fname": f"{title} {frappe.utils.today()}.pdf", "fcontent": pdf}],
+            subject=f"{heading} · {business} · {when}",
+            message=branding.email_html(
+                f"<p><b>{esc(heading)}</b> · {esc(business)}</p>"
+                f"<p>{esc(lead)}</p>"
+                f"<p>The full report is attached. It was written from the records as at "
+                f"{esc(_as_of())}, with the permissions of "
+                f"{esc(frappe.utils.get_fullname(doc.run_as))}.</p>"
+                f"<p style='color:#777'>Sent by {esc(branding.branding()['product'])} on its "
+                f"{esc(describe(doc))} schedule.</p>", doc.business_code),
+            attachments=[{"fname": f"{heading} {frappe.utils.today()}.pdf", "fcontent": pdf}],
             now=True,
         )
         doc.db_set({"last_sent": now_datetime(),

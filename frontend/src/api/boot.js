@@ -18,3 +18,19 @@ export const boot = raw || {
 
 export const hasSession = Boolean(raw);
 
+
+/**
+ * The product's brand (Settings -> Branding, command_center/branding.py): its name,
+ * tagline, logos and the vendor's footer lines. The server always sends it; the
+ * fallback is only for a page with no payload.
+ */
+export const brand = {
+  product: "Insights", tagline: "", footer: "", prepared: "",
+  logo_light_url: null, logo_dark_url: null,
+  ...((boot && boot.brand) || {}),
+};
+
+/** A business's co-brand -- the name and logo its documents are prepared for -- or null. */
+export function clientBrand(code) {
+  return ((boot && boot.clients) || {})[code] || null;
+}

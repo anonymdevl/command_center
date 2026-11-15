@@ -34,6 +34,19 @@
 .st-facts dt{color:var(--mut)}
 .st-facts dd{margin:0;word-break:break-word}
 .st-stack>.panel+.panel{margin-top:var(--sp-4)}
+/* Branding: each logo on the kind of background it is for, whatever the theme. */
+.st-logos{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--sp-4)}
+.st-logo>b{display:block;font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--ink)}
+.st-logo-box{height:84px;margin:var(--sp-2) 0;border:1px solid var(--line2);border-radius:var(--r-sm);
+ display:grid;place-items:center;padding:10px;background:var(--surface)}
+.st-logo-box img{max-height:60px;max-width:100%;object-fit:contain}
+.st-logo-box.dark{background:var(--ink)}
+[data-theme="dark"] .st-logo-box{background:var(--ink)}
+[data-theme="dark"] .st-logo-box.dark{background:var(--bg)}
+.st-file{position:relative;overflow:hidden;cursor:pointer}
+.st-file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.st-cobrand{display:flex;gap:var(--sp-4);flex-wrap:wrap;align-items:flex-start}
+.st-cobrand>*{flex:1 1 220px;min-width:0}
 @media (max-width:700px){
  .st-acts{justify-content:flex-start}
 }

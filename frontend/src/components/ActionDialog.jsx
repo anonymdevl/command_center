@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
+import { brand } from "../api/boot.js";
 
 /**
  * Put a piece of work on someone's desk, from wherever it was noticed.
@@ -96,7 +97,7 @@ export default function ActionDialog({ scope }) {
     setState("saving");
     setError("");
     try {
-      const subject = `${k.lead}${req.title || "From AI Business Intelligence"}`.slice(0, 140);
+      const subject = `${k.lead}${req.title || `From ${brand.product}`}`.slice(0, 140);
       const res = await api.createTask({
         business_code: scope,
         subject,

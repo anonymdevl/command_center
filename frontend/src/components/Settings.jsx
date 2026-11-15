@@ -4,12 +4,13 @@ import SettingsPeople from "./SettingsPeople.jsx";
 import SettingsBusinesses from "./SettingsBusinesses.jsx";
 import SettingsEmail from "./SettingsEmail.jsx";
 import SettingsRecommend from "./SettingsRecommend.jsx";
+import SettingsBranding from "./SettingsBranding.jsx";
 import { SettingsChanges, SettingsClaude, SettingsCredentials } from "./SettingsKeys.jsx";
 import "../styles/settings.css";
 
 /**
- * Settings: people, connected businesses, the Claude key, email, personal ERPNext keys and
- * the recommendation rules.
+ * Settings: people, connected businesses, the Claude key, email, branding, personal
+ * ERPNext keys and the recommendation rules.
  *
  * Not a designed screen, so not in views.json: the platform administrator's own page,
  * replacing the Django administration for everyday work (/admin keeps working). The
@@ -24,6 +25,7 @@ const TABS = [
   ["businesses", "Businesses", SettingsBusinesses],
   ["claude", "Claude", SettingsClaude],
   ["email", "Email", SettingsEmail],
+  ["branding", "Branding", SettingsBranding],
   ["keys", "Personal ERPNext Keys", SettingsCredentials],
   ["recommend", "Recommendations", SettingsRecommend],
   ["changes", "Changes", SettingsChanges],
@@ -59,7 +61,7 @@ export default function Settings() {
           <h3>Settings</h3>
           <div className="when">
             {everything
-              ? "Who can sign in, the businesses the platform reads, and the keys and email it uses. Only administrators, and managers given a section of it, see this screen; every change is recorded under Changes."
+              ? "Who can sign in, the businesses the platform reads, the keys and email it uses, and the product's branding. Only administrators, and managers given a section of it, see this screen; every change is recorded under Changes."
               : "The parts of Settings the platform's administrator has given you. Every change you make is recorded."}
           </div>
         </div>

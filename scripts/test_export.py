@@ -265,8 +265,60 @@ check(_doc3.count('<div class="ch">') == len(_new) and "```" not in _doc3, "ever
 
 # the engine's settings: a fine layout grid, and no letter-spacing it would overdo
 check(int(export.PDF_OPTIONS["dpi"]) >= 1200, "PDFs lay text out at 1200 dpi or finer")
-check("letter-spacing" not in export.PDF_TEMPLATE and "letter-spacing" not in export.pdf_blocks.CSS,
+check("letter-spacing" not in export.PDF_TEMPLATE + export.PAGE_CSS and "letter-spacing" not in export.pdf_blocks.CSS,
       "the PDF's styles use no letter-spacing")
+
+# The brand on every output (command_center/branding.py): the product's name at the top,
+# the vendor's line at the foot of every page and the end of every sheet.
+_b = export.brand.branding("GIGMANN")
+check(_b["product"] == "Ultrasoft Insights" and _b["company"] == "Ultrasoft Systems",
+      "the product and vendor default to Ultrasoft Insights by Ultrasoft Systems")
+_seen = {}
+pdf.get_pdf = lambda html, options=None: (_seen.update(options or {}), html.encode())[1]
+export.answer_pdf("Who owes us?", "Lead.", [], "GIGMANN", "m")
+_ans = frappe.local.response.filecontent.decode()
+check('<div class="brand">Ultrasoft Insights</div>' in _ans and "Ultrasoft Insights · built by Ultrasoft Systems" in _ans,
+      "an answer PDF carries the product at the top and the vendor's line at the end")
+check(_seen.get("footer-left", "").startswith("Ultrasoft Insights · built by Ultrasoft Systems")
+      and _seen.get("footer-right") == "Page [page] of [topage]",
+      "every PDF page's footer: the vendor's line, and Page X of Y")
+_rep_md = ("# Executive Summary: Gigmann Medical Supplies Ltd\n\nHere's the summary you asked for:\n\n"
+           "Sales fell 12% 📉 to GHS 1.2M.\n\n## cash and receivables\n\n| Customer | Owed |\n|---|---|\n"
+           "| UBUNTU | 636675 |\n\n## Recommendations\n\n- **Recommendation:** Reconcile the GHS 7.25M "
+           "of unmatched receipts by 30 November.\n- Recommendation: chase Ubuntu.\n")
+export.answer_pdf("Executive Summary", _rep_md, [], "GIGMANN", "m", kind="report")
+_rep = frappe.local.response.filecontent.decode()
+check(_rep.count("Executive Summary") == 1 and "Executive Summary: Gigmann" not in _rep,
+      "a report's heading that repeats its title is dropped: the title is said once")
+check("Management Report" in _rep and "Prepared for <b>Gigmann Medical Supplies Ltd</b>" in _rep,
+      "a report PDF opens with its title block")
+check("📉" not in _rep and "Here's" not in _rep, "emoji and a chatty opening are left out of a report")
+_tidied = export.report_text.tidy(_rep_md, "Executive Summary", "Gigmann Medical Supplies Ltd")
+check("## Cash and Receivables" in _tidied, "a report's headings are in Title Case")
+check("1. Reconcile the GHS 7.25M" in _tidied and "2. Chase Ubuntu." in _tidied
+      and "Recommendation:" not in _tidied, "recommendations are a numbered list, without a label")
+_pol2 = export._polish("<p>Lead</p><h2>Cash</h2><p>Text.</p><table><thead><tr><th>Who</th><th>Owed</th></tr></thead>"
+                       "<tbody><tr><td>UBUNTU</td><td>636675</td></tr><tr><td>Year</td><td>2025</td></tr></tbody></table>"
+                       "<h1>Stray</h1><h2>Recommendations</h2><ol><li>Reconcile.</li></ol>")
+check('<td class="n">636,675</td>' in _pol2 and '<td class="n">2025</td>' in _pol2,
+      "a bare figure of five digits or more gets its thousands separators; a year does not")
+check('<div class="keep"><h2>Cash</h2><p>Text.</p></div>' in _pol2, "a heading is kept on the page with what follows it")
+check('<ol class="recs">' in _pol2 and "<h1>" not in _pol2, "the Recommendations list is set off; a body h1 becomes h2")
+_rt = export.report_text
+check(_rt.tidy("## Weekly Management Report — Gigmann Medical Supplies Ltd, November 2026\n\nText.",
+               "Weekly management report", "Gigmann Medical Supplies Ltd").strip() == "Text.",
+      "the title with the business and a date is a repeat too")
+check(_rt.tidy("## Weekly Sales\n\nText.", "Weekly management report", "Gigmann").startswith("## Weekly Sales"),
+      "a heading that is not the title is kept")
+check(_rt.title_case("sales and payments in GHS: what to do") == "Sales and Payments in GHS: What to Do",
+      "Title Case keeps acronyms and lowers short joining words")
+export.tables_xlsx("Who owes us", [{"name": "T", "columns": ["A", "B"], "rows": [["x", "1"]]}], "GIGMANN")
+_ws = load_workbook(io.BytesIO(frappe.local.response.filecontent)).active
+check(_ws["A2"].value.startswith("Ultrasoft Insights · Gigmann Medical Supplies Ltd · figures as at"),
+      "a sheet's header row names the product, the business and the date")
+check(_ws.cell(row=_ws.max_row, column=1).value == "Prepared with Ultrasoft Insights by Ultrasoft Systems"
+      and _ws.cell(row=_ws.max_row - 1, column=1).value is None,
+      "a sheet ends with the vendor's line, after a blank row")
 
 # _cell
 check(export._cell("GHS 1,234.50") == 1234.5 and export._cell("12%") == 0.12, "figure parsing")
