@@ -212,6 +212,7 @@ AGGS = ("sum", "count", "count_distinct", "avg", "max", "top", "ratio")
 RESERVED_TOKENS = ("period", "group")
 
 import re as _re
+import threading as _threading
 _WINDOW = _re.compile(r"^(last_full_month|last_full_months_([2-9]|1[0-9]|2[0-4])|"
                       r"last_days_([1-9][0-9]{0,2}))$")
 
@@ -336,12 +337,26 @@ def dependencies(key: str) -> set[str]:
     return {n for n in needed if n and n != key}
 
 
+_LOAD_LOCK = _threading.Lock()
+_LOADED = False
+
+
 def load_all() -> dict[str, Kpi]:
-    """Import every definition module. Registration happens on import."""
-    if not REGISTRY:
-        from command_center.kpi import (  # noqa: F401
-            buying, operations, sales, stock)
-        problems = validate_registry()
-        if problems:
-            raise ValueError("; ".join(problems))
+    """Import every definition module. Registration happens on import.
+
+    Under a lock, and complete only once every module is in: a web process answers
+    several requests at once, and a second request that saw the registry half-filled
+    (the first module registered, the rest still importing) read it as complete and
+    failed with "No KPI 'revenue_12m'"."""
+    global _LOADED
+    if _LOADED:
+        return REGISTRY
+    with _LOAD_LOCK:
+        if not _LOADED:
+            from command_center.kpi import (  # noqa: F401
+                buying, operations, sales, stock)
+            problems = validate_registry()
+            if problems:
+                raise ValueError("; ".join(problems))
+            _LOADED = True
     return REGISTRY

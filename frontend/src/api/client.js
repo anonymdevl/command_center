@@ -10,7 +10,13 @@
  * with a Frappe session and every call carries it.
  */
 
-const CSRF = window.csrf_token || null;
+// The request token is read when each request is made, from the session's csrftoken
+// cookie, which is renewed at sign-in -- a token captured once at page load would go
+// stale and every request would be refused. The page's own copy is the fallback.
+function csrfToken() {
+  const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+  return (m && decodeURIComponent(m[1])) || window.csrf_token || null;
+}
 
 export class ApiError extends Error {
   constructor(message, { status, method, exc } = {}) {
@@ -33,7 +39,7 @@ export async function call(method, args = {}, { signal } = {}) {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
-        ...(CSRF ? { "X-Frappe-CSRF-Token": CSRF } : {}),
+        ...(csrfToken() ? { "X-Frappe-CSRF-Token": csrfToken() } : {}),
       },
       body: JSON.stringify(args),
     });
@@ -84,7 +90,7 @@ export async function download(method, args = {}, fallbackName = "export") {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(CSRF ? { "X-Frappe-CSRF-Token": CSRF } : {}),
+      ...(csrfToken() ? { "X-Frappe-CSRF-Token": csrfToken() } : {}),
     },
     body: JSON.stringify(args),
   });

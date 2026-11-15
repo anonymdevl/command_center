@@ -643,3 +643,56 @@ class SettingsPage(TransactionTestCase):
                        "started a full reload", "replaced the Claude key",
                        "removed the ERPNext key of manager@test.com"):
             self.assertIn(phrase, whats)
+
+
+class PagesNotStored(TransactionTestCase):
+    """The pages carry the person's details and their session's request token: the
+    browser must never keep them, or a stale token refuses every request after sign-in."""
+
+    databases = {"default", "aux"}
+
+    def test_no_store(self):
+        U = get_user_model()
+        u = U.objects.create_user("m@test.com", "m@test.com", "a-long-test-pass-5")
+        u.groups.add(Group.objects.get_or_create(name="Insights Dashboard Manager")[0])
+        c = Client()
+        self.assertEqual(c.get("/command-center-login")["Cache-Control"], "no-store")
+        c.login(username="m@test.com", password="a-long-test-pass-5")
+        self.assertEqual(c.get("/command-center")["Cache-Control"], "no-store")
+
+
+class KpiCatalogueThreads(TransactionTestCase):
+    """The figure catalogue is complete for every request, however many arrive at once."""
+
+    def test_concurrent_load(self):
+        import threading
+        from command_center.kpi import registry
+        saved = dict(registry.REGISTRY)
+        registry.REGISTRY.clear()
+        registry._LOADED = False
+        import sys
+        import command_center.kpi as kpi_pkg
+        for m in ("buying", "operations", "sales", "stock"):
+            sys.modules.pop(f"command_center.kpi.{m}", None)
+            if hasattr(kpi_pkg, m):
+                delattr(kpi_pkg, m)
+        seen, errors = [], []
+
+        def worker():
+            try:
+                seen.append(len(registry.load_all()))
+            except Exception as e:  # pragma: no cover - would be the failure
+                errors.append(e)
+        threads = [threading.Thread(target=worker) for _ in range(12)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        try:
+            self.assertFalse(errors, errors)
+            self.assertEqual(len(set(seen)), 1, f"some requests saw a partial catalogue: {seen}")
+            self.assertIn("revenue_12m", registry.REGISTRY)
+        finally:
+            registry.REGISTRY.clear()
+            registry.REGISTRY.update(saved)
+            registry._LOADED = True

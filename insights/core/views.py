@@ -281,7 +281,12 @@ def _page(request, template: str, controller: str):
         except Redirect:
             return HttpResponseRedirect(local.flags.redirect_location or "/")
         html = _jinja.get_template(template).render(**ctx)
-    return HttpResponse(html)
+    resp = HttpResponse(html)
+    # Each page carries the signed-in person's details and the request token of their
+    # session: never kept by the browser or anything in between, so it cannot come back
+    # stale after a sign-in or sign-out (a stale token refuses every request).
+    resp["Cache-Control"] = "no-store"
+    return resp
 
 
 def command_center(request, path=""):
