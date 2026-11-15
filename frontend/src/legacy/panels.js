@@ -7,14 +7,35 @@
  * wording stay and the figures, names and dates are the business's. The generated
  * markup carries no sample: its marks are empty until the answer arrives.
  *
+ * The chart panels -- trend, bars, stack, funnel -- are drawn by viz.js (ECharts): the
+ * designed mark is kept in the markup, hidden, and the interactive chart sits in its
+ * place under the same heading, with the same figures and the same drill (a click on a
+ * bar, slice or stage opens what clicking the designed row opened). Each panel's chart
+ * is made once and updated in place on every refresh, so the screen's minute redraw
+ * never stacks charts up. A panel that shows parts of a whole (COMPOSITION) offers a
+ * donut and a pie in its switcher; a trend offers line, area and bars.
+ *
  * A panel the server could not answer says so under its heading -- "can't reach the
  * business's ERPNext", or "could not be read" -- and never shows anything it did not
  * read. Nothing from the API is written as HTML; every node is built here.
  */
 
 import { guideBox } from "./guide.js";
+import { createViz, vizOf } from "./viz.js";
 
 export const PANEL_VIEWS = new Set(["sales", "proc", "inv", "eng", "cx", "fin", "hr", "it", "aud", "risk"]);
+
+// The bar panels whose rows are the parts of one whole, so a donut or pie is a true
+// picture of them. shares "shown": the parts of what the panel shows (its largest
+// orders, say), which the chart says, rather than of the business's whole. money: the
+// rows are amounts in the business's currency (a donut's total then says so).
+const COMPOSITION = {
+  "Where the value sits": { shares: true, money: true },
+  "Where people work": { shares: true },
+  "Where people are": { shares: true },
+  "What they are complaining about": { shares: true },
+  "Where the money goes": { shares: "shown", money: true },
+};
 
 // The designed marks a panel draws its answer into.
 const MARKS = ".chartwrap, .bars, .stack, .stackkey, table.dt, .funnel, ul.bul";
@@ -193,64 +214,75 @@ function ensure(panel, selector, make) {
   return node;
 }
 
+/* ------------------------------------------------------------------ charts */
+/**
+ * The panel's interactive chart for one of its designed marks ("slot"), made the first
+ * time and updated in place after, with the designed mark hidden under it.
+ */
+function chartIn(panel, slot, anchor, model, { onPick, onView } = {}) {
+  const title = panel.querySelector(".ph b")?.textContent?.trim() || "";
+  const opts = { key: `panel:${title}:${slot}`, title, compact: true, onPick, onView };
+  const host = panel.querySelector(`[data-viz="${slot}"]`);
+  let viz = vizOf(host);
+  if (viz) {
+    viz.update(model, opts);
+  } else {
+    host?.remove();
+    viz = createViz(model, opts);
+    viz.node.dataset.viz = slot;
+    anchor.after(viz.node);
+  }
+  hide(anchor);
+  return viz;
+}
+
+/** A panel's chart for this slot is not wanted this time (an empty answer). */
+function noChart(panel, slot) {
+  hide(panel.querySelector(`[data-viz="${slot}"]`));
+}
+
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
 /* ------------------------------------------------------------------ trend */
 function drawTrend(panel, spec) {
   const wrap = panel.querySelector(".chartwrap");
   const values = (spec.values || []).map(Number);
   if (!wrap || !values.length || values.some((v) => !Number.isFinite(v))) return false;
-  const max = Math.max(...values, 0) || 1;
-  const n = values.length;
-  const pts = values.map((v, i) => {
-    const x = n === 1 ? 50 : (100 * i) / (n - 1);
-    const y = 38 - (36 * Math.max(v, 0)) / max;
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  const labels = (spec.labels || []).map(String);
+  if (labels.length !== values.length) return false;
+  const title = panel.querySelector(".ph b")?.textContent?.trim() || "";
+  let top = 0;
+  values.forEach((v, i) => { if (v > values[top]) top = i; });
+  chartIn(panel, "trend", wrap, {
+    type: "area", title, unit: spec._cur || "", unit2: "", labels, total: labels.length, note: "",
+    series: [{ name: title, values }], time: true,
+    peak: spec.peak && values[top] > 0 ? { index: top, text: spec.peak } : null,
   });
-  const line = wrap.querySelector("polyline");
-  const area = wrap.querySelector("polygon");
-  if (!line) return false;
-  line.setAttribute("points", pts.join(" "));
-  if (area) {
-    const first = pts[0].split(",")[0];
-    const last = pts[pts.length - 1].split(",")[0];
-    area.setAttribute("points", `${first},38 ${pts.join(" ")} ${last},38`);
-  }
-  const xlab = wrap.querySelector(".xlab");
-  if (xlab) {
-    xlab.textContent = "";
-    (spec.labels || []).forEach((l) => {
-      const s = el("span", null, l);
-      s.style.flex = "1";
-      s.style.textAlign = "center";
-      xlab.append(s);
-    });
-  }
-  const ymax = wrap.querySelector(".ymax");
-  if (ymax && spec.peak) ymax.textContent = spec.peak;
   return true;
 }
 
 /* ------------------------------------------------------------------ bars */
 function drawBars(panel, spec, onOpen) {
   const box = ensure(panel, ".bars", () => el("div", "bars"));
-  const rows = spec.rows || [];
+  const rows = (spec.rows || []).filter((r) => r && r.label !== undefined && r.label !== null);
   box.textContent = "";
   if (!rows.length) {
+    noChart(panel, "bars");
     box.append(el("div", "thin", spec.empty || "Nothing recorded."));
     return true;
   }
-  const max = Math.max(...rows.map((r) => Number(r.value) || 0), 0) || 1;
-  rows.forEach((r) => {
-    const row = el("div", "barrow");
-    const fill = el("div", "barfill");
-    fill.style.width = `${Math.max(0, (100 * (Number(r.value) || 0)) / max).toFixed(1)}%`;
-    fill.style.background = `var(--${r.tone || "accent"})`;
-    const track = el("div", "bartrack");
-    track.append(fill);
-    const val = el("div", "barval", r.display ?? String(r.value ?? ""));
-    if (r.note) val.append(el("span", "barnote", r.note));
-    row.append(el("div", "barlab", r.label), track, val);
-    if (r.drill && onOpen) clickable(row, () => onOpen({ drill: r.drill, label: r.label }));
-    box.append(row);
+  const title = panel.querySelector(".ph b")?.textContent?.trim() || "";
+  const drills = rows.some((r) => r.drill) && onOpen;
+  chartIn(panel, "bars", box, {
+    type: "hbar", title, unit: COMPOSITION[title]?.money ? spec._cur || "" : "", unit2: "",
+    labels: rows.map((r) => String(r.label)),
+    series: [{ name: title, values: rows.map((r) => num(r.value)) }],
+    displays: rows.map((r) => (r.display ?? String(r.value ?? ""))),
+    notes: rows.map((r) => r.note || ""),
+    colors: rows.map((r) => r.tone || "accent"),
+    shares: COMPOSITION[title]?.shares || false, total: rows.length, note: "",
+  }, {
+    onPick: drills ? (i) => rows[i]?.drill && onOpen({ drill: rows[i].drill, label: rows[i].label }) : undefined,
   });
   return true;
 }
@@ -260,10 +292,12 @@ function drawStack(panel, spec) {
   const bar = panel.querySelector(".stack");
   const parts = spec.parts || [];
   if (!bar || !parts.length) return false;
-  const total = parts.reduce((s, p) => s + (Number(p.value) || 0), 0) || 1;
   const segs = [...bar.children];
-  parts.forEach((p, i) => {
-    if (segs[i]) segs[i].style.width = `${((100 * (Number(p.value) || 0)) / total).toFixed(2)}%`;
+  // The designed segments carry the meaning of each part's colour (under a month is
+  // good, over three is critical); the chart keeps it.
+  const tones = parts.map((_, i) => {
+    const m = String(segs[i]?.getAttribute("style") || "").match(/var\(--([\w-]+)\)/);
+    return m ? m[1] : "accent";
   });
   const key = panel.querySelector(".stackkey");
   if (key) {
@@ -271,33 +305,37 @@ function drawStack(panel, spec) {
       if (parts[i]) b.textContent = parts[i].display ?? String(parts[i].value);
     });
   }
+  const title = panel.querySelector(".ph b")?.textContent?.trim() || "";
+  chartIn(panel, "stack", bar, {
+    type: "strip", title, unit: "", unit2: "", labels: parts.map((p) => String(p.label ?? "")),
+    series: [{ name: title, values: parts.map((p) => Math.max(0, num(p.value))) }],
+    displays: parts.map((p) => p.display ?? String(p.value ?? "")), colors: tones,
+    shares: true, total: parts.length, note: "",
+  }, {
+    // The designed key says each part's figure beside its colour: it is the legend while
+    // the parts are drawn as one bar, and the chart's own legend takes over otherwise.
+    onView: (v) => { if (key && !key.dataset.hid) key.style.display = v === "strip" ? "" : "none"; },
+  });
   return true;
 }
 
 /* ------------------------------------------------------------------ funnel */
 function drawFunnel(panel, spec, onOpen) {
-  // The designed stages are redrawn in place, one for one: the bar, "Stage · count ·
-  // value", and the line under it.
-  const stages = [...panel.querySelectorAll(".funnel .fstage")];
+  // One stage for each designed stage, in order: the same stages, now drawn as a
+  // funnel, each opening what the designed stage opened.
+  const box = panel.querySelector(".funnel");
+  const stages = box ? [...box.querySelectorAll(".fstage")] : [];
   const rows = spec.stages || [];
   if (!stages.length || stages.length !== rows.length) return false;
-  const max = Math.max(...rows.map((r) => Number(r.count) || 0), 0) || 1;
-  rows.forEach((r, i) => {
-    const stage = stages[i];
-    const bar = stage.querySelector(".fbar");
-    if (bar) bar.style.width = `${Math.max(2, (100 * (Number(r.count) || 0)) / max).toFixed(1)}%`;
-    const txt = stage.querySelector(".ftxt");
-    if (txt) {
-      txt.textContent = "";
-      txt.append(el("b", null, r.label), document.createTextNode(
-        ` · ${Number(r.count || 0).toLocaleString("en-GB")}${r.display ? ` · ${r.display}` : ""}`));
-    }
-    const note = stage.querySelector(".fnote");
-    if (note) {
-      note.textContent = r.note || "";
-      note.hidden = !r.note;
-    }
-    if (r.drill && onOpen) clickable(stage, () => onOpen({ drill: r.drill, label: r.label }));
+  const title = panel.querySelector(".ph b")?.textContent?.trim() || "";
+  const drills = rows.some((r) => r.drill) && onOpen;
+  chartIn(panel, "funnel", box, {
+    type: "funnel", title, unit: "", unit2: "", labels: rows.map((r) => String(r.label ?? "")),
+    series: [{ name: "Count", values: rows.map((r) => Math.max(0, num(r.count))) }],
+    displays: rows.map((r) => r.display || ""), notes: rows.map((r) => r.note || ""),
+    total: rows.length, note: "",
+  }, {
+    onPick: drills ? (i) => rows[i]?.drill && onOpen({ drill: rows[i].drill, label: rows[i].label }) : undefined,
   });
   return true;
 }
@@ -433,19 +471,6 @@ function renderFindings(root, findings, failed) {
       b.addEventListener("click", () => window.ask2?.(f.ask));
       acts.append(b);
       w.append(acts);
-    }
-  });
-}
-
-function clickable(node, fn) {
-  node.classList.add("clickable");
-  node.setAttribute("role", "button");
-  node.setAttribute("tabindex", "0");
-  node.addEventListener("click", fn);
-  node.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      fn();
     }
   });
 }
