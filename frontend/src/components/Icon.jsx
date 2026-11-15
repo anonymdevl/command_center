@@ -127,6 +127,7 @@ const PATHS = {
   arrow: <path d="M7 17 17 7M8.5 7H17v8.5" />,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   bell: <path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 2h-15zM10 20.5a2.2 2.2 0 0 0 4 0" />,
+  logout: <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M9 16l-4-4 4-4M5 12h11" />,
 };
 
 /** Which glyph each screen uses in the sidebar, by view key. */

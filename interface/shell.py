@@ -214,6 +214,19 @@ SHELL_CSS = """
 .whotxt b{display:block;font-size:var(--fs-sm);font-weight:var(--fw-semibold);white-space:nowrap;
  max-width:170px;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
 .whotxt span{display:block;font-size:var(--fs-xs);color:var(--mut);white-space:nowrap}
+.whow{position:relative}
+button.who{background:none;border:0;border-radius:var(--r-pill);cursor:pointer;color:inherit;font:inherit;text-align:left}
+button.who:hover,button.who.on,button.who:focus-visible{background:var(--hover);outline:0}
+.whomenu{position:absolute;right:0;top:calc(100% + 12px);width:260px;z-index:60;background:var(--surface);
+ border:1px solid var(--line2);border-radius:20px;box-shadow:var(--shadow2);padding:8px}
+.whomenu-h{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.whomenu-h b{font-size:var(--fs-sm);font-weight:var(--fw-semibold)}
+.whomenu-h span{font-size:var(--fs-xs);color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.whomenu-out{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;border-radius:var(--r-sm);
+ padding:10px 12px;cursor:pointer;color:var(--ink);font:inherit;font-size:var(--fs-sm);font-weight:var(--fw-semibold)}
+.whomenu-out:hover,.whomenu-out:focus-visible{background:var(--hover);outline:0}
+.whomenu-out:disabled{opacity:.6;cursor:default}
+.whomenu-out svg{width:18px;height:18px}
 
 /* ---- appearance menu ---- */
 .appear{position:relative}
@@ -300,6 +313,10 @@ SHELL_CSS = """
  .ask-go span{display:none}
  .seg2{display:none}
  .askpop,.askpop.wide{position:fixed;left:10px;right:10px;top:72px;width:auto;max-height:calc(100vh - 86px)}
+ /* The bell's, the account's and the appearance panels sit under the top bar across the
+    screen's width: anchored to their buttons they ran off the left edge (iPhone 11). */
+ .bellpop,.whomenu,.appearmenu{position:fixed;left:10px;right:10px;top:72px;width:auto;
+  max-height:calc(100vh - 86px);overflow:auto}
  .ap-q{font-size:var(--fs-md)}
  .ib{width:40px;height:40px}
  .av{width:38px;height:38px}
