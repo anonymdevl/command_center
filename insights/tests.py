@@ -236,6 +236,16 @@ class PlatformEndToEnd(TransactionTestCase):
                          json.dumps({"keys": ["ar_total"]}), content_type="application/json").json()
         self.assertGreater(figures["message"]["ar_total"]["value"] or 0, 0)
 
+        # every designed screen's charts and tables answer from the loaded records
+        from command_center.api import panels as panels_api
+        for view, builders in panels_api.SCREENS.items():
+            r = c.post("/api/method/command_center.api.panels.get",
+                       json.dumps({"view": view, "business_code": "test_medical_ltd"}),
+                       content_type="application/json")
+            self.assertEqual(r.status_code, 200, f"panels {view}: {r.content[:300]!r}")
+            got = r.json()["message"]["panels"]
+            self.assertEqual(sorted(got), sorted(builders), f"panels {view} answered {sorted(got)}")
+
         # the administration, with a loaded business in it: every list and the first
         # record of each opens for the platform's administrator
         from django.contrib import admin as dj_admin
@@ -352,3 +362,19 @@ class SignInLimits(TransactionTestCase):
         r = Client().post("/admin/login/?next=/admin/", {"username": "boss@test.com",
                                                          "password": "a-long-test-pass-1"})
         self.assertEqual(r.status_code, 302)
+
+
+class PanelHeadings(TransactionTestCase):
+    """Every panel api/panels.py answers is a heading on that screen, word for word --
+    a heading that does not match would leave the designed sample in place."""
+
+    def test_headings_exist(self):
+        import html as _html
+        from pathlib import Path
+        from django.conf import settings
+        from command_center.api.panels import SCREENS
+        views = json.loads(Path(settings.BASE_DIR, "frontend/src/legacy/views.json").read_text())
+        for view, builders in SCREENS.items():
+            markup = _html.unescape(views[view])
+            for title in builders:
+                self.assertIn(f"<b>{title}</b>", markup, f"{view}: no panel headed {title!r}")

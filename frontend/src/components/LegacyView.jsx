@@ -17,6 +17,7 @@ import { WORK_VIEWS, renderWork } from "../legacy/work.js";
 import { ALERT_VIEWS, renderAlerts } from "../legacy/alerts.js";
 import { renderHealthTiles, renderHome } from "../legacy/home.js";
 import { renderSchedules } from "../legacy/schedules.js";
+import { PANEL_VIEWS, renderPanels } from "../legacy/panels.js";
 import { renderLoads } from "../legacy/loads.js";
 
 /**
@@ -58,6 +59,9 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
 
   // Today, Approvals and Outstanding Tasks read the real queue (api/work.py), again
   // after any decision made on them.
+  // The department screens' charts and tables (api/panels.py, legacy/panels.js).
+  const hasPanels = PANEL_VIEWS.has(viewKey);
+  const panels = useApi(() => api.panels(viewKey, scope), [viewKey, scope], { skip: !hasPanels });
   const isWork = WORK_VIEWS.has(viewKey);
   const work = useApi(() => api.work(scope), [viewKey, scope], { skip: !isWork });
   useEffect(() => {
@@ -379,12 +383,16 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       renderHome(root, { figures: figures.data, alerts: alerts.data, scope, onOpen: opts.onOpen });
     }
     if (viewKey === "health") renderHealthTiles(root, figures.data);
+    if (hasPanels) {
+      renderPanels(root, viewKey, panels.data, { onOpen: opts.onOpen, failed: !!panels.error });
+    }
     // An alert drawn by the generator is a designed sample until something live replaces
     // it, and the screen's "still illustrative" line must keep saying so.
     root.querySelectorAll(".alert:not([data-live])").forEach((a) => {
       a.dataset.illustrative = "1";
     });
-  }, [viewKey, html, figures.data, work.data, isWork, alerts.data, hasAlerts, scope, openDrawer]);
+  }, [viewKey, html, figures.data, work.data, isWork, alerts.data, hasAlerts, scope, openDrawer,
+      hasPanels, panels.data, panels.error]);
 
   // The designed action buttons (Assign, the "⋯" menu, Raise it...) had no handlers.
   useEffect(() => {

@@ -170,6 +170,8 @@ export const api = {
   kpis: ({ keys, business_code }) =>
     call("command_center.api.kpi.get", { keys, business_code }),
   kpiCatalogue: () => call("command_center.api.kpi.catalogue"),
+  /* The designed screens' charts and tables, by panel heading (api/panels.py). */
+  panels: (view, business_code) => call("command_center.api.panels.get", { view, business_code }),
   kpiVerify: (business_code) => call("command_center.api.kpi.verify", { business_code }),
 
   /* The question box. Read-only: there is no path from here to actions.py. */

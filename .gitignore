@@ -17,3 +17,4 @@ insights.json
 *.sqlite3
 staticfiles/
 files/
+*.sqlite3-journal
