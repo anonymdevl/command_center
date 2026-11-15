@@ -7,20 +7,29 @@ import React, { useEffect, useRef } from "react";
  * (the legacy views' own generated markup only), or { node } for an element built
  * with DOM calls (legacy/guide.js) -- data is never passed as html.
  */
-export default function Drawer({ content, onClose }) {
+export default function Drawer({ content, onClose, onBack = null }) {
   const open = Boolean(content);
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e) => e.key === "Escape" && onClose();
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft" && e.altKey && onBack) onBack();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, onBack]);
 
   return (
     <>
       <div className={`scrim${open ? " on" : ""}`} onClick={onClose} />
       <div className={`drawer${open ? " on" : ""}`}>
+        {onBack ? (
+          <button type="button" className="btn drawer-back" onClick={onBack}
+                  aria-label="Back to the previous panel">
+            ← Back
+          </button>
+        ) : null}
         {content && content.html ? (
           <div dangerouslySetInnerHTML={{ __html: content.html }} />
         ) : content && content.node ? (

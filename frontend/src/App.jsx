@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { boot } from "./api/boot.js";
 import { initAppearance } from "./appearance.js";
 import Topbar from "./components/Topbar.jsx";
@@ -38,7 +38,15 @@ export default function App() {
     const real = (boot.scopes || []).filter((s) => s.code !== "__all__");
     return real.length === 1 ? real[0].code : boot.scopes?.[0]?.code || "__all__";
   });
-  const [drawer, setDrawer] = useState(null);
+  // The drawer keeps a short history: following a link inside it (a record, a person,
+  // the records behind a figure) opens the next one on top, and Back returns to the one
+  // before. Closing it, or moving to another screen, clears the history.
+  const [drawerStack, setDrawerStack] = useState([]);
+  const drawer = drawerStack.length ? drawerStack[drawerStack.length - 1] : null;
+  const setDrawer = useCallback((content) => {
+    setDrawerStack((s) => (content == null ? [] : [...s, content].slice(-20)));
+  }, []);
+  const drawerBack = useCallback(() => setDrawerStack((s) => s.slice(0, -1)), []);
   // Phones: the sidebar is a drawer, open only while choosing a screen.
   const [navOpen, setNavOpen] = useState(false);
 
@@ -83,7 +91,7 @@ export default function App() {
   // be false on them.
   const showBanner = !Ported && !settings && !CORE_VIEWS.has(view);
 
-  const ctx = useMemo(() => ({ scope, go, openDrawer: setDrawer }), [scope]);
+  const ctx = useMemo(() => ({ scope, go, openDrawer: setDrawer }), [scope, setDrawer]);
 
   return (
     <div className={`shell${navOpen ? " navopen" : ""}`}>
@@ -103,7 +111,8 @@ export default function App() {
           )}
         </main>
       </div>
-      <Drawer content={drawer} onClose={() => setDrawer(null)} />
+      <Drawer content={drawer} onClose={() => setDrawer(null)}
+              onBack={drawerStack.length > 1 ? drawerBack : null} />
       <ActionDialog scope={scope} />
       <ScheduleDialog scope={scope} />
     </div>
