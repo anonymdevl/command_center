@@ -42,7 +42,9 @@ def tabify(view_html, tabs=("Overview","Detail","Not yet measured"), ov_count=3)
     blocks=_merge_headers(split_blocks(view_html))
     head=[];rest=[]
     for b in blocks:
-        if 'class="topbar"' in b or 'class="kpis' in b or 'class="banner"' in b:
+        # data-lead: a block the screen leads with, above its tabs (Finances' statements)
+        if ('class="topbar"' in b or 'class="kpis' in b or 'class="banner"' in b
+                or 'data-lead="1"' in b[:120]):
             head.append(b)
         else:
             rest.append(b)

@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 exec(_src('views_c.py'))
+exec(_src('statements.py'))
 
 # ============ FINANCE ============
 V_FIN=f'''<div class="topbar"><div><h3>Finances</h3>
 <div class="when">Full ledger</div></div></div>
+{fs_block()}
 <div class="kpis six">
 {kpi("Owed to us","—","","","flat","","ar")}
 {kpi("Unpaid invoices","—","","","flat","","ar")}

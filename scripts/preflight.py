@@ -1278,6 +1278,8 @@ def _scripted(attrs):
     _id = re.search(r'\bid="([\w-]+)"', attrs)
     if _id and f"#{_id.group(1)}" in _legacy_js:
         return True
+    if "data-period=" in attrs:  # Finances' period switch (legacy/statements.js)
+        return '".fs-p"' in _legacy_js
     return "data-mode=" in attrs and ".segc button" in _legacy_js
 
 
