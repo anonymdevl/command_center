@@ -14,7 +14,7 @@ import { clearTurns, historyFor, remember, replaceAnswer, restore, turnsFor } fr
 import { renderConversations } from "../legacy/conversations.js";
 import { fetchStarters, followDeep, runAsk, runningFor, stopDeepLook, stopRunning } from "../askFlow.js";
 import { renderSteps } from "../legacy/steps.js";
-import { runReport } from "../legacy/reports.js";
+import { mountReports, runReport } from "../legacy/reports.js";
 import { wireActions } from "../legacy/actions.js";
 import { WORK_VIEWS, renderWork } from "../legacy/work.js";
 import { ALERT_VIEWS, alertsFailed, renderAlerts } from "../legacy/alerts.js";
@@ -186,6 +186,12 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
   useEffect(() => {
     if (isReports) renderSchedules(ref.current, sched.data);
   }, [isReports, sched.data, html]);
+  // ... and what each report's last run did, from the runs kept on the server: a report
+  // being written carries on when the screen is left, and is picked up again here.
+  useEffect(() => {
+    if (!isReports) return undefined;
+    return mountReports(ref.current, scope);
+  }, [isReports, html, scope]);
 
   // The generated markup calls these by name from inline onclick attributes.
   useEffect(() => {

@@ -546,6 +546,32 @@ class CommandCenterRecommendationFeedback(DocModel):
         indexes = [models.Index(fields=['business_code', 'rule', 'acted_on'], name="ix_dationFeedback_busine_rule_")]
 
 
+class CommandCenterReportRun(DocModel):
+    business_code = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    report = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    title = models.CharField(max_length=140, null=True, blank=True)
+    state = models.CharField(max_length=140, null=True, blank=True, db_index=True, default="queued")
+    kind = models.CharField(max_length=140, null=True, blank=True, default="manual")
+    run_by = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    schedule = models.CharField(max_length=140, null=True, blank=True)
+    started = models.DateTimeField(null=True, blank=True)
+    claimed = models.DateTimeField(null=True, blank=True)
+    heartbeat = models.DateTimeField(null=True, blank=True)
+    deadline = models.DateTimeField(null=True, blank=True)
+    finished = models.DateTimeField(null=True, blank=True)
+    attempts = models.IntegerField(null=True, blank=True, default=0)
+    worker = models.CharField(max_length=140, null=True, blank=True)
+    seen = models.SmallIntegerField(default=0)
+    error = models.TextField(null=True, blank=True)
+    result = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = "tabCommand Center Report Run"
+        verbose_name = "Command Center Report Run"
+        verbose_name_plural = "Command Center Report Run"
+        indexes = [models.Index(fields=['business_code', 'report', 'started'], name="ix_enterReportRun_busine_repor")]
+
+
 class CommandCenterReportSchedule(DocModel):
     report = models.CharField(max_length=140, null=True, blank=True)
     report_title = models.CharField(max_length=140, null=True, blank=True)
@@ -624,6 +650,7 @@ DOCTYPE_MODELS = {
     "Command Center Metric Point": CommandCenterMetricPoint,
     "Command Center Recommendation": CommandCenterRecommendation,
     "Command Center Recommendation Feedback": CommandCenterRecommendationFeedback,
+    "Command Center Report Run": CommandCenterReportRun,
     "Command Center Report Schedule": CommandCenterReportSchedule,
     "Command Center Site Credential": CommandCenterSiteCredential,
     "Connected Business": ConnectedBusiness,

@@ -339,11 +339,17 @@ const HANDLERS = {
   },
   "command_center.api.reports.status": ({ job_id }) => {
     const code = job_id.replace("preview-", "");
-    if ((reportPolls[code] = (reportPolls[code] || 0) + 1) < 2) return { state: "running" };
+    const run = { name: job_id, code, title: REPORT_TITLES[code] || code, kind: "manual",
+      mine: true, run_by_name: "you", business_code: "__all__", started_label: "now" };
+    if ((reportPolls[code] = (reportPolls[code] || 0) + 1) < 2) return { state: "running", run: { ...run, state: "running" } };
     const r = HANDLERS["command_center.api.ask.answer"]({ question: REPORT_TITLES[code] });
-    return { state: "done", report: { ...r, title: REPORT_TITLES[code], code,
-      generated: new Date().toISOString() } };
+    return { state: "done", run: { ...run, state: "done", finished_label: "now" },
+      report: { ...r, title: REPORT_TITLES[code], code, generated: new Date().toISOString() } };
   },
+  // The runs kept on the server: none in the preview until one is run.
+  "command_center.api.reports.latest": () => ({ business_code: "__all__", runs: {} }),
+  "command_center.api.reports.mine": () => ({ ready: [], running: [] }),
+  "command_center.api.reports.mark_seen": () => ({ ok: true }),
   "command_center.api.ask.answerable": () => ({
     mode: "analyst",
     examples: [

@@ -206,6 +206,17 @@ SHELL_CSS = """
 .bellpop-f{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--line);
  padding:10px 12px 6px;margin-top:4px;font-size:var(--fs-sm)}
 .bellpop-f .lnk{background:none;border:0;padding:0;cursor:pointer;color:var(--accent-ink);text-decoration:none}
+/* A report finished while its writer is on another screen (Bell.jsx): a word, not a dialog. */
+.cc-toast{position:fixed;right:24px;bottom:24px;z-index:85;display:flex;align-items:center;gap:12px;
+ width:min(420px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line2);
+ border-radius:var(--r-sm);box-shadow:var(--shadow2);padding:12px 12px 12px 16px}
+.cc-toast .bell-dot{margin-top:0}
+.cc-toast .bell-t{flex:1}
+.cc-toast-x{flex:none;width:28px;height:28px;border:0;background:none;border-radius:50%;color:var(--dim);
+ cursor:pointer;font-size:var(--fs-md);line-height:1}
+.cc-toast-x:hover{background:var(--hover);color:var(--ink)}
+@media (max-width:640px){.cc-toast{right:16px;left:16px;bottom:16px;width:auto}}
+@media print{.cc-toast{display:none}}
 .menu-b{display:none}
 .who{display:flex;align-items:center;gap:10px;padding:0 14px 0 4px;min-width:0}
 .av{width:44px;height:44px;border-radius:50%;background:var(--accent-bg2);color:var(--accent-ink);

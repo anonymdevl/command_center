@@ -7,6 +7,8 @@ Run every night by the scheduler (manage.py scheduler), or by hand:
 - the error log keeps `error_log_days` (default 30) days, the sign-in record
   `security_event_days` (default 730);
 - expired sign-in sessions are cleared (Django never clears them by itself);
+- the Reports screen's runs keep the latest `report_runs_keep` (default 10) of each
+  report for each business;
 - the platform's database is backed up to `backup_dir` (default ~/insights-backups),
   with a copy of insights.json and the uploaded logos, keeping `backup_days` (default 14)
   days of them. A backup is skipped, and the reason logged, when the disk has less
@@ -150,10 +152,22 @@ def _drop_old(target: Path) -> None:
             f.unlink()
 
 
+def prune_report_runs() -> int:
+    """The Reports screen's runs: the latest `report_runs_keep` (default 10) of each
+    report for each business are kept, with the report each wrote (api/reports.py)."""
+    from command_center.api import reports
+    return reports.prune_runs(int(_conf("report_runs_keep", reports.KEEP_RUNS)))
+
+
 def daily() -> dict:
     import frappe  # insights.compat
     done = {"error_log_pruned": prune_error_log(),
             "security_events_pruned": prune_security_events()}
+    try:
+        done["report_runs_pruned"] = prune_report_runs()
+    except Exception as e:  # recorded, and the rest of the upkeep still runs
+        frappe.log_error(title="Platform upkeep: report runs", message=frappe.get_traceback())
+        done["report_runs_pruned"] = f"failed: {e}"
     clear_sessions()
     done["sessions"] = "cleared expired"
     try:

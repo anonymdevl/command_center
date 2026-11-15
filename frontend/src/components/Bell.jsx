@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api, plansApi } from "../api/client.js";
+import { boot } from "../api/boot.js";
+import { follow, OPEN_KEY } from "../legacy/reports.js";
 import Icon from "./Icon.jsx";
 
 /**
@@ -13,6 +15,12 @@ import Icon from "./Icon.jsx";
  * Critical recommendations (api/recommend.critical) are listed under the alerts, except
  * one about the same issue as an open alert -- the server leaves those out, so nothing
  * is shown twice. One opens the Executive Summary, where every recommendation is.
+ *
+ * The person's own reports (api/reports.mine): one they ran that has been written, or
+ * has failed, waits here until they have seen it, and opens the Reports screen with it
+ * shown. Those still being written are followed from here, whichever screen is open
+ * (legacy/reports.js follow), and a finish away from the Reports screen also says so in
+ * a small toast, once.
  */
 const WORDS = { crit: "Critical", high: "High", med: "Medium", info: "For information" };
 
@@ -24,7 +32,69 @@ export default function Bell({ scope, onGo }) {
   // alerts (insights/core/security.py). One person's own, until dismissed.
   const [notes, setNotes] = useState([]);
   const [open, setOpen] = useState(false);
+  // This person's reports: finished and not yet seen, and the toast for one just done.
+  const [reports, setReports] = useState([]);
+  const [toast, setToast] = useState(null);
   const wrap = useRef(null);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () => api.reportMine().then((d) => {
+      if (!alive) return;
+      setReports(d?.ready || []);
+      (d?.running || []).forEach((r) => follow(r.name));
+    }).catch(() => {});
+    const done = (e) => {
+      const d = e.detail || {};
+      const run = d.run && typeof d.run === "object" ? d.run : null;
+      load();
+      // Shown on the Reports screen already: no toast. Otherwise, a word, once.
+      if (!run?.mine || document.querySelector(`.rp[data-run="${run.name}"]`)) return;
+      setToast({ run, ok: d.state === "done" });
+    };
+    load();
+    const t = setInterval(load, 60000);
+    window.addEventListener("cc-report-finished", done);
+    window.addEventListener("cc-reports-changed", load);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      window.removeEventListener("cc-report-finished", done);
+      window.removeEventListener("cc-reports-changed", load);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(null), 12000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const openReport = (r) => {
+    setOpen(false);
+    setToast(null);
+    if (r.state === "done") {
+      // The Reports screen opens it (legacy/reports.js mountReports), or, when it is
+      // already open, is told to.
+      try { sessionStorage.setItem(OPEN_KEY, r.name); } catch { /* private mode */ }
+      if (document.getElementById("rpout")) {
+        try { sessionStorage.removeItem(OPEN_KEY); } catch { /* private mode */ }
+        window.dispatchEvent(new CustomEvent("cc-report-open", { detail: { run: r.name } }));
+      }
+    } else {
+      seen(r);
+    }
+    onGo?.("reports");
+  };
+  const seen = (r) => {
+    setReports((list) => list.filter((x) => x.name !== r.name));
+    api.reportSeen(r.name).catch(() => {});
+  };
+  const reportWords = (r) => (r.state === "done"
+    ? `Your ${r.title} is ready`
+    : `Your ${r.title} could not be written`);
+  const bizLabel = (code) => (boot.scopes || []).find((x) => x.code === (code || "__all__"))?.label
+    || "All businesses";
 
   useEffect(() => {
     let alive = true;
@@ -59,7 +129,7 @@ export default function Bell({ scope, onGo }) {
 
   const alerts = data?.alerts || [];
   const fresh = data?.new || 0;
-  const total = alerts.length + recs.length + notes.length;
+  const total = alerts.length + recs.length + notes.length + reports.length;
   const label = total
     ? `${alerts.length} open alert${alerts.length === 1 ? "" : "s"}`
       + (recs.length ? `, ${recs.length} critical recommendation${recs.length === 1 ? "" : "s"}` : "")
@@ -92,10 +162,23 @@ export default function Bell({ scope, onGo }) {
 
   return (
     <div className="bellw" ref={wrap}>
+      {toast ? (
+        <div className="cc-toast" role="status" aria-live="polite">
+          <span className={`bell-dot ${toast.ok ? "info" : "crit"}`} aria-hidden="true" />
+          <span className="bell-t">
+            <b>{reportWords({ ...toast.run, state: toast.ok ? "done" : "failed" })}</b>
+            <span>{bizLabel(toast.run.business_code)}</span>
+          </span>
+          <button type="button" className="btn" onClick={() => openReport({ ...toast.run, state: toast.ok ? "done" : "failed" })}>
+            {toast.ok ? "View Report" : "Open Reports"}
+          </button>
+          <button type="button" className="cc-toast-x" aria-label="Close" onClick={() => setToast(null)}>×</button>
+        </div>
+      ) : null}
       <button className={`ib bell${open ? " on" : ""}`} title={label} aria-label={label}
         aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <Icon name="bell" />
-        {total ? <span className={`bell-n${fresh || recs.length || notes.length ? " fresh" : ""}`}>{total > 99 ? "99+" : total}</span> : null}
+        {total ? <span className={`bell-n${fresh || recs.length || notes.length || reports.length ? " fresh" : ""}`}>{total > 99 ? "99+" : total}</span> : null}
       </button>
       {open ? (
         <div className="bellpop" role="dialog" aria-label="Alerts">
@@ -136,6 +219,28 @@ export default function Bell({ scope, onGo }) {
                         <span>{r.area_label} · {r.owner_role}</span>
                       </span>
                     </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          {reports.length ? (
+            <>
+              <div className="bellpop-h">
+                <b>Your Reports</b>
+                <span>{reports.length}</span>
+              </div>
+              <ul className="bellpop-l">
+                {reports.slice(0, 5).map((r) => (
+                  <li key={r.name}>
+                    <button type="button" onClick={() => openReport(r)}>
+                      <span className={`bell-dot ${r.state === "done" ? "info" : "crit"}`} aria-hidden="true" />
+                      <span className="bell-t">
+                        <b>{reportWords(r)}</b>
+                        <span>{bizLabel(r.business_code)} · {r.state === "done" ? "written" : "failed"} {r.finished_label}</span>
+                      </span>
+                    </button>
+                    <button type="button" className="lnk" onClick={() => seen(r)}>Dismiss</button>
                   </li>
                 ))}
               </ul>

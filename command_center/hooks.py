@@ -109,6 +109,9 @@ scheduler_events = {
         # Access follows the role on each business's ERPNext: whoever lost it there
         # loses the platform within 15 minutes.
         "*/15 * * * *": ["command_center.api.sso.sync_members"],
+        # Report runs that can no longer finish -- past their deadline, or their worker
+        # gone with a restart -- failed with the reason, or picked up again once.
+        "*/5 * * * *": ["command_center.api.reports.sweep"],
         # Recommendations, once a day per business: the Daily Brief by Claude (only where
         # an administrator switched it on), then the email digest to the managers.
         # Before them, at 06:15 once the morning's loads have settled, the daily AI review
