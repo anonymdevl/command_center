@@ -64,7 +64,7 @@ V_SALES=f'''<div class="topbar"><div><h3>Sales and Payments</h3>
  "Monthly, from confirmed orders","rev")}
 {panel("Who owes us, and how long it has been",
  stacked([("Under 1 month",0,"var(--ok)"),("1–2 months",0,"var(--med)"),("2–3 months",0,"var(--high)"),("Over 3 months",0,"var(--crit)")])
- +thin("How the money owed by the ten largest balances is spread by age."),
+ +thin("How the money owed by the ten largest balances is spread by age, after payments not yet matched are set against the oldest invoices."),
  "Ten largest balances","ar")}
 </div>
 <div class="two">
@@ -73,8 +73,14 @@ V_SALES=f'''<div class="topbar"><div><h3>Sales and Payments</h3>
  ("Orders",0,0,"")]),
  "Whole history","funnel")}
 {panel("Largest balances owed", bars0(),
- "The ten largest balances","ar")}
+ "The ten largest balances, by the ledger","ar")}
 </div>
+{warn0()}
+{warn0()}
+{panel("What each customer really owes",
+ '<div class="dt-scroll">'+dtable(["Customer",("On Open Invoices$",True),("Ledger Balance$",True),("Difference$",True),"Why",
+ ("Not Yet Due",True),("1–30 Days",True),("31–60 Days",True),("61–90 Days",True),("Over 90 Days",True)])+'</div>',
+ "By the ledger, beside what the open invoices say","ledger")}
 {panel("Where orders are held up",
  '<div class="grid six">'+"".join(tile0(l,"openorders") for l in ["Awaiting stock","Awaiting purchase",
  "Awaiting despatch","Awaiting invoice","Awaiting install","Awaiting payment"])+'</div>',

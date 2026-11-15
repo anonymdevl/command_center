@@ -163,6 +163,8 @@ a.chip.src{text-decoration:none}
 a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .work-banner{margin:0 0 14px}
 div.work-table{overflow-x:auto;margin-bottom:12px}
+div.dt-scroll{overflow-x:auto;max-width:100%}
+div.dt-scroll table.dt{min-width:960px}
 div.work-table table.dt{min-width:560px}
 .alert .chip.src{white-space:normal;max-width:100%}
 

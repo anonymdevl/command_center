@@ -104,6 +104,7 @@ READS = [
     ("Company", None), ("Task", None), ("Project", None), ("Employee", None),
     ("Department", None), ("Issue", None), ("User", None), ("Has Role", "User"),
     ("Version", None), ("Workflow", None), ("Journal Entry", None), ("GL Entry", None),
+    ("Journal Entry Account", "Journal Entry"),
 ]
 # Roles that can change records. The platform's user on a business's site must hold
 # none of them: it reads, and only reads.
@@ -277,23 +278,79 @@ def _source_sum(conn, doctype, field, filters, parent=None):
 
     v16 takes an aggregate as {"SUM": field} and rejects SQL function strings; v15 and
     earlier take only the string. A peer may be on either (Gigmann may move to v16 while
-    the platform is live), so the v16 form is tried first and the older one on refusal.
+    the platform is live), so this goes through grouped_read, the one place both are
+    spoken (grouped by docstatus, which every doctype has, then added up).
     """
-    try:
-        rows = conn.get_list(doctype, filters=filters, fields=[{"SUM": field}],
-                             parent_doctype=parent, limit=1)
-        return _first(rows, f"SUM(`{field}`)")
-    except Exception:
-        rows = conn.get_list(doctype, filters=filters, fields=[f"sum({field}) as total"],
-                             parent_doctype=parent, limit=1)
-        return _first(rows, "total")
+    from command_center.kpi.live_departments import grouped_read
+    rows = grouped_read(conn, doctype, filters, "docstatus", [("sum", field, "total")],
+                        parent=parent)
+    return sum(float(r.get("total") or 0) for r in rows)
 
 
-def _first(rows, key):
-    if not rows:
-        return 0
-    row = rows[0]
-    return row.get(key) or row.get(key.replace("`", "")) or 0
+def source_figures(business_code: str, as_of) -> dict:
+    """What the business's ERPNext says right now, for the reconciliation check
+    (api/audit.py): each by the same rule the platform's figure uses. Read as the system
+    -- the read-only service account every load uses -- so like is compared with like.
+    Reads only, every one an aggregate or a count, except the open sales orders, whose
+    undelivered value has to be worked out per order."""
+    from command_center.ingest.operations import CLOSED_ORDER
+    from command_center.kpi.live_departments import grouped_read
+
+    conn = connector_for(business_code).as_system()
+    total = lambda dt, field, f, parent=None: _source_sum(conn, dt, field, f, parent)  # noqa: E731
+    count = lambda dt, f=None: int(conn.get_count(dt, f or {}) or 0)  # noqa: E731
+    over_90 = frappe.utils.add_days(as_of, -90)
+    si_open = {"docstatus": 1, "outstanding_amount": [">", 0]}
+    pi_open = {"docstatus": 1, "outstanding_amount": [">", 0]}
+    out = {
+        "si_unpaid_count": count("Sales Invoice", si_open),
+        "si_unpaid_sum": total("Sales Invoice", "outstanding_amount", si_open),
+        "si_over_90": total("Sales Invoice", "outstanding_amount",
+                            {**si_open, "due_date": ["<", over_90]}),
+        "pi_unpaid_count": count("Purchase Invoice", pi_open),
+        "pi_unpaid_sum": total("Purchase Invoice", "outstanding_amount", pi_open),
+        "si_count": count("Sales Invoice", {"docstatus": 1}),
+        "si_total": total("Sales Invoice", "base_grand_total", {"docstatus": 1}),
+        "si_net": total("Sales Invoice", "base_net_total", {"docstatus": 1}),
+        "pe_received": total("Payment Entry", "total_allocated_amount",
+                             {"docstatus": 1, "payment_type": "Receive"}),
+        "stock_value": total("Bin", "stock_value", {}),
+        "stock_lines": count("Bin"),
+        "employees_active": count("Employee", {"status": "Active"}),
+        "tasks": count("Task"),
+        "cases": count("Issue"),
+    }
+    for party_type, sign, pay in (("Customer", 1, "Receive"), ("Supplier", -1, "Pay")):
+        gl = grouped_read(conn, "GL Entry", {"is_cancelled": 0, "party_type": party_type},
+                          "party_type", [("sum", "debit", "debit_total"),
+                                         ("sum", "credit", "credit_total")])
+        out[f"{party_type.lower()}_ledger"] = sign * sum(
+            float(r.get("debit_total") or 0) - float(r.get("credit_total") or 0) for r in gl)
+        unmatched = {"docstatus": 1, "party_type": party_type, "payment_type": pay,
+                     "unallocated_amount": [">", 0]}
+        out[f"{party_type.lower()}_unmatched"] = total("Payment Entry", "unallocated_amount", unmatched)
+        out[f"{party_type.lower()}_unmatched_count"] = count("Payment Entry", unmatched)
+    orders = conn.get_list("Sales Order",
+                           filters={"docstatus": 1, "status": ["not in", sorted(CLOSED_ORDER)]},
+                           fields=["name", "base_grand_total", "per_delivered"],
+                           order_by="name asc", limit=500000)
+    out["order_book"] = sum(round(max(float(o.get("base_grand_total") or 0) * (
+        1 - min(float(o.get("per_delivered") or 0), 100.0) / 100.0), 0), 2) for o in orders)
+    out["order_book_count"] = len(orders)
+    return out
+
+
+def changed_since(business_code: str, doctypes, since) -> dict:
+    """How many records of each doctype were changed in the business's ERPNext after
+    `since` -- the reconciliation check's first explanation for a difference."""
+    conn = connector_for(business_code).as_system()
+    out = {}
+    for dt in doctypes:
+        try:
+            out[dt] = int(conn.get_count(dt, {"modified": [">", since]}) or 0)
+        except Exception:
+            out[dt] = None
+    return out
 
 
 def _check(label, source, fact, money=True, tolerance=0.01):
@@ -319,6 +376,7 @@ FACT_WORDS = {
     "fact_task": "Jobs and tasks",
     "fact_person": "People",
     "fact_case": "Customer issues",
+    "fact_party_balance": "Balances owed, by the ledger",
 }
 
 

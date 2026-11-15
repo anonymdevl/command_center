@@ -954,6 +954,9 @@ FACT_WORDS = {
     "fact_purchase_invoice_line": "supplier bill lines", "fact_stock_balance": "stock balances",
     "fact_sales_order": "sales orders", "fact_task": "jobs and tasks",
     "fact_person": "staff records", "fact_case": "customer issues",
+    "fact_party_balance": "what each customer and supplier owes by the ledger, with what "
+                          "their open invoices say, why the two differ, and the ageing after "
+                          "unmatched payments are set against the oldest invoices",
 }
 INTENT_WORDS = {
     "who_owes_most": "Working out who owes the most", "has_party_ever_paid": "Reading {s}'s payment history",

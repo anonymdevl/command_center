@@ -31,6 +31,7 @@ EXTRA_INDEXES = {
                                                ["business_code", "posting_date"]],
     "Command Center Fact Stock Balance": [["business_code", "warehouse"],
                                           ["business_code", "item_group"]],
+    "Command Center Fact Party Balance": [["business_code", "party_type", "party"]],
 }
 
 NO_COLUMN = {"Section Break", "Column Break", "Tab Break", "HTML", "Button", "Heading",

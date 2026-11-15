@@ -24,6 +24,7 @@ FACTS = {
     "fact_task": "Command Center Fact Task",
     "fact_person": "Command Center Fact Person",
     "fact_case": "Command Center Fact Case",
+    "fact_party_balance": "Command Center Fact Party Balance",
 }
 
 # What each fact may be grouped by. An allow-list, because a group_by taken from a
@@ -50,6 +51,7 @@ DIMENSIONS = {
                     "status", "business_code"],
     "fact_case": ["customer", "status", "priority", "issue_type", "wait_bucket",
                   "assigned_to", "opening_date", "business_code"],
+    "fact_party_balance": ["party_type", "party", "business_code"],
 }
 
 MEASURES = {
@@ -66,6 +68,13 @@ MEASURES = {
     "fact_task": ["days_late"],
     "fact_person": ["tenure_days"],
     "fact_case": ["days_open"],
+    "fact_party_balance": ["ledger_balance", "owed", "in_credit", "open_invoices",
+                           "open_invoice_count", "unmatched_payments",
+                           "unmatched_payment_count", "unlinked_journals",
+                           "unlinked_credit_notes", "other_unlinked", "unlinked_debits",
+                           "invoices_not_updated", "unexplained", "not_due", "d0_30",
+                           "d31_60", "d61_90", "d90_plus", "undated", "inside_90",
+                           "overdue"],
 }
 
 # The dates each fact can be windowed or grouped by month on (Kpi.period, "month:").
@@ -79,6 +88,7 @@ DATE_FIELDS = {
     "fact_task": ["exp_end_date", "completed_on"],
     "fact_person": ["date_of_joining", "relieving_date"],
     "fact_case": ["opening_date", "resolution_date"],
+    "fact_party_balance": ["oldest_due_after_matching"],
 }
 
 # Columns every fact carries, which a filter may name even though they are neither

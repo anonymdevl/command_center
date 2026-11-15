@@ -308,75 +308,250 @@ def sales_trend(ctx):
                          "/app/sales-order")
 
 
-def _owed_by_customer(ctx):
-    rows = ctx.rows("fact_sales_invoice", ["customer", "outstanding_amount", "days_overdue",
-                                           "ageing_bucket"],
-                    lambda t: [t.outstanding_amount > 0, t.src_docstatus == 1])
-    by = defaultdict(lambda: {"owed": 0.0, "days": 0, "n": 0, "buckets": defaultdict(float)})
+# --------------------------------------------------------------------------- owed, by the ledger
+# What each customer and supplier owes is their General Ledger balance (fact_party_balance,
+# ingest/ledger.py), aged after the payments never matched to an invoice are set against
+# the oldest open items. The open invoices' own figure is shown beside it with the reason
+# for the difference, in plain words.
+POSITION_FIELDS = ["party", "ledger_balance", "owed", "in_credit", "open_invoices",
+                   "open_invoice_count", "unmatched_payments", "unmatched_payment_count",
+                   "unlinked_journals", "unlinked_credit_notes", "other_unlinked",
+                   "unlinked_debits", "invoices_not_updated", "unexplained", "not_due",
+                   "d0_30", "d31_60", "d61_90", "d90_plus", "undated", "inside_90", "overdue",
+                   "oldest_due_after_matching", "days_overdue"]
+_DATE_OR_NAME = ("party", "oldest_due_after_matching")
+# Each reason the open invoices and the ledger differ, as a manager would say it:
+# (column, sign, customer wording, supplier wording). sign -1 is a reason the ledger is
+# higher than the invoices.
+REASONS = (
+    ("unmatched_payments", 1, "received but never matched to invoices",
+     "paid but never matched to their bills"),
+    ("invoices_not_updated", 1, "already paid or credited against invoices that still show it unpaid",
+     "already paid or credited against bills that still show it unpaid"),
+    ("unlinked_journals", 1, "of journal entries reducing the balance, not linked to any invoice",
+     "of journal entries reducing what we owe, not linked to any bill"),
+    ("unlinked_credit_notes", 1, "of credit notes never set against the original invoice",
+     "of debit notes never set against the original bill"),
+    ("other_unlinked", 1, "paid against orders or journal entries rather than invoices",
+     "paid against purchase orders or journal entries rather than bills"),
+    ("unlinked_debits", -1, "owed on journal entries or refunds that are on no invoice, such as opening balances",
+     "owed on journal entries or refunds that are on no bill, such as opening balances"),
+)
+PARTY_WORDS = {"Customer": ("customer", "customers", "invoices"),
+               "Supplier": ("supplier", "suppliers", "bills")}
+
+
+def _positions(ctx, party_type):
+    rows = ctx.rows("fact_party_balance", POSITION_FIELDS,
+                    lambda t: [t.party_type == party_type])
     for r in rows:
-        c = by[r["customer"]]
-        c["owed"] += _num(r["outstanding_amount"])
-        c["days"] = max(c["days"], int(r["days_overdue"] or 0))
-        c["n"] += 1
-        c["buckets"][r["ageing_bucket"]] += _num(r["outstanding_amount"])
-    ranked = sorted(by.items(), key=lambda kv: -kv[1]["owed"])
-    return ranked, sum(v["owed"] for v in by.values()), len(rows)
+        for k in POSITION_FIELDS:
+            if k not in _DATE_OR_NAME:
+                r[k] = _num(r[k])
+    return rows
+
+
+def _sum(rows, key):
+    return sum(r[key] for r in rows)
+
+
+def _amt(v) -> str:
+    """GHS 341,565 under a million; GHS 10.07M above it."""
+    return _short(v) if abs(_num(v)) >= 1e6 else _money(v)
+
+
+def _why(r, cur, party_type) -> str:
+    """The plain reasons a party's open invoices and ledger balance differ."""
+    side = 2 if party_type == "Customer" else 3
+    parts = []
+    for row in REASONS:
+        col, sign, words = row[0], row[1], row[side]
+        v = r[col]
+        if abs(v) < 0.5:
+            continue
+        if col == "invoices_not_updated" and v < 0:
+            parts.append((abs(v), f"the {PARTY_WORDS[party_type][2]} show {cur} {_amt(-v)} less "
+                                  f"than the ledger holds against them"))
+        elif col == "other_unlinked" and v < 0:
+            parts.append((abs(v), f"{cur} {_amt(-v)} of other ledger entries adding to the balance"))
+        else:
+            parts.append((abs(v), f"{cur} {_amt(v)} {words}"))
+    parts.sort(key=lambda x: -x[0])
+    out = [t for _, t in parts]
+    if abs(r["unexplained"]) >= 0.5:
+        out.append(f"the ledger and the {PARTY_WORDS[party_type][2]} disagree by {cur} "
+                   f"{_amt(abs(r['unexplained']))} for reasons the records do not show")
+    return "; ".join(out)
+
+
+def _summary(ctx, party_type, rows) -> str:
+    """What is owed by the ledger, what the invoices say, and why -- in words that add up:
+    the open invoices less the reasons is the ledger's net balance, and the net balance is
+    what is owed less what those in credit hold."""
+    one, many, docs = PARTY_WORDS[party_type]
+    cur = ctx.cur
+    owed, on_docs, net = _sum(rows, "owed"), _sum(rows, "open_invoices"), _sum(rows, "ledger_balance")
+    credit = [r for r in rows if r["in_credit"] > 0]
+    lead = (f"{many.capitalize()} owe {cur} {_amt(owed)} by the ledger" if party_type == "Customer"
+            else f"We owe {many} {cur} {_amt(owed)} by the ledger")
+    if credit:
+        held = _sum(credit, "in_credit")
+        lead += (f", and {_plural(len(credit), one)} {'is' if len(credit) == 1 else 'are'} in credit "
+                 f"by {cur} {_amt(held)} (paid in advance, or more than "
+                 f"{'billed' if party_type == 'Customer' else 'they billed'}), so on balance "
+                 + (f"they owe {cur} {_amt(net)}" if party_type == "Customer"
+                    else f"we owe {cur} {_amt(net)}"))
+    tot = {k: _sum(rows, k) for k in POSITION_FIELDS if k not in _DATE_OR_NAME}
+    why = _why(tot, cur, party_type)
+    if abs(on_docs - net) < 0.5 and not why:
+        return f"{lead}, as the open {docs} say."
+    return (f"{lead}. The open {docs} say {cur} {_amt(on_docs)}"
+            + (f" because of: {why}." if why else "."))
+
+
+def _ledger_href(ctx, party_type, party):
+    """The party's account in the business's own General Ledger report."""
+    from command_center.guides import site_url
+    to = ctx.as_of
+    frm = frappe.utils.add_days(to, -365)
+    return (f"{site_url(ctx.code)}/app/query-report/General%20Ledger?party_type={quote(party_type)}"
+            f"&party={quote(party)}&from_date={frm}&to_date={to}")
+
+
+def _money_or_dash(v):
+    return _money(v) if abs(_num(v)) >= 0.5 else "—"
+
+
+def _ledger_rows(ctx, party_type, rows, top):
+    one, many, _ = PARTY_WORDS[party_type]
+    ranked = sorted(rows, key=lambda r: -max(r["open_invoices"], r["owed"], r["in_credit"]))
+    out = []
+    for r in ranked[:top]:
+        diff = r["open_invoices"] - r["ledger_balance"]
+        out.append({"cells": [
+            {"text": r["party"] or "—", "drill": {"href": _ledger_href(ctx, party_type, r["party"])},
+             "sub": (f"in credit by {_money(r['in_credit'])}" if r["in_credit"] > 0 else
+                     f"{_plural(int(r['open_invoice_count']), 'open ' + ('invoice' if party_type == 'Customer' else 'bill'))}")},
+            {"text": _money_or_dash(r["open_invoices"]), "num": True, "tone": "mut"},
+            {"text": _money(r["ledger_balance"]), "num": True, "bold": True,
+             "tone": "ok" if r["ledger_balance"] < 0 else ""},
+            {"text": _money_or_dash(diff), "num": True,
+             "tone": "high" if abs(diff) >= 0.5 else "mut"},
+            {"text": _why(r, ctx.cur, party_type) or "They agree.", "small": True},
+            {"text": _money_or_dash(r["not_due"]), "num": True},
+            {"text": _money_or_dash(r["d0_30"]), "num": True},
+            {"text": _money_or_dash(r["d31_60"]), "num": True},
+            {"text": _money_or_dash(r["d61_90"]), "num": True},
+            {"text": _money_or_dash(r["d90_plus"]), "num": True,
+             "tone": "crit" if r["d90_plus"] >= 0.5 else ""},
+        ]})
+    t = {k: _sum(rows, k) for k in ("open_invoices", "ledger_balance", "not_due", "d0_30",
+                                    "d31_60", "d61_90", "d90_plus")}
+    out.append({"rule": True, "cells": [
+        {"text": f"All {len(rows):,} {many}", "bold": True,
+         "sub": f"the {_word(min(top, len(rows)))} largest shown" if len(rows) > top else None},
+        {"text": _money(t["open_invoices"]), "num": True, "bold": True},
+        {"text": _money(t["ledger_balance"]), "num": True, "bold": True,
+         "sub": (f"{_money(_sum(rows, 'owed'))} owed, {_money(_sum(rows, 'in_credit'))} in credit"
+                 if _sum(rows, "in_credit") >= 0.5 else None)},
+        {"text": _money(t["open_invoices"] - t["ledger_balance"]), "num": True, "bold": True},
+        {"text": ""},
+        {"text": _money(t["not_due"]), "num": True, "bold": True},
+        {"text": _money(t["d0_30"]), "num": True, "bold": True},
+        {"text": _money(t["d31_60"]), "num": True, "bold": True},
+        {"text": _money(t["d61_90"]), "num": True, "bold": True},
+        {"text": _money(t["d90_plus"]), "num": True, "bold": True},
+    ]})
+    return out
+
+
+LEDGER_COLUMNS = ("On Open Invoices$", "Ledger Balance$", "Difference$", "Why", "#Not Yet Due",
+                  "#1–30 Days", "#31–60 Days", "#61–90 Days", "#Over 90 Days")
+
+
+def _ledger_table(ctx, party_types, top):
+    tables, notes = [], []
+    for pt in party_types:
+        rows = _positions(ctx, pt)
+        if rows:
+            tables += _ledger_rows(ctx, pt, rows, top[pt])
+            notes.append(_summary(ctx, pt, rows))
+    head = "Customer" if party_types == ("Customer",) else "Customer or Supplier"
+    out = {"kind": "table", "rows": tables, "columns": _cols(head, *LEDGER_COLUMNS),
+           "empty": ("No customer holds a balance in the ledger." if party_types == ("Customer",)
+                     else "No customer or supplier holds a balance in the ledger.")}
+    if notes:
+        out["subtitle"] = notes[0]
+        out["note"] = " ".join(notes[1:]) + (" " if len(notes) > 1 else "") + (
+            "Ageing is after the payments not yet matched are set against the oldest open "
+            "items first. Each name opens its account in ERPNext's General Ledger.")
+    return out
+
+
+def sales_ledger(ctx):
+    return _ledger_table(ctx, ("Customer",), {"Customer": 12})
+
+
+def fin_ledger(ctx):
+    return _ledger_table(ctx, ("Customer", "Supplier"), {"Customer": 12, "Supplier": 8})
+
+
+def _owed_by_customer(ctx):
+    rows = [r for r in _positions(ctx, "Customer") if r["owed"] > 0]
+    ranked = sorted(rows, key=lambda r: -r["owed"])
+    return ranked, _sum(rows, "owed"), len(rows)
+
+
+def _owing_drill(party):
+    return {"fact": "fact_party_balance",
+            "filters": {"party_type": "Customer", "party": party, "owed": [">", 0]}}
 
 
 def sales_largest_owed(ctx):
     ranked, total, _ = _owed_by_customer(ctx)
     top = ranked[:10]
     if not top:
-        return {"kind": "bars", "rows": [], "empty": "Nobody owes the business anything."}
-    held = sum(v["owed"] for _, v in top)
+        return {"kind": "bars", "rows": [], "empty": "Nobody owes the business anything, by the ledger."}
+    held = sum(r["owed"] for r in top)
     share = round(100 * held / total) if total else 0
-    if len(top) == len(ranked):
-        out = _bars([{
-            "label": c, "value": v["owed"], "display": _money(v["owed"]),
-            "tone": _tone_days(v["days"]),
-            "drill": {"fact": "fact_sales_invoice",
-                      "filters": {"customer": c, "outstanding_amount": [">", 0],
-                                  "src_docstatus": 1}},
-        } for c, v in top])
-        out["subtitle"] = (f"{ctx.cur} · {'the only customer' if len(top) == 1 else f'all {_word(len(top))} customers'} "
-                           f"who owe us, {ctx.cur} {_money(held)} between them")
-        return out
     out = _bars([{
-        "label": c, "value": v["owed"], "display": _money(v["owed"]),
-        "tone": _tone_days(v["days"]),
-        "drill": {"fact": "fact_sales_invoice",
-                  "filters": {"customer": c, "outstanding_amount": [">", 0], "src_docstatus": 1}},
-    } for c, v in top])
-    out["subtitle"] = (f"{ctx.cur} · the {_word(len(top))} largest hold {ctx.cur} {_money(held)}, "
-                       f"{share}% of all money owed")
+        "label": r["party"], "value": r["owed"], "display": _money(r["owed"]),
+        "tone": _tone_days(r["days_overdue"]),
+        "note": (f"open invoices say {_money(r['open_invoices'])}"
+                 if abs(r["open_invoices"] - r["owed"]) >= 0.5 else None),
+        "drill": _owing_drill(r["party"]),
+    } for r in top])
+    if len(top) == len(ranked):
+        out["subtitle"] = (f"{ctx.cur} · {'the only customer' if len(top) == 1 else f'all {_word(len(top))} customers'} "
+                           f"who owe us by the ledger, {ctx.cur} {_money(held)} between them")
+    else:
+        out["subtitle"] = (f"{ctx.cur} · the {_word(len(top))} largest hold {ctx.cur} {_money(held)}, "
+                           f"{share}% of all money owed by the ledger")
     return out
 
 
 def sales_ageing(ctx):
-    ranked, _, _ = _owed_by_customer(ctx)
+    ranked, _, n = _owed_by_customer(ctx)
     top = ranked[:10]
     if not top:
         return {"kind": "stack", "parts": [{"label": l, "value": 0, "display": "0"} for l in
                                            ("Under 1 month", "1–2 months", "2–3 months",
                                             "Over 3 months")],
-                "note": "Nobody owes the business anything."}
-    b = defaultdict(float)
-    for _, v in top:
-        for k, amt in v["buckets"].items():
-            b[k] += amt
-    under1 = b["Not yet due"] + b["0-30"] + b["Unknown"]
-    parts = [("Under 1 month", under1), ("1–2 months", b["31-60"]),
-             ("2–3 months", b["61-90"]), ("Over 3 months", b["90+"])]
+                "note": "Nobody owes the business anything, by the ledger."}
+    b = {k: sum(r[k] for r in top) for k in ("not_due", "d0_30", "d31_60", "d61_90", "d90_plus",
+                                              "undated")}
+    parts = [("Under 1 month", b["not_due"] + b["d0_30"]), ("1–2 months", b["d31_60"]),
+             ("2–3 months", b["d61_90"]), ("Over 3 months", b["d90_plus"])]
     total = sum(v for _, v in parts) or 1
-    over = b["90+"]
-    # Inside ninety days across every unpaid invoice, as the designed reading had it.
-    inside = ctx.rows("fact_sales_invoice", ["outstanding_amount"],
-                      lambda t: [t.outstanding_amount > 0, t.src_docstatus == 1,
-                                 t.ageing_bucket != "90+"])
-    inside_amt = sum(_num(r["outstanding_amount"]) for r in inside)
-    note = (f"{round(100 * over / total)}% of what the {_word(len(top))} largest owe is beyond three months. "
-            f"{ctx.cur} {_short(inside_amt)} across {len(inside):,} invoices is still inside "
+    inside_amt = _sum(ranked, "inside_90")
+    inside_n = sum(1 for r in ranked if r["inside_90"] > 0)
+    note = (f"{round(100 * b['d90_plus'] / total)}% of what the {_word(len(top))} largest owe is beyond "
+            f"three months, after payments not yet matched are set against their oldest invoices. "
+            f"{ctx.cur} {_short(inside_amt)} owed by {_plural(inside_n, 'customer')} is still inside "
             f"ninety days.")
+    if b["undated"] >= 0.5:
+        note += (f" {ctx.cur} {_money(b['undated'])} is owed by the ledger with no invoice or entry "
+                 f"to date it, and is not in the bar.")
     return {"kind": "stack", "parts": [{"label": l, "value": v, "display": _money(v)}
                                        for l, v in parts], "note": note}
 
@@ -832,7 +1007,7 @@ def sales_funnel(ctx):
 # --------------------------------------------------------------------------- projects: late jobs and money
 def eng_late_cost(ctx):
     """Customers waiting on late jobs, beside what they owe. The customer is the job's
-    project's, read live; what they owe is the loaded receivable."""
+    project's, read live; what they owe is their ledger balance."""
     late = [t for t in _tasks(ctx) if t["is_open"] and int(t["days_late"] or 0) > 0]
     if not late:
         return {"kind": "table", "rows": [], "empty": "No open job is past its promised date."}
@@ -842,7 +1017,7 @@ def eng_late_cost(ctx):
         customer_of = {p["name"]: p.get("customer") for p in _guarded(
             ctx, "Project", {"name": ["in", projects]}, ["name", "customer"])}
     ranked, _, _ = _owed_by_customer(ctx)
-    owed = dict(ranked)
+    owed = {r["party"]: r for r in ranked}
 
     groups = defaultdict(list)
     for t in late:
@@ -850,8 +1025,8 @@ def eng_late_cost(ctx):
     rows = []
     for who, ts in groups.items():
         known = who in owed
-        o = owed.get(who, {}).get("owed", 0.0) if known else 0.0
-        over = owed.get(who, {}).get("buckets", {}).get("90+", 0.0) if known else 0.0
+        o = owed[who]["owed"] if known else 0.0
+        over = owed[who]["d90_plus"] if known else 0.0
         what = sorted({t["subject"] or t["src_name"] for t in ts})
         due = min((t["exp_end_date"] for t in ts if t["exp_end_date"]), default=None)
         days = max(int(t["days_late"] or 0) for t in ts)
@@ -1262,12 +1437,19 @@ def proc_advances(ctx):
     ]} for x in pays[:12]]
     total = sum(x["base"] for x in pays)
     suppliers = len({x.get("party") for x in pays})
+    # Not every payment not yet matched is an advance: most may pay bills that were simply
+    # never matched to it. What is really ahead of the bills is what suppliers hold in
+    # credit by the ledger, so the note says both.
+    ahead = [r for r in _positions(ctx, "Supplier") if r["in_credit"] > 0]
+    ahead_note = (f" By the ledger, {ctx.cur} {_money(_sum(ahead, 'in_credit'))} of it is really "
+                  f"ahead of the bills ({_plural(len(ahead), 'supplier')} in credit); the rest "
+                  f"pays bills it was never matched to." if pays else "")
     return {"kind": "table", "rows": rows,
             "columns": _cols("Supplier", "Payment", "Paid on", "Not yet matched$"),
             "empty": "Every payment to a supplier is matched to an invoice.",
             "note": (f"{ctx.cur} {_money(total)} paid to {_plural(suppliers, 'supplier')} and "
-                     f"not yet matched to an invoice. Match each to its invoice with Payment "
-                     f"Reconciliation once the goods are billed." if pays else "")}
+                     f"not yet matched to an invoice.{ahead_note} Match each to its invoice with "
+                     f"Payment Reconciliation once the goods are billed." if pays else "")}
 
 
 # --------------------------------------------------------------------------- stock
@@ -1568,37 +1750,66 @@ def cx_fixed(ctx):
 
 
 # --------------------------------------------------------------------------- finances
+def _ahead(ctx, party_type, rows):
+    """What is owed and not yet due after matching, by due date: [(due_date, amount)].
+
+    The unmatched credits were set against the oldest items first, so what is left not
+    yet due is the newest invoices: each party's not-yet-due part is filled from its
+    latest-falling invoices back."""
+    fact, col = (("fact_sales_invoice", "customer") if party_type == "Customer"
+                 else ("fact_purchase_invoice", "supplier"))
+    today = ctx.as_of
+    by = defaultdict(list)
+    for x in ctx.rows(fact, [col, "due_date", "outstanding_amount"],
+                      lambda t: [t.src_docstatus == 1, t.outstanding_amount > 0,
+                                 t.due_date >= today]):
+        by[x[col]].append((frappe.utils.getdate(x["due_date"]), _num(x["outstanding_amount"])))
+    out = []
+    for r in rows:
+        left = r["not_due"]
+        for due, amt in sorted(by.get(r["party"], []), key=lambda x: x[0], reverse=True):
+            if left < 0.005:
+                break
+            take = min(amt, left)
+            out.append((due, take))
+            left -= take
+        if left >= 0.005:
+            out.append((today, left))
+    return out
+
+
 def fin_suppliers_due(ctx):
-    owed = ctx.rows("fact_purchase_invoice", ["outstanding_amount", "due_date"],
-                    lambda t: [t.src_docstatus == 1, t.outstanding_amount > 0])
-    if not owed and not ctx.rows("fact_purchase_invoice", ["src_name"], lambda t: [t.src_docstatus == 1]):
+    rows = [r for r in _positions(ctx, "Supplier") if r["owed"] > 0]
+    if not rows and not ctx.rows("fact_purchase_invoice", ["src_name"], lambda t: [t.src_docstatus == 1]):
         return _guide(ctx, "No supplier invoice is recorded in ERPNext.",
                       ["Record each supplier's bill as a Purchase Invoice (from the Purchase "
                        "Order or Receipt: Create, Purchase Invoice).",
                        "Check its Due Date against the supplier's payment terms, then Submit."],
                       "/app/purchase-invoice/new")
     today = ctx.as_of
-    bands = [("Overdue now", None, 0, "crit"), ("Due in 7 days", 0, 7, "high"),
-             ("Due in 8–30 days", 7, 30, "med"), ("Due in 31–60 days", 30, 60, "accent"),
-             ("Later", 60, None, "dim")]
+    bands = [("Overdue now", "crit"), ("Due in 7 days", "high"), ("Due in 8–30 days", "med"),
+             ("Due in 31–60 days", "accent"), ("Later", "dim")]
 
     def band(due):
-        d = frappe.utils.date_diff(due, today) if due else 0
-        return 0 if d < 0 else 1 if d <= 7 else 2 if d <= 30 else 3 if d <= 60 else 4
+        d = frappe.utils.date_diff(due, today)
+        return 1 if d <= 7 else 2 if d <= 30 else 3 if d <= 60 else 4
     sums = [0.0] * len(bands)
-    for x in owed:
-        sums[band(x["due_date"])] += _num(x["outstanding_amount"])
-    rows = [{"label": l, "value": v, "display": _money(v), "tone": tone}
-            for (l, _, _, tone), v in zip(bands, sums)]
-    out = _bars(rows)
+    sums[0] = _sum(rows, "overdue")
+    for due, amt in _ahead(ctx, "Supplier", rows):
+        sums[band(due)] += amt
+    out = _bars([{"label": l, "value": v, "display": _money(v), "tone": tone}
+                 for (l, tone), v in zip(bands, sums)])
     edge = frappe.utils.add_days(today, 30)
-    coming = sum(_num(x["outstanding_amount"]) for x in ctx.rows(
-        "fact_sales_invoice", ["outstanding_amount", "due_date"],
-        lambda t: [t.src_docstatus == 1, t.outstanding_amount > 0, t.due_date >= today,
-                   t.due_date <= edge]))
-    out["note"] = (f"{ctx.cur} {_money(sums[0] + sums[1] + sums[2])} is overdue or due to suppliers "
-                   f"within thirty days; customers are due to pay {ctx.cur} {_money(coming)} "
-                   f"in the same thirty days." if owed else "Nothing is owed to suppliers.")
+    customers = [r for r in _positions(ctx, "Customer") if r["owed"] > 0]
+    coming = sum(a for due, a in _ahead(ctx, "Customer", customers) if due <= edge)
+    undated = _sum(rows, "undated")
+    out["note"] = ((f"{ctx.cur} {_money(sums[0] + sums[1] + sums[2])} is overdue or due to suppliers "
+                    f"within thirty days by the ledger, after payments not yet matched are set "
+                    f"against the oldest bills; customers are due to pay {ctx.cur} {_money(coming)} "
+                    f"in the same thirty days."
+                    + (f" {ctx.cur} {_money(undated)} more is owed with no bill to date it."
+                       if undated >= 0.5 else ""))
+                   if rows else "Nothing is owed to suppliers, by the ledger.")
     return out
 
 
@@ -1951,7 +2162,9 @@ def when_sales(ctx):
     inv = _n(ctx, "fact_sales_invoice", lambda t: [t.src_docstatus == 1])
     orders = _n(ctx, "fact_sales_order", lambda t: [t.src_docstatus == 1])
     unpaid = _n(ctx, "fact_sales_invoice", lambda t: [t.src_docstatus == 1, t.outstanding_amount > 0])
-    return f"{inv:,} invoices · {orders:,} orders · {unpaid:,} still unpaid"
+    owing = _n(ctx, "fact_party_balance", lambda t: [t.party_type == "Customer", t.owed > 0])
+    return (f"{inv:,} invoices · {orders:,} orders · {unpaid:,} still open · "
+            f"{owing:,} customer{'s' if owing != 1 else ''} owing by the ledger")
 
 
 def when_proc(ctx):
@@ -2025,7 +2238,8 @@ def find_proc(ctx):
                             f"{ctx.cur} {_money(w.get('base_grand_total'))}.",
                     "ask": f"Which purchase orders are past their Required By date, and what "
                            f"have the suppliers said?"})
-    return out[:1]
+    # The second box: payments to suppliers never matched to their bills.
+    return out[:1] + [f for f in (_owed_finding(ctx, "Supplier"),) if f][:1]
 
 
 def find_inv(ctx):
@@ -2070,10 +2284,7 @@ def find_eng(ctx):
 
 def find_cx(ctx):
     cases = ctx.rows("fact_case", ["customer", "days_open", "subject"], lambda t: [t.is_open == 1])
-    owed = {}
-    for r in ctx.rows("fact_sales_invoice", ["customer", "outstanding_amount"],
-                      lambda t: [t.src_docstatus == 1, t.outstanding_amount > 0]):
-        owed[r["customer"]] = owed.get(r["customer"], 0.0) + _num(r["outstanding_amount"])
+    owed = {r["party"]: r["owed"] for r in _positions(ctx, "Customer") if r["owed"] > 0}
     both = [c for c in cases if c["customer"] and owed.get(c["customer"])]
     if not both:
         return []
@@ -2108,7 +2319,64 @@ def find_hr(ctx):
              "text": text, "ask": "Who has left, from which departments, and how long did they stay?"}]
 
 
-FINDINGS = {"proc": find_proc, "inv": find_inv, "eng": find_eng, "cx": find_cx, "hr": find_hr}
+def _owed_finding(ctx, party_type):
+    """When the open invoices and the ledger disagree: what is really owed, and why."""
+    rows = _positions(ctx, party_type)
+    if not rows:
+        return None
+    one, many, docs = PARTY_WORDS[party_type]
+    owed, on_docs = _sum(rows, "owed"), _sum(rows, "open_invoices")
+    if abs(on_docs - owed) < max(1.0, 0.01 * max(owed, on_docs)):
+        return None
+    cur = ctx.cur
+    tot = {k: _sum(rows, k) for k in POSITION_FIELDS if k not in _DATE_OR_NAME}
+    title = (f"Customers owe {cur} {_amt(owed)} by the ledger, not the {cur} {_amt(on_docs)} "
+             f"their open invoices say." if party_type == "Customer" else
+             f"We owe suppliers {cur} {_amt(owed)} by the ledger, not the {cur} {_amt(on_docs)} "
+             f"their open bills say.")
+    credit = [r for r in rows if r["in_credit"] > 0]
+    held = (f"less {cur} {_amt(_sum(credit, 'in_credit'))} that {_plural(len(credit), one)} "
+            f"{'holds' if len(credit) == 1 else 'hold'} in credit, which no "
+            f"{'invoice' if party_type == 'Customer' else 'bill'} can show" if credit else "")
+    reasons = "; ".join(x for x in (_why(tot, cur, party_type), held) if x)
+    text = (f"The difference: {reasons}. Until the payments are matched, "
+            f"every list of {'debtors' if party_type == 'Customer' else 'bills to pay'} drawn from "
+            f"the {docs} is wrong by that much; the figures here use the ledger.")
+    return {"title": title.replace("  ", " "), "text": text,
+            "ask": (f"Which customers have payments not matched to invoices, and how much does "
+                    f"each really owe?" if party_type == "Customer" else
+                    f"Which suppliers have payments not matched to bills, and how much do we "
+                    f"really owe each?"),
+            "ask_label": "Show me who"}
+
+
+def _matching_guide(ctx, party_type):
+    """The guide to fixing it at source, when there are payments to match."""
+    from command_center.guides import payment_reconciliation
+    rows = _positions(ctx, party_type)
+    paid, n = _sum(rows, "unmatched_payments"), int(_sum(rows, "unmatched_payment_count"))
+    if paid < 0.5:
+        return None
+    text = (f"{ctx.cur} {_amt(paid)} received from customers ({_plural(n, 'payment')}) was never "
+            f"matched to invoices. Matching them in ERPNext puts the invoices right:"
+            if party_type == "Customer" else
+            f"{ctx.cur} {_amt(paid)} paid to suppliers ({_plural(n, 'payment')}) was never "
+            f"matched to their bills. Matching them in ERPNext puts the bills right:")
+    return {"guide": payment_reconciliation(ctx.code, text.strip())}
+
+
+def find_sales(ctx):
+    return [f for f in (_owed_finding(ctx, "Customer"), _matching_guide(ctx, "Customer")) if f]
+
+
+def find_fin(ctx):
+    out = [f for f in (_owed_finding(ctx, "Customer"), _owed_finding(ctx, "Supplier")) if f]
+    if len(out) < 2:
+        out += [f for f in (_matching_guide(ctx, "Customer"), _matching_guide(ctx, "Supplier")) if f]
+    return out[:2]
+
+
+FINDINGS = {"sales": find_sales, "fin": find_fin, "proc": find_proc, "inv": find_inv, "eng": find_eng, "cx": find_cx, "hr": find_hr}
 
 
 SCREENS = {
@@ -2116,6 +2384,7 @@ SCREENS = {
         "How sales have moved": sales_trend,
         "Who owes us, and how long it has been": sales_ageing,
         "Largest balances owed": sales_largest_owed,
+        "What each customer really owes": sales_ledger,
         "Orders taken but not despatched": sales_not_despatched,
         "From enquiry to order": sales_funnel,
         "Discounts and price changes outside policy": sales_discounts,
@@ -2154,6 +2423,7 @@ SCREENS = {
         "Money coming in": fin_money_in,
         "Working capital tied up": fin_working_capital,
         "What we owe suppliers": fin_suppliers_due,
+        "Receivables and payables": fin_ledger,
         "Cash and bank position": fin_cash,
         "Budget against actual": fin_budget,
         "Tax and statutory deadlines": fin_tax,

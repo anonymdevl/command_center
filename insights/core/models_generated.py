@@ -130,6 +130,49 @@ class CommandCenterFactCase(DocModel):
         verbose_name_plural = "Command Center Fact Case"
 
 
+class CommandCenterFactPartyBalance(DocModel):
+    business_code = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    src_doctype = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    src_name = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    src_row_name = models.CharField(max_length=140, null=True, blank=True)
+    src_modified = models.DateTimeField(null=True, blank=True, db_index=True)
+    src_docstatus = models.IntegerField(null=True, blank=True, default=0)
+    ingested_at = models.DateTimeField(null=True, blank=True)
+    fact_key = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    party_type = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    party = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    as_of_date = models.DateField(null=True, blank=True)
+    ledger_balance = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    owed = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    in_credit = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    open_invoices = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    open_invoice_count = models.IntegerField(null=True, blank=True, default=0)
+    unmatched_payments = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    unmatched_payment_count = models.IntegerField(null=True, blank=True, default=0)
+    unlinked_journals = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    unlinked_credit_notes = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    other_unlinked = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    unlinked_debits = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    invoices_not_updated = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    unexplained = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    not_due = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    d0_30 = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    d31_60 = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    d61_90 = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    d90_plus = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    undated = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    inside_90 = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    overdue = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    oldest_due_after_matching = models.DateField(null=True, blank=True)
+    days_overdue = models.IntegerField(null=True, blank=True, default=0)
+
+    class Meta:
+        db_table = "tabCommand Center Fact Party Balance"
+        verbose_name = "Command Center Fact Party Balance"
+        verbose_name_plural = "Command Center Fact Party Balance"
+        indexes = [models.Index(fields=['business_code', 'party_type', 'party'], name="ix_ctPartyBalance_busine_party")]
+
+
 class CommandCenterFactPaymentAllocation(DocModel):
     business_code = models.CharField(max_length=140, null=True, blank=True, db_index=True)
     src_doctype = models.CharField(max_length=140, null=True, blank=True, db_index=True)
@@ -490,6 +533,7 @@ DOCTYPE_MODELS = {
     "Command Center Change Event": CommandCenterChangeEvent,
     "Command Center Conversation": CommandCenterConversation,
     "Command Center Fact Case": CommandCenterFactCase,
+    "Command Center Fact Party Balance": CommandCenterFactPartyBalance,
     "Command Center Fact Payment Allocation": CommandCenterFactPaymentAllocation,
     "Command Center Fact Person": CommandCenterFactPerson,
     "Command Center Fact Purchase Invoice": CommandCenterFactPurchaseInvoice,

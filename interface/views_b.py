@@ -30,7 +30,8 @@ V_PROC=f'''<div class="topbar"><div><h3>Buying and Suppliers</h3>
 <div class="two">
 {panel("Supplier performance", thin("<b>Delivered on time, and goods turned away, per supplier.</b> Each goods receipt is compared with the date its purchase order asked for, so a supplier that is always late shows up before the next order is placed."))}
 {panel("Money paid to suppliers in advance", thin("<b>Payments to suppliers not yet matched to an invoice.</b> Advances paid before the goods arrive are a normal exposure for an importer; this is how much is out there, and with whom."))}
-</div>'''
+</div>
+{warn0()}'''
 
 # ============ INVENTORY ============
 V_INV=f'''<div class="topbar"><div><h3>Stock &amp; Warehouses</h3>

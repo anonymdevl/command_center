@@ -262,6 +262,7 @@ export const settingsApi = {
   testBusiness: (name) => call(`${PS}.test_business`, { name }),
   setPaused: (name, paused) => call(`${PS}.set_paused`, { name, paused: paused ? 1 : 0 }),
   reloadBusiness: (name) => call(`${PS}.reload_business`, { name }),
+  checkFigures: (name) => call(`${PS}.check_figures`, { name }),
 
   claude: () => call(`${PS}.claude`),
   setClaudeKey: (key) => call(`${PS}.set_claude_key`, { key }),

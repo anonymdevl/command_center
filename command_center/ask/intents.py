@@ -31,6 +31,8 @@ from command_center.ask import query, resolve
 from command_center.kpi.engine import evaluate_set
 
 UNPAID = {"outstanding_amount": [">", 0], "src_docstatus": 1}
+# What a customer owes is their ledger balance (fact_party_balance), not their open invoices.
+OWING = {"party_type": "Customer", "owed": [">", 0]}
 SUBMITTED = {"src_docstatus": 1}
 OPEN = {"is_open": 1}
 
@@ -210,9 +212,9 @@ def supplier_concentration(question, business_code=None):
 
 def owes_and_waiting(question, business_code=None):
 
-    owed = {r["customer"]: r["owed"] for r in query.grouped(
-        "fact_sales_invoice", "customer", _scoped(UNPAID, business_code),
-        measures=[("sum", "outstanding_amount", "owed")], limit=500)}
+    owed = {r["party"]: r["owed"] for r in query.grouped(
+        "fact_party_balance", "party", _scoped(OWING, business_code),
+        measures=[("sum", "owed", "owed")], limit=500)}
     waiting = {r["customer"]: r["undelivered"] for r in query.grouped(
         "fact_sales_order", "customer", _scoped(OPEN, business_code),
         measures=[("sum", "undelivered_value", "undelivered")], limit=500)}
@@ -224,7 +226,7 @@ def owes_and_waiting(question, business_code=None):
     if not both:
         return {"intent": "owes_and_waiting", "figures": [],
                 "answer": "No customer both owes money and is waiting on a delivery.",
-                "checked": ["unpaid invoices by customer", "open orders by customer"],
+                "checked": ["what each customer owes by the ledger", "open orders by customer"],
                 "records": None}
 
     return {
@@ -235,7 +237,7 @@ def owes_and_waiting(question, business_code=None):
             f"{_money(sum(r['undelivered'] or 0 for r in both))} of their orders is still "
             f"to deliver. Worth knowing before chasing payment: they are waiting on us too."
         ),
-        "checked": ["unpaid invoices grouped by customer",
+        "checked": ["what each customer owes by the ledger",
                     "open orders grouped by customer",
                     "the two lists intersected"],
         "table": {"columns": [("customer", "Customer"), ("owed", "They owe us"),
@@ -247,38 +249,42 @@ def owes_and_waiting(question, business_code=None):
 
 def who_owes_most(question, business_code=None):
 
-    filters = _scoped(UNPAID, business_code)
-    top5 = query.grouped("fact_sales_invoice", "customer", filters,
-                         measures=[("sum", "outstanding_amount", "owed"),
-                                   ("count", "name", "invoices")], limit=5)
+    filters = _scoped(OWING, business_code)
+    top5 = query.grouped("fact_party_balance", "party", filters,
+                         measures=[("sum", "owed", "owed"),
+                                   ("sum", "open_invoices", "on_invoices"),
+                                   ("sum", "d90_plus", "over_90")], limit=5)
     figures = evaluate_set(["ar_total", "ar_over_90_pct"], business_code)
     whole = figures["ar_total"]["value"] or 0
     as_of = figures["ar_total"].get("as_of") or {}
 
     if not top5:
         return {"intent": "who_owes_most", "figures": [],
-                "answer": "Nobody owes anything on the loaded invoices.",
-                "checked": ["unpaid sales invoices"], "records": None}
+                "answer": "Nobody owes anything, by the ledger.",
+                "checked": ["each customer's ledger balance"], "records": None}
 
-    top = top5[0]
+    rows = [{"customer": r.get("party"), "owed": r.get("owed"), "on_invoices": r.get("on_invoices"),
+             "over_90": r.get("over_90")} for r in top5]
+    top = rows[0]
     share = (top["owed"] / whole * 100) if whole else None
 
     return {
         "intent": "who_owes_most", "figures": ["ar_total", "ar_over_90_pct"],
         "answer": (
-            f"{top['customer']} owes the most: {_money(top['owed'])} across "
-            f"{_n(top['invoices'])} invoices"
+            f"{top['customer']} owes the most by the ledger: {_money(top['owed'])}"
             + (f", {share:.1f}% of everything owed" if share is not None else "")
+            + (f" (their open invoices say {_money(top['on_invoices'])})"
+               if abs((top["on_invoices"] or 0) - (top["owed"] or 0)) >= 0.5 else "")
             + f". The five largest together are "
-              f"{_money(sum(r['owed'] or 0 for r in top5))} of {_money(whole)}, "
+              f"{_money(sum(r['owed'] or 0 for r in rows))} of {_money(whole)}, "
               f"measured as at {as_of.get('date', 'the latest date the data covers')}."
         ),
-        "checked": ["unpaid sales invoices grouped by customer",
-                    "the receivable total, from the same fact table"],
-        "table": {"columns": [("customer", "Customer"), ("owed", "Owed"),
-                              ("invoices", "Invoices")],
-                  "rows": top5},
-        "records": {"fact": "fact_sales_invoice", "filters": filters},
+        "checked": ["each customer's ledger balance, largest first",
+                    "the receivable total, from the same balances"],
+        "table": {"columns": [("customer", "Customer"), ("owed", "Owed by the ledger"),
+                              ("on_invoices", "On open invoices"), ("over_90", "Over 90 days")],
+                  "rows": rows},
+        "records": {"fact": "fact_party_balance", "filters": filters},
     }
 
 
@@ -294,11 +300,21 @@ def party_brief(question, business_code=None):
                             measures=[("sum", "outstanding_amount", "owed"),
                                       ("count", "name", "invoices"),
                                       ("max", "days_overdue", "worst")])
-        checked.append(f"unpaid invoices for {name}")
+        ledger = query.totals("fact_party_balance",
+                              _scoped({"party_type": "Customer", "party": name}, business_code),
+                              measures=[("sum", "owed", "owed"), ("sum", "in_credit", "credit"),
+                                        ("max", "days_overdue", "worst")])
+        checked += [f"unpaid invoices for {name}", f"{name}'s ledger balance"]
+        if ledger.get("credit"):
+            parts.append(f"by the ledger they are in credit by {_money(ledger['credit'])}")
+        else:
+            parts.append(f"by the ledger they owe {_money(ledger.get('owed') or 0)}"
+                         + (f", the oldest of it {_n(ledger['worst'])} days past due"
+                            if ledger.get("worst") else ""))
         parts.append(
-            f"they owe {_money(owed['owed'])} across {_n(owed['invoices'])} invoices, "
+            f"their open invoices say {_money(owed['owed'])} across {_n(owed['invoices'])} invoices, "
             f"the oldest {_n(owed['worst'])} days past due"
-            if owed.get("owed") else "they owe nothing on the loaded invoices")
+            if owed.get("owed") else "nothing is open on their invoices")
 
         orders = query.totals("fact_sales_order",
                               _scoped({**OPEN, "customer": name}, business_code),

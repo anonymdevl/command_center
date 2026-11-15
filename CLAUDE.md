@@ -271,6 +271,22 @@ departments; 57 tasks in flight, 24 past due.
 - `api/ingest.check_access` lists what the service user can read and whether it holds any
   role that can write. `scripts/test_remote.py` tests the connector offline (in preflight).
 
+## What is owed is the ledger (15 Nov 2026)
+
+Gigmann never matches payments to invoices, so open invoices said customers owed GHS
+10.07M where the General Ledger said GHS 341,565 net (suppliers: 15.54M vs 2.61M).
+`fact_party_balance` (ingest/ledger.py, rebuilt whole when GL Entry, Payment Entry,
+Journal Entry or an invoice changed) holds per customer and supplier: the ledger balance,
+the open invoices, and the difference explained -- payments not matched (Payment Entry
+unallocated), payments and credit notes the invoices do not show, journal entries and
+credit notes not linked (Journal Entry Account references), amounts owed on no invoice,
+and an `unexplained` remainder that is said, never forced -- plus the ageing after the
+unmatched credits are set against the oldest open items. Not GL `against_voucher`: v14+
+leave it as posted when a payment is matched later, and Gigmann's Payment Ledger Entry
+disagrees with its GL by GHS 2.82M on journals. `ar_total`/`ap_total` are the positive
+balances; `ar_open_invoices`/`ap_open_invoices` keep the invoice view. `api/audit.py` is
+Check Figures (Settings → Businesses), line by line against the business's ERPNext.
+
 ## The question box
 
 **Decision of 18 Oct 2026 (Michael), replacing "Gemini routes; the facts answer":**
