@@ -203,12 +203,22 @@ def get_url(path: str = "") -> str:
 
 
 def get_url_to_form(doctype: str, name: str) -> str:
-    """There is no desk: the platform's administration lives in its admin."""
+    """Where a document opens.
+
+    A business's own documents (Sales Invoice, Purchase Order, ...) live in its ERPNext:
+    the desk route, exactly as Frappe builds it -- /app/<doctype lowercased, spaces as
+    hyphens>/<name, quoted> -- for the caller to put that business's address in front
+    (api/facts.py _document_url). Only the platform's own records (connected businesses,
+    alert rules, load history) open in its administration. Pointing everything at the
+    administration sent every "open in ERPNext" link to <business>/admin/, a 404.
+    """
+    from urllib.parse import quote
     from insights.core.models import DOCTYPE_MODELS
     model = DOCTYPE_MODELS.get(doctype)
-    if model is None:
-        return get_url("/admin/")
-    return get_url(f"/admin/core/{model._meta.model_name}/{name}/change/")
+    if model is not None and not str(doctype).startswith("Command Center Fact"):
+        return get_url(f"/admin/core/{model._meta.model_name}/{quote(str(name), safe='')}/change/")
+    slug = str(doctype).strip().lower().replace(" ", "-")
+    return get_url(f"/app/{quote(slug)}/{quote(str(name), safe='')}")
 
 
 def get_fullname(user: str | None = None) -> str:

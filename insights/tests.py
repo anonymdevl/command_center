@@ -969,3 +969,27 @@ class SettingsDelegation(TransactionTestCase):
         self.assertTrue(sched.last_status.startswith("Sent to 1"), sched.last_status)
         n = self._ok("notifications")
         self.assertEqual((n["schedules_on"], n["failing"]), (1, []))
+
+
+class DocumentLinks(TransactionTestCase):
+    """A record opens in its own business's ERPNext, at the document -- never at this
+    platform's administration (which sent every link to <business>/admin/, a 404)."""
+
+    databases = {"default", "aux"}
+
+    def test_links(self):
+        from command_center.api.facts import _document_url
+        from insights.compat.utils import get_url_to_form
+        sites = {"gms": "https://erp.example.com"}
+        self.assertEqual(
+            _document_url(sites, {"business_code": "gms", "src_doctype": "Sales Invoice",
+                                  "src_name": "ACC-SINV-2026-00012"}),
+            "https://erp.example.com/app/sales-invoice/ACC-SINV-2026-00012")
+        self.assertEqual(
+            _document_url(sites, {"business_code": "gms", "src_doctype": "Purchase Order",
+                                  "src_name": "PUR-ORD 2026/7"}),
+            "https://erp.example.com/app/purchase-order/PUR-ORD%202026%2F7")
+        # the platform's own records still open in its administration
+        self.assertIn("/admin/core/connectedbusiness/", get_url_to_form("Connected Business", "X"))
+        self.assertNotIn("/admin", _document_url(sites, {"business_code": "gms",
+                                                          "src_doctype": "Task", "src_name": "T-1"}))

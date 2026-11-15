@@ -286,9 +286,15 @@ def list_records(fact: str, columns=None, filters=None, order_by: str | None = N
         q = q.orderby(t[_check_column(fact, order_by)],
                       order=Order.desc if descending else Order.asc)
     rows = [_clean(dict(r)) for r in q.limit(min(int(limit or 20), MAX_ROWS)).run(as_dict=True)]
+    # Each row opens in its own business's ERPNext (api/facts.py builds the address).
+    from command_center.api.facts import _document_url, _site_urls
+    sites = _site_urls()
+    from command_center.api.businesses import default_business_code
+    asked = (business_code if business_code and business_code != "__all__"
+             else default_business_code())
     for r in rows:
         if r.get("src_doctype") and r.get("src_name"):
-            r["open_url"] = frappe.utils.get_url_to_form(r["src_doctype"], str(r["src_name"]))
+            r["open_url"] = _document_url(sites, {"business_code": asked, **r})
     return {"data_set": fact, "filters": rules, "rows": rows}
 
 

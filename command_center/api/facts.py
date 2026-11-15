@@ -190,8 +190,9 @@ def _site_urls() -> dict:
     request rather than per row.
     """
     urls = {}
+    # Every business, whatever its status: a paused or unreachable business's records
+    # still open on its own site, never on this platform's.
     for b in frappe.get_all("Connected Business",
-                            filters={"status": "Active"},
                             fields=["business_code", "is_local", "site_url"]):
         urls[b.business_code] = "" if b.is_local else (b.site_url or "").rstrip("/")
     return urls
