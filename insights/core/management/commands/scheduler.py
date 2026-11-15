@@ -4,7 +4,8 @@
 
 The schedule is the one the business logic always declared (command_center/hooks.py
 scheduler_events): the 15-minute refresh of each business, the hourly alerts and due
-reports, the nightly load, the weekly full rebuild. Each run is a unit of work as
+reports, the nightly load, the weekly full rebuild -- plus the platform's own upkeep
+(insights/core/maintenance.py: old errors, expired sessions, the nightly backup). Each run is a unit of work as
 Administrator; a failure is recorded in the error log and stops nothing else.
 """
 
@@ -69,6 +70,10 @@ class Command(BaseCommand):
             for p in paths:
                 sched.add_job(_job(p), trigger, id=f"{when}:{p}")
                 n += 1
+        # The platform's own upkeep: logs, sessions, the nightly backup (maintenance.py).
+        sched.add_job(_job("insights.core.maintenance.daily"), CronTrigger(hour=1, minute=45),
+                      id="daily:insights.core.maintenance.daily")
+        n += 1
         self.stdout.write(f"scheduler: {n} jobs")
         for job in sched.get_jobs():
             self.stdout.write(f"  {job.id}")

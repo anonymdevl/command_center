@@ -71,6 +71,8 @@ in their own database, and read the businesses' ERPNext a page at a time.
 | Remove a manager | Admin → Users → untick *Active* (or remove the group). |
 | Connect a business | Admin → Connected businesses → add; its secret is write-only. Or `manage.py register_business`. Then `manage.py execute command_center.api.ingest.run_all --kwargs '{"full": true}'`. |
 | What went wrong | Admin → Error log. |
+| Is everything healthy? | `./deploy/health.sh`: the server (load, memory, disk, updates, certificates, shared services) and the platform (services, errors, loads, backups). Reads only. `--backup` also tests the backup now. |
+| Backups | Every night at 01:45 into `~/insights-backups` (the database and `insights.json`), 14 days kept. Copy them off the server now and then. |
 | Change the Claude key | `manage.py shell -c "import frappe; frappe.installer.update_site_config('command_center_anthropic_key', input())"`. No restart needed. |
 | Update | `./deploy/platform.sh` (pull, install, migrate, restart). |
 | Run any function | `manage.py execute <dotted.path> --kwargs '{...}'` (as `bench execute` was). |

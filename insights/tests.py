@@ -257,3 +257,34 @@ class CommandLine(TransactionTestCase):
             ManagementUtility(["manage.py", "execute", "command_center.api.kpi.verify",
                                "--kwargs", "{}", "--args", "[]"]).execute()
         self.assertIn('"all_ok"', out.getvalue())
+
+
+class Upkeep(TransactionTestCase):
+    """The nightly upkeep: old errors pruned, a backup written and old ones dropped."""
+
+    databases = {"default", "aux"}
+
+    def test_daily(self):
+        import os
+        import tempfile
+        import time
+        from pathlib import Path
+        from django.conf import settings
+        from insights.core import maintenance
+        from insights.core.models import ErrorLog
+        old = ErrorLog.objects.using("aux").create(title="old", error="x")
+        ErrorLog.objects.using("aux").filter(pk=old.pk).update(
+            creation=dt.datetime.now() - dt.timedelta(days=90))
+        ErrorLog.objects.using("aux").create(title="recent", error="y")
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(
+                settings.CONFIG, {"backup_dir": d}):
+            stale = Path(d, "insights-20200101-000000.sqlite3")
+            stale.write_text("old")
+            os.utime(stale, (time.time() - 30 * 86400,) * 2)
+            out = maintenance.daily()
+            self.assertEqual(out["error_log_pruned"], 1)
+            self.assertTrue(Path(out["backup"]).exists(), out)
+            self.assertFalse(stale.exists())
+        titles = set(ErrorLog.objects.using("aux").values_list("title", flat=True))
+        self.assertIn("recent", titles)
+        self.assertNotIn("old", titles)
