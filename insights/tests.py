@@ -3272,6 +3272,347 @@ class Branding(TransactionTestCase):
         self.assertNotIn(b["business_code"], self._boot(self.manager)["clients"])
 
 
+
+def _jpeg(w: int, h: int) -> bytes:
+    """The header of a JPEG of that size: enough for the content check and the size."""
+    import struct
+    app0 = b"\xff\xe0" + struct.pack(">H", 16) + b"JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+    sof = b"\xff\xc0" + struct.pack(">HBHHB", 11, 8, h, w, 1) + b"\x01\x11\x00"
+    return b"\xff\xd8" + app0 + sof + b"\xff\xda\x00\x08\x01\x01\x00\x00\x3f\x00" + b"\x00" * 16 + b"\xff\xd9"
+
+
+class ReportBranding(TransactionTestCase):
+    """The PDFs' own Report Logo (Settings -> Branding -> Reports), separate from the
+    screens' logos, and each business's Report Style (Businesses -> Manage): Platform
+    Branding, Client Branding or Client Letterhead (header and footer images on every
+    page through the PDF engine's header and footer files, removed after), the vendor's
+    credit Show / Small / Hide (Hide by the administrator alone), the Preview, and the
+    platform's own documents, which ignore the business's style."""
+
+    databases = {"default", "aux"}
+    MOD = SettingsPage.MOD
+    SECRET = SettingsPage.SECRET
+    _call = SettingsPage._call
+    _ok = SettingsPage._ok
+    _refused = SettingsPage._refused
+    setUp = Branding.setUp
+    tearDown = Branding.tearDown
+    _boot = Branding._boot
+
+    HEAD = (2480, 350)
+    FOOT = (2480, 236)
+
+    def _business(self, **brand) -> dict:
+        b = self._ok("add_business", business_name="Test Medical Ltd", site_url="https://erp.test/",
+                     api_key="key-abcd1234", api_secret=self.SECRET)["business"]
+        self._ok("set_business_brand", name=b["name"], display_name="Test Medical Group")
+        self._ok("upload_business_logo", name=b["name"], data=_data_url(_png(3, 3)))
+        return b
+
+    def _pdf(self, code, kind="answer", client=None):
+        """One answer PDF through the endpoint: (html, options, files seen while it ran)."""
+        import os
+        import sys
+        seen = []
+
+        def engine(html, options=None):
+            files = {}
+            for k in ("header-html", "footer-html"):
+                if options and options.get(k):
+                    with open(options[k], encoding="utf-8") as fh:
+                        files[k] = (options[k], fh.read())
+            seen.append((html, dict(options or {}), files))
+            return b"%PDF"
+        pdfmod = sys.modules["frappe.utils.pdf"]
+        with mock.patch.object(pdfmod, "get_pdf", engine), \
+                mock.patch("command_center.api.export._ensure_fonts", lambda: None):
+            r = (client or self.manager).post(
+                "/api/method/command_center.api.export.answer_pdf", json.dumps(
+                    {"question": "Who owes us?", "answer": "Lead.\n\n## Cash\n\nText.",
+                     "business_code": code, "model": "m", "kind": kind}),
+                content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        html, options, files = seen[0]
+        for path, _ in files.values():
+            self.assertFalse(os.path.exists(path), "the letterhead's files are removed after")
+            self.assertFalse(os.path.exists(os.path.dirname(path)), "and their folder")
+        return html, options, files
+
+    def _sheet(self, code):
+        import io
+
+        from openpyxl import load_workbook
+        r = self.manager.post("/api/method/command_center.api.export.tables_xlsx", json.dumps(
+            {"title": "Who owes us", "business_code": code,
+             "tables": [{"name": "T", "columns": ["A", "B"], "rows": [["x", "1"]]}]}),
+            content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        return load_workbook(io.BytesIO(r.content)).active
+
+    def test_report_logo(self):
+        import base64
+        b = self._business()
+        code = b["business_code"]
+        html, _, _ = self._pdf(code)
+        self.assertIn('<div class="brand">Ultrasoft Insights</div>', html, "no logo: the product's name")
+        self.assertEqual(self._ok("brand")["report_uses"], "name")
+        light, report = _png(6, 2), _png(8, 2)
+        self._ok("upload_brand_logo", kind="logo_light", data=_data_url(light))
+        self.assertEqual(self._ok("brand")["report_uses"], "light")
+        html, _, _ = self._pdf(code)
+        self.assertIn(base64.b64encode(light).decode(), html, "no Report Logo: the light logo")
+        # the Report Logo: PNG or JPEG only, administrator only
+        webp = b"RIFF\x20\x00\x00\x00WEBPVP8 " + b"\x00" * 24
+        self.assertIn("PDFs cannot show WebP", self._refused("upload_brand_logo", kind="logo_report",
+                                                              data=_data_url(webp, "image/webp")))
+        self.assertEqual(self._call(self.manager, "upload_brand_logo", kind="logo_report",
+                                    data=_data_url(report)).status_code, 403)
+        out = self._ok("upload_brand_logo", kind="logo_report", data=_data_url(report))
+        self.assertRegex(out["logo_report_url"], r"^/branding/logo_report-[0-9a-f]{16}\.png$")
+        self.assertEqual(out["report_uses"], "report")
+        html, _, _ = self._pdf(code)
+        self.assertIn(base64.b64encode(report).decode(), html, "PDFs print the Report Logo")
+        self.assertNotIn(base64.b64encode(light).decode(), html, "instead of the light logo")
+        # the screens' logos are unaffected
+        brand = self._boot(self.manager)["brand"]
+        self.assertEqual(brand["logo_light_url"], out["logo_light_url"])
+        self.assertNotIn("logo_report", json.dumps(brand))
+        self.assertEqual(Client().get(out["logo_report_url"]).status_code, 200)
+        # removed: back to the light logo
+        self._ok("remove_brand_logo", kind="logo_report")
+        self.assertEqual(Client().get(out["logo_report_url"]).status_code, 404, "its file is deleted")
+        html, _, _ = self._pdf(code)
+        self.assertIn(base64.b64encode(light).decode(), html)
+
+    def test_each_style(self):
+        import base64
+        b = self._business()
+        code = b["business_code"]
+        self.assertEqual((b["report_style"], b["credit"]), ("platform", "show"))
+        # Platform Branding: today's document
+        html, opts, files = self._pdf(code)
+        self.assertIn('<div class="brand">Ultrasoft Insights</div>', html)
+        self.assertIn('class="hd-client"', html)
+        self.assertIn("Prepared for <b>Test Medical Group</b>", html)
+        self.assertIn("Prepared by Ultrasoft Insights from", html)
+        self.assertEqual(opts["footer-left"][:40], "Ultrasoft Insights · built by Ultrasoft ")
+        self.assertEqual(opts["footer-right"], "Page [page] of [topage]")
+        self.assertEqual(files, {})
+        # Client Branding: the client's logo and name lead; the platform only in the credit
+        row = self._ok("set_business_report_style", name=b["name"], style="client")
+        self.assertEqual(row["report_style"], "client")
+        self.assertIn("Nothing was changed", self._refused("set_business_report_style",
+                                                           name=b["name"], style="client"))
+        html, opts, files = self._pdf(code)
+        self.assertIn('<td class="hd-l"><img class="hd-logo"', html, "the client's logo leads")
+        self.assertIn('<div class="hd-issuer">Test Medical Group</div>', html)
+        self.assertNotIn("Prepared for", html)
+        self.assertNotIn('<div class="brand">Ultrasoft Insights', html)
+        self.assertNotIn("Prepared by Ultrasoft Insights", html)
+        self.assertIn("Prepared from Test Medical Ltd", html)
+        self.assertIn('<div class="ft-by">Ultrasoft Insights · built by', html, "the credit stays")
+        self.assertEqual(files, {})
+        ws = self._sheet(code)
+        self.assertTrue(ws["A2"].value.startswith("Test Medical Group · figures as at"), ws["A2"].value)
+        self.assertEqual(ws.oddHeader.left.text, "Test Medical Group")
+        # Client Letterhead: needs its header image first
+        self.assertIn("header image first", self._refused("set_business_report_style",
+                                                          name=b["name"], style="letterhead"))
+        head, foot = _png(*self.HEAD), _jpeg(*self.FOOT)
+        row = self._ok("upload_business_letterhead", name=b["name"], part="header", data=_data_url(head))
+        self.assertRegex(row["letterhead_url"], r"^/branding/letterhead-[0-9a-f]{16}\.png$")
+        row = self._ok("upload_business_letterhead", name=b["name"], part="footer",
+                       data=_data_url(foot, "image/jpeg"))
+        self.assertRegex(row["letterfoot_url"], r"^/branding/letterfoot-[0-9a-f]{16}\.jpg$")
+        self._ok("set_business_report_style", name=b["name"], style="letterhead")
+        for kind in ("answer", "report"):
+            html, opts, files = self._pdf(code, kind=kind)
+            self.assertIn(f'<body class="{kind} lh">', html, "the text is set in from the edges")
+            self.assertNotIn('<table class="hd', html, "the letterhead replaces the header block")
+            self.assertIn("<h1>Who owes us?</h1>", html, "the title block stays")
+            self.assertEqual(set(files), {"header-html", "footer-html"})
+            self.assertIn(base64.b64encode(head).decode(), files["header-html"][1])
+            self.assertIn(base64.b64encode(foot).decode(), files["footer-html"][1])
+            self.assertIn('Page <b class="page"></b> of <b class="topage"></b>', files["footer-html"][1])
+            self.assertIn("Ultrasoft Insights · built by", files["footer-html"][1])
+            self.assertNotIn("<script", files["header-html"][1])
+            for k in ("footer-left", "footer-right", "footer-font-name"):
+                self.assertNotIn(k, opts, "the footer page carries the credit and page numbers")
+            self.assertEqual((opts["margin-left"], opts["margin-right"]), ("0mm", "0mm"))
+            head_mm = round(210 * 350 / 2480, 1)  # 29.6
+            foot_mm = round(210 * 236 / 2480, 1)  # 20.0
+            self.assertEqual(opts["margin-top"], f"{head_mm + 5.5:.1f}mm")
+            self.assertEqual(opts["margin-bottom"], f"{foot_mm + 6 + 5.5:.1f}mm")
+            self.assertEqual((opts["header-spacing"], opts["footer-spacing"]), ("5", "5"))
+            self.assertEqual(opts["dpi"], "1200")
+        ws = self._sheet(code)
+        self.assertTrue(ws["A2"].value.startswith("Test Medical Group · "), "Excel: the client's name")
+        # no footer image: the footer page still carries the credit and page numbers
+        self._ok("remove_business_letterhead", name=b["name"], part="footer")
+        html, opts, files = self._pdf(code)
+        self.assertNotIn("<img", files["footer-html"][1])
+        self.assertIn('class="topage"', files["footer-html"][1])
+        self.assertEqual(opts["margin-bottom"], "11.5mm")
+        # no header image: Client Branding
+        row = self._ok("remove_business_letterhead", name=b["name"], part="header")
+        self.assertEqual(row["report_style"], "client")
+        self.assertIsNone(row["letterhead_url"])
+        html, opts, files = self._pdf(code)
+        self.assertEqual(files, {})
+        self.assertIn('class="hd-issuer"', html)
+        whats = " | ".join(c["what"] for c in self._ok("changes"))
+        self.assertIn("report style to Client Letterhead", whats)
+        self.assertIn("removed Test Medical Ltd's letterhead header (its report style is now Client Branding)", whats)
+
+    def test_vendor_credit(self):
+        b = self._business()
+        code = b["business_code"]
+        self._ok("set_business_report_style", name=b["name"], credit="small")
+        html, opts, _ = self._pdf(code)
+        self.assertEqual(opts["footer-left"], "Prepared with Ultrasoft Insights")
+        self.assertIn('<div class="ft-by">Prepared with Ultrasoft Insights</div>', html)
+        ws = self._sheet(code)
+        self.assertEqual(ws.cell(row=ws.max_row, column=1).value, "Prepared with Ultrasoft Insights")
+        self._ok("set_business_report_style", name=b["name"], credit="hide")
+        html, opts, _ = self._pdf(code)
+        self.assertNotIn("footer-left", opts)
+        self.assertEqual(opts["footer-right"], "Page [page] of [topage]", "page numbers always stay")
+        self.assertNotIn('class="ft-by"', html)
+        ws = self._sheet(code)
+        self.assertNotIn("Prepared with", " ".join(str(c.value) for row in ws.iter_rows() for c in row))
+        self.assertNotIn("Prepared", ws.oddFooter.left.text or "")
+        # a Businesses delegate: Show or Small, never Hide
+        self._ok("set_business_report_style", name=b["name"], credit="show")
+        self._ok("set_settings_access", username="manager@test.com", sections=["businesses"])
+        rows = json.loads(self._call(self.manager, "businesses").content)["message"]
+        self.assertFalse(rows[0]["may_hide_credit"])
+        self.assertTrue(self._ok("businesses")[0]["may_hide_credit"])
+        r = self._call(self.manager, "set_business_report_style", name=b["name"], credit="small")
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        r = self._call(self.manager, "set_business_report_style", name=b["name"], credit="hide")
+        self.assertEqual(r.status_code, 403, "a delegate cannot hide the vendor's credit")
+        self.assertEqual(self._call(self.manager, "preview_report_style", name=b["name"],
+                                    credit="hide").status_code, 403)
+        self.assertEqual(self._ok("businesses")[0]["credit"], "small", "nothing was changed by trying")
+        # the administrator's Hide stands while a delegate changes the style
+        self._ok("set_business_report_style", name=b["name"], credit="hide")
+        r = self._call(self.manager, "set_business_report_style", name=b["name"], style="client",
+                       credit="hide")
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        self.assertEqual(self._ok("businesses")[0]["credit"], "hide")
+        # nobody without the Businesses section
+        self._ok("set_settings_access", username="manager@test.com", sections=[])
+        for fn in ("set_business_report_style", "upload_business_letterhead",
+                   "remove_business_letterhead", "preview_report_style"):
+            self.assertEqual(self._call(self.manager, fn, name=b["name"], style="client").status_code,
+                             403, fn)
+        self.assertEqual(self._call(Client(), "preview_report_style", name=b["name"]).status_code, 401)
+
+    def test_own_documents_ignore_the_style(self):
+        import sys
+
+        from command_center.api import export
+        from insights.compat import run_as
+        b = self._business()
+        code = b["business_code"]
+        self._ok("set_business_report_style", name=b["name"], style="client", credit="hide")
+        seen = []
+        pdfmod = sys.modules["frappe.utils.pdf"]
+        with mock.patch.object(pdfmod, "get_pdf", lambda html, options=None: (seen.append((html, options)), b"%PDF")[1]), \
+                mock.patch("command_center.api.export._ensure_fonts", lambda: None), \
+                run_as("boss@test.com"):
+            export.html_pdf("Usage Statement · May 2026", "<p>Counts.</p>", code, own=True,
+                            kicker="Usage Statement", business="Alpha Holdings Ltd")
+            export.html_pdf("Financial Statements", "<p>Figures.</p>", code)
+            own_head = export.brand_rows_head("Usage", code, business="Alpha Holdings Ltd", own=True)
+            own_foot = export.brand_rows_foot(code, own=True)
+        (own, own_opts), (client, client_opts) = seen
+        self.assertIn('<div class="brand">Ultrasoft Insights</div>', own)
+        self.assertIn("Prepared for <b>Alpha Holdings Ltd</b>", own)
+        self.assertNotIn("Test Medical Group", own, "no co-brand on the platform's own documents")
+        self.assertTrue(own_opts["footer-left"].startswith("Ultrasoft Insights · built by"))
+        self.assertTrue(own_head[1][0].startswith("Ultrasoft Insights · Alpha Holdings Ltd · "))
+        self.assertTrue(own_foot[1][0].startswith("Prepared with Ultrasoft Insights by Ultrasoft Systems"))
+        # the business's own document in the same moment follows its style
+        self.assertIn('class="hd-issuer">Test Medical Group', client)
+        self.assertNotIn("footer-left", client_opts)
+        # the callers pass own=True: usage statements and incident reports
+        import inspect
+
+        from insights.core import plans, security
+        self.assertIn("own=True", inspect.getsource(plans._send_pdf))
+        self.assertIn("own=True", inspect.getsource(plans._send_sheet))
+        self.assertIn("own=True", inspect.getsource(security.incident_pdf))
+        self.assertIn("own=True", inspect.getsource(security.incident_xlsx))
+
+    def test_letterhead_uploads(self):
+        from command_center import branding
+        b = self._business()
+        name = b["name"]
+        up = lambda part, raw, mime="image/png": self._call(  # noqa: E731
+            self.admin, "upload_business_letterhead", name=name, part=part, data=_data_url(raw, mime))
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg" width="2480" height="350"><script>1</script></svg>'
+        self.assertIn("SVG images are not accepted", self._refused(
+            "upload_business_letterhead", name=name, part="header", data=_data_url(svg, "image/svg+xml")))
+        webp = b"RIFF\x20\x00\x00\x00WEBPVP8 " + b"\x00" * 24
+        self.assertIn("PDFs cannot show WebP", self._refused(
+            "upload_business_letterhead", name=name, part="header", data=_data_url(webp, "image/webp")))
+        for w, h in ((1200, 1200), (800, 110), (2480, 900), (2480, 40)):
+            self.assertIn("wide strip", self._refused(
+                "upload_business_letterhead", name=name, part="header", data=_data_url(_png(w, h))),
+                f"{w} x {h}")
+        self.assertIn("wide strip", self._refused(
+            "upload_business_letterhead", name=name, part="footer", data=_data_url(_png(2480, 600))),
+            "a footer is shallower than a header may be")
+        big = _png(*self.HEAD) + b"\x00" * (branding.LETTER_MAX_BYTES + 10)
+        self.assertIn("too large", self._refused(
+            "upload_business_letterhead", name=name, part="header", data=_data_url(big)))
+        self.assertIn("header or footer", self._refused(
+            "upload_business_letterhead", name=name, part="../x", data=_data_url(_png(*self.HEAD))))
+        # 1-2 MB is allowed for a letterhead (a logo stops at 1 MB)
+        roomy = _png(*self.HEAD) + b"\x00" * (branding.MAX_BYTES + 10)
+        self.assertEqual(up("header", roomy).status_code, 200)
+        first = self._ok("businesses")[0]["letterhead_url"]
+        self.assertEqual(up("header", _png(*self.HEAD)).status_code, 200)
+        second = self._ok("businesses")[0]["letterhead_url"]
+        self.assertNotEqual(first, second)
+        self.assertEqual(Client().get(first).status_code, 404, "the replaced header's file is removed")
+        self.assertEqual(Client().get(second).status_code, 200)
+        # in the files folder the nightly backup copies
+        import os
+        self.assertTrue(os.path.isfile(os.path.join(branding.folder(), second.rsplit("/", 1)[1])))
+        self.assertIn(second.rsplit("/", 1)[1], branding.in_use())
+
+    def test_preview(self):
+        b = self._business()
+        self._ok("upload_business_letterhead", name=b["name"], part="header", data=_data_url(_png(*self.HEAD)))
+        before = open(self.cfg).read()
+        with mock.patch("command_center.api.export._ensure_fonts", lambda: None), \
+                mock.patch("shutil.which", lambda exe: None):  # no PDF engine on this laptop
+            out = self._ok("preview_report_style", name=b["name"], style="letterhead", credit="small")
+        self.assertIsNone(out["pdf"])
+        self.assertEqual((out["style"], out["credit"]), ("letterhead", "small"))
+        html = out["html"]
+        self.assertIn("Report Style Preview", html)
+        self.assertIn("nothing is saved", html)
+        self.assertIn('class="pv-edge"><img src="data:image/png;base64,', html, "the letterhead is drawn")
+        self.assertIn("Prepared with Ultrasoft Insights", html)
+        self.assertIn("Page <b>1</b> of <b>1</b>", html)
+        self.assertEqual(open(self.cfg).read(), before, "a preview stores nothing")
+        self.assertEqual(self._ok("businesses")[0]["report_style"], "platform")
+        # with an engine: the PDF itself
+        import sys
+        pdfmod = sys.modules["frappe.utils.pdf"]
+        with mock.patch.object(pdfmod, "get_pdf", lambda html, options=None: b"%PDF-1.4 sample"), \
+                mock.patch("command_center.api.export._ensure_fonts", lambda: None):
+            out = self._ok("preview_report_style", name=b["name"], style="client", credit="show")
+            plat = self._ok("preview_report_style")
+        import base64
+        self.assertEqual(base64.b64decode(out["pdf"]), b"%PDF-1.4 sample")
+        self.assertEqual(plat["style"], "platform")
+        self.assertEqual(self._call(self.manager, "preview_report_style").status_code, 403,
+                         "the platform's own preview is the administrator's")
+
 # ------------------------------------------------------------------------------------------
 # Plans, licences and usage (insights/core/plans.py)
 # ------------------------------------------------------------------------------------------
@@ -3736,6 +4077,13 @@ class PlansAndUsage(TransactionTestCase):
         with run_as("ama@a.test"):
             plans.record("ai_questions", 1, "biz_a")
             plans.record("ai_questions", 1, "biz_a")
+        # the business's own Report Style is not the platform's usage statement's
+        from insights.core import platform_settings as ps
+        with run_as("Administrator"):
+            cfg = ps._brand_cfg()
+            cfg["businesses"] = {"biz_a": {"display_name": "Zed Client", "style": "client",
+                                           "credit": "hide"}}
+            ps._save_brand(cfg)
         seen = []
         pdfmod = sys.modules["frappe.utils.pdf"]
         with mock.patch.object(pdfmod, "get_pdf", lambda html, options=None: (seen.append((html, options)), b"%PDF")[1]), \
@@ -3755,6 +4103,7 @@ class PlansAndUsage(TransactionTestCase):
             self.assertEqual(options["footer-left"], "Acme Insight · built by Acme Systems · hello@acme.test")
             self.assertEqual("Total for the month" in html, money)
             self.assertEqual("GHS" in html, money, "money only on the administrator's")
+            self.assertNotIn("Zed Client", html, "a usage statement ignores the client's style")
         self.assertIn("not an invoice and has not been sent", seen[1][0])
         r = self._call(self.users["ama@a.test"], "usage_statement", format="xlsx")
         wb = load_workbook(io.BytesIO(r.content))

@@ -406,7 +406,13 @@ the administrator in Settings → Branding with the logos (light and dark backgr
 favicon; PNG/JPEG/WebP checked by content, 1 MB, never SVG, stored in the files folder
 under content-hash names, served at `/branding/<name>`) and the vendor's footer (company,
 person, email, phone, website -- free text, never hard-coded). A business may carry a
-co-brand (display name and logo, "Prepared for ...") from Settings → Businesses → Manage.
+co-brand (display name and logo, "Prepared for ...") from Settings → Businesses → Manage,
+and a Report Style (15 Nov 2026): Platform Branding / Client Branding / Client Letterhead
+(header and footer images on every page via `export.page_options`, which writes two small
+header/footer HTML files of our own to a temp folder and removes them), vendor credit
+Show / Small / Hide (Hide: administrator only). PDFs use the Report Logo (`logo_report`),
+not the screens' logos. `branding.document(code, own=...)` resolves it; the platform's own
+documents (usage statements, incident reports) pass own=True.
 `command_center/branding.py` is the one source: every page, the boot payload, every PDF
 (`export.brand_header`, `export.pdf_options` -- the vendor's line and "Page X of Y" on
 every page), every workbook (`export.brand_rows_head/foot`) and every email

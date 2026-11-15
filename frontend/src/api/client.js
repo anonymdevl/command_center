@@ -335,6 +335,13 @@ Object.assign(settingsApi, {
   setBusinessBrand: (name, display_name) => call(`${PS}.set_business_brand`, { name, display_name }),
   uploadBusinessLogo: (name, data) => call(`${PS}.upload_business_logo`, { name, data }),
   removeBusinessLogo: (name) => call(`${PS}.remove_business_logo`, { name }),
+  setReportStyle: (name, style, credit) =>
+    call(`${PS}.set_business_report_style`, { name, style, credit }),
+  uploadLetterhead: (name, part, data) =>
+    call(`${PS}.upload_business_letterhead`, { name, part, data }),
+  removeLetterhead: (name, part) => call(`${PS}.remove_business_letterhead`, { name, part }),
+  previewReportStyle: (name, style, credit) =>
+    call(`${PS}.preview_report_style`, { name, style, credit }),
 });
 
 /* Settings -> Security (insights/core/security.py): the platform administrator's only,
@@ -366,13 +373,19 @@ export const securityApi = {
   posture: () => call(`${SEC}.posture`),
 };
 
+export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+/* What the PDF engine can draw: it cannot draw WebP. */
+export const PRINT_TYPES = ["image/png", "image/jpeg"];
+
 /** A chosen file as a data: URL, refused here first if it is plainly too large or not
- *  a PNG, JPEG or WebP (the server checks again, by content). */
-export function readImage(file, maxKb = 1024) {
+ *  one of `types` (the server checks again, by content). */
+export function readImage(file, maxKb = 1024, types = IMAGE_TYPES) {
   return new Promise((resolve, reject) => {
     if (!file) return reject(new Error("Choose an image file."));
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      return reject(new Error("Choose a PNG, JPEG or WebP image. SVG is not accepted."));
+    if (!types.includes(file.type)) {
+      return reject(new Error(types.includes("image/webp")
+        ? "Choose a PNG, JPEG or WebP image. SVG is not accepted."
+        : "Choose a PNG or JPEG image. PDFs cannot show WebP, and SVG is not accepted."));
     }
     if (file.size > maxKb * 1024) {
       return reject(new Error(`That image is too large. The most it may be is ${maxKb} KB.`));
