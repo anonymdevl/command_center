@@ -67,13 +67,15 @@ in their own database, and read the businesses' ERPNext a page at a time.
 
 | Task | How |
 |---|---|
-| Add a manager | Admin → Users → add (email as username), set a password, add the group *Insights Dashboard Manager*. Or `manage.py add_manager email "Name"`. |
-| Remove a manager | Admin → Users → untick *Active* (or remove the group). |
-| Connect a business | Admin → Connected businesses → add; its secret is write-only. Or `manage.py register_business`. Then `manage.py execute command_center.api.ingest.run_all --kwargs '{"full": true}'`. |
+| Add a manager | Settings → People → Add Person (in the platform's sidebar, administrators only): email, name, a password typed twice or "set it later", tick Manager. Or `manage.py add_manager email "Name"`. |
+| Remove a manager | Settings → People → Manage → Deactivate (their sign-ins end at once) or Remove Manager. Make Administrator, Reset Password are there too; the last administrator cannot be removed. |
+| Connect a business | Settings → Businesses → Add Business (address, API key and secret; it is checked at once and says who it reads as and whether it can write). Then Manage → Reload Everything for its first full load, in the background. Edit, Test Connection and Pause are there too; secrets are write-only. Or `manage.py register_business`. |
 | What went wrong | Admin → Error log. |
 | Is everything healthy? | `./deploy/health.sh`: the server (load, memory, disk, updates, certificates, shared services) and the platform (services, errors, loads, backups). Reads only. `--backup` also tests the backup now. |
 | Backups | Every night at 01:45 into `~/insights-backups` (the database and `insights.json`), 14 days kept. Copy them off the server now and then. |
-| Change the Claude key | `manage.py shell -c "import frappe; frappe.installer.update_site_config('command_center_anthropic_key', input())"`. No restart needed. |
+| Change the Claude key | Settings → Claude → Replace Key, then Check. No restart needed. |
+| A manager's own ERPNext key (approvals) | Settings → Personal ERPNext Keys → Add Key. |
+| Who changed what | Settings → Changes (also Admin → Recent actions). Secrets are never recorded. |
 | Update | `./deploy/platform.sh` (pull, install, migrate, restart). |
 | Run any function | `manage.py execute <dotted.path> --kwargs '{...}'` (as `bench execute` was). |
 
@@ -89,7 +91,7 @@ It also checks that the generated models match the doctype JSON and that migrati
 
 ## Not done yet
 
-- **The Settings page:** the designed screen for businesses, people and keys. Until then, the admin covers it.
-- **Approvals and delegation from the platform:** these work with each manager's own ERPNext key, linked in Admin → Site credentials.
+- **The Settings page** is built (people, businesses, the Claude key, personal ERPNext keys, changes), for administrators only. Not there yet: removing a business, editing its overdue days or approval threshold, and its ERPNext sign-in (OAuth client); those stay in Admin → Connected businesses.
+- **Approvals and delegation from the platform:** these work with each manager's own ERPNext key, linked in Settings → Personal ERPNext Keys.
 - **Agent mode** (Claude proposing actions you confirm).
 - **Sign-in wording:** the sign-in page still mentions ERPNext in its error messages.
