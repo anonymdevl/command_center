@@ -22,6 +22,7 @@ import { renderHealthTiles, renderHome } from "../legacy/home.js";
 import { renderSchedules } from "../legacy/schedules.js";
 import { PANEL_VIEWS, renderPanels } from "../legacy/panels.js";
 import { renderLoads } from "../legacy/loads.js";
+import { PEOPLE_VIEWS, renderPeople } from "../legacy/people.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -493,6 +494,13 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     });
   }, [viewKey, html, figures.data, figures.error, work.data, work.error, isWork, alerts.data,
       alerts.error, hasAlerts, scope, openDrawer, hasPanels, panels.data, panels.error, reachDown]);
+
+  // HR & Payroll's People Lookup and Leave (legacy/people.js, api/people.py): drawn once
+  // the markup is in place, again when the business changes.
+  useEffect(() => {
+    if (!PEOPLE_VIEWS.has(viewKey)) return undefined;
+    return renderPeople(ref.current, { scope, openDrawer });
+  }, [viewKey, html, scope, openDrawer]);
 
   // The designed action buttons (Assign, the "⋯" menu, Raise it...) had no handlers.
   useEffect(() => {
