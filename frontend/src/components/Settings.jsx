@@ -3,11 +3,13 @@ import { boot as bootPayload } from "../api/boot.js";
 import SettingsPeople from "./SettingsPeople.jsx";
 import SettingsBusinesses from "./SettingsBusinesses.jsx";
 import SettingsEmail from "./SettingsEmail.jsx";
+import SettingsRecommend from "./SettingsRecommend.jsx";
 import { SettingsChanges, SettingsClaude, SettingsCredentials } from "./SettingsKeys.jsx";
 import "../styles/settings.css";
 
 /**
- * Settings: people, connected businesses, the Claude key, email and personal ERPNext keys.
+ * Settings: people, connected businesses, the Claude key, email, personal ERPNext keys and
+ * the recommendation rules.
  *
  * Not a designed screen, so not in views.json: the platform administrator's own page,
  * replacing the Django administration for everyday work (/admin keeps working). The
@@ -23,6 +25,7 @@ const TABS = [
   ["claude", "Claude", SettingsClaude],
   ["email", "Email", SettingsEmail],
   ["keys", "Personal ERPNext Keys", SettingsCredentials],
+  ["recommend", "Recommendations", SettingsRecommend],
   ["changes", "Changes", SettingsChanges],
 ];
 

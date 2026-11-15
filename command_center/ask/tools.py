@@ -319,6 +319,26 @@ def get_figures(keys, business_code=None):
                    for k, v in result.items()})
 
 
+def current_recommendations(business_code=None):
+    """The platform's current recommendations for the business, ranked by money at stake
+    times urgency -- the same list as Home's Top actions. Reads only."""
+    from command_center.recommend import engine
+    if business_code and business_code != "__all__":
+        codes = [business_code]
+    else:
+        from command_center.api.businesses import loaded_codes
+        codes = loaded_codes()
+    out = {"recommendations": [], "total": 0}
+    for code in codes:
+        got = engine.snapshot(code)
+        out["recommendations"] += got["recommendations"]
+        out["total"] += got["total"]
+        out["worked_out"] = got["worked_out"]
+    out["recommendations"].sort(key=lambda r: -(r.get("money_at_stake") or 0))
+    out["recommendations"] = out["recommendations"][:15]
+    return _clean(out)
+
+
 def find(text: str, business_code=None):
     """Customers, suppliers, items and warehouses whose names match the text."""
     from command_center.ask import resolve
@@ -823,6 +843,13 @@ TOOLS = {
         "exactly the numbers its cards show, with their note and as-of date. Ask for every "
         "key you need in one call.",
         {"keys": {"type": "array", "items": {"type": "string"}}}, ["keys"])),
+    "current_recommendations": (current_recommendations, _decl(
+        "current_recommendations",
+        "The platform's current recommendations for this business -- what its figures say "
+        "is worth doing, ranked by money at stake: each with its title, the evidence, the "
+        "steps, the money at stake, the area and who would act. First choice for 'what "
+        "should I focus on', 'what needs my attention', 'where are we losing money', "
+        "'what should we do'. The same list as the screens' Top actions.")),
     "find": (find, _decl(
         "find",
         "Look up customers, suppliers, items or warehouses by name or part of a name, to get "
@@ -987,6 +1014,8 @@ def describe(name: str, args: dict) -> str:
         return f"Looking up “{str(a.get('text', ''))[:40]}”"
     if name == "describe_data":
         return "Checking what data is loaded"
+    if name == "current_recommendations":
+        return "Reading the current recommendations"
     if name == "run_report":
         return f"Running ERPNext's {a.get('report', 'report')}"
     if name == "report_filters":
@@ -1018,6 +1047,7 @@ STEP_KINDS = {
     "compare_periods": "Comparing with an earlier period", "list_records": "Reading records",
     "get_figures": "Reading the headline figures", "find": "Looking up a name",
     "describe_data": "Checking what data is loaded", "run_report": "Running an ERPNext report",
+    "current_recommendations": "Reading the current recommendations",
     "report_filters": "Checking how a report is filtered",
     "erpnext_list": "Reading ERPNext records", "erpnext_count": "Reading ERPNext records",
     "erpnext_fields": "Reading ERPNext records", "erpnext_document": "Opening an ERPNext document",

@@ -95,6 +95,8 @@ V_COMMAND=f'''<div class="topbar"><div><h3 class="hello" id="greet">Good morning
 <div class="grid hero-row">{_HOME_TILES}</div>
 <div class="mbrief" id="mbrief"><div class="mb-tag">Morning brief</div>
 <h4 id="mb-h">Reading what needs your attention…</h4><div class="mb-chips" id="mb-chips"></div></div>
+<div class="sect"><span>Top actions</span><span class="lnk" onclick="go('brief')">See every recommendation →</span></div>
+<div class="rec-live-list" data-rec="top"><div class="work-empty"><b>Working out what to do first&hellip;</b></div></div>
 <div class="panel debt" id="debt"><div class="debt-h"><div><h4>Largest amounts owed <span class="debt-n" id="debt-n"></span></h4>
 <p>Customers with the most money still to collect, by the ledger</p></div>
 <div class="segc" role="tablist" aria-label="Which debts">
@@ -131,6 +133,10 @@ and that is all they do.</div>
 # ---------------- V: BRIEF ----------------
 V_BRIEF=f'''<div class="topbar"><div><h3>Executive Summary</h3>
 <div class="when" id="brief-when">Reading the alerts&hellip;</div></div></div>
+<div class="rec-brief" id="rec-brief" hidden></div>
+<div class="sect"><span>Recommendations</span><span class="rec-sub" id="rec-sub"></span></div>
+<div class="rec-live-list" data-rec="all"><div class="work-empty"><b>Working out what to do first&hellip;</b></div></div>
+<div class="sect"><span>Alerts</span></div>
 <div class="banner">Each item states six things: <b>what happened · why it matters · the figure ·
 where it came from · who owns it · how long it has been true</b>. Every one links to the record behind it.</div>
 <div class="alert-live-list"><div class="work-empty"><b>Reading the alerts&hellip;</b></div></div>'''

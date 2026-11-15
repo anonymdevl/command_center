@@ -109,11 +109,17 @@ scheduler_events = {
         # Access follows the role on each business's ERPNext: whoever lost it there
         # loses the platform within 15 minutes.
         "*/15 * * * *": ["command_center.api.sso.sync_members"],
+        # Recommendations, once a day per business: the Daily Brief by Claude (only where
+        # an administrator switched it on), then the email digest to the managers.
+        "30 6 * * *": ["command_center.recommend.daily.write_briefs"],
+        "0 7 * * *": ["command_center.recommend.daily.send_digests"],
     },
     # Alerts, from the KPIs. Also evaluated when they are read and the last pass is
     # stale, so they do not depend on the workers running.
     "hourly": [
         "command_center.alerts.engine.scheduled",
+        # Recommendations, from the same figures (also made fresh when they are read).
+        "command_center.recommend.engine.scheduled",
         # Reports whose scheduled time has come (Command Center Report Schedule).
         "command_center.api.reports.send_due",
     ],
