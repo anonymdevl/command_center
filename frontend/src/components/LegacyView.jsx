@@ -25,6 +25,7 @@ import { disposeWithin } from "../legacy/viz.js";
 import { renderLoads } from "../legacy/loads.js";
 import { PEOPLE_VIEWS, renderPeople } from "../legacy/people.js";
 import { REC_VIEWS, recsFailed, renderRecs } from "../legacy/recommend.js";
+import { STATEMENT_VIEWS, mountStatements } from "../legacy/statements.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -146,6 +147,22 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       },
     });
   }, [isHealth, loads.data, html, scope]);
+
+  // Finances leads with the financial statements (legacy/statements.js): ERPNext's own
+  // reports, read again every five minutes while the screen is looked at -- they are
+  // heavier than the panels, and kept five minutes on the server.
+  useEffect(() => {
+    if (!STATEMENT_VIEWS.has(viewKey)) return;
+    const s = mountStatements(ref.current, { scope });
+    if (!s) return;
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") s.refresh();
+    }, 300000);
+    return () => {
+      clearInterval(t);
+      s.destroy();
+    };
+  }, [viewKey, html, scope]);
 
   // The Reports screen says the schedule actually set for each report.
   const isReports = viewKey === "reports";

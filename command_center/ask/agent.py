@@ -647,6 +647,20 @@ slow; use it only for these.
 someone has left: leave (with the person's name or ID for one person). Who someone is, \
 who they report to, who is in a department: people. Do not rebuild a leave balance from \
 erpnext_list rows -- the leave tool already counts it as ERPNext does.
+9. Profit (gross or net), margins, revenue for a period as the accounts state it, assets, \
+liabilities, equity, cash and bank, working capital and the trial balance: ERPNext's own \
+statements, through run_report -- "Profit and Loss Statement", "Balance Sheet", "Cash Flow" \
+(filters company, filter_based_on Date Range, period_start_date, period_end_date, \
+from_fiscal_year and to_fiscal_year, periodicity) and "Trial Balance" (company, fiscal_year, \
+from_date, to_date). Never rebuild a statement from invoices or the loaded sets: the \
+statements carry the business's own accounting -- opening entries, journals, finance books. \
+Gross profit is income less the accounts of type Cost of Goods Sold (count a cost-of-sales \
+group once, not its children again); net profit is the report's profit line. Read the \
+period columns: on the balance sheet the last period column is the position, and its \
+"total" column adds periods together and means nothing; on a cash flow, add the period \
+columns. If the balance sheet does not balance, or the trial balance's debits and credits \
+differ, say so with the difference. These are the same statements the Finances screen \
+shows under Financial Statements.
 Put independent lookups in the same round. Most questions need one or two rounds; once \
 you can answer, stop looking and answer.
 The loaded sets count submitted documents only, as the screens do. For drafts or \

@@ -124,6 +124,170 @@ JOURNALS = [("Customer", "Ubuntu Ltd", 5000, 0, None), ("Customer", "Ubuntu Ltd"
             ("Customer", "Korle Bu", 7000, 0, None), ("Supplier", "Min-Medical", 0, 3000, None)]
 
 
+# The fake's chart of accounts and its four financial statements, shaped as ERPNext 14
+# answers frappe.desk.query_report.run (checked against Gigmann's live site, 15 Nov 2026):
+# account rows with parent_account, indent, account_type, is_group and one key per period;
+# each side's total row (no indent); a blank row; the profit or provisional line quoted.
+# Per month: income 12,000 (sales 10,000, services 2,000), cost of goods 7,000 (purchases
+# 6,000; freight 1,000, an expense account inside the cost-of-goods group), other expenses
+# 3,000 -- gross profit 5,000, net profit 2,000. A year earlier every flow is 80% of that.
+CHART = [  # account, parent, root type, account type, is group, per month or balances
+    ("Income - TML", "", "Income", "", 1, None),
+    ("Sales - TML", "Income - TML", "Income", "Income Account", 0, 10000),
+    ("Service Income - TML", "Income - TML", "Income", "Income Account", 0, 2000),
+    ("Expenses - TML", "", "Expense", "", 1, None),
+    ("Cost of Goods Sold - TML", "Expenses - TML", "Expense", "Cost of Goods Sold", 1, None),
+    ("Purchases - TML", "Cost of Goods Sold - TML", "Expense", "Cost of Goods Sold", 0, 6000),
+    ("Freight - TML", "Cost of Goods Sold - TML", "Expense", "Expense Account", 0, 1000),
+    ("Indirect Expenses - TML", "Expenses - TML", "Expense", "", 1, None),
+    ("Salaries - TML", "Indirect Expenses - TML", "Expense", "Expense Account", 0, 2500),
+    ("Rent - TML", "Indirect Expenses - TML", "Expense", "Expense Account", 0, 500),
+    # balances: (as at the last period, as at the earlier ones)
+    ("Application of Funds (Assets) - TML", "", "Asset", "", 1, None),
+    ("Current Assets - TML", "Application of Funds (Assets) - TML", "Asset", "", 1, None),
+    ("Debtors - TML", "Current Assets - TML", "Asset", "Receivable", 0, (30000, 30000)),
+    ("Bank - TML", "Current Assets - TML", "Asset", "Bank", 0, (20000, 18000)),
+    ("Stock In Hand - TML", "Current Assets - TML", "Asset", "Stock", 0, (10000, 10000)),
+    ("Fixed Assets - TML", "Application of Funds (Assets) - TML", "Asset", "", 1, None),
+    ("Equipment - TML", "Fixed Assets - TML", "Asset", "Fixed Asset", 0, (40000, 40000)),
+    ("Source of Funds (Liabilities) - TML", "", "Liability", "", 1, None),
+    ("Current Liabilities - TML", "Source of Funds (Liabilities) - TML", "Liability", "", 1, None),
+    ("Creditors - TML", "Current Liabilities - TML", "Liability", "Payable", 0, (25000, 23000)),
+    ("Long Term Loans - TML", "Source of Funds (Liabilities) - TML", "Liability", "", 0, (15000, 15000)),
+    ("Equity - TML", "", "Equity", "", 1, None),
+    ("Capital Stock - TML", "Equity - TML", "Equity", "Equity", 0, (50000, 50000)),
+]
+PROVISIONAL = 10000  # assets 100,000 = liabilities 40,000 + equity 50,000 + 10,000
+FS_SCRIPT = ('frappe.require("assets/erpnext/js/financial_statements.js", function() {\n'
+             '  frappe.query_reports["X"] = $.extend({}, erpnext.financial_statements);\n'
+             '  frappe.query_reports["X"]["filters"].push({"fieldname": "include_default_book_entries",'
+             ' "fieldtype": "Check", "default": 1});\n});')
+TB_SCRIPT = ("frappe.query_reports['Trial Balance'] = {filters: [" + ", ".join(
+    f'{{"fieldname": "{f}"}}' for f in (
+        "company", "fiscal_year", "from_date", "to_date", "cost_center", "project", "finance_book",
+        "presentation_currency", "with_period_closing_entry", "show_zero_values",
+        "show_unclosed_fy_pl_balances", "include_default_book_entries", "show_net_values")) + "]}")
+
+
+def _month_keys(a: dt.date, b: dt.date, periodicity: str):
+    """ERPNext's period columns for a date range: (fieldname, label, months in it)."""
+    months = []
+    d = a.replace(day=1)
+    while d <= b:
+        months.append(d)
+        d = (d + dt.timedelta(days=32)).replace(day=1)
+    if periodicity == "Monthly":
+        return [(m.strftime("%b_%Y").lower(), m.strftime("%b %Y"), 1) for m in months]
+    return [(b.strftime("%b_%Y").lower(), str(b.year), len(months))]
+
+
+def fake_statement(report: str, f: dict) -> dict:
+    if report == "Trial Balance":
+        return _fake_tb(f)
+    a = dt.date.fromisoformat(f.get("period_start_date"))
+    b = dt.date.fromisoformat(f.get("period_end_date"))
+    cols = _month_keys(a, b, f.get("periodicity") or "Yearly")
+    scale = 0.8 if b.year < TODAY.year else 1.0
+    columns = [{"fieldname": "account", "label": "Account", "fieldtype": "Link"},
+               {"fieldname": "currency", "label": "Currency", "fieldtype": "Link", "hidden": 1}] + [
+        {"fieldname": k, "label": lab, "fieldtype": "Currency"} for k, lab, _ in cols]
+    if report == "Cash Flow":
+        return {"columns": columns, "result": _fake_cf(cols, scale), "message": None}
+    balance = report == "Balance Sheet"
+    sides = ("Asset", "Liability", "Equity") if balance else ("Income", "Expense")
+    by = {name: (parent, rt, at, g, v) for name, parent, rt, at, g, v in CHART}
+
+    def amount(name, i):
+        parent, rt, at, g, v = by[name]
+        if g:
+            return sum(amount(c, i) for c, (p, *_r) in by.items() if p == name)
+        if balance:
+            return v[0] if i == len(cols) - 1 else v[1]
+        return v * cols[i][2] * scale
+
+    def depth(name):
+        return 0 if not by[name][0] else 1 + depth(by[name][0])
+    out = []
+    for side in sides:
+        names = [n for n, (p, rt, *_r) in by.items() if rt == side]
+        for n in names:
+            parent, rt, at, g, v = by[n]
+            row = {"account": n, "parent_account": parent, "indent": depth(n),
+                   "account_name": n.rsplit(" - ", 1)[0], "account_type": at, "is_group": g,
+                   "include_in_gross": 0, "currency": "GHS", "opening_balance": 0, "has_value": True}
+            for i, (k, _l, _m) in enumerate(cols):
+                row[k] = amount(n, i)
+            # ERPNext's own "total" adds the periods, which means nothing on a balance sheet
+            row["total"] = sum(row[k] for k, _l, _m in cols)
+            out.append(row)
+        label = f"Total {side} ({'Debit' if side in ('Asset', 'Expense') else 'Credit'})"
+        tot = {"account_name": label, "account": label, "currency": "GHS"}
+        for i, (k, _l, _m) in enumerate(cols):
+            tot[k] = sum(amount(r, i) for r in names if not by[r][0])
+        out += [tot, {}]
+    last = {"currency": "GHS", "warn_if_negative": True}
+    name = "'Provisional Profit / Loss (Credit)'" if balance else "'Profit for the year'"
+    last.update(account_name=name, account=name)
+    for i, (k, _l, _m) in enumerate(cols):
+        last[k] = PROVISIONAL if balance else amount("Income - TML", i) - amount("Expenses - TML", i)
+    out.append(last)
+    return {"columns": columns, "result": out, "message": None, "report_summary": [],
+            "add_total_row": 0}
+
+
+def _fake_cf(cols, scale):
+    """ERPNext 14's own cash flow: a header per section, its lines, a quoted total."""
+    out = []
+    lines = {"Operations": [("'Profit for the year'", 2000), ("Net Change in Accounts Receivable", -1000)],
+             "Investing": [("Net Change in Fixed Asset", -3000)],
+             "Financing": [("Net Change in Equity", 500)]}
+    for section, items in lines.items():
+        head = f"Cash Flow from {section}"
+        out.append({"account_name": head, "parent_account": None, "indent": 0.0, "account": head})
+        total = {"account_name": f"'Net Cash from {section}'", "account": f"'Net Cash from {section}'",
+                 "currency": "GHS"}
+        for label, per in items:
+            row = {"account_name": label, "account": label, "indent": 1, "parent_account": head,
+                   "currency": "GHS", "total": -123}  # a wrong own total: never read
+            for k, _l, m in cols:
+                row[k] = per * m * scale
+                total[k] = total.get(k, 0) + row[k]
+            out.append(row)
+        out += [total, {}]
+    change = {"account_name": "'Net Change in Cash'", "account": "'Net Change in Cash'", "currency": "GHS"}
+    for k, _l, m in cols:
+        change[k] = -1500 * m * scale
+    return out + [change, {}]
+
+
+def _fake_tb(f):
+    """Balanced: opening 98,000 a side; the period's 12,000 a month of income against 10,000
+    of expenses, through the bank."""
+    m = len(_month_keys(dt.date.fromisoformat(f["from_date"]), dt.date.fromisoformat(f["to_date"]),
+                        "Monthly"))
+    K = ("opening_debit", "opening_credit", "debit", "credit", "closing_debit", "closing_credit")
+    rows = []
+    for name, parent, indent, v in (
+            ("Application of Funds (Assets) - TML", None, 0, (98000, 0, 12000 * m, 10000 * m, 98000 + 2000 * m, 0)),
+            ("Bank - TML", "Application of Funds (Assets) - TML", 1, (98000, 0, 12000 * m, 10000 * m, 98000 + 2000 * m, 0)),
+            ("Source of Funds (Liabilities) - TML", None, 0, (0, 38000, 0, 0, 0, 38000)),
+            ("Creditors - TML", "Source of Funds (Liabilities) - TML", 1, (0, 38000, 0, 0, 0, 38000)),
+            ("Equity - TML", None, 0, (0, 60000, 0, 0, 0, 60000)),
+            ("Capital Stock - TML", "Equity - TML", 1, (0, 60000, 0, 0, 0, 60000)),
+            ("Income - TML", None, 0, (0, 0, 0, 12000 * m, 0, 12000 * m)),
+            ("Sales - TML", "Income - TML", 1, (0, 0, 0, 12000 * m, 0, 12000 * m)),
+            ("Expenses - TML", None, 0, (0, 0, 10000 * m, 0, 10000 * m, 0)),
+            ("Salaries - TML", "Expenses - TML", 1, (0, 0, 10000 * m, 0, 10000 * m, 0))):
+        rows.append({"account": name, "parent_account": parent, "indent": indent,
+                     "account_name": name.rsplit(" - ", 1)[0], "currency": "GHS",
+                     "has_value": True, **dict(zip(K, v))})
+    total = {"account": "'Total'", "account_name": "'Total'", "parent_account": None, "indent": 0,
+             "warn_if_negative": True, "currency": "GHS",
+             **{k: sum(r[k] for r in rows if r["indent"] == 0) for k in K}}
+    return {"columns": [{"fieldname": k, "label": k, "fieldtype": "Currency"} for k in K],
+            "result": rows + [{}, total], "message": None}
+
+
 def _wanted(filters, field, value) -> bool:
     rule = (filters or {}).get(field) if isinstance(filters, dict) else None
     if rule is None:
@@ -143,6 +307,8 @@ class FakeERPNext:
         # every read of them is kept in hr_reads as (doctype, fields).
         self.hr = hr
         self.hr_reads = []
+        self.reports = []
+        self.fiscal_years = True
 
     def __call__(self, method_name):
         def call(url, headers=None, params=None, data=None, json=None, timeout=None):
@@ -153,6 +319,15 @@ class FakeERPNext:
         return call
 
     def answer(self, m, p):
+        if m == "frappe.desk.query_report.get_script":
+            name = p.get("report_name")
+            return _R(200, {"message": {"script": TB_SCRIPT if name == "Trial Balance" else FS_SCRIPT,
+                                        "filters": []}})
+        if m == "frappe.desk.query_report.run":
+            f = p.get("filters") or {}
+            f = json.loads(f) if isinstance(f, str) else f
+            self.reports.append((p.get("report_name"), f))
+            return _R(200, {"message": fake_statement(p.get("report_name"), f)})
         if m == "frappe.auth.get_logged_user":
             return _R(200, {"message": "reader@test.com"})
         if self.hr is not None and p.get("doctype") in HR_DOCTYPES and m in (
@@ -226,6 +401,12 @@ class FakeERPNext:
             return self.ledger(doctype, fields, filters, p.get("group_by"), start, n)
         if doctype == "Company":
             return [{"name": "Test Medical Ltd", "default_currency": "GHS"}][:n]
+        if doctype == "Fiscal Year":
+            return [{"name": str(y), "year_start_date": f"{y}-01-01", "year_end_date": f"{y}-12-31"}
+                    for y in range(TODAY.year - 3, TODAY.year + 1)] if self.fiscal_years else []
+        if doctype == "Account" and "root_type" in fields:
+            return [{"name": a, "parent_account": p or None, "root_type": rt, "account_type": at,
+                     "is_group": g} for a, p, rt, at, g, _v in CHART][start:start + n]
         parents = names = None
         if isinstance(filters, dict):
             if isinstance(filters.get("parent"), list) and filters["parent"][0] == "in":
@@ -2647,3 +2828,224 @@ class Recommendations(TransactionTestCase):
         self.assertIn('data-rec="top"', views["command"])
         self.assertIn('data-rec="all"', views["brief"])
         self.assertIn('id="rec-brief"', views["brief"])
+
+
+class FinancialStatements(TransactionTestCase):
+    """The Finances screen's statements: ERPNext's own Profit and Loss Statement, Balance
+    Sheet, Trial Balance and Cash Flow, read from the business's site and added up the way
+    their trees say -- gross and net profit, the balance check, the ratios -- with a guide
+    where a report cannot run and the "can't reach" state where the site does not answer."""
+
+    databases = {"default", "aux"}
+
+    def setUp(self):
+        from cryptography.fernet import Fernet
+        from django.conf import settings
+        from django.core.cache import cache
+        settings.CONFIG.setdefault("encryption_key", Fernet.generate_key().decode())
+        cache.clear()
+        Group.objects.get_or_create(name="Insights Dashboard Manager")
+        self.fake = FakeERPNext()
+        self.patches = [mock.patch("requests.get", self.fake("GET")),
+                        mock.patch("requests.post", self.fake("POST")),
+                        mock.patch("time.sleep", lambda s: None)]
+        for p in self.patches:
+            p.start()
+        from command_center import install
+        from insights.compat import run_as
+        with run_as("Administrator"):
+            self.code = install.register_business("Test Medical Ltd", "https://erp.test", "key",
+                                                  "s3cret")["code"]
+
+    def tearDown(self):
+        from django.core.cache import cache
+        for p in self.patches:
+            p.stop()
+        cache.clear()
+
+    def _get(self, **kw):
+        from command_center.api import statements
+        from insights.compat import run_as
+        with run_as("Administrator"):
+            return statements.get(self.code, **kw)
+
+    def test_profit_and_loss_balance_sheet_and_ratios(self):
+        out = self._get(period="ytd")
+        self.assertEqual(out["state"], "ok", out)
+        self.assertEqual(out["currency"], "GHS")
+        m = TODAY.month
+        pl = out["pl"]["figures"]
+        self.assertAlmostEqual(pl["income"], 12000 * m)
+        # the cost-of-goods group counts once, with the expense account inside it
+        self.assertAlmostEqual(pl["cogs"], 7000 * m)
+        self.assertAlmostEqual(pl["gross_profit"], 5000 * m)
+        self.assertAlmostEqual(pl["other_expenses"], 3000 * m)
+        self.assertAlmostEqual(pl["net_profit"], 2000 * m)
+        self.assertAlmostEqual(pl["gross_margin"], 5 / 12)
+        self.assertAlmostEqual(pl["net_margin"], 1 / 6)
+        self.assertAlmostEqual(out["pl"]["compare_figures"]["net_profit"], 2000 * m * 0.8)
+        self.assertEqual(out["pl"]["notes"], [])
+        # the company comes from the platform's Connected Business, never from the markup
+        runs = [f for r, f in self.fake.reports if r == "Profit and Loss Statement"]
+        self.assertTrue(runs and all(f["company"] == "Test Medical Ltd" for f in runs))
+        # both spellings of the period, for every version
+        f = runs[0]
+        for k in ("filter_based_on", "period_start_date", "period_end_date", "from_fiscal_year",
+                  "to_fiscal_year", "periodicity"):
+            self.assertIn(k, f)
+        self.assertEqual(f["from_fiscal_year"], str(TODAY.year))
+        # twelve months' trend and the four periods at a glance
+        trend = out["pl"]["trend"]
+        self.assertEqual(len(trend), 12)
+        self.assertTrue(all(abs(t["revenue"] - 12000) < 0.01 and abs(t["net_profit"] - 2000) < 0.01
+                            for t in trend), trend)
+        self.assertEqual(trend[-1]["from"], str(TODAY.replace(day=1)))
+        glance = out["pl"]["glance"]
+        self.assertEqual(glance["columns"], ["This Month", "Last Month", "Year to Date",
+                                             "Same Period Last Year"])
+        self.assertAlmostEqual(glance["rows"][0]["values"][2], 12000 * m)
+        # the balance sheet: as at today against the end of last month
+        bs = out["bs"]["figures"]
+        for key, want in (("assets", 100000), ("current_assets", 60000), ("fixed_assets", 40000),
+                          ("liabilities", 40000), ("current_liabilities", 25000),
+                          ("long_term_liabilities", 15000), ("equity", 50000),
+                          ("provisional_profit", PROVISIONAL), ("cash", 20000), ("inventory", 10000)):
+            self.assertAlmostEqual(bs[key], want, msg=key)
+        self.assertTrue(bs["balances"])
+        self.assertAlmostEqual(out["bs"]["compare_figures"]["cash"], 18000)
+        self.assertEqual(out["balance_dates"]["at"], str(TODAY))
+        r = {x["key"]: x["value"] for x in out["ratios"]}
+        self.assertAlmostEqual(r["current_ratio"], 2.4)
+        self.assertAlmostEqual(r["quick_ratio"], 2.0)
+        self.assertAlmostEqual(r["debt_to_equity"], 40000 / 60000)
+        self.assertAlmostEqual(r["working_capital"], 35000)
+        self.assertTrue(all(x["meaning"] and x["reading"] for x in out["ratios"]))
+        c = out["cards"]
+        self.assertAlmostEqual(c["revenue"]["value"], 12000 * m)
+        self.assertAlmostEqual(c["revenue"]["change_pct"], 0.25)
+        self.assertAlmostEqual(c["cash"]["value"], 20000)
+        self.assertAlmostEqual(c["current_ratio"]["value"], 2.4)
+        # an account row opens the General Ledger on the business's own ERPNext
+        drill = next(x["drill"] for x in out["pl"]["rows"] if x.get("account") == "Sales - TML")
+        self.assertTrue(drill.startswith("https://erp.test/app/query-report/General%20Ledger?"), drill)
+        self.assertIn("account=Sales%20-%20TML", drill)
+        self.assertIn(f"from_date={TODAY.year}-01-01", drill)
+        # kept five minutes: the same question asks ERPNext nothing new
+        before = len(self.fake.reports)
+        self._get(period="ytd")
+        self.assertEqual(len(self.fake.reports), before)
+
+    def test_trial_balance_and_cash_flow(self):
+        out = self._get(period="this_month", section="tb")
+        self.assertEqual(out["state"], "ok", out)
+        tb = out["tb"]
+        self.assertTrue(tb["balanced"], tb)
+        self.assertEqual(tb["fiscal_year"], str(TODAY.year))
+        self.assertAlmostEqual(tb["total"][0], 98000)
+        self.assertEqual({r["account"] for r in tb["rows"]} >= {"Bank - TML", "Sales - TML"}, True)
+        sent = [f for r, f in self.fake.reports if r == "Trial Balance"][0]
+        self.assertEqual(sent["show_unclosed_fy_pl_balances"], 1)
+        self.assertEqual(sent["fiscal_year"], str(TODAY.year))
+        cf = self._get(period="ytd", section="cf")
+        self.assertEqual(cf["state"], "ok", cf)
+        m = TODAY.month
+        lines = {s["key"]: s["values"][0] for s in cf["cf"]["summary"]}
+        self.assertAlmostEqual(lines["operating"], 1000 * m)
+        self.assertAlmostEqual(lines["investing"], -3000 * m)
+        self.assertAlmostEqual(lines["financing"], 500 * m)
+        self.assertAlmostEqual(lines["net_change"], -1500 * m)
+        self.assertEqual(cf["cf"]["notes"], [])
+        # ERPNext's own (wrong) total key is never read
+        self.assertNotIn(-123, [v for r in cf["cf"]["rows"] for v in r["values"]])
+
+    def test_a_statement_that_does_not_balance_says_so(self):
+        with mock.patch(f"{__name__}.PROVISIONAL", 9000):
+            out = self._get(period="ytd")
+        self.assertFalse(out["bs"]["figures"]["balances"])
+        self.assertAlmostEqual(out["bs"]["figures"]["difference"], 1000)
+        self.assertTrue(any("does not balance" in n for n in out["bs"]["notes"]), out["bs"]["notes"])
+
+    def test_guides_when_not_set_up(self):
+        # no fiscal year: the trial balance says how to add one
+        self.fake.fiscal_years = False
+        out = self._get(period="ytd", section="tb")
+        self.assertEqual(out["state"], "needs_setup", out)
+        self.assertIn("/app/fiscal-year/new", out["guide"]["href"])
+        self.assertTrue(out["guide"]["href"].startswith("https://erp.test"))
+        self.assertNotIn("tb", out)
+        # the platform's account may not run the reports: who to give which role
+        from django.core.cache import cache
+        cache.clear()
+        self.fake.fiscal_years = True
+        real = self.fake.answer
+
+        def refuse(m, p):
+            return _R(403, {"exc": "PermissionError"}) if m == "frappe.desk.query_report.run" else real(m, p)
+        self.fake.answer = refuse
+        out = self._get(period="ytd")
+        self.assertEqual(out["state"], "needs_setup", out)
+        self.assertIn("/app/user", out["guide"]["href"])
+        self.assertTrue(out["guide"]["steps"])
+        self.assertNotIn("cards", out)
+
+    def test_cannot_reach(self):
+        import requests as _rq
+        from insights.core.models import ConnectedBusiness
+
+        def down(*a, **k):
+            raise _rq.ConnectionError("connection refused")
+        with mock.patch("requests.get", down), mock.patch("requests.post", down):
+            out = self._get(period="ytd")
+        self.assertEqual(out["state"], "unreachable", out)
+        self.assertEqual(out["business"], "Test Medical Ltd")
+        self.assertNotIn("cards", out)
+        # already known to be down: no network wait at all
+        ConnectedBusiness.objects.update(status="Unreachable")
+
+        def no_network(*a, **k):
+            raise AssertionError("a known-down business was contacted")
+        with mock.patch("requests.get", no_network), mock.patch("requests.post", no_network):
+            self.assertEqual(self._get(period="last_month", section="cf")["state"], "unreachable")
+
+    def test_through_the_web_and_the_pdf_body(self):
+        from command_center.api import statements
+        U = get_user_model()
+        m = U.objects.create_user("cfo@test.com", "cfo@test.com", "a-long-test-pass-9")
+        m.groups.add(Group.objects.get(name="Insights Dashboard Manager"))
+        c = Client()
+        self.assertTrue(c.login(username="cfo@test.com", password="a-long-test-pass-9"))
+        parts = {}
+        for section in statements.SECTIONS:
+            r = c.post("/api/method/command_center.api.statements.get",
+                       json.dumps({"business_code": self.code, "period": "custom",
+                                   "from_date": f"{TODAY.year}-01-01", "to_date": str(TODAY),
+                                   "section": section}), content_type="application/json")
+            self.assertEqual(r.status_code, 200, r.content[:300])
+            parts[section] = r.json()["message"]
+            self.assertEqual(parts[section]["state"], "ok", parts[section])
+        html = statements.pdf_body(parts)
+        for heading in ("Profit and Loss", "Balance Sheet", "Key Ratios", "Cash Flow", "Trial Balance"):
+            self.assertIn(f"<h2>{heading}", html)
+        self.assertIn("Gross Profit", html)
+        # a clerk is refused
+        U.objects.create_user("clerk@test.com", "clerk@test.com", "a-long-test-pass-8")
+        c2 = Client()
+        c2.login(username="clerk@test.com", password="a-long-test-pass-8")
+        r = c2.post("/api/method/command_center.api.statements.get",
+                    json.dumps({"business_code": self.code}), content_type="application/json")
+        self.assertNotEqual(r.status_code, 200)
+
+    def test_the_screen_has_the_statements(self):
+        import html as _html
+        from pathlib import Path
+        from django.conf import settings
+        views = json.loads(Path(settings.BASE_DIR, "frontend/src/legacy/views.json").read_text())
+        fin = _html.unescape(views["fin"])
+        self.assertIn('id="fs"', fin)
+        # first thing under the heading, before the screen's own cards and tabs
+        self.assertLess(fin.index('id="fs"'), fin.index('class="kpis'))
+        for heading in ("Financial Statements", "Profit and Loss", "Balance Sheet", "Trial Balance",
+                        "Cash Flow", "Key Ratios"):
+            self.assertIn(heading, fin, heading)
+        for period in ("This Month", "Last Month", "This Quarter", "Year to Date", "Last Year", "Custom"):
+            self.assertIn(f">{period}<", fin, period)

@@ -178,6 +178,9 @@ export const api = {
   kpiCatalogue: () => call("command_center.api.kpi.catalogue"),
   /* The designed screens' charts and tables, by panel heading (api/panels.py). */
   panels: (view, business_code) => call("command_center.api.panels.get", { view, business_code }),
+  /* Finances' financial statements, as the business's ERPNext draws them (api/statements.py). */
+  statements: ({ business_code, period, from_date, to_date, section }) =>
+    call("command_center.api.statements.get", { business_code, period, from_date, to_date, section }),
   kpiVerify: (business_code) => call("command_center.api.kpi.verify", { business_code }),
 
   /* The question box. Read-only: there is no path from here to actions.py. */
@@ -235,6 +238,7 @@ export const api = {
   /* Downloads. Reads only: nothing is written to the site, not even a File. */
   answerPdf: (args) => download("command_center.api.export.answer_pdf", args, "answer.pdf"),
   tablesXlsx: (args) => download("command_center.api.export.tables_xlsx", args, "tables.xlsx"),
+  statementsPdf: (args) => download("command_center.api.statements.pdf", args, "statements.pdf"),
   recordsXlsx: (args) => download("command_center.api.export.records_xlsx", args, "records.xlsx"),
 
   /* The nine management reports: started as a job, polled until written. */

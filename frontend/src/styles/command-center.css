@@ -390,6 +390,69 @@ background:var(--raised)}
 .immut{display:inline-flex;align-items:center;gap:6px;background:var(--ok-bg);
  border:1px solid var(--ok-line);color:var(--ok);border-radius:var(--r-xs);padding:3px 9px;font-size:var(--fs-2xs)}
 
+/* ============ FINANCIAL STATEMENTS ============ */
+.fs{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;
+ margin:0 0 18px}
+.fs-head{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--sp-3);flex-wrap:wrap;
+ margin-bottom:var(--sp-4)}
+.fs-title b{display:block;font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.015em}
+.fs-title span{display:block;margin-top:3px;font-size:var(--fs-xs);color:var(--mut)}
+.fs-tools{display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:center;justify-content:flex-end;
+ min-width:0;max-width:100%}
+.fs-title{min-width:0}
+.fs-periods{display:flex;flex-wrap:wrap;gap:2px;min-width:0;max-width:100%;background:var(--raised);border:1px solid var(--line);
+ border-radius:var(--r-pill);padding:3px}
+.fs-p{background:none;border:0;border-radius:var(--r-pill);padding:6px 12px;font:var(--fw-semibold) var(--fs-xs) var(--sans);
+ color:var(--mut);cursor:pointer;white-space:nowrap}
+.fs-p:hover{color:var(--ink)}
+.fs-p.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-hover)}
+.fs-custom{display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap;font-size:var(--fs-xs);color:var(--mut)}
+.fs-custom[hidden]{display:none}
+.fs-custom input{font:var(--fw-medium) var(--fs-xs) var(--sans);color:var(--ink);background:var(--bg);
+ border:1px solid var(--line2);border-radius:var(--r-xs);padding:5px 8px;margin-left:4px}
+.fs-exports{display:flex;gap:6px}
+.fs-state{margin:0 0 var(--sp-4);font-size:var(--fs-sm);color:var(--mut)}
+.fs-cards{margin-bottom:var(--sp-2);grid-template-columns:repeat(5,minmax(0,1fr))}
+.fs-cards:empty{display:none}
+.fs .kpi .delta.up{color:var(--ok)}
+.fs .kpi .delta.down{color:var(--crit)}
+.fs-body{min-height:40px}
+.fs-body h4{font-size:var(--fs-sm);font-weight:var(--fw-semibold);margin:var(--sp-5) 0 var(--sp-2)}
+.fs-body h4:first-child{margin-top:0}
+.fs-sub{font-size:var(--fs-xs);color:var(--mut);margin:-4px 0 var(--sp-2)}
+.fs-notes{margin:var(--sp-3) 0 0;padding-left:18px;font-size:var(--fs-xs);color:var(--mut);line-height:1.55}
+.fs-notes li{margin:3px 0}
+.fs-check{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);
+ border-radius:var(--r-pill);padding:4px 10px;margin:var(--sp-3) 0 0}
+.fs-check.ok{background:var(--ok-bg);color:var(--ok)}
+.fs-check.bad{background:var(--crit-bg);color:var(--crit)}
+.fs-wait{font-size:var(--fs-sm);color:var(--mut);padding:var(--sp-3) 0}
+.fs-wrap{overflow-x:auto;max-width:100%}
+.fs-wrap.tall{max-height:560px;overflow-y:auto;border:1px solid var(--line);border-radius:var(--r-sm)}
+.fs-wrap.tall table.dt th{position:sticky;top:0;background:var(--surface);z-index:1}
+table.dt.fs-t{width:100%;font-variant-numeric:tabular-nums}
+table.dt.fs-t td,table.dt.fs-t th{padding:8px 12px}
+table.dt.fs-t td.n,table.dt.fs-t th.n{text-align:right;white-space:nowrap}
+table.dt.fs-t tr.fs-group td,table.dt.fs-t tr.fs-heading td{font-weight:var(--fw-semibold)}
+table.dt.fs-t tr.fs-total td{font-weight:var(--fw-bold);border-top:1px solid var(--line2)}
+table.dt.fs-t tr.fs-heading td{color:var(--mut)}
+table.dt.fs-t td.neg{color:var(--crit)}
+table.dt.fs-t td.pos{color:var(--ok)}
+table.dt.fs-t tr.fs-deep{display:none}
+.fs-all table.dt.fs-t tr.fs-deep{display:table-row}
+table.dt.fs-t a.fs-acc{color:inherit;text-decoration:none;border-bottom:1px dotted var(--line2)}
+table.dt.fs-t a.fs-acc:hover{color:var(--accent);border-bottom-color:var(--accent)}
+.fs-more{margin-top:var(--sp-2)}
+.fs-mean{font-size:var(--fs-xs);color:var(--mut);line-height:1.5}
+@container panel (max-width:1199px){
+ .fs-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@container panel (max-width:560px){
+ .fs{padding:14px 12px}
+ .fs-head,.fs-tools{justify-content:flex-start}
+ .fs-periods{overflow-x:auto;flex-wrap:nowrap;max-width:100%;scrollbar-width:none}
+ .fs-periods::-webkit-scrollbar{display:none}
+ table.dt.fs-t td,table.dt.fs-t th{padding:7px 8px}}
+
 .tod{flex:none;overflow:visible}
 .todray{animation:todspin 22s linear infinite;transform-origin:24px 24px}
 .todcore{animation:todbreathe 3.4s ease-in-out infinite;transform-origin:24px 24px}

@@ -22,7 +22,7 @@ exec(_src('lookup.py'))
 exec(_src('auth.py'))
 exec(_src('shell.py'))
 
-EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + """
+EXTRA_CSS = CHART_CSS + TIDY_CSS + AUDIT_CSS + FS_CSS + """
 .tod{flex:none;overflow:visible}
 .todray{animation:todspin 22s linear infinite;transform-origin:24px 24px}
 .todcore{animation:todbreathe 3.4s ease-in-out infinite;transform-origin:24px 24px}
