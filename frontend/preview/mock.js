@@ -206,6 +206,38 @@ const LOOKUP_SAMPLE = (question) => ({
   checked: ["(sample) the live site lists the lookups Gemini actually made"],
 });
 
+// Every chart type an answer can draw, so each can be looked at offline in both themes:
+// ask the preview anything with "chart" in it. Sample figures, said to be samples.
+const CHART_SAMPLES = [
+  { type: "bar", title: "Spend by supplier (sample)", unit: "GHS", labels: ["Pharmanova", "MedSupply", "Kinapharma", "Tobinco"], series: [{ name: "Spend", values: [412000, 288500, 190250, 96000] }] },
+  { type: "hbar", title: "Largest balances owed (sample)", unit: "GHS", labels: ["HAIRASH ENTERPRISE", "UBUNTU Medical Supplies Company Limited", "A.S Hospitex", "Korle Bu Teaching Hospital Pharmacy", "Small Pharmacy Ltd"], series: [{ name: "Owed", values: [737544, 636675, 541841, 310200, 12000] }] },
+  { type: "line", title: "Sales by month (sample)", unit: "GHS", labels: ["Sep 25", "Oct", "Nov", "Dec", "Jan 26", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"], series: [{ name: "2026", values: [1.8e6, 2.1e6, 1.95e6, 2.6e6, 1.7e6, 2.2e6, 2.45e6, 2.3e6, 2.9e6, 3.19e6, 2.7e6, 2.5e6] }, { name: "2025", values: [1.5e6, 1.7e6, 1.6e6, 2.1e6, 1.4e6, 1.9e6, 2.0e6, 2.1e6, 2.2e6, 2.4e6, 2.3e6, 2.0e6] }] },
+  { type: "area", title: "Cash in the bank (sample)", unit: "GHS", labels: ["Mar", "Apr", "May", "Jun", "Jul", "Aug"], series: [{ name: "Cash", values: [410000, 380000, 455000, 520000, 498000, 560000] }] },
+  { type: "stacked_area", title: "Sales by product line (sample)", unit: "GHS", labels: ["Mar", "Apr", "May", "Jun", "Jul", "Aug"], series: [{ name: "Drugs", values: [900, 950, 1000, 1100, 1050, 1200] }, { name: "Devices", values: [400, 420, 380, 500, 520, 560] }, { name: "Consumables", values: [200, 210, 260, 240, 250, 300] }] },
+  { type: "donut", title: "Where the stock value sits (sample)", unit: "GHS", labels: ["Accra main", "Kumasi", "Tamale", "Takoradi"], series: [{ name: "Value", values: [2100000, 950000, 480000, 239970] }] },
+  { type: "pie", title: "Complaints by type (sample)", labels: ["Late delivery", "Wrong item", "Billing", "Damaged", "Other"], series: [{ name: "Cases", values: [24, 12, 9, 6, 3] }] },
+  { type: "rose", title: "Staff by department (sample)", labels: ["Sales", "Stores", "Finance", "Engineering", "Admin", "HR"], series: [{ name: "Staff", values: [8, 5, 4, 4, 2, 1] }] },
+  { type: "stacked", title: "Owed by age, by month (sample)", unit: "GHS", labels: ["May", "Jun", "Jul", "Aug"], series: [{ name: "Under 1 month", values: [900, 1100, 800, 950] }, { name: "1-3 months", values: [600, 500, 700, 650] }, { name: "Over 3 months", values: [5200, 5900, 6400, 6777] }] },
+  { type: "grouped", title: "Sales by branch, this year and last (sample)", unit: "GHS", labels: ["Accra", "Kumasi", "Tamale", "Takoradi"], series: [{ name: "2025", values: [8.1e6, 4.2e6, 1.9e6, 1.1e6] }, { name: "2026", values: [9.4e6, 4.0e6, 2.3e6, 1.2e6] }] },
+  { type: "percentage", title: "How each quarter was paid (sample)", labels: ["Q1", "Q2", "Q3", "Q4"], series: [{ name: "On time", values: [60, 55, 48, 40] }, { name: "Late", values: [30, 30, 32, 35] }, { name: "Unpaid", values: [10, 15, 20, 25] }] },
+  { type: "combo", title: "Sales and gross margin (sample)", unit: "GHS", unit2: "%", labels: ["Mar", "Apr", "May", "Jun", "Jul", "Aug"], series: [{ name: "Sales", values: [2.45e6, 2.3e6, 2.9e6, 3.19e6, 2.7e6, 2.5e6] }, { name: "Gross margin", values: [27.1, 28.4, 26.2, 29.0, 27.7, 27.65] }] },
+  { type: "waterfall", title: "Cash, opening to closing (sample)", unit: "GHS", labels: ["Opening", "Customer receipts", "Supplier payments", "Payroll", "Tax", "Closing"], series: [{ name: "Cash", values: [410000, 1250000, -820000, -210000, -70000, 560000] }] },
+  { type: "funnel", title: "From enquiry to invoice (sample)", labels: ["Enquiries", "Quotations", "Orders", "Invoices"], series: [{ name: "Count", values: [1204, 640, 312, 298] }] },
+  { type: "gauge", title: "Collected inside 90 days (sample)", unit: "%", value: 26.2, target: 80, label: "of what customers owe" },
+  { type: "heatmap", title: "Orders by weekday and hour (sample)", labels: ["8", "9", "10", "11", "12", "13", "14", "15", "16"], series: ["Mon", "Tue", "Wed", "Thu", "Fri"].map((d, j) => ({ name: d, values: [2, 6, 9, 7, 4, 3, 8, 6, 2].map((v, i) => (v + ((i + j) % 3)) * (j === 4 ? 1.4 : 1)) })) },
+  { type: "treemap", title: "Spend by supplier and item group (sample)", unit: "GHS", items: [{ name: "Pharmanova", children: [{ name: "Antibiotics", value: 210000 }, { name: "Analgesics", value: 140000 }, { name: "Vaccines", value: 62000 }] }, { name: "MedSupply", children: [{ name: "Devices", value: 180000 }, { name: "Consumables", value: 108500 }] }, { name: "Kinapharma", value: 190250 }, { name: "Tobinco", value: 96000 }] },
+  { type: "radar", title: "Business health (sample)", unit: "%", labels: ["Paid inside 90 days", "Promised stock covered", "Invoices issued", "Approvals on time", "Records complete"], series: [{ name: "Now", values: [26, 91, 99, 72, 64] }, { name: "Target", values: [80, 95, 100, 90, 90] }] },
+  { type: "scatter", title: "Owed against days overdue (sample)", unit: "GHS", unit2: "days", labels: ["HAIRASH", "UBUNTU", "Hospitex", "Korle Bu", "Small Ltd", "Nyaho"], series: [{ name: "Owed", values: [737544, 636675, 541841, 310200, 12000, 88000] }, { name: "Days overdue", values: [212, 180, 143, 60, 15, 95] }] },
+  { type: "bubble", title: "Customers: owed, overdue and invoices (sample)", unit: "GHS", unit2: "days", labels: ["HAIRASH", "UBUNTU", "Hospitex", "Korle Bu", "Small Ltd", "Nyaho"], series: [{ name: "Owed", values: [737544, 636675, 541841, 310200, 12000, 88000] }, { name: "Days overdue", values: [212, 180, 143, 60, 15, 95] }, { name: "Invoices", values: [41, 33, 28, 12, 2, 9] }] },
+];
+const CHARTS_SAMPLE = (question) => ({
+  answered: true, format: "markdown", mode: "analyst", planner: "claude", model: "preview", question,
+  notice: "Preview only: every chart type an answer can draw, on sample figures.",
+  answer: ["Every chart type, on sample figures. *(Preview only.)*", "",
+    ...CHART_SAMPLES.flatMap((c) => ["```chart", JSON.stringify(c), "```", ""])].join("\n"),
+  checked: ["(sample) no tools are called in the preview"],
+});
+
 const CONVS = {
   "conv-sample": { name: "conv-sample", title: "Who owes us the most? (sample)", business_code: BUSINESS,
     last_at: "2026-10-17 16:20:00",
@@ -223,7 +255,8 @@ const HANDLERS = {
   "command_center.api.facts.records": ({ fact }) => records(fact),
   // The shape the analyst returns, so the formatted answer can be looked at offline.
   // The figures are Biomed's verified ones; the customer rows are the samples above.
-  "command_center.api.ask.answer": ({ question }) => (/^(how many|show|list|who is)/i.test(question || "")
+  "command_center.api.ask.answer": ({ question }) => (/chart/i.test(question || "") ? CHARTS_SAMPLE(question)
+    : /^(how many|show|list|who is)/i.test(question || "")
     ? LOOKUP_SAMPLE(question) : {
     answered: true,
     format: "markdown",

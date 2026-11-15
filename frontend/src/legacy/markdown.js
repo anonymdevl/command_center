@@ -408,8 +408,21 @@ function chartText(source) {
     const s = Number(v).toLocaleString("en-GB", { maximumFractionDigits: 2 });
     return unit === "%" ? `${s}%` : unit ? `${unit} ${s}` : s;
   };
-  const unitOf = (si) => (si === 1 && (m.type === "combo" || m.type === "scatter") ? m.unit2 || m.unit : m.unit);
-  const series = m.type === "bar" || m.type === "donut" || m.type === "hbar" ? m.series.slice(0, 1) : m.series;
+  if (m.type === "gauge") {
+    const g = m.gauge;
+    return [m.title ? `${m.title}:` : "",
+      `- ${g.label || "Value"}: ${n(g.value, m.unit)}${g.target !== null ? ` (target ${n(g.target, m.unit)})` : ""}`]
+      .filter(Boolean).join("\n");
+  }
+  if (m.type === "treemap") {
+    const rows = m.tree.flatMap((t) => [`- ${t.name}: ${n(t.value, m.unit)}`,
+      ...(t.children || []).map((c) => `  - ${c.name}: ${n(c.value, m.unit)}`)]);
+    return [m.title ? `${m.title}:` : "", ...rows].filter(Boolean).join("\n");
+  }
+  const unitOf = (si) => (si === 1 && ["combo", "scatter", "bubble"].includes(m.type) ? m.unit2 || m.unit
+    : si === 2 && m.type === "bubble" ? m.unit3 : m.unit);
+  const series = ["bar", "donut", "hbar", "pie", "rose", "funnel", "waterfall"].includes(m.type)
+    ? m.series.slice(0, 1) : m.series;
   const rows = m.labels.map((l, i) => {
     const vals = series.filter((s) => i < s.values.length);
     if (vals.length === 1) return `- ${l}: ${n(vals[0].values[i], unitOf(0))}`;

@@ -349,6 +349,55 @@ table.dt th[aria-sort="ascending"]::after{border-bottom:5px solid currentColor;o
  .md-chart-f,.md-pager,.md-tip{display:none!important}
  table.dt tbody tr[hidden]{display:table-row!important}
 }
+/* ======================================================================
+   Charts, third set (legacy/viz.js on Apache ECharts): every chart on the
+   platform -- answers and the designed screens' panels. The switcher, Download
+   and Table toolbar; the chart's box; its table view; the tooltip ECharts writes
+   (its frame is set in vizoptions.js from these same tokens).
+   ====================================================================== */
+.vz{position:relative;min-width:0}
+.vz-bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 10px;margin:0 0 8px}
+.vz-seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:2px;border:1px solid var(--line2);
+ border-radius:var(--r-pill);background:var(--raised)}
+.vz-seg[hidden]{display:none}
+.vz-opt{all:unset;cursor:pointer;padding:3px 10px;border-radius:var(--r-pill);font-size:var(--fs-xs);
+ font-weight:var(--fw-medium);color:var(--mut);line-height:1.5;white-space:nowrap;transition:background .15s,color .15s}
+.vz-opt:hover{color:var(--ink)}
+.vz-opt.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.vz-opt:focus-visible,.vz-dl:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.vz-tools{display:inline-flex;align-items:center;gap:4px;margin-left:auto}
+.vz-dl-t{font-size:var(--fs-2xs);color:var(--dim);margin-right:2px}
+.vz-dl{background:var(--surface);border:1px solid var(--line2);color:var(--ink2);border-radius:var(--r-pill);
+ padding:2px 9px;font:var(--fw-semibold) var(--fs-2xs) var(--sans);cursor:pointer;white-space:nowrap;
+ transition:border-color .15s,color .15s}
+.vz-dl:hover{border-color:var(--ink2);color:var(--ink)}
+.vz-stage{width:100%;min-width:0}
+.vz-stage[hidden],.vz-table[hidden]{display:none}
+.vz-table{overflow:auto;max-height:420px}
+.vz-tbl th.num,.vz-tbl td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.vz-tbl tr.clickable{cursor:pointer}
+.vz-tbl tr.clickable:hover td{background:var(--hover)}
+.vz-tbl tr.clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.vz-tt-h{font-weight:var(--fw-semibold);color:var(--ink);margin-bottom:4px;max-width:260px;white-space:normal;
+ overflow-wrap:anywhere}
+.vz-tt-r{display:flex;align-items:center;gap:8px;min-width:150px;line-height:1.6}
+.vz-tt-k{width:8px;height:8px;border-radius:2px;flex:none}
+.vz-tt-n{color:var(--mut);flex:1;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vz-tt-v{color:var(--ink);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;white-space:nowrap}
+.vz-tt-x{color:var(--mut);font-size:var(--fs-2xs);margin-top:2px;max-width:260px;white-space:normal}
+.vz-compact .vz-bar{margin:2px 0 6px}
+.vz-compact .vz-dl-t{display:none}
+@media (hover:hover){
+ .panel .vz-compact .vz-bar{opacity:.55;transition:opacity .15s}
+ .panel:hover .vz-compact .vz-bar,.panel .vz-compact .vz-bar:focus-within{opacity:1}
+}
+@media (max-width:520px){
+ .vz-dl-t{display:none}
+ .vz-opt{padding:3px 8px}
+ .vz-seg{flex-wrap:nowrap;overflow-x:auto;max-width:100%;scrollbar-width:none}
+ .vz-seg::-webkit-scrollbar{display:none}
+}
+@media print{.vz-bar{display:none!important}}
 /* ---- Ask: grouped live steps, Stop, one question at a time (15 Nov 2026) ---- */
 .ap-stepwrap{margin-top:10px}
 .ap-stepwrap .ap-steps{margin-top:0}

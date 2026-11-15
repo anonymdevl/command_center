@@ -701,22 +701,47 @@ opening in a figures block (JSON, exactly this shape; tone is good, bad, warn or
 [{{"label": "Owed to us", "value": "GHS 1.25M", "note": "120 unpaid invoices", "tone": "bad"}}]
 (The numbers in these examples are made up; yours come from the tools.)
 ```
-3. When a picture says it faster, add a chart block. Choose the type by what the \
-reader should see:
+3. When a picture says it faster, add a chart block. Choose the type by the question \
+the reader is asking, not for variety; when two charts would show the same thing, use \
+one. The reader can switch a chart to another view or a table, so pick the clearest:
 - bar: compare up to twelve short names, largest first.
 - hbar: a ranking where the names are long (customers, suppliers, items) -- up to \
 twelve, one series; it is drawn largest first with each rank numbered.
-- line: change over time, one to three series, up to 36 points.
-- donut: shares of one whole, up to six parts, none negative.
+- line: change over time, one to three series, up to 36 points. area: the same for one \
+to three series where the size under the line matters (cash, sales). stacked_area: up \
+to four parts of a total over time, no negatives.
+- pie or donut: shares of ONE whole, at most seven parts, none negative (beyond seven \
+the smallest are combined as Other). Never for a top-ten of a larger whole, for \
+changes, or to compare two wholes. rose: the same, when the parts differ a lot.
 - stacked: what a total is made of, over months or across groups -- up to four series \
-that add up to the total, up to 24 labels; no negative values.
+that add up to the total, up to 24 labels; no negative values. percentage: the same \
+drawn as 100% columns, when the mix matters more than the size (up to six series).
 - grouped: two to four series side by side for each label, e.g. this year against \
 last year by branch -- up to twelve labels.
 - combo: an amount with a rate, e.g. sales with gross margin % -- exactly two series: \
 the first drawn as bars in "unit", the second as a line in "unit2", up to 24 labels.
+- waterfall: a bridge from one level to another, e.g. opening cash, receipts, \
+payments, closing cash -- one series; "totals" lists the indexes of the levels \
+(default: the first and the last), every other value is a movement (+ or -). Each \
+level must equal the one before plus the movements between, or it is not drawn.
+- funnel: drop-off through stages in order, e.g. enquiries, quotations, orders, \
+invoices -- one series of counts, up to eight stages.
+- gauge: ONE ratio against its target, e.g. "collected inside 90 days" -- not labels \
+and series but "value", optional "target", "min" (default 0) and "max" (default 100 \
+when unit is "%", otherwise required), "label", and "better": "lower" when lower is \
+good.
+- heatmap: one measure across two categories, e.g. month by product group, weekday \
+by hour -- labels are the columns, each series is one row (its name is the row), up \
+to 31 columns and 24 rows.
+- treemap: how a whole breaks down in two levels, e.g. spend by supplier then item \
+group -- "items": [{{"name", "value", "children": [{{"name", "value"}}]}}]; a parent's \
+value may be left out, and its children may not add up to more than it.
+- radar: three to ten dimensions of one thing on one scale, e.g. the business health \
+ratios, one to four series; values from zero, "max" optional (100 for "%").
 - scatter: two measures for each name, e.g. sales against days overdue by customer -- \
 exactly two series: the first is across in "unit", the second up in "unit2"; one \
-label per dot, up to 40.
+label per dot, up to 40. bubble: the same with a third series (in "unit3") as the \
+size of each dot, none negative.
 ```chart
 {{"type": "bar", "title": "Spend by supplier, last 12 months", "unit": "GHS", \
 "labels": ["A", "B"], "series": [{{"name": "Spend", "values": [1200.5, 900]}}]}}
@@ -725,6 +750,15 @@ label per dot, up to 40.
 {{"type": "combo", "title": "Sales and gross margin by month", "unit": "GHS", \
 "unit2": "%", "labels": ["Jan", "Feb"], "series": [{{"name": "Sales", "values": \
 [120000, 98000]}}, {{"name": "Gross margin", "values": [31.5, 28]}}]}}
+```
+```chart
+{{"type": "waterfall", "title": "Cash, opening to closing", "unit": "GHS", "labels": \
+["Opening", "Receipts", "Payments", "Closing"], "series": [{{"name": "Cash", "values": \
+[410000, 1250000, -1100000, 560000]}}]}}
+```
+```chart
+{{"type": "gauge", "title": "Owed that is inside 90 days", "unit": "%", "value": 26.2, \
+"target": 80, "label": "of all money owed"}}
 ```
 Values are plain numbers, not text. Every series has exactly one value per label, \
 in the label order; a block that breaks these rules is not drawn at all. Every axis \

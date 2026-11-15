@@ -181,6 +181,88 @@ _doc2 = frappe.local.response.filecontent.decode()
 check(_doc2.count('<div class="ch">') == 5 and "```" not in _doc2 and "CCBLOCK" not in _doc2,
       "every new chart type reaches the answer PDF")
 
+# Every chart type of 2026 is drawn on paper too -- static SVG in the screen's palette --
+# checked as strictly as on the screen, its text escaped, never breaking the PDF.
+_L3 = ["Jan", "Feb", "Mar"]
+_s2 = [{"name": "A", "values": [5.0, 7, 3]}, {"name": "B", "values": [2, 4, 6]}]
+_new = {
+    "pie": {"type": "pie", "title": "Sales by branch", "unit": "GHS", "labels": ["Accra", "Kumasi"],
+            "series": [{"name": "Sales", "values": [60, 40]}]},
+    "rose": {"type": "rose", "labels": ["A", "B", "C"], "series": [{"values": [9, 4, 1]}]},
+    "area": {"type": "area", "unit": "GHS", "labels": _L3, "series": [_s2[0]]},
+    "stacked_area": {"type": "stacked_area", "labels": _L3, "series": _s2},
+    "percentage": {"type": "percentage", "labels": _L3, "series": _s2},
+    "waterfall": {"type": "waterfall", "unit": "GHS", "labels": ["Opening", "In", "Out", "Closing"],
+                  "series": [{"values": [100, 50, -30, 120]}]},
+    "funnel": {"type": "funnel", "labels": ["Enquiries", "Quotes", "Orders"], "series": [{"values": [100, 40, 10]}]},
+    "gauge": {"type": "gauge", "title": "Collected inside 90 days", "unit": "%", "value": 26.2, "target": 80},
+    "heatmap": {"type": "heatmap", "labels": _L3, "series": _s2},
+    "treemap": {"type": "treemap", "unit": "GHS", "items": [
+        {"name": "Supplier A", "children": [{"name": "Drugs", "value": 60}, {"name": "Devices", "value": 30}]},
+        {"name": "Supplier B", "value": 50}, {"name": "Supplier C", "value": 20}]},
+    "radar": {"type": "radar", "unit": "%", "labels": ["Paid", "Delivered", "Paperwork"],
+              "series": [{"name": "Now", "values": [26, 91, 99]}]},
+    "bubble": {"type": "bubble", "labels": _L3, "series": _s2 + [{"name": "Size", "values": [1, 4, 9]}]},
+}
+check(set(_new) | set(_ok) | {"bar", "line", "donut"} == set(_pb.STRICT) | {"bar", "line", "donut"},
+      "every strict chart type has a PDF check")
+for _k, _spec in _new.items():
+    _out = _pb.chart(_spec)
+    check(_out.startswith('<div class="ch">') and "<svg" in _out and "<table><thead>" not in _out,
+          f"{_k}: drawn in the PDF as a picture, not a fallback table")
+    if _k in ("gauge", "treemap"):
+        continue
+    for _what, _mut in (("a value missing", lambda s: s["series"][0]["values"].pop()),
+                        ("text for a number", lambda s: s["series"][0]["values"].__setitem__(0, "1")),
+                        ("a null", lambda s: s["series"][0]["values"].__setitem__(0, None)),
+                        ("no labels", lambda s: s.__setitem__("labels", []))):
+        _bad = __import__("json").loads(__import__("json").dumps(_spec))
+        _mut(_bad)
+        check(_pb.chart(_bad) == "", f"{_k}: {_what} -- not drawn")
+for _k in ("pie", "rose", "stacked_area", "percentage", "funnel", "radar"):
+    _neg = __import__("json").loads(__import__("json").dumps(_new[_k]))
+    _neg["series"][0]["values"][0] = -1
+    check(_pb.chart(_neg) == "", f"{_k} refuses a negative value on paper")
+check(_pb.chart({**_new["waterfall"], "series": [{"values": [100, 50, -30, 125]}]}) == "",
+      "a waterfall that does not add up is not drawn on paper")
+_wf = _pb.chart(_new["waterfall"])
+check(_wf.count("<rect") == 4 and "+GHS 50" in _wf and "−GHS 30" in _wf, "a waterfall draws each step, signed")
+_pie9 = _pb.chart({"type": "pie", "labels": [f"P{i}" for i in range(9)], "series": [{"values": list(range(9, 0, -1))}]})
+check("Other (3)" in _pie9 and "The 3 smallest are combined as Other." in _pie9 and _pie9.count("<path") == 7,
+      "a pie of nine parts: six and Other, and it says so")
+_old9 = _pb.chart({"type": "donut", "labels": [f"P{i}" for i in range(9)], "series": [{"values": list(range(9, 0, -1))}]})
+check("Other (3)" in _old9, "an old donut of nine parts folds the rest into Other rather than dropping them")
+check(_pb.chart({"type": "gauge", "unit": "GHS", "value": 5}) == "", "a money gauge needs its scale")
+check(_pb.chart({"type": "gauge", "unit": "%", "value": "5"}) == "", "a gauge's figure must be a number")
+check("#a85a0a" in _pb.chart(_new["gauge"]) and "#127a55" in _pb.chart({**_new["gauge"], "value": 90}),
+      "a gauge short of target is amber, on target green")
+check(_pb.chart({"type": "treemap", "items": [{"name": "A", "value": 5, "children": [{"name": "x", "value": 9}]}]}) == "",
+      "a treemap whose parts exceed their parent is not drawn")
+check("Not broken down" in _pb.chart({"type": "treemap", "items": [{"name": "A", "value": 100,
+                                                                     "children": [{"name": "x", "value": 60}]}]}),
+      "what a parent's parts leave is shown on paper too")
+_tm_rects = _pb._squarify([(0, 6.0), (1, 3.0), (2, 1.0)], 0, 0, 100, 100)
+check(len(_tm_rects) == 3 and abs(sum(w * h for _, _, _, w, h in _tm_rects) - 10000) < 1e-6
+      and abs(_tm_rects[0][3] * _tm_rects[0][4] - 6000) < 1e-6, "the treemap layout gives each part its share of the area")
+check(_pb.chart({"type": "radar", "labels": ["A", "B"], "series": [{"values": [1, 2]}]}) == "",
+      "a radar of two dimensions is refused on paper")
+for _k, _spec in _new.items():
+    _evil = __import__("json").loads(__import__("json").dumps(_spec))
+    if "labels" in _evil:
+        _evil["labels"][0] = "<script>x</script>"
+    if "items" in _evil:
+        _evil["items"][0]["name"] = "<script>x</script>"
+    _evil["title"] = "<script>t</script>"
+    check("<script" not in _pb.chart(_evil), f"{_k}: text is escaped on paper")
+_origd = _pb._funnel
+_pb._funnel = lambda m: 1 / 0
+check("<table>" in _pb.chart(_new["funnel"]), "a new chart that cannot be drawn becomes a table on paper")
+_pb._funnel = _origd
+_md3 = "Lead.\n\n" + "\n\n".join(f"```chart\n{__import__('json').dumps(v)}\n```" for v in _new.values())
+export.answer_pdf("Report", _md3, [], "GIGMANN", "m")
+_doc3 = frappe.local.response.filecontent.decode()
+check(_doc3.count('<div class="ch">') == len(_new) and "```" not in _doc3, "every 2026 chart type reaches the answer PDF")
+
 # the engine's settings: a fine layout grid, and no letter-spacing it would overdo
 check(int(export.PDF_OPTIONS["dpi"]) >= 1200, "PDFs lay text out at 1200 dpi or finer")
 check("letter-spacing" not in export.PDF_TEMPLATE and "letter-spacing" not in export.pdf_blocks.CSS,

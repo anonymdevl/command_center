@@ -21,6 +21,7 @@ import ReachBanner from "./ReachBanner.jsx";
 import { renderHealthTiles, renderHome } from "../legacy/home.js";
 import { renderSchedules } from "../legacy/schedules.js";
 import { PANEL_VIEWS, renderPanels } from "../legacy/panels.js";
+import { disposeWithin } from "../legacy/viz.js";
 import { renderLoads } from "../legacy/loads.js";
 
 /**
@@ -493,6 +494,12 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     });
   }, [viewKey, html, figures.data, figures.error, work.data, work.error, isWork, alerts.data,
       alerts.error, hasAlerts, scope, openDrawer, hasPanels, panels.data, panels.error, reachDown]);
+
+  // The screen's charts (legacy/viz.js) are disposed with it, not left for the sweep.
+  useEffect(() => {
+    const root = ref.current;
+    return () => disposeWithin(root);
+  }, [viewKey]);
 
   // The designed action buttons (Assign, the "⋯" menu, Raise it...) had no handlers.
   useEffect(() => {
