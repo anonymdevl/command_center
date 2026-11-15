@@ -7,9 +7,9 @@ Run every night by the scheduler (manage.py scheduler), or by hand:
 - the error log keeps `error_log_days` (default 30) days;
 - expired sign-in sessions are cleared (Django never clears them by itself);
 - the platform's database is backed up to `backup_dir` (default ~/insights-backups),
-  with a copy of insights.json, keeping `backup_days` (default 14) days of them. A backup
-  is skipped, and the reason logged, when the disk has less than 2 GB free -- a full disk
-  would hurt every site on the server, not only this one.
+  with a copy of insights.json and the uploaded logos, keeping `backup_days` (default 14)
+  days of them. A backup is skipped, and the reason logged, when the disk has less
+  than 2 GB free -- a full disk would hurt every site on the server, not only this one.
 
 The business logic's own pruning (load log, consumed change events) is in its hooks.
 """
@@ -78,8 +78,24 @@ def backup() -> str:
         copy = target / f"insights-{stamp}.json"
         shutil.copy2(cfg, copy)
         os.chmod(copy, 0o600)
+    _backup_logos(target, stamp)
     _drop_old(target)
     return str(out)
+
+
+def _backup_logos(target: Path, stamp: str) -> None:
+    """The uploaded logos (Settings, Branding) beside the database copy: insights.json
+    names them, so a restore needs the files too."""
+    import tarfile
+
+    from command_center import branding
+    folder = Path(branding.folder())
+    if not folder.is_dir() or not any(folder.iterdir()):
+        return
+    out = target / f"insights-{stamp}-logos.tar.gz"
+    with tarfile.open(out, "w:gz") as tar:
+        tar.add(folder, arcname=folder.name)
+    os.chmod(out, 0o600)
 
 
 def _dump_mariadb(db: dict, out: Path) -> None:
