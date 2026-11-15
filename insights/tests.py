@@ -45,6 +45,8 @@ def _value(field: str, i: int, doctype: str):
         return (dt.datetime.now() - dt.timedelta(days=rnd.randint(0, 300))).strftime("%Y-%m-%d %H:%M:%S.%f")
     if f == "docstatus":
         return 1
+    if f in ("resolution_by", "response_by", "last_active", "last_login"):
+        return (dt.datetime.now() - dt.timedelta(days=rnd.randint(-20, 200))).strftime("%Y-%m-%d %H:%M:%S")
     if "date" in f or f in ("exp_end_date", "completed_on", "opening_date"):
         return str(TODAY - dt.timedelta(days=rnd.randint(-30, 300)))
     if f.startswith(("is_", "has_")) or f in ("enabled", "disabled", "is_return"):
@@ -235,6 +237,18 @@ class PlatformEndToEnd(TransactionTestCase):
         figures = c.post("/api/method/command_center.api.kpi.get",
                          json.dumps({"keys": ["ar_total"]}), content_type="application/json").json()
         self.assertGreater(figures["message"]["ar_total"]["value"] or 0, 0)
+
+        # every figure read live from the business's ERPNext, and the order-book boxes,
+        # come back read -- never "could not be read" -- with somewhere to open
+        from command_center.kpi.live import LIVE
+        keys = sorted(LIVE) + ["order_awaiting_despatch", "order_awaiting_invoice"]
+        got = c.post("/api/method/command_center.api.kpi.get",
+                     json.dumps({"keys": keys, "business_code": "test_medical_ltd"}),
+                     content_type="application/json").json()["message"]
+        for key in keys:
+            self.assertNotEqual(got[key]["data_status"]["state"], "failed",
+                                f"{key}: {got[key]}")
+            self.assertTrue(got[key]["drill"], f"{key} opens to nothing")
 
         # every designed screen's charts and tables answer from the loaded records
         from command_center.api import panels as panels_api

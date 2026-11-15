@@ -754,9 +754,9 @@ else:
         for _label, _key in re.findall(
                 r'^\s*"?([^":\n]+?)"?:\s*\{\s*key:\s*"([a-z][a-z0-9_]+)"', _body, re.M):
             _label = _label.strip()
-            check(_key in REGISTRY,
+            check(_key in REGISTRY or _key in _LIVE,
                   f"hydrate.js maps tile {_view}/{_label!r} to KPI {_key!r}, which is "
-                  f"not registered")
+                  f"not registered (kpi/*.py) or a live read (kpi/live.py)")
             check(_keys.count(_key) == 1,
                   f"{_view}: two tiles both map to KPI {_key!r}, so the screen would "
                   f"show one number twice under labels that mean different things")
@@ -767,7 +767,7 @@ else:
             # reloaded. The hydrator replaces such a footnote with the KPI's note, so a
             # KPI with no note would leave the stale figure sitting under the live one.
             if re.search(r"\d", _labels.get(_label, "")):
-                check(bool(REGISTRY[_key].note if _key in REGISTRY else False),
+                check(_key in _LIVE or bool(REGISTRY[_key].note if _key in REGISTRY else False),
                       f"{_view}: the tile {_label!r} has a figure in its footnote and "
                       f"KPI {_key!r} has no note to replace it with, so the designed "
                       f"figure would stay beside a live one")

@@ -15,7 +15,13 @@ Shapes (all numbers plain, all text plain -- the screen never treats any of it a
     trend  {"kind": "trend", "labels": [...], "values": [...], "peak": "peak GHS 3,187,600"}
     stack  {"kind": "stack", "parts": [{"label", "value", "display"}]}
     table  {"kind": "table", "rows": [{"cells": [{"text", "num", "tone", "tag", "drill",
-                                                   "ask", "nowrap"}]}], "empty": "..."}
+                                                   "ask", "nowrap", "bold", "small", "dot",
+                                                   "sub", "sub_tone"}], "rule"}],
+            "empty": "..."}
+           (sub is the cell's small second line; dot a coloured bullet before the text;
+           rule a line above the row, for a subtotal)
+    funnel {"kind": "funnel", "stages": [{"label", "count", "display", "note", "drill"}]}
+           (one per designed stage, in order)
 
 and on any of them "subtitle" (the line under the heading) and "note" (the short
 reading under the chart; "" hides the designed one, which was written about the old
@@ -431,7 +437,7 @@ def inv_reserved(ctx):
 
 # --------------------------------------------------------------------------- projects (tasks)
 def _tasks(ctx):
-    return ctx.rows("fact_task", ["src_name", "subject", "project_name", "status",
+    return ctx.rows("fact_task", ["src_name", "subject", "project", "project_name", "status",
                                   "assigned_to", "exp_end_date", "days_late", "is_open",
                                   "is_assigned"])
 
@@ -608,12 +614,296 @@ def hr_where(ctx):
     return out
 
 
+# --------------------------------------------------------------------------- read live, shared
+def _guarded(ctx, doctype, filters, fields, **kw):
+    """A live read that refuses a reply missing a column (see kpi/live._read)."""
+    from command_center.kpi.live import _read
+    return _read(ctx.reader(), doctype, filters, fields, **kw)
+
+
+def _names(ctx, users):
+    """Account -> the person's name, in one read."""
+    users = sorted({u for u in users if u})
+    if not users:
+        return {}
+    rows = ctx.reader().all("User", filters={"name": ["in", users]},
+                            fields=["name", "full_name"], limit=len(users))
+    got = {r["name"]: r.get("full_name") or r["name"] for r in rows}
+    return {u: got.get(u, u) for u in users}
+
+
+def _month(v) -> str:
+    return frappe.utils.getdate(v).strftime("%b %Y") if v else "never"
+
+
+# --------------------------------------------------------------------------- sales: funnel
+def sales_funnel(ctx):
+    """Enquiries, opportunities, quotations and orders, over the whole history. Orders
+    are the loaded fact (every submitted sales order); the rest are counted live."""
+    r = ctx.reader()
+    leads = r.count("Lead")
+    opps = r.count("Opportunity")
+    quotes = _guarded(ctx, "Quotation", {"docstatus": 1}, ["base_grand_total"])
+    orders = ctx.rows("fact_sales_order", ["base_grand_total"], lambda t: [t.src_docstatus == 1])
+    q_val = sum(_num(x.get("base_grand_total")) for x in quotes)
+    o_val = sum(_num(x["base_grand_total"]) for x in orders)
+    site = ctx.site()
+
+    def seen(n):
+        return "Not used at all" if not n else f"{n:,} in the whole system"
+    stages = [
+        {"label": "Enquiries", "count": leads, "note": seen(leads),
+         "drill": {"href": f"{site}/app/lead"}},
+        {"label": "Opportunities", "count": opps, "note": seen(opps),
+         "drill": {"href": f"{site}/app/opportunity"}},
+        {"label": "Quotations", "count": len(quotes),
+         "display": f"{ctx.cur} {_money(q_val)}".strip() if quotes else None,
+         "note": f"{len(quotes):,} against {len(orders):,} orders",
+         "drill": {"href": f"{site}/app/quotation?docstatus=1"}},
+        {"label": "Orders", "count": len(orders),
+         "display": f"{ctx.cur} {_money(o_val)}".strip() if orders else None,
+         "note": "", "drill": {"fact": "fact_sales_order", "filters": {"src_docstatus": 1}}},
+    ]
+    return {"kind": "funnel", "stages": stages}
+
+
+# --------------------------------------------------------------------------- projects: late jobs and money
+def eng_late_cost(ctx):
+    """Customers waiting on late jobs, beside what they owe. The customer is the job's
+    project's, read live; what they owe is the loaded receivable."""
+    late = [t for t in _tasks(ctx) if t["is_open"] and int(t["days_late"] or 0) > 0]
+    if not late:
+        return {"kind": "table", "rows": [], "empty": "No open job is past its promised date."}
+    projects = sorted({t["project"] for t in late if t["project"]})
+    customer_of = {}
+    if projects:
+        customer_of = {p["name"]: p.get("customer") for p in _guarded(
+            ctx, "Project", {"name": ["in", projects]}, ["name", "customer"])}
+    ranked, _, _ = _owed_by_customer(ctx)
+    owed = dict(ranked)
+
+    groups = defaultdict(list)
+    for t in late:
+        groups[customer_of.get(t["project"]) or t["project_name"] or "—"].append(t)
+    rows = []
+    for who, ts in groups.items():
+        known = who in owed
+        o = owed.get(who, {}).get("owed", 0.0) if known else 0.0
+        over = owed.get(who, {}).get("buckets", {}).get("90+", 0.0) if known else 0.0
+        what = sorted({t["subject"] or t["src_name"] for t in ts})
+        due = min((t["exp_end_date"] for t in ts if t["exp_end_date"]), default=None)
+        days = max(int(t["days_late"] or 0) for t in ts)
+        is_customer = any(customer_of.get(t["project"]) for t in ts)
+        rows.append((o, days, {"cells": [
+            {"text": who, "tone": "" if is_customer else "mut"},
+            {"text": ", ".join(what[:3]) + (f" and {len(what) - 3} more" if len(what) > 3 else "")},
+            {"text": _date(due), "nowrap": True},
+            {"text": _late(days), "tone": "crit", "nowrap": True},
+            {"text": _money(o) if o else "—", "num": True, "tone": "crit" if over else "dim"},
+            ({"ask": f"{who} is waiting on late jobs and owes us {ctx.cur} {_money(o)}. "
+                     f"What are both sides?", "text": "Both sides"} if o else {"text": ""}),
+        ]}))
+    rows.sort(key=lambda x: (-x[0], -x[1]))
+    return {"kind": "table", "rows": [r for _, _, r in rows[:10]],
+            "empty": "No open job is past its promised date."}
+
+
+# --------------------------------------------------------------------------- audit: approvals and history
+APPROVAL_DOCS = (("Purchase Order", "Purchase order", "supplier", "base_grand_total"),
+                 ("Payment Entry", "Payment", "party", "base_paid_amount"))
+
+
+def _approval_rows(ctx, doctype, party, value):
+    """Every purchase order (or payment) with its approval stage, read once per screen.
+
+    Without the stage where the doctype has no workflow: there is no workflow_state
+    column then, and the site refuses the field by name."""
+    cache = ctx.__dict__.setdefault("_approvals", {})
+    if doctype not in cache:
+        fields = ["name", "docstatus", "status", "owner", party, value]
+        try:
+            cache[doctype] = (_guarded(ctx, doctype, {}, fields + ["workflow_state"]), True)
+        except Exception as e:
+            if "workflow_state" not in str(e):
+                raise
+            cache[doctype] = (_guarded(ctx, doctype, {}, fields), False)
+    return cache[doctype]
+
+
+def _stage(row, has_wf) -> str:
+    if row.get("docstatus") == 0:
+        return "Draft — never submitted"
+    if row.get("docstatus") == 2:
+        return "Cancelled"
+    return (row.get("workflow_state") if has_wf else None) or row.get("status") or "Submitted"
+
+
+def aud_where_approvals(ctx):
+    rows = []
+    for doctype, word, party, value in APPROVAL_DOCS:
+        docs, has_wf = _approval_rows(ctx, doctype, party, value)
+        by = defaultdict(lambda: [0, 0.0])
+        for d in docs:
+            k = _stage(d, has_wf)
+            by[k][0] += 1
+            by[k][1] += _num(d.get(value))
+        order = sorted(by, key=lambda k: (k != "Draft — never submitted", k == "Cancelled",
+                                          -by[k][0]))
+        for k in order:
+            n, v = by[k]
+            dot = ("crit" if k.startswith("Draft") else "dim" if k == "Cancelled" else
+                   "ok" if "approv" in k.lower() else "med")
+            rows.append({"cells": [
+                {"text": k, "dot": dot, "sub": word},
+                {"text": f"{n:,}", "num": True},
+                {"text": f"{ctx.cur} {_money(v)}".strip(), "tone": "mut", "small": True},
+            ]})
+    return {"kind": "table", "rows": rows, "empty": "No purchase orders or payments recorded."}
+
+
+def aud_decisions(ctx):
+    """The largest purchase orders and payments that were decided -- submitted through
+    their approvals, or withdrawn -- and where each ended."""
+    got = []
+    for doctype, word, party, value in APPROVAL_DOCS:
+        docs, has_wf = _approval_rows(ctx, doctype, party, value)
+        got += [(d, doctype, word, party, value, has_wf) for d in docs
+                if d.get("docstatus") in (1, 2)]
+    got.sort(key=lambda x: -_num(x[0].get(x[4])))
+    got = got[:15]
+    who = _names(ctx, [d.get("owner") for d, *_ in got])
+    site = ctx.site()
+    rows = []
+    for d, doctype, word, party, value, has_wf in got:
+        ended = _stage(d, has_wf)
+        slug = frappe.scrub(doctype).replace("_", "-")
+        rows.append({"cells": [
+            {"text": d["name"], "sub": word, "drill": {"href": f"{site}/app/{slug}/{d['name']}"}},
+            {"text": d.get(party) or "—", "sub": f"raised by {who.get(d.get('owner'), '—')}"},
+            {"text": _money(d.get(value)), "num": True},
+            {"text": ended, "tag": "t-dr" if ended == "Cancelled" else
+             "t-ok" if "approv" in ended.lower() else "t-wt"},
+            {"text": ""},
+        ]})
+    return {"kind": "table", "rows": rows, "empty": "No purchase order or payment decided yet."}
+
+
+def aud_never_submitted(ctx):
+    docs = _guarded(ctx, "Purchase Order", {"docstatus": 0},
+                    ["name", "supplier", "base_grand_total", "transaction_date", "owner"])
+    docs.sort(key=lambda d: -_num(d.get("base_grand_total")))
+    who = _names(ctx, [d.get("owner") for d in docs])
+    site = ctx.site()
+    rows = [{"cells": [
+        {"text": d["name"], "drill": {"href": f"{site}/app/purchase-order/{d['name']}"}},
+        {"text": d.get("supplier") or "—"},
+        {"text": _money(d.get("base_grand_total")), "num": True,
+         "tone": "crit" if _num(d.get("base_grand_total")) > 50000 else ""},
+        {"text": _date(d.get("transaction_date")), "nowrap": True, "tone": "mut"},
+        {"text": who.get(d.get("owner"), "—")},
+        {"text": "never submitted", "tag": "t-od"},
+    ]} for d in docs]
+    return {"kind": "table", "rows": rows,
+            "empty": "Every purchase order raised has been submitted."}
+
+
+HISTORY_ROWS = (("Customer payments", "Payment Entry"), ("Customer invoices", "Sales Invoice"),
+                ("Customer orders", "Sales Order"), ("Stock movements", "Stock Entry"),
+                ("Purchase orders", "Purchase Order"))
+
+
+def aud_history(ctx):
+    """The change log, by what was changed -- the same counts as the cards above it."""
+    from command_center.kpi.live import BUSINESS_DOCTYPES
+    r = ctx.reader()
+    named = [(label, dt_, r.count("Version", {"ref_doctype": dt_})) for label, dt_ in HISTORY_ROWS]
+    business = r.count("Version", {"ref_doctype": ["in", list(BUSINESS_DOCTYPES)]})
+    total = r.count("Version")
+    rest = max(business - sum(n for *_, n in named), 0)
+    rows = [{"cells": [{"text": label, "sub": dt_}, {"text": f"{n:,}", "num": True}]}
+            for label, dt_, n in named]
+    rows += [
+        {"cells": [{"text": "Everything else on business records"},
+                   {"text": f"{rest:,}", "num": True}]},
+        {"rule": True,
+         "cells": [{"text": "Changes to business records", "bold": True},
+                   {"text": f"{business:,}", "num": True, "bold": True}]},
+        {"cells": [{"text": "Settings, permissions and system changes", "tone": "mut"},
+                   {"text": f"{max(total - business, 0):,}", "num": True, "tone": "mut"}]},
+        {"cells": [{"text": "Everything recorded", "bold": True},
+                   {"text": f"{total:,}", "num": True, "bold": True}]},
+    ]
+    return {"kind": "table", "rows": rows, "empty": "Nothing recorded."}
+
+
+# --------------------------------------------------------------------------- systems and access
+def _accounts(ctx):
+    from command_center.kpi.live import CONFLICTS, KEY_ROLES
+    r = ctx.reader()
+    users = [u for u in _guarded(ctx, "User", {"user_type": "System User"},
+                                 ["name", "full_name", "enabled", "last_active", "last_login"])
+             if u["name"] not in ("Administrator", "Guest")]
+    held = defaultdict(list)
+    for row in r.all("Has Role", filters={"parenttype": "User", "role": ["in", list(KEY_ROLES)]},
+                     fields=["parent", "role"], limit=20000, parent="User"):
+        if row.get("role") in KEY_ROLES:
+            held[row["parent"]].append(row["role"])
+    out = []
+    for u in users:
+        roles = sorted(set(held.get(u["name"], [])), key=KEY_ROLES.index)
+        clash = [say for a, b, say in CONFLICTS if set(roles) & set(a) and set(roles) & set(b)]
+        out.append({**u, "roles": roles, "conflicts": clash,
+                    "seen": u.get("last_active") or u.get("last_login")})
+    out.sort(key=lambda u: (-len(u["conflicts"]), -len(u["roles"]), u.get("full_name") or ""))
+    return out
+
+
+def _person(u):
+    return {"text": u.get("full_name") or u["name"], "sub": u["name"]}
+
+
+def it_who_can_get_in(ctx):
+    live = [u for u in _accounts(ctx) if u.get("enabled")]
+    rows = []
+    for u in live:
+        n = len(u["conflicts"])
+        rows.append({"cells": [
+            _person(u),
+            {"text": " · ".join(u["roles"]) or "none of the business roles", "tone": "mut",
+             "small": True, "sub": "; ".join(u["conflicts"]) or None, "sub_tone": "crit"},
+            {"text": str(len(u["roles"])), "num": True},
+            {"text": f"{n} conflict{'s' if n != 1 else ''}" if n else "clear",
+             "tag": "t-od" if n else "t-ok"},
+            {"text": _month(u["seen"]), "tone": "mut", "nowrap": True},
+        ]})
+    return {"kind": "table", "rows": rows, "subtitle": f"{len(live):,} active accounts",
+            "empty": "No active staff accounts."}
+
+
+def it_switched_off(ctx):
+    off = [u for u in _accounts(ctx) if not u.get("enabled")]
+    rows = [{"cells": [
+        _person(u),
+        {"text": " · ".join(u["roles"]) or "none", "tone": "mut", "small": True},
+        {"text": str(len(u["roles"])), "num": True},
+        {"text": "Sign-in blocked", "tag": "t-ok"},
+        {"text": _month(u["seen"]), "tone": "mut", "nowrap": True},
+    ]} for u in off]
+    still = sum(1 for u in off if u["roles"])
+    note = (f"{_word(still).capitalize()} of them still {'has' if still == 1 else 'have'} "
+            f"roles attached, so re-enabling {'it' if still == 1 else 'one'} restores "
+            f"everything it had." if still else "")
+    return {"kind": "table", "rows": rows, "subtitle": f"{len(off):,} account{'s' if len(off) != 1 else ''}",
+            "empty": "No account is switched off.", "note": note}
+
+
 SCREENS = {
     "sales": {
         "How sales have moved": sales_trend,
         "Who owes us, and how long it has been": sales_ageing,
         "Largest balances owed": sales_largest_owed,
         "Orders taken but not despatched": sales_not_despatched,
+        "From enquiry to order": sales_funnel,
     },
     "proc": {
         "Where the money goes": proc_money,
@@ -628,6 +918,7 @@ SCREENS = {
         "Can we actually deliver the work we are holding?": eng_capacity,
         "Every job past its promised date": eng_late,
         "Every open job": eng_open,
+        "What the late jobs are costing us": eng_late_cost,
     },
     "cx": {
         "Open cases, longest wait first": cx_open,
@@ -640,5 +931,15 @@ SCREENS = {
     "hr": {
         "Where people work": hr_departments,
         "Where people are": hr_where,
+    },
+    "aud": {
+        "Decisions taken": aud_decisions,
+        "Where approvals currently sit": aud_where_approvals,
+        "Raised and never submitted": aud_never_submitted,
+        "How much history there is": aud_history,
+    },
+    "it": {
+        "Who can get into ERPNext today, and what they can do": it_who_can_get_in,
+        "Accounts that are switched off": it_switched_off,
     },
 }

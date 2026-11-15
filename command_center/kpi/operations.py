@@ -13,6 +13,9 @@ OPEN_TASK = {"is_open": 1}
 OPEN_CASE = {"is_open": 1}
 ACTIVE = {"is_active": 1}
 # Everything delivered and some of it not billed. per_delivered is a percentage.
+# Open orders with something still to despatch, or still to invoice.
+AWAITING_DESPATCH = {"is_open": 1, "undelivered_value": [">", 0]}
+AWAITING_INVOICE = {"is_open": 1, "unbilled_value": [">", 0]}
 DELIVERED_UNBILLED = {"src_docstatus": 1, "per_delivered": [">=", 99.99],
                       "unbilled_value": [">", 0]}
 
@@ -368,6 +371,36 @@ register(
         filters=DELIVERED_UNBILLED,
         note="worth {order_delivered_unbilled}",
         drill_filters=DELIVERED_UNBILLED,
+        as_of_basis="data_horizon",
+    ),
+
+    # 15 Nov 2026. Two of Sales' "Where orders are held up" boxes. The stages overlap by
+    # design -- an order not yet despatched is usually not yet invoiced either -- so each
+    # is its own count over open orders, never a slice of one total.
+    Kpi(
+        key="order_awaiting_despatch",
+        label="Orders awaiting despatch",
+        fact="fact_sales_order",
+        measure="*",
+        agg="count",
+        unit="count",
+        direction="neutral",
+        filters=AWAITING_DESPATCH,
+        note="{order_book}",
+        drill_filters=AWAITING_DESPATCH,
+        as_of_basis="data_horizon",
+    ),
+    Kpi(
+        key="order_awaiting_invoice",
+        label="Orders awaiting invoice",
+        fact="fact_sales_order",
+        measure="*",
+        agg="count",
+        unit="count",
+        direction="neutral",
+        filters=AWAITING_INVOICE,
+        note="{order_unbilled}",
+        drill_filters=AWAITING_INVOICE,
         as_of_basis="data_horizon",
     ),
 )

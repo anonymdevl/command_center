@@ -31,7 +31,8 @@ export const WORK_TILES = {
   delegation: {
     "Still open": { key: "work_open" },
     Late: { key: "work_late" },
-    // "Reopened twice+" needs the history of each To-Do, which is not read yet.
+    // Sent back more than once through "Send it back", from the comments it leaves.
+    "Reopened twice+": { key: "work_reopened" },
     "High risk": { key: "work_high" },
   },
 };
