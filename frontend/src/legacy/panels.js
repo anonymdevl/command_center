@@ -12,11 +12,13 @@
  * already use. Nothing from the API is written as HTML; every node is built here.
  */
 
+import { guideBox } from "./guide.js";
+
 export const PANEL_VIEWS = new Set(["sales", "proc", "inv", "eng", "cx", "fin", "hr", "it", "aud", "risk"]);
 
 const SAMPLE = ".chartwrap, .bars, .stack, table.dt, .funnel";
 
-export function renderPanels(root, viewKey, data, { onOpen, failed = false } = {}) {
+export function renderPanels(root, viewKey, data, { onOpen, openDrawer, failed = false } = {}) {
   if (!root || !PANEL_VIEWS.has(viewKey)) return 0;
   // Until the answer is in, the designed panels are left alone: marking them and then
   // clearing the mark a moment later would flash.
@@ -46,8 +48,7 @@ export function renderPanels(root, viewKey, data, { onOpen, failed = false } = {
     }
   });
 
-  // The designed findings were written about the 2025 extract.
-  root.querySelectorAll(".warn:not([data-live])").forEach((w) => flag(w, "sample finding"));
+  renderFindings(root, data?.findings, failed);
   return live;
 }
 
@@ -79,6 +80,8 @@ function draw(panel, spec, onOpen) {
       return drawStack(panel, spec);
     case "table":
       return drawTable(panel, spec, onOpen);
+    case "guide":
+      return drawGuide(panel, spec);
     case "funnel":
       return drawFunnel(panel, spec, onOpen);
     default:
@@ -257,6 +260,60 @@ function drawTable(panel, spec, onOpen) {
     body.append(tr);
   });
   return true;
+}
+
+/* ------------------------------------------------------------------ guide */
+// Nothing recorded in ERPNext behind this panel yet: the sample marks go and the guide
+// (what to record there, and where) takes their place, under the designed heading.
+function drawGuide(panel, spec) {
+  if (!spec.guide) return false;
+  panel.querySelectorAll(":scope > :not(.ph)").forEach((n) => { n.hidden = true; });
+  let box = panel.querySelector(":scope > .guide[data-prov]");
+  if (box) box.remove();
+  box = guideBox(spec.guide);
+  box.dataset.prov = "1";
+  panel.append(box);
+  return true;
+}
+
+/* ------------------------------------------------------------------ findings */
+// The designed finding boxes (.warn) were written about the 2025 extract. The server
+// sends the screen's live findings (api/panels.py FINDINGS): each fills a box in turn
+// -- a heading, a sentence, and an "Ask" button when it has a question -- and a box
+// with no live finding to carry is hidden, never left showing the old one.
+function renderFindings(root, findings, failed) {
+  const boxes = [...root.querySelectorAll(".warn")];
+  if (!boxes.length) return;
+  if (!Array.isArray(findings)) {
+    if (failed) boxes.forEach((w) => { w.hidden = true; });
+    else boxes.forEach((w) => { if (w.dataset.live !== "1") w.hidden = true; });
+    return;
+  }
+  boxes.forEach((w, i) => {
+    const f = findings[i];
+    if (!f) {
+      w.hidden = true;
+      return;
+    }
+    w.hidden = false;
+    w.dataset.live = "1";
+    delete w.dataset.illustrative;
+    w.textContent = "";
+    if (f.guide) {
+      w.append(guideBox(f.guide, { compact: true }));
+      return;
+    }
+    if (f.title) w.append(el("b", null, f.title));
+    if (f.text) w.append(document.createTextNode(` ${f.text}`));
+    if (f.ask) {
+      const acts = el("div", "acts");
+      const b = el("button", "btn", f.ask_label || "Ask about it");
+      b.type = "button";
+      b.addEventListener("click", () => window.ask2?.(f.ask));
+      acts.append(b);
+      w.append(acts);
+    }
+  });
 }
 
 /* ------------------------------------------------------------------ flags */

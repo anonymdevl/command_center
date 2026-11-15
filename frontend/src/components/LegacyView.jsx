@@ -429,6 +429,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
             )
           : undefined,
     };
+    opts.openDrawer = openDrawer;
     setLiveCount(
       hydrateCards(root, viewKey, figures.data, opts) +
       hydrateTiles(root, viewKey, figures.data, opts) +
@@ -439,7 +440,8 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     }
     if (viewKey === "health") renderHealthTiles(root, figures.data);
     if (hasPanels) {
-      renderPanels(root, viewKey, panels.data, { onOpen: opts.onOpen, failed: !!panels.error });
+      renderPanels(root, viewKey, panels.data, { onOpen: opts.onOpen, openDrawer,
+                                                 failed: !!panels.error });
     }
     // An alert drawn by the generator is a designed sample until something live replaces
     // it, and the screen's "still illustrative" line must keep saying so.

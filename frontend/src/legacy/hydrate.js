@@ -21,6 +21,7 @@
  * behind.
  */
 
+import { guideCard } from "./guide.js";
 import { money, count, exact } from "../format.js";
 
 /**
@@ -257,7 +258,7 @@ export function keysFor(viewKey) {
  * it. Every write is defensive: a card whose markup does not match what is expected is
  * left exactly as designed rather than half-rewritten.
  */
-export function hydrateCards(root, viewKey, figures, { onOpen } = {}) {
+export function hydrateCards(root, viewKey, figures, { onOpen, openDrawer } = {}) {
   const map = CARD_KPIS[viewKey] || {};
   let live = 0;
 
@@ -270,6 +271,12 @@ export function hydrateCards(root, viewKey, figures, { onOpen } = {}) {
 
     if (!figure) {
       markIllustrative(card);
+      return;
+    }
+    // Nothing recorded in ERPNext yet: the card says how to set it up (guides.py).
+    if (figure.data_status?.state === "needs_setup" && figure.data_status.guide) {
+      guideCard(card, figure.data_status.guide, openDrawer);
+      live += 1;
       return;
     }
 
@@ -290,7 +297,7 @@ export function hydrateCards(root, viewKey, figures, { onOpen } = {}) {
  * or `explain('unwired')`, which is a placeholder. Only the placeholder is replaced, so
  * hydrating Business Overview does not cost it its navigation.
  */
-export function hydrateTiles(root, viewKey, figures, { onOpen } = {}, map = TILE_KPIS[viewKey] || {}) {
+export function hydrateTiles(root, viewKey, figures, { onOpen, openDrawer } = {}, map = TILE_KPIS[viewKey] || {}) {
   // `map` is TILE_KPIS by default; Today and Outstanding Tasks pass legacy/work.js's,
   // whose figures come from the work queue rather than the KPI engine.
   let live = 0;
@@ -302,6 +309,11 @@ export function hydrateTiles(root, viewKey, figures, { onOpen } = {}, map = TILE
 
     if (!figure) {
       markIllustrative(tile);
+      return;
+    }
+    if (figure.data_status?.state === "needs_setup" && figure.data_status.guide) {
+      if (!navigates(tile)) guideCard(tile, figure.data_status.guide, openDrawer);
+      live += 1;
       return;
     }
 

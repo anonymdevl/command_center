@@ -69,6 +69,15 @@ def get(view: str, business_code: str | None = None) -> dict:
         if out is not None:
             panels[title] = out
     out = {"view": view, "currency": ctx.cur, "as_of": str(ctx.as_of), "panels": panels}
+    # The screen's live findings, filling its designed finding boxes in order (a box
+    # with none is hidden on the screen). [{"title", "text", "ask"?} or {"guide": ...}]
+    if view in FINDINGS:
+        try:
+            out["findings"] = FINDINGS[view](ctx) or []
+        except Exception:
+            failed = True
+            frappe.log_error(title=f"Command Center findings {view}",
+                             message=frappe.get_traceback())
     # The facts change every fifteen minutes and the buying panels read the business's
     # ERPNext live, so ten minutes keeps a busy screen light on their site.
     # Only a complete answer is kept: a panel that failed (the business's ERPNext did
@@ -928,6 +937,10 @@ def it_switched_off(ctx):
     return {"kind": "table", "rows": rows, "subtitle": f"{len(off):,} account{'s' if len(off) != 1 else ''}",
             "empty": "No account is switched off.", "note": note}
 
+
+# view -> fn(ctx) returning that screen's live findings (see get()). Screens register
+# here; a screen without an entry has its designed finding boxes hidden.
+FINDINGS: dict = {}
 
 SCREENS = {
     "sales": {
