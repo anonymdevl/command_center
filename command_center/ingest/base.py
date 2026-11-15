@@ -104,6 +104,7 @@ class Ingestor:
         state = self._state(conn.code)
         since = None if full else (since or state.last_src_modified)
         started = now_datetime()
+        before = (state.get("status"), str(state.get("as_of_date") or ""))
 
         try:
             rows = self.extract(conn, since=since, limit=limit, as_of=as_of)
@@ -136,6 +137,10 @@ class Ingestor:
             state.save(ignore_permissions=True)
             self._log(conn.code, started, "OK", len(rows), full)
             frappe.db.commit()
+            if (full or rows or withdrawn or (self.whole and changed)
+                    or before != ("OK", str(as_of or ""))):
+                # The figures kept for this business are worked out again (speed.py).
+                _data_changed(conn.code)
             return {"fact": self.fact, "business": conn.code,
                     "rows": len(rows), "watermark": str(watermark) if watermark else None}
 
@@ -151,6 +156,7 @@ class Ingestor:
                 state.save(ignore_permissions=True)
                 self._log(conn.code, started, "Failed", 0, full, failure[-600:])
                 frappe.db.commit()
+                _data_changed(conn.code)  # its figures now say the load failed
             except Exception:
                 # Recording the failure must never replace the failure.
                 frappe.log_error(title=f"Command Center ingest {self.fact}",
@@ -311,3 +317,11 @@ def resolve_as_of(conn) -> str:
     if latest:
         return latest[0]["posting_date"]
     return frappe.utils.today()
+
+
+def _data_changed(code):
+    try:
+        from command_center import speed
+        speed.data_changed(code)
+    except Exception:
+        frappe.log_error(title="Command Center cache", message=frappe.get_traceback())

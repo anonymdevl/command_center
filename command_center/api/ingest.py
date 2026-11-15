@@ -34,8 +34,14 @@ def run(fact: str | None = None, business_code: str | None = None,
     with business_lock(code) as got:
         if not got:
             frappe.throw(f"{conn.name} is being loaded already. Try again in a few minutes.")
-        return load_business(conn, facts=[fact] if fact else None, full=full,
-                             limit=int(limit) if limit else None, raise_errors=True)
+        try:
+            return load_business(conn, facts=[fact] if fact else None, full=full,
+                                 limit=int(limit) if limit else None, raise_errors=True)
+        finally:
+            # A person is waiting to see what the load brought: nothing kept from
+            # before it is shown, not even while the new figures are read (speed.py).
+            from command_center import speed
+            speed.data_changed(code, hard=True)
 
 
 def load_business(conn, facts=None, full: bool = False, limit: int | None = None,
@@ -491,6 +497,7 @@ def poll_peers():
             frappe.db.set_value("Connected Business", conn.business.name, "last_sync",
                                 now_datetime(), update_modified=False)
             frappe.db.commit()
+            _warm(code)
         except (ConnectorError, ValueError) as e:
             # Polled every two minutes: a business that was already down before this
             # attempt is not logged again (its going down was), so the error log is not
@@ -501,6 +508,18 @@ def poll_peers():
             if not already_down:
                 frappe.log_error(title=f"Command Center peer refresh: {code}", message=str(e))
     frappe.db.commit()
+
+
+def _warm(code):
+    """The screens people have been looking at, read again now that the business is
+    up to date, so their next look (or the minute's refresh) is answered at once."""
+    try:
+        from command_center import speed
+        speed.warm(code)
+        frappe.db.commit()
+    except Exception:
+        frappe.db.rollback()
+        frappe.log_error(title=f"Command Center warm {code}", message=frappe.get_traceback())
 
 
 class business_lock:

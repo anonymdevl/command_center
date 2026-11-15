@@ -128,6 +128,7 @@ class CommandCenterFactCase(DocModel):
         db_table = "tabCommand Center Fact Case"
         verbose_name = "Command Center Fact Case"
         verbose_name_plural = "Command Center Fact Case"
+        indexes = [models.Index(fields=['business_code', 'is_open'], name="ix_CenterFactCase_busine_is_op")]
 
 
 class CommandCenterFactPartyBalance(DocModel):
@@ -197,6 +198,7 @@ class CommandCenterFactPaymentAllocation(DocModel):
         db_table = "tabCommand Center Fact Payment Allocation"
         verbose_name = "Command Center Fact Payment Allocation"
         verbose_name_plural = "Command Center Fact Payment Allocation"
+        indexes = [models.Index(fields=['business_code', 'payment_type', 'posting_date'], name="ix_mentAllocation_busine_payme")]
 
 
 class CommandCenterFactPerson(DocModel):
@@ -226,6 +228,7 @@ class CommandCenterFactPerson(DocModel):
         db_table = "tabCommand Center Fact Person"
         verbose_name = "Command Center Fact Person"
         verbose_name_plural = "Command Center Fact Person"
+        indexes = [models.Index(fields=['business_code', 'is_active'], name="ix_nterFactPerson_busine_is_ac")]
 
 
 class CommandCenterFactPurchaseInvoice(DocModel):
@@ -254,6 +257,7 @@ class CommandCenterFactPurchaseInvoice(DocModel):
         db_table = "tabCommand Center Fact Purchase Invoice"
         verbose_name = "Command Center Fact Purchase Invoice"
         verbose_name_plural = "Command Center Fact Purchase Invoice"
+        indexes = [models.Index(fields=['business_code', 'src_docstatus', 'outstanding_amount'], name="ix_urchaseInvoice_busine_src_d")]
 
 
 class CommandCenterFactPurchaseInvoiceLine(DocModel):
@@ -281,6 +285,7 @@ class CommandCenterFactPurchaseInvoiceLine(DocModel):
         db_table = "tabCommand Center Fact Purchase Invoice Line"
         verbose_name = "Command Center Fact Purchase Invoice Line"
         verbose_name_plural = "Command Center Fact Purchase Invoice Line"
+        indexes = [models.Index(fields=['business_code', 'src_docstatus'], name="ix_aseInvoiceLine_busine_src_d")]
 
 
 class CommandCenterFactSalesInvoice(DocModel):
@@ -310,6 +315,7 @@ class CommandCenterFactSalesInvoice(DocModel):
         db_table = "tabCommand Center Fact Sales Invoice"
         verbose_name = "Command Center Fact Sales Invoice"
         verbose_name_plural = "Command Center Fact Sales Invoice"
+        indexes = [models.Index(fields=['business_code', 'src_docstatus', 'outstanding_amount'], name="ix_ctSalesInvoice_busine_src_d")]
 
 
 class CommandCenterFactSalesInvoiceLine(DocModel):
@@ -341,7 +347,7 @@ class CommandCenterFactSalesInvoiceLine(DocModel):
         db_table = "tabCommand Center Fact Sales Invoice Line"
         verbose_name = "Command Center Fact Sales Invoice Line"
         verbose_name_plural = "Command Center Fact Sales Invoice Line"
-        indexes = [models.Index(fields=['business_code', 'item_group'], name="ix_lesInvoiceLine_busine_item_"), models.Index(fields=['business_code', 'posting_date'], name="ix_lesInvoiceLine_busine_posti")]
+        indexes = [models.Index(fields=['business_code', 'item_group'], name="ix_lesInvoiceLine_busine_item_"), models.Index(fields=['business_code', 'posting_date'], name="ix_lesInvoiceLine_busine_posti"), models.Index(fields=['business_code', 'src_docstatus', 'posting_date'], name="ix_lesInvoiceLine_busine_src_d")]
 
 
 class CommandCenterFactSalesOrder(DocModel):
@@ -374,6 +380,7 @@ class CommandCenterFactSalesOrder(DocModel):
         db_table = "tabCommand Center Fact Sales Order"
         verbose_name = "Command Center Fact Sales Order"
         verbose_name_plural = "Command Center Fact Sales Order"
+        indexes = [models.Index(fields=['business_code', 'is_open'], name="ix_FactSalesOrder_busine_is_op")]
 
 
 class CommandCenterFactStockBalance(DocModel):
@@ -434,6 +441,7 @@ class CommandCenterFactTask(DocModel):
         db_table = "tabCommand Center Fact Task"
         verbose_name = "Command Center Fact Task"
         verbose_name_plural = "Command Center Fact Task"
+        indexes = [models.Index(fields=['business_code', 'is_open'], name="ix_CenterFactTask_busine_is_op")]
 
 
 class CommandCenterIngestState(DocModel):

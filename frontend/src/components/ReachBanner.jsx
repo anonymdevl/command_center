@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { call } from "../api/client.js";
 
 /**
@@ -12,18 +12,23 @@ export default function ReachBanner({ scope, onBack }) {
   const [st, setSt] = useState(null);
   const [busy, setBusy] = useState(false);
 
+  // The screen hands a new onBack at every render (each figure or panel that arrives);
+  // read through a ref, so the check depends on the business alone and is asked once
+  // per screen, not once per render.
+  const back = useRef(onBack);
+  back.current = onBack;
   const check = useCallback((method = "status") => {
     return call(`command_center.api.reach.${method}`, { business_code: scope })
       .then((s) => {
         setSt((was) => {
-          if (was && !was.reachable && s?.reachable) onBack?.();
+          if (was && !was.reachable && s?.reachable) back.current?.();
           return s;
         });
         window.dispatchEvent(new CustomEvent("cc-reach", { detail: s }));
         return s;
       })
       .catch(() => null);
-  }, [scope, onBack]);
+  }, [scope]);
 
   useEffect(() => {
     let alive = true;

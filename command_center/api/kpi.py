@@ -29,9 +29,20 @@ def get(keys, business_code: str | None = None):
                      f"Known: {', '.join(sorted(known) + sorted(LIVE))}")
 
     # Figures from the facts, and the few read straight from ERPNext (kpi/live.py).
-    result = evaluate_set([k for k in keys if k in known], business_code)
+    # Those from the facts are kept until a load changes the facts (speed.py), so a
+    # screen opened again, or refreshed, does not work them out again.
+    from command_center import speed
+    facts_keys = sorted(k for k in keys if k in known)
+    result = (speed.cached("engine", business_code, {"keys": facts_keys}, engine,
+                           {"keys": facts_keys, "business_code": business_code})
+              if facts_keys else {})
     result.update(evaluate_live([k for k in keys if k in LIVE], business_code))
-    return result
+    return {k: result[k] for k in keys if k in result}
+
+
+def engine(keys, business_code=None) -> dict:
+    """The figures from the loaded facts, worked out now."""
+    return evaluate_set(list(keys), business_code)
 
 
 @frappe.whitelist()

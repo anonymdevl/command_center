@@ -52,21 +52,39 @@ WORDS = ("no", "one", "two", "three", "four", "five", "six", "seven", "eight", "
 @frappe.whitelist()
 def get(view: str, business_code: str | None = None) -> dict:
     require_manager()
+    from command_center import speed
+    # Kept per business and per whose view of its ERPNext (speed.py): a complete answer
+    # is returned at once while it is fresh, and read again in the background once it
+    # is not; the scheduler reads the screens people look at again after each refresh.
+    out = speed.cached("panels", business_code, {"view": view}, compute,
+                       {"view": view, "business_code": business_code}, complete=complete)
+    return {k: v for k, v in out.items() if k != "_failed"}
+
+
+def compute(view: str, business_code: str | None = None) -> dict:
+    """The screen's panels, findings and line under the heading, read now. Each panel is
+    independent of the others, so they are read side by side (speed.parallel); a panel
+    that fails is that panel's problem, as before."""
+    from command_center import speed
     from command_center.kpi.live_departments import is_down
     builders = SCREENS.get(view) or {}
-    key = f"cc:panels:{view}:{business_code or '__all__'}"
-    cached = frappe.cache().get_value(key)
-    if cached:
-        return cached
-    ctx = _Ctx(business_code)
+    with speed.interactive():
+        ctx = _Ctx(business_code)
+        try:
+            ctx.reader()  # one guarded reader, shared by every panel's thread
+        except Exception:
+            pass  # asked again (and failing as that panel's problem) where it is needed
+        extra = [(name, table[view]) for name, table in (("findings", FINDINGS), ("when", WHEN))
+                 if view in table]
+        jobs = list(builders.items()) + extra
+        answers = speed.parallel([(lambda fn=fn: fn(ctx)) for _, fn in jobs])
     panels = {}
     failed = down = False
-    for title, fn in builders.items():
-        try:
-            out = fn(ctx)
-        except Exception as e:
+    out = {"view": view, "currency": ctx.cur, "as_of": str(ctx.as_of), "panels": panels}
+    for (title, _), (ok, got) in zip(jobs[:len(builders)], answers[:len(builders)]):
+        if not ok:
             failed = True
-            if is_down(e):
+            if is_down(got):
                 # The business did not answer: the panel says so, calmly, and is asked
                 # again next time.
                 down = True
@@ -74,34 +92,32 @@ def get(view: str, business_code: str | None = None) -> dict:
                 continue
             # One panel that cannot be read must not cost the screen its others.
             frappe.log_error(title=f"Command Center panel {view}: {title}",
-                             message=frappe.get_traceback())
+                             message=getattr(got, "__cc_traceback__", "") or repr(got))
             panels[title] = {"kind": "failed"}
             continue
-        if out is not None:
-            panels[title] = out
-    out = {"view": view, "currency": ctx.cur, "as_of": str(ctx.as_of), "panels": panels}
+        if got is not None:
+            panels[title] = got
     # The screen's live findings, filling its designed finding boxes in order (a box
     # with none is hidden on the screen). [{"title", "text", "ask"?} or {"guide": ...}]
-    for name, table in (("findings", FINDINGS), ("when", WHEN)):
-        if view not in table:
+    for (name, _), (ok, got) in zip(extra, answers[len(builders):]):
+        if ok:
+            out[name] = got or ([] if name == "findings" else "")
             continue
-        try:
-            out[name] = table[view](ctx) or ([] if name == "findings" else "")
-        except Exception as e:
-            failed = True
-            down = down or is_down(e)
-            if not is_down(e):
-                frappe.log_error(title=f"Command Center {name} {view}",
-                                 message=frappe.get_traceback())
+        failed = True
+        down = down or is_down(got)
+        if not is_down(got):
+            frappe.log_error(title=f"Command Center {name} {view}",
+                             message=getattr(got, "__cc_traceback__", "") or repr(got))
     if down:
         out.update({"unreachable": True, **ctx.business()})
-    # Facts are refreshed every two minutes and some panels read the business's ERPNext
-    # live; ninety seconds keeps a busy screen light on their site while an open screen
-    # (which refreshes itself every minute) stays current. Only a complete answer is
-    # kept: a panel that failed is asked again next time.
-    if not failed:
-        frappe.cache().set_value(key, out, expires_in_sec=90)
+    # Only a complete answer is kept (complete()): a panel that failed is asked again
+    # next time.
+    out["_failed"] = failed
     return out
+
+
+def complete(out) -> bool:
+    return isinstance(out, dict) and not out.get("_failed") and not out.get("unreachable")
 
 
 # --------------------------------------------------------------------------- helpers
@@ -150,9 +166,17 @@ class _Guarded:
     the screen's other panels give up at once instead of each waiting out the retries
     (Internal Audit took 73 s to fail with Gigmann's ERPNext down; now one wait)."""
 
+    # Reads asked for twice on one screen (the staff list behind four figures, the
+    # purchase orders behind three panels) go to the business once, even when they are
+    # asked for at the same moment from two threads (speed.parallel).
+    MEMO = ("all", "count", "has")
+
     def __init__(self, reader):
+        import threading
         self._r = reader
         self._down = None
+        self._memo = {}
+        self._lock = threading.Lock()
         # Already known to be down (the shell's banner says so): fail at once rather than
         # make every screen wait out the retries first. The 15-minute refresh and the
         # banner's Retry still reach out, and the first answer marks the business Active.
@@ -180,7 +204,33 @@ class _Guarded:
                 if is_down(e):
                     self._down = e
                 raise
-        return call
+        if name not in self.MEMO:
+            return call
+
+        def once(*a, **k):
+            import json
+            import threading
+            key = (name, json.dumps([a, k], sort_keys=True, default=str))
+            with self._lock:
+                slot = self._memo.get(key)
+                mine = slot is None
+                if mine:
+                    slot = self._memo[key] = {"done": threading.Event()}
+            if mine:
+                try:
+                    slot["value"] = call(*a, **k)
+                except Exception as e:
+                    slot["error"] = e
+                finally:
+                    slot["done"].set()
+            else:
+                slot["done"].wait()
+            if "error" in slot:
+                raise slot["error"]
+            got = slot["value"]
+            # Each caller its own rows: a panel may add to the ones it is handed.
+            return [type(r)(r) if isinstance(r, dict) else r for r in got] if isinstance(got, list) else got
+        return once
 
 
 def _as_of(business_code):

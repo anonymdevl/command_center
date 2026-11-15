@@ -21,3 +21,6 @@ class CoreConfig(AppConfig):
         # requests at once could find the catalogue half-filled.
         from command_center.kpi.registry import load_all
         load_all()
+        # Where each API call's time goes (insights/core/timing.py).
+        from insights.core import timing
+        timing.install()

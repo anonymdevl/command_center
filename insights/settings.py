@@ -122,6 +122,14 @@ if DATABASES["default"]["ENGINE"].endswith("sqlite3"):
                         "NAME": str(Path(DATABASES["default"]["NAME"]).with_suffix(".aux.sqlite3")),
                         "OPTIONS": {"timeout": 30}}
     AUX_SEPARATE = True
+    # The test databases are files, as the real ones are, not SQLite's shared in-memory
+    # database: a screen reads on several threads at once (command_center/speed.py), and
+    # in memory SQLite refuses a second thread's write outright ("table is locked")
+    # instead of waiting its turn.
+    import tempfile as _tempfile
+    for _alias in ("default", "aux"):
+        DATABASES[_alias]["TEST"] = {"NAME": os.path.join(
+            _tempfile.gettempdir(), f"insights-test-{os.getpid()}-{_alias}.sqlite3")}
 else:
     DATABASES["aux"] = dict(DATABASES["default"])
     AUX_SEPARATE = False

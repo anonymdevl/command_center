@@ -48,6 +48,8 @@ TIMEOUT = 20
 PAGE = 500
 PACE_MS = 250
 RETRIES = 3
+# Pages of a screen's read (not a load) asked for without the pause between them.
+INTERACTIVE_PAGES = 4
 REPORT_TIMEOUT = 90
 # Above this many characters of query string a read goes by POST. The binding limit is
 # gunicorn's, behind the site's nginx: limit_request_line defaults to 4094 for the
@@ -129,6 +131,17 @@ class RemoteConnector(BusinessConnector):
         data = _encode(params or {})
         post = write or len(urlencode(data)) > MAX_GET_QUERY
         r = None
+        started = time.perf_counter()
+        try:
+            r = self._send(url, headers, data, post, write, timeout)
+        finally:
+            _count(started)
+        return self._answer(r, whole)
+
+    def _send(self, url, headers, data, post, write, timeout):
+        import time
+
+        r = None
         for attempt in range(RETRIES + 1):
             try:
                 if post:
@@ -154,7 +167,9 @@ class RemoteConnector(BusinessConnector):
                     time.sleep(wait)
                     continue
             break
+        return r
 
+    def _answer(self, r, whole):
         if r.status_code in (401, 403):
             raise RemotePermissionDenied(
                 f"{self.name} refused this. Your account there does not have "
@@ -180,18 +195,14 @@ class RemoteConnector(BusinessConnector):
     def _mark_unreachable(self, error: str):
         if _in_question():
             return
-        frappe.db.set_value("Connected Business", self.business.name,
-                            {"status": "Unreachable", "last_error": error[:500]},
-                            update_modified=False)
+        _mark(self.business.name, {"status": "Unreachable", "last_error": error[:500]})
         # Remember it here too, so the next call that succeeds marks it Active again
         # (_mark_reachable reads this copy, not the database).
         self.business.status = "Unreachable"
 
     def _mark_reachable(self):
         if self.business.status == "Unreachable" and not _in_question():
-            frappe.db.set_value("Connected Business", self.business.name,
-                                {"status": "Active", "last_error": ""},
-                                update_modified=False)
+            _mark(self.business.name, {"status": "Active", "last_error": ""})
             self.business.status = "Active"
 
     # -- reads -------------------------------------------------------------
@@ -229,7 +240,16 @@ class RemoteConnector(BusinessConnector):
             if len(rows) < n:
                 break
             start += n
-            time.sleep(_pace())
+            # Paced: a load may run to thousands of pages on somebody's production
+            # server. A screen's read a person is waiting for (speed.interactive, never
+            # a system read) goes without the pause for its first INTERACTIVE_PAGES.
+            quick = (getattr(frappe.local, "cc_interactive", False) and not self.system
+                     and start < INTERACTIVE_PAGES * page)
+            pause = 0 if quick else _pace()
+            if pause:
+                started = time.perf_counter()
+                time.sleep(pause)
+                _count(started)
         return _refit(out, renamed, missing)
 
     # -- one platform, every ERPNext version ------------------------------------
@@ -444,6 +464,29 @@ def _page() -> int:
 def _pace() -> float:
     ms = frappe.conf.get("command_center_remote_pace_ms")
     return max(0, int(PACE_MS if ms is None else ms)) / 1000
+
+
+def _mark(name: str, values: dict):
+    """Record the business's reachability. A read made on one of a request's own
+    threads (speed.parallel) hands the mark back to be written on the request's
+    transaction, so no thread writes beside it."""
+    marks = getattr(frappe.local, "cc_defer_marks", None)
+    if marks is not None:
+        marks.append((name, values))
+        return
+    frappe.db.set_value("Connected Business", name, values, update_modified=False)
+
+
+def _count(started: float):
+    """Time spent waiting on the business, counted to the request that waited
+    (insights/core/timing.py), when one is being timed."""
+    import time
+    stats = getattr(frappe.local, "cc_timing", None)
+    if stats is not None:
+        try:
+            stats.add_remote((time.perf_counter() - started) * 1000)
+        except Exception:
+            pass
 
 
 def _in_question() -> bool:

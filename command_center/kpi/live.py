@@ -68,6 +68,10 @@ class Live:
     # from that loaded fact (matched against another), so it carries the fact's as-of
     # date and load state rather than "read just now".
     source: str = "erp"
+    # False for a figure worked out from this platform's own tables alone (the loads,
+    # the alerts, the loaded facts): it is cheap, and it is worked out at every look
+    # rather than kept with the figures that wait on the business's ERPNext (speed.py).
+    reads_erp: bool = True
 
 
 # --------------------------------------------------------------------------- reading
@@ -520,7 +524,8 @@ LIVE = {k.key: k for k in (
     Live("users_manager_roles", "Accounts with a manager role", "count", users_manager_roles, "/app/user?enabled=1"),
     Live("users_role_conflicts", "Can buy and pay", "count", users_role_conflicts, "/app/user?enabled=1"),
     Live("departments_erp", "Departments", "count", departments_erp, "/app/department"),
-    Live("last_refreshed", "Last refreshed", "time", last_refreshed, "/app/command-center-ingest-state"),
+    Live("last_refreshed", "Last refreshed", "time", last_refreshed, "/app/command-center-ingest-state",
+         reads_erp=False),
     Live("versions_total", "Changes logged", "count", versions_total, "/app/version"),
     Live("versions_business", "Changes on business documents", "count", versions_business, "/app/version"),
     Live("versions_earliest", "Earliest change logged", "date", versions_earliest, "/app/version?order_by=creation%20asc"),
@@ -536,7 +541,7 @@ LIVE = {k.key: k for k in (
     Live("tasks_costed", "Open jobs with a cost", "count", tasks_costed, "/app/task"),
     Live("cases_past_due", "Cases past their promised time", "count", cases_past_due, "/app/issue"),
     Live("cases_owing", "Open cases from customers who owe us", "count", cases_owing, "",
-         source="fact_case"),
+         source="fact_case", reads_erp=False),
     Live("batches_near_expiry", "Batches near expiry", "count", batches_near_expiry,
          "/app/batch?disabled=0"),
     Live("self_approved", "Approved by whoever raised them", "count", self_approved, "/app/version"),
@@ -554,14 +559,39 @@ LIVE.update(_governance.LIVE)
 
 
 def evaluate(keys, business_code=None) -> dict:
-    """The live figures asked for, in the engine's shape. Unknown keys are left out."""
-    import frappe
+    """The live figures asked for, in the engine's shape. Unknown keys are left out.
 
-    from command_center.api.businesses import currency_for
-
+    Kept for a short while per business and whose view of its ERPNext (speed.py), and
+    read side by side when they are read (speed.parallel), so a screen waits for its
+    slowest figure rather than for all of them one after another."""
     wanted = [k for k in keys if k in LIVE]
     if not wanted:
         return {}
+    from command_center import speed
+    remote = sorted(k for k in wanted if LIVE[k].reads_erp)
+    out = (speed.cached("live", business_code, {"keys": remote}, compute,
+                        {"keys": remote, "business_code": business_code}, complete=complete)
+           if remote else {})
+    here = [k for k in wanted if not LIVE[k].reads_erp]
+    if here:
+        out.update(compute(here, business_code, side_by_side=False))
+    return {k: out[k] for k in wanted if k in out}
+
+
+def complete(out) -> bool:
+    """Only an answer whose every figure was read is kept."""
+    return all((f.get("data_status") or {}).get("state") not in ("failed", "unreachable")
+               for f in (out or {}).values())
+
+
+def compute(keys, business_code=None, side_by_side: bool = True) -> dict:
+    """The live figures, read now."""
+    import frappe
+
+    from command_center import speed
+    from command_center.api.businesses import currency_for
+
+    wanted = [k for k in keys if k in LIVE]
     reader = None
     try:
         # Guarded: once the business has not answered, the other figures give up at once
@@ -571,38 +601,42 @@ def evaluate(keys, business_code=None) -> dict:
         reader = _Guarded(_Reader(business_code))
     except Exception:
         frappe.log_error(title="Command Center live figures", message=frappe.get_traceback())
+
+    def read(spec):
+        if reader is None:
+            raise RuntimeError("no business to read")
+        return spec.fn(reader)
+
+    with speed.interactive():
+        jobs = [(lambda spec=LIVE[k]: read(spec)) for k in wanted]
+        answers = speed.parallel(jobs) if side_by_side else [speed.attempt(j) for j in jobs]
+    read_at = frappe.utils.now_datetime().strftime("%H:%M")
     out = {}
-    from command_center.connectors.base import BusinessUnreachable
-    down = None
-    for key in wanted:
+    for key, (ok, got) in zip(wanted, answers):
         spec = LIVE[key]
         drill = None
-        try:
-            if reader is None:
-                raise RuntimeError("no business to read")
-            if down is not None and spec.source == "erp":
-                raise down
-            got = spec.fn(reader)
+        if ok:
             value, note = got[0], got[1]
             drill = got[2] if len(got) > 2 else None
             # A fourth element is the figure's own status: needs_setup (guides.py) when
             # nothing behind it is recorded in ERPNext yet.
             state = (got[3] if len(got) > 3 and got[3] else {"state": "live", "message": None})
-        except NeedsSetup as e:
-            value, note, state = None, e.status.get("message"), e.status
-        except Exception as e:
+        elif isinstance(got, NeedsSetup):
+            value, note, state = None, got.status.get("message"), got.status
+        else:
             from command_center.kpi.live_departments import is_down, unreachable_status
-            if is_down(e):
-                # The business's ERPNext did not answer: once is enough for this screen,
-                # and the card says so rather than "could not be read".
-                down = e
-                value, note, state = None, "Can't reach ERPNext", unreachable_status(e)
+            if is_down(got):
+                # The business's ERPNext did not answer: once is enough for this screen
+                # (the guarded reader fails the others at once), and the card says so
+                # rather than "could not be read".
+                value, note, state = None, "Can't reach ERPNext", unreachable_status(got)
             else:
-                frappe.log_error(title=f"Command Center live figure {key}", message=frappe.get_traceback())
+                frappe.log_error(title=f"Command Center live figure {key}",
+                                 message=getattr(got, "__cc_traceback__", "") or repr(got))
                 value, note, state = None, "could not be read", {"state": "failed",
                                                                 "message": "This figure could not be read."}
         site = "" if not reader or reader.local else (reader.conn.base_url or "")
-        as_of = {"date": frappe.utils.today(), "basis": "read from ERPNext just now"}
+        as_of = {"date": frappe.utils.today(), "basis": f"read from ERPNext at {read_at}"}
         if spec.source != "erp":
             # Worked out from loaded facts: as of the data they cover, and as fresh as
             # their last load -- the same statement an engine figure makes.

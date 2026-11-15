@@ -5,6 +5,7 @@ import { boot } from "../api/boot.js";
 import { renderGreeting } from "../greeting.js";
 import { api } from "../api/client.js";
 import { useApi } from "../useApi.js";
+import { keyFor } from "../swr.js";
 import Records from "./Records.jsx";
 import { hydrateCards, hydrateTiles, keysFor, markLoading } from "../legacy/hydrate.js";
 import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js";
@@ -55,10 +56,13 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
   goRef.current = go;
 
   const keys = keysFor(viewKey);
+  // Each call's last answer is shown at once on a revisit while the new one is read,
+  // kept under the person, the business and the call (useApi, swr.js).
+  const me = boot.user?.id;
   const figures = useApi(
     () => (keys.length ? api.kpis({ keys, business_code: scope }) : Promise.resolve(null)),
     [viewKey, scope, keys.join(",")],
-    { skip: keys.length === 0 }
+    { skip: keys.length === 0, key: keyFor(me, scope, "kpis", keys.join(",")) }
   );
 
   // Today, Approvals and Outstanding Tasks read the real queue (api/work.py), again
@@ -66,9 +70,11 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
   // The department screens' charts and tables (api/panels.py, legacy/panels.js).
   // Business Overview's finding comes the same way (api/panels_core.py).
   const hasPanels = PANEL_VIEWS.has(viewKey) || CORE_PANEL_VIEWS.has(viewKey);
-  const panels = useApi(() => api.panels(viewKey, scope), [viewKey, scope], { skip: !hasPanels });
+  const panels = useApi(() => api.panels(viewKey, scope), [viewKey, scope],
+    { skip: !hasPanels, key: keyFor(me, scope, "panels", viewKey) });
   const isWork = WORK_VIEWS.has(viewKey);
-  const work = useApi(() => api.work(scope), [viewKey, scope], { skip: !isWork });
+  const work = useApi(() => api.work(scope), [viewKey, scope],
+    { skip: !isWork, key: keyFor(me, scope, "work") });
   useEffect(() => {
     if (!isWork) return;
     const again = () => work.reload();
@@ -78,7 +84,8 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
 
   // Home and the Executive Summary show the alert engine's alerts (api/alerts.py).
   const hasAlerts = ALERT_VIEWS.has(viewKey);
-  const alerts = useApi(() => api.alerts(scope), [viewKey, scope], { skip: !hasAlerts });
+  const alerts = useApi(() => api.alerts(scope), [viewKey, scope],
+    { skip: !hasAlerts, key: keyFor(me, scope, "alerts") });
   useEffect(() => {
     if (!hasAlerts) return;
     const again = () => alerts.reload();
@@ -89,14 +96,16 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
   // Live: while the screen is being looked at, its figures, panels, work and alerts are
   // read again every minute (the platform refreshes each business's data every two
   // minutes), and at once when the tab comes back into view. The figures on screen stay
-  // in place while the new ones load, so nothing flickers.
+  // in place while the new ones load, so nothing flickers. A refresh is skipped while
+  // the last one is still on its way (useApi's background reload), so they never pile up.
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState !== "visible") return;
-      if (keys.length) figures.reload();
-      if (hasPanels) panels.reload();
-      if (isWork) work.reload();
-      if (hasAlerts) alerts.reload();
+      const quiet = { background: true };
+      if (keys.length) figures.reload(quiet);
+      if (hasPanels) panels.reload(quiet);
+      if (isWork) work.reload(quiet);
+      if (hasAlerts) alerts.reload(quiet);
     };
     const t = setInterval(tick, 60000);
     const onShow = () => {

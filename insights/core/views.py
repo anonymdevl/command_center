@@ -31,6 +31,7 @@ from django.views.decorators.http import require_http_methods
 
 import frappe  # insights.compat
 from insights.compat import WHITELIST, run_as
+from insights.core import timing
 from insights.compat.state import (AuthenticationError, DoesNotExistError, FrappeError,
                                    PermissionError, Redirect, ValidationError, _dict, local)
 
@@ -154,8 +155,26 @@ def api_method(request, method):
         return _error(AuthenticationError("Sign in to continue."), 401)
 
     cookies = _Cookies()
+    stats = timing.Stats()
+    response = _answer(entry, method, user, request, cookies, stats)
+    timing.finish(stats, method, response)
+    return _gzip(request, response)
+
+
+def _gzip(request, response):
+    """An answer of figures or panels sent compressed when the browser accepts it (a
+    screen's panels are tens of kilobytes of JSON, a few once compressed). Only JSON:
+    downloads are already compressed or are not worth the work."""
+    if not str(response.get("Content-Type", "")).startswith("application/json"):
+        return response
+    from django.middleware.gzip import GZipMiddleware
+    return GZipMiddleware(lambda r: response).process_response(request, response)
+
+
+def _answer(entry, method, user, request, cookies, stats):
     try:
         with run_as(user, request=request):
+            local.cc_timing = stats
             local.form_dict = _dict(_args(request))
             local.request_ip = _ip(request)
             local.cookie_manager = cookies
