@@ -319,6 +319,35 @@ Object.assign(settingsApi, {
   removeBusinessLogo: (name) => call(`${PS}.remove_business_logo`, { name }),
 });
 
+/* Settings -> Security (insights/core/security.py): the platform administrator's only,
+   never given to anyone else; the server refuses every call to anyone who is not one. */
+const SEC = "insights.core.security";
+export const securityApi = {
+  overview: () => call(`${SEC}.overview`),
+  signIns: (days) => call(`${SEC}.sign_ins`, { days }),
+  unlock: (kind, username, ip) => call(`${SEC}.unlock`, { kind, username, ip }),
+  sessions: () => call(`${SEC}.sessions`),
+  signOutEverywhere: (username) => call(`${SEC}.sign_out_everywhere`, { username }),
+  changes: () => call(`${SEC}.changes`),
+  watch: (status) => call(`${SEC}.watch`, { status }),
+  runWatch: (business_code) => call(`${SEC}.run_watch`, { business_code }),
+  acknowledge: (id) => call(`${SEC}.acknowledge`, { id }),
+  incidents: () => call(`${SEC}.incidents`),
+  incident: (id) => call(`${SEC}.incident`, { id }),
+  openIncident: (args) =>
+    call(`${SEC}.open_incident`, { ...args, businesses: JSON.stringify(args.businesses || []) }),
+  updateIncident: (args) =>
+    call(`${SEC}.update_incident`, {
+      ...args, businesses: args.businesses ? JSON.stringify(args.businesses) : undefined,
+    }),
+  setIncidentStatus: (id, status, note) => call(`${SEC}.set_incident_status`, { id, status, note }),
+  addIncidentNote: (id, text) => call(`${SEC}.add_incident_note`, { id, text }),
+  linkFinding: (id, finding_id) => call(`${SEC}.link_finding`, { id, finding_id }),
+  incidentPdf: (id) => download(`${SEC}.incident_pdf`, { id }, "incident-report.pdf"),
+  incidentXlsx: (id) => download(`${SEC}.incident_xlsx`, { id }, "incident-events.xlsx"),
+  posture: () => call(`${SEC}.posture`),
+};
+
 /** A chosen file as a data: URL, refused here first if it is plainly too large or not
  *  a PNG, JPEG or WebP (the server checks again, by content). */
 export function readImage(file, maxKb = 1024) {

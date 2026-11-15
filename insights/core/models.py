@@ -197,3 +197,138 @@ class PlanNotice(models.Model):
         db_table = "insights_plan_notice"
         unique_together = [("recipient", "dedupe")]
         ordering = ["-created"]
+
+
+# --- security (insights/core/security.py, Settings -> Security) -----------------------
+# The administrator's alone. The sign-in record is on "aux" with the usage ledger, so a
+# request that is rolled back still leaves its sign-in attempt on record, and like the
+# ledger it is never edited or deleted. Never a password, never a full key or secret.
+class _AppendOnly(models.QuerySet):
+    def update(self, **kw):
+        raise PermissionError("The security record is never edited.")
+
+    def delete(self):
+        raise PermissionError("The security record is never deleted from.")
+
+
+class SecurityEvent(models.Model):
+    """One sign-in attempt on the platform or the administration, a sign-out, an
+    unlock or a Sign Out Everywhere: who (as typed, for a failure), from where, with
+    what kind of browser (a summary, never the whole user-agent string), and what
+    happened."""
+
+    at = models.DateTimeField(db_index=True)
+    kind = models.CharField(max_length=30, db_index=True)      # sign_in, sign_out, unlock, end_sessions
+    outcome = models.CharField(max_length=20, db_index=True)   # success, failed, blocked, refused, done
+    username = models.CharField(max_length=150, blank=True, default="", db_index=True)
+    known_user = models.BooleanField(default=False)
+    ip = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    agent = models.CharField(max_length=80, blank=True, default="")
+    channel = models.CharField(max_length=20, blank=True, default="")  # platform, admin, sso
+    locked = models.BooleanField(default=False)    # this attempt locked the account or address
+    new_ip = models.BooleanField(default=False)
+    new_agent = models.BooleanField(default=False)
+    first_seen = models.BooleanField(default=False)
+    actor = models.CharField(max_length=150, blank=True, default="")   # who did an unlock
+    note = models.CharField(max_length=255, blank=True, default="")
+
+    objects = _AppendOnly.as_manager()
+
+    class Meta:
+        db_table = "insights_security_event"
+        ordering = ["-at", "-id"]
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            raise PermissionError("The security record is never edited.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PermissionError("The security record is never deleted from.")
+
+
+class SecurityCheck(models.Model):
+    """The last run of one watch check on one connected business's ERPNext: whether it
+    could be read, and what was seen (the baseline the next run is compared with --
+    names, dates, fingerprints of code and keys; never code or a key itself)."""
+
+    business_code = models.CharField(max_length=140, db_index=True)
+    check_id = models.CharField(max_length=40)
+    status = models.CharField(max_length=20, default="ok")  # ok, refused, unavailable, unreachable, error
+    message = models.TextField(blank=True, default="")
+    baseline = models.TextField(blank=True, default="")
+    checked_at = models.DateTimeField(null=True, blank=True)
+    first_run = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "insights_security_check"
+        unique_together = [("business_code", "check_id")]
+
+
+class SecurityFinding(models.Model):
+    """Something the watch or the sign-in record found, once per fingerprint. A finding
+    about how things are now (a setting off, risky code present) clears itself when it is
+    no longer so; one about something that happened (a new administrator, a new key)
+    stays open until the administrator acknowledges it."""
+
+    fingerprint = models.CharField(max_length=64, unique=True)
+    business_code = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    check_id = models.CharField(max_length=40, db_index=True)
+    severity = models.CharField(max_length=10, db_index=True)  # critical, high, medium, low, info
+    title = models.CharField(max_length=255)
+    detail = models.TextField(blank=True, default="")
+    evidence = models.TextField(blank=True, default="[]")      # JSON list of {label, value}
+    action = models.TextField(blank=True, default="")
+    doc_url = models.CharField(max_length=500, blank=True, default="")
+    state_kind = models.BooleanField(default=False)            # clears itself when gone
+    status = models.CharField(max_length=20, default="open", db_index=True)  # open, acknowledged, cleared
+    first_seen = models.DateTimeField(db_index=True)
+    last_seen = models.DateTimeField()
+    cleared_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_by = models.CharField(max_length=150, blank=True, default="")
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    alerted = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "insights_security_finding"
+        ordering = ["-first_seen", "-id"]
+
+
+class SecurityIncident(models.Model):
+    """The incident register: an incident opened from a finding or by hand, its
+    status, the businesses it touched, and the report's sections."""
+
+    STATUSES = ("Open", "Investigating", "Contained", "Resolved")
+    title = models.CharField(max_length=200)
+    severity = models.CharField(max_length=10, default="high")
+    status = models.CharField(max_length=20, default="Open", db_index=True)
+    businesses = models.TextField(blank=True, default="[]")    # JSON list of business codes
+    findings = models.TextField(blank=True, default="[]")      # JSON list of finding ids
+    summary = models.TextField(blank=True, default="")
+    impact = models.TextField(blank=True, default="")
+    actions = models.TextField(blank=True, default="")
+    root_cause = models.TextField(blank=True, default="")
+    lessons = models.TextField(blank=True, default="")
+    recommendations = models.TextField(blank=True, default="")
+    opened_by = models.CharField(max_length=150, blank=True, default="")
+    opened_at = models.DateTimeField(db_index=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    modified = models.DateTimeField()
+
+    class Meta:
+        db_table = "insights_security_incident"
+        ordering = ["-opened_at", "-id"]
+
+
+class SecurityIncidentNote(models.Model):
+    """One line of an incident's timeline, as written, never changed."""
+
+    incident = models.ForeignKey(SecurityIncident, on_delete=models.CASCADE, related_name="notes")
+    at = models.DateTimeField()
+    by = models.CharField(max_length=150, blank=True, default="")
+    kind = models.CharField(max_length=20, default="note")    # note, status, finding, opened
+    text = models.TextField()
+
+    class Meta:
+        db_table = "insights_security_incident_note"
+        ordering = ["at", "id"]

@@ -243,11 +243,16 @@ def login_succeeded(request, usr: str) -> None:
 
 
 def admin_login(request, extra_context=None):
-    """The administration's own sign-in page, under the same limits as the platform's."""
+    """The administration's own sign-in page, under the same limits as the platform's.
+    Every attempt is in the security record (insights/core/security.py); a success is
+    recorded by Django's user_logged_in, whichever way the person signed in."""
     from django.contrib import admin
+
+    from insights.core import security
     if request.method == "POST":
-        usr = str(request.POST.get("username") or "").strip().lower()
+        usr = str(request.POST.get("username") or "").strip().lower()[:150]
         if login_locked(request, usr):
+            security.record_attempt(request, usr, "blocked", "admin")
             return HttpResponse(f"Too many failed attempts. Try again in {LOCK_MINUTES} minutes.",
                                 status=429, content_type="text/plain")
         resp = admin.AdminSite.login(admin.site, request, extra_context)
@@ -255,6 +260,8 @@ def admin_login(request, extra_context=None):
             login_succeeded(request, usr)
         else:
             login_failed(request, usr)
+            security.record_attempt(request, usr, "failed", "admin",
+                                    locked=login_locked(request, usr))
         return resp
     return admin.AdminSite.login(admin.site, request, extra_context)
 
@@ -263,9 +270,11 @@ def api_login(request):
     if request.method != "POST":
         return _error(PermissionError("Use POST"), 405)
     args = _args(request)
-    usr = str(args.get("usr") or "").strip().lower()
+    from insights.core import security
+    usr = str(args.get("usr") or "").strip().lower()[:150]
     pwd = str(args.get("pwd") or "")
     if login_locked(request, usr):
+        security.record_attempt(request, usr, "blocked", "platform")
         return _json({"message": f"Too many failed attempts. Try again in {LOCK_MINUTES} "
                                  f"minutes."}, 429)
     user = authenticate(request, username=usr, password=pwd)
@@ -276,6 +285,9 @@ def api_login(request):
             user = authenticate(request, username=alt.username, password=pwd)
     if user is None or not user.is_active:
         login_failed(request, usr)
+        security.record_attempt(request, usr, "failed", "platform",
+                                locked=login_locked(request, usr),
+                                note="account deactivated" if user is not None else "")
         return _json({"message": "That email or password is not right."}, 401)
     login_succeeded(request, usr)
     login(request, user)
@@ -284,6 +296,8 @@ def api_login(request):
 
 
 def api_logout(request):
+    from insights.core import security
+    security.record_sign_out(request)
     logout(request)
     return _json({"message": "Logged Out"})
 

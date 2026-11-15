@@ -6,7 +6,9 @@ from django.conf import settings
 
 AUX_MODELS = {("core", "errorlog"), ("django_cache", "cacheentry"),
               # the usage ledger and its notices (plans.py): billing outlives a rollback
-              ("core", "usageevent"), ("core", "plannotice")}
+              ("core", "usageevent"), ("core", "plannotice"),
+              # the sign-in record (security.py): a rolled-back request keeps its attempt
+              ("core", "securityevent")}
 
 
 class AuxRouter:

@@ -1404,7 +1404,7 @@ class SettingsDelegation(TransactionTestCase):
     def test_boot_and_a_plain_manager(self):
         self.assertEqual(self._boot(self.admin)["settings_sections"],
                          ["people", "businesses", "customers", "claude", "email", "branding",
-                          "keys", "recommend", "changes"])
+                          "keys", "recommend", "changes", "security"])
         self.assertEqual(self._boot(self.manager)["settings_sections"], [])
         for fn in ("people", "businesses", "credentials", "email", "notifications",
                    "set_email", "test_email", "set_settings_access", "changes"):
@@ -3758,3 +3758,462 @@ class PlansAndUsage(TransactionTestCase):
         self.assertEqual(wb.sheetnames, ["Usage", "Ledger"])
         rows = [[c.value for c in row] for row in wb["Usage"].iter_rows()]
         self.assertIn(["Total for the month", None, None, None, None, None, 100], rows)
+
+
+# --- Settings -> Security --------------------------------------------------------------------
+OLD = str(TODAY - dt.timedelta(days=400)) + " 09:00:00"
+
+
+def _sec_match(row, filters) -> bool:
+    items = filters.items() if isinstance(filters, dict) else [
+        (f[0], f[1:]) if len(f) == 3 else (f[1], f[2:]) for f in (filters or [])]
+    for field, cond in items:
+        if isinstance(cond, (list, tuple)) and len(cond) == 2 and isinstance(cond[0], str):
+            op, val = cond
+        else:
+            op, val = "=", cond
+        v = row.get(field)
+        if op == "=" and v != val:
+            return False
+        if op == "in" and v not in val:
+            return False
+        if op == ">=" and str(v or "") < str(val):
+            return False
+        if op == "is" and val == "set" and not v:
+            return False
+    return True
+
+
+class SecurityERPNext(FakeERPNext):
+    """The fake ERPNext, with the doctypes the security watch reads; any of them can be
+    refused (403), and the whole site can stop answering."""
+
+    def __init__(self):
+        super().__init__()
+        self.refuse, self.down = set(), False
+        now = dt.datetime.now()
+        recent = str(now - dt.timedelta(hours=2))[:19]
+        self.data = {
+            "Server Script": [
+                {"name": "poc_v15_doctype_aef3", "script_type": "API", "api_method": "poc_run",
+                 "allow_guest": 1, "disabled": 0, "reference_doctype": None, "doctype_event": None,
+                 "event_frequency": None, "modified": OLD, "modified_by": "abigail@biz.test",
+                 "owner": "abigail@biz.test", "creation": OLD,
+                 "script": "import_line = 1\nout = subprocess.run(frappe.form_dict.cmd, shell=True)\n"
+                           "frappe.response['message'] = out"},
+                {"name": "Set Customer Group", "script_type": "DocType Event", "api_method": None,
+                 "allow_guest": 0, "disabled": 0, "reference_doctype": "Customer",
+                 "doctype_event": "Before Save", "event_frequency": None, "modified": OLD,
+                 "modified_by": "it@biz.test", "owner": "it@biz.test", "creation": OLD,
+                 "script": "if not doc.customer_group:\n    doc.customer_group = 'All Customer Groups'"},
+            ],
+            "Console Log": [],
+            "Has Role": [
+                {"parent": "Administrator", "role": "System Manager", "creation": OLD, "parenttype": "User"},
+                {"parent": "it@biz.test", "role": "System Manager", "creation": OLD, "parenttype": "User"},
+                {"parent": "it@biz.test", "role": "Accounts User", "creation": OLD, "parenttype": "User"},
+            ],
+            "User": [
+                {"name": "Administrator", "full_name": "Administrator", "enabled": 1,
+                 "user_type": "System User", "creation": OLD, "modified": OLD, "owner": "Administrator"},
+                {"name": "it@biz.test", "full_name": "Kofi IT", "enabled": 1, "user_type": "System User",
+                 "creation": OLD, "modified": OLD, "owner": "Administrator", "last_login": recent,
+                 "last_ip": "41.1.1.1", "api_key": None},
+                {"name": "reader@test.com", "full_name": "Platform Reader", "enabled": 1,
+                 "user_type": "System User", "creation": OLD, "modified": OLD, "owner": "it@biz.test",
+                 "api_key": "readerkey0001abcd"},
+                {"name": "ama@biz.test", "full_name": "Ama Sales", "enabled": 1, "user_type": "System User",
+                 "creation": OLD, "modified": OLD, "owner": "it@biz.test", "api_key": None},
+            ],
+            "Activity Log": [
+                {"name": "AL-1", "user": "ama@biz.test", "full_name": "Ama Sales", "operation": "Login",
+                 "status": "Success", "ip_address": "41.1.1.5", "creation": recent},
+            ],
+        }
+        self.settings = {"name": "System Settings", "modified": OLD, "modified_by": "Administrator",
+                         "enable_two_factor_auth": 0, "enable_password_policy": 1,
+                         "minimum_password_score": "3", "allow_consecutive_login_attempts": 5,
+                         "allow_login_using_mobile_number": 0, "allow_login_using_user_name": 0,
+                         "allow_error_traceback": 0, "session_expiry": "12:00"}
+
+    def __call__(self, method_name):
+        inner = super().__call__(method_name)
+
+        def call(url, **kw):
+            if self.down:
+                import requests
+                raise requests.ConnectionError("connection refused")
+            return inner(url, **kw)
+        return call
+
+    def answer(self, m, p):
+        doctype = p.get("doctype")
+        if m == "frappe.client.get" and doctype == "System Settings":
+            if doctype in self.refuse:
+                return _R(403, {"exc_type": "PermissionError"})
+            return _R(200, {"message": dict(self.settings)})
+        if doctype in self.data and m in ("frappe.client.get_list", "frappe.client.get_count"):
+            if doctype in self.refuse:
+                return _R(403, {"exc_type": "PermissionError", "_server_messages": json.dumps(
+                    [json.dumps({"message": f"No permission for {doctype}"})])})
+            filters = p.get("filters") or {}
+            filters = json.loads(filters) if isinstance(filters, str) else filters
+            rows = [r for r in self.data[doctype] if _sec_match(r, filters)]
+            if m == "frappe.client.get_count":
+                return _R(200, {"message": len(rows)})
+            fields = p.get("fields") or ["name"]
+            fields = json.loads(fields) if isinstance(fields, str) else fields
+            return _R(200, {"message": [{f: r.get(f) for f in fields} for r in rows]})
+        return super().answer(m, p)
+
+
+class Security(TransactionTestCase):
+    """Settings -> Security (insights/core/security.py, security_watch.py): for the
+    administrator only -- a manager, a delegate given every grantable section and a guest
+    are all refused, and it is never in their boot payload; every sign-in attempt is in the
+    record (failures, lockouts, never a password); Unlock; new-address flags; Sign Out
+    Everywhere ends sessions; the ERPNext watch against the fake ERPNext (a Server Script
+    with subprocess, a new System Manager, a refused read with its guide, an unreachable
+    site); incidents and the Incident Report; alerts sent once; the analyst cannot reach it."""
+
+    databases = {"default", "aux"}
+    MOD = SettingsPage.MOD
+    SEC = "insights.core.security"
+    setUp_page = SettingsPage.setUp
+    tearDown = SettingsPage.tearDown
+    _call = SettingsPage._call
+    _ok = SettingsPage._ok
+
+    def setUp(self):
+        self.setUp_page()
+        self.sec = SecurityERPNext()
+        for p in (mock.patch("requests.get", self.sec("GET")),
+                  mock.patch("requests.post", self.sec("POST"))):
+            p.start()
+            self.patches.append(p)
+
+    def _s(self, fn, client=None, expect=200, **args):
+        r = (client or self.admin).post(f"/api/method/{self.SEC}.{fn}", json.dumps(args),
+                                        content_type="application/json")
+        self.bodies.append(r.content.decode(errors="replace"))
+        self.assertEqual(r.status_code, expect, f"{fn}: {r.content[:500]!r}")
+        if expect == 200 and r["Content-Type"].startswith("application/json"):
+            return r.json()["message"]
+        return r
+
+    def _refused_words(self, fn, **args) -> str:
+        r = self._s(fn, expect=417, **args)
+        return " ".join(json.loads(m)["message"] for m in json.loads(r.json()["_server_messages"]))
+
+    def _boot(self, client) -> dict:
+        page = client.get("/command-center").content.decode()
+        return json.loads(re.search(r"window\.CC_BOOT = (.*?);\s*$", page, re.M).group(1))
+
+    def _login(self, c, usr, pwd, ip="41.66.1.1", ua="Mozilla/5.0 (Windows NT 10.0) Chrome/120.0 Safari/537.36"):
+        return c.post("/api/method/login", json.dumps({"usr": usr, "pwd": pwd}),
+                      content_type="application/json", REMOTE_ADDR=ip, HTTP_USER_AGENT=ua)
+
+    def _business(self):
+        self._ok("add_business", business_name="Test Medical Ltd", site_url="https://erp.test/",
+                 api_key="key-abcd1234", api_secret="biz-secret-value-71x")
+        from insights.core.models import ConnectedBusiness
+        return ConnectedBusiness.objects.get(pk="Test Medical Ltd")
+
+    def _run(self):
+        from insights.compat import run_as
+        from insights.core import security_watch
+        with run_as("boss@test.com"):
+            return security_watch.run()
+
+    def _notices(self, who="boss@test.com"):
+        from insights.core.models import PlanNotice
+        return list(PlanNotice.objects.filter(recipient=who, kind="security"))
+
+    # --- who may ------------------------------------------------------------------------
+    def test_administrator_only(self):
+        from insights.compat import WHITELIST
+        names = [k.rsplit(".", 1)[1] for k in WHITELIST if k.startswith(self.SEC + ".")]
+        self.assertGreaterEqual(len(names), 18)
+        # a delegate given every section that can be given is still refused
+        self._ok("set_settings_access", username="manager@test.com",
+                 sections=["businesses", "people", "keys"])
+        for fn in names:
+            r = self.manager.post(f"/api/method/{self.SEC}.{fn}", json.dumps({"id": 1, "username": "boss@test.com"}),
+                                  content_type="application/json")
+            self.assertEqual(r.status_code, 403, f"{fn} answered a delegate: {r.status_code}")
+            self.assertEqual(Client().post(f"/api/method/{self.SEC}.{fn}", "{}",
+                                           content_type="application/json").status_code, 401, fn)
+        self.assertIn("security", self._boot(self.admin)["settings_sections"])
+        self.assertNotIn("security", self._boot(self.manager)["settings_sections"])
+        r = self._call(self.admin, "set_settings_access", username="manager@test.com",
+                       sections=["security"])
+        self.assertEqual(r.status_code, 417, "Security can never be given")
+        self.assertIsInstance(self._s("overview")["open_findings"], dict)
+
+    # --- the sign-in record -------------------------------------------------------------------
+    def test_sign_ins_recorded_locked_and_unlocked(self):
+        from insights.core.models import SecurityEvent
+        U = get_user_model()
+        ama = U.objects.create_user("ama@test.com", "ama@test.com", "a-long-test-pass-8")
+        ama.groups.add(Group.objects.get(name="Insights Dashboard Manager"))
+        c = Client()
+        codes = [self._login(c, "ama@test.com", "wrong-password-z").status_code for _ in range(6)]
+        self.assertEqual(codes, [401] * 5 + [429])
+        # a password typed in the email box is never kept
+        self.assertEqual(self._login(Client(), "Hunter2-Secret", "x", ip="41.66.9.9").status_code, 401)
+        ev = list(SecurityEvent.objects.filter(kind="sign_in").order_by("at", "id"))
+        self.assertEqual([e.outcome for e in ev], ["failed"] * 5 + ["blocked", "failed"])
+        self.assertEqual([e.locked for e in ev[:5]], [False] * 4 + [True])
+        self.assertTrue(all(e.username == "ama@test.com" and e.known_user for e in ev[:6]))
+        self.assertEqual(ev[0].agent, "Chrome on Windows")
+        self.assertEqual(ev[6].username, "(not an email address, 14 characters)")
+        for e in SecurityEvent.objects.all():
+            for v in (e.username, e.note, e.agent):
+                self.assertNotIn("hunter2", v.lower())
+                self.assertNotIn("wrong-password", v)
+        # the record is append-only
+        with self.assertRaises(PermissionError):
+            SecurityEvent.objects.filter(pk=ev[0].pk).update(outcome="success")
+        with self.assertRaises(PermissionError):
+            ev[0].delete()
+        seen = self._s("sign_ins", days=1)
+        self.assertEqual(seen["by_account"][0]["username"], "ama@test.com")
+        self.assertEqual(seen["by_account"][0]["failures"], 6)
+        locks = seen["lockouts"]
+        pair = [x for x in locks if x["kind"] == "pair"]
+        self.assertEqual((pair[0]["username"], pair[0]["ip"]), ("ama@test.com", "41.66.1.1"))
+        # Unlock: the right password works again at once
+        self.assertEqual(self._login(c, "ama@test.com", "a-long-test-pass-8").status_code, 429)
+        out = self._s("unlock", kind="pair", username="ama@test.com", ip="41.66.1.1")
+        self.assertFalse([x for x in out["lockouts"] if x["kind"] == "pair"])
+        self.assertIn("not an address", self._refused_words("unlock", kind="ip", ip="nonsense"))
+        self.assertEqual(self._login(c, "ama@test.com", "a-long-test-pass-8").status_code, 200)
+        ok = SecurityEvent.objects.filter(kind="sign_in", outcome="success").get()
+        self.assertTrue(ok.first_seen and ok.new_ip)
+        self.assertEqual(SecurityEvent.objects.filter(kind="unlock").get().actor, "boss@test.com")
+        whats = " | ".join(x["what"] for x in self._s("changes"))
+        self.assertIn("unlocked sign-in for ama@test.com from 41.66.1.1", whats)
+
+    def test_new_address_flag_and_alert_once(self):
+        from insights.core.models import SecurityEvent, SecurityFinding
+        c = Client()
+        self.assertEqual(self._login(c, "boss@test.com", "a-long-test-pass-5", ip="41.66.1.1").status_code, 200)
+        self.assertEqual(self._login(Client(), "boss@test.com", "a-long-test-pass-5", ip="41.66.1.1").status_code, 200)
+        self.assertEqual(self._login(Client(), "boss@test.com", "a-long-test-pass-5", ip="185.7.7.7",
+                                     ua="Mozilla/5.0 (Macintosh; Intel Mac OS X 14) Firefox/130.0").status_code, 200)
+        self.assertEqual(self._login(Client(), "boss@test.com", "a-long-test-pass-5", ip="185.7.7.7").status_code, 200)
+        flags = [(e.ip, e.first_seen, e.new_ip, e.new_agent) for e in
+                 SecurityEvent.objects.filter(kind="sign_in").order_by("at", "id")]
+        self.assertEqual(flags, [("41.66.1.1", True, True, True), ("41.66.1.1", False, False, False),
+                                 ("185.7.7.7", False, True, True), ("185.7.7.7", False, False, False)])
+        f = SecurityFinding.objects.get(check_id="admin_new_ip")
+        self.assertIn("185.7.7.7", f.title + f.detail)
+        self.assertTrue(f.alerted)
+        self.assertEqual(len(self._notices()), 1, "one alert for one finding, never repeated")
+        self.assertEqual(self._notices()[0].link, "security")
+        flagged = self._s("sign_ins", days=7)["flagged"]
+        self.assertEqual({x["ip"] for x in flagged}, {"41.66.1.1", "185.7.7.7"})
+        # a lockout storm: one critical finding, one alert
+        for who in ("x1@test.com", "x2@test.com", "x3@test.com"):
+            for _ in range(5):
+                self._login(Client(), who, "nope-nope-nope", ip="203.0.113.9")
+        storm = SecurityFinding.objects.get(check_id="lockout_storm")
+        self.assertEqual(storm.severity, "critical")
+        for _ in range(5):
+            self._login(Client(), "x4@test.com", "nope-nope-nope", ip="203.0.113.9")
+        self.assertEqual(SecurityFinding.objects.filter(check_id="lockout_storm").count(), 1)
+        self.assertEqual(len(self._notices()), 2)
+
+    def test_sign_out_everywhere(self):
+        c1, c2 = Client(), Client()
+        self.assertTrue(c1.login(username="manager@test.com", password="a-long-test-pass-6"))
+        self.assertTrue(c2.login(username="manager@test.com", password="a-long-test-pass-6"))
+        url = "/api/method/command_center.api.businesses.get_visible_businesses"
+        self.assertEqual(c1.post(url, "{}", content_type="application/json").status_code, 200)
+        rows = {r["username"]: r for r in self._s("sessions")}
+        self.assertEqual(rows["manager@test.com"]["count"], 3)  # setUp's client too
+        self.assertNotIn("session_key", json.dumps(rows))
+        out = self._s("sign_out_everywhere", username="manager@test.com")
+        self.assertEqual(out["ended"], 3)
+        for c in (c1, c2, self.manager):
+            self.assertIn(c.post(url, "{}", content_type="application/json").status_code, (401, 403))
+        # the administrator's own: every session but this one
+        other = Client()
+        self.assertTrue(other.login(username="boss@test.com", password="a-long-test-pass-5"))
+        out = self._s("sign_out_everywhere", username="boss@test.com")
+        self.assertEqual(out["ended"], 1)
+        self.assertEqual(self.admin.post(url, "{}", content_type="application/json").status_code, 200)
+        self.assertIn(other.post(url, "{}", content_type="application/json").status_code, (401, 403))
+        self.assertIn("signed manager@test.com out everywhere",
+                      " | ".join(x["what"] for x in self._s("changes")))
+
+    # --- the ERPNext watch -------------------------------------------------------------------
+    def test_watch_flags_scripts_admins_keys_and_settings(self):
+        from insights.core.models import SecurityCheck, SecurityFinding
+        self._business()
+        out = self._s("run_watch")
+        self.assertIn("7 of 7 checks ran", out["says"])
+        view = self._s("watch")
+        found = {f["title"]: f for f in view["findings"]}
+        script = found["Server Script can reach the server: poc_v15_doctype_aef3"]
+        self.assertEqual(script["severity"], "critical")
+        self.assertIn("subprocess", json.dumps(script["evidence"]))
+        self.assertEqual(script["doc_url"], "https://erp.test/app/server-script/poc_v15_doctype_aef3")
+        self.assertIn("Anyone can call this Server Script without signing in: poc_v15_doctype_aef3", found)
+        self.assertNotIn("Server Script can reach the server: Set Customer Group", found)
+        self.assertEqual(found["Two-factor sign-in is off"]["severity"], "medium")
+        self.assertTrue(found["Two-factor sign-in is off"]["doc_url"].endswith("/app/system-settings"))
+        # first run: a baseline, not a flood of "new" findings
+        self.assertFalse([t for t in found if t.startswith(("New System Manager", "API key", "New user"))])
+        # nothing of the code, nor a whole key, is kept or shown
+        for row in SecurityCheck.objects.all():
+            self.assertNotIn("subprocess", row.baseline)
+            self.assertNotIn("readerkey0001abcd", row.baseline)
+        self.assertEqual(len(self._notices()), 1, "the critical script, alerted once")
+
+        # someone is made System Manager, a key appears, a sign-in from a new address,
+        # and the System Console is used
+        self.sec.data["Has Role"].append({"parent": "ama@biz.test", "role": "System Manager",
+                                          "creation": OLD, "parenttype": "User"})
+        self.sec.data["User"][3]["api_key"] = "amakey000000wxyz"
+        self.sec.data["Activity Log"].append({"name": "AL-2", "user": "ama@biz.test", "full_name": "Ama Sales",
+                                              "operation": "Login", "status": "Success",
+                                              "ip_address": "185.220.101.4",
+                                              "creation": str(dt.datetime.now())[:19]})
+        self.sec.data["Console Log"].append({"name": "CL-9", "owner": "ama@biz.test",
+                                             "creation": str(dt.datetime.now())[:19],
+                                             "script": "import os\nos.system('id')"})
+        self._run()
+        self._run()   # and once more: nothing is alerted twice
+        found = {f["title"]: f for f in self._s("watch")["findings"]}
+        admin = found["New System Manager: ama@biz.test"]
+        self.assertEqual(admin["severity"], "critical")
+        self.assertEqual(admin["doc_url"], "https://erp.test/app/user/ama%40biz.test")
+        self.assertEqual(found["API key generated for ama@biz.test"]["severity"], "high")
+        self.assertIn("Sign-in from a new address: ama@biz.test", found)
+        self.assertEqual(found["Code was run in the System Console by ama@biz.test"]["severity"], "critical")
+        titles = [n.title for n in self._notices()]
+        self.assertEqual(len(titles), len(set(titles)), "each alert once")
+        self.assertIn("Security: New System Manager: ama@biz.test", titles)
+        for body in self.bodies:
+            self.assertNotIn("amakey000000wxyz", body)
+            self.assertNotIn("biz-secret-value-71x", body)
+
+        # the script is removed: its finding clears by itself; the new admin stays open
+        self.sec.data["Server Script"].pop(0)
+        self._run()
+        self.assertEqual(SecurityFinding.objects.get(title__startswith="Server Script can reach").status, "cleared")
+        self.assertEqual(SecurityFinding.objects.get(title="New System Manager: ama@biz.test").status, "open")
+        ack = self._s("acknowledge", id=admin["id"])
+        self.assertEqual((ack["status"], ack["acknowledged_by"]), ("acknowledged", "boss@test.com"))
+
+    def test_watch_refused_and_unreachable(self):
+        self._business()
+        self.sec.refuse = {"Server Script", "System Settings"}
+        self._s("run_watch")
+        b = self._s("watch")["businesses"][0]
+        st = {c["id"]: c for c in b["checks"]}
+        self.assertEqual(st["server_scripts"]["status"], "refused")
+        self.assertTrue(st["server_scripts"]["guide"])
+        self.assertIn("Role Permissions Manager", st["server_scripts"]["message"])
+        self.assertIn("optional", st["server_scripts"]["message"])
+        self.assertIn("Server Script", st["server_scripts"]["message"])
+        self.assertEqual(st["settings"]["status"], "refused")
+        self.assertEqual(st["admins"]["status"], "ok")
+        # the site stops answering: said, nothing breaks
+        self.sec.down = True
+        out = self._run()
+        self.assertEqual(set(out[0]["checks"].values()), {"unreachable"})
+        st = {c["id"]: c for c in self._s("watch")["businesses"][0]["checks"]}
+        self.assertEqual(st["admins"]["status_label"], "Unreachable")
+        self.assertIn("did not answer", st["admins"]["message"])
+
+    # --- incidents -------------------------------------------------------------------------
+    def test_incident_lifecycle_and_report(self):
+        import sys
+        self._business()
+        self._s("run_watch")
+        f = next(x for x in self._s("watch")["findings"] if x["severity"] == "critical")
+        inc = self._s("open_incident", finding_id=f["id"])
+        self.assertEqual((inc["ref"], inc["status"], inc["severity"]), ("INC-0001", "Open", "critical"))
+        self.assertEqual(inc["businesses"], ["test_medical_ltd"])
+        self.assertEqual(inc["finding_rows"][0]["id"], f["id"])
+        self.assertIn("Type the incident's title", self._refused_words("open_incident", title=" "))
+        self.assertIn("too long", self._refused_words("add_incident_note", id=inc["id"], text="x" * 4001))
+        self._s("update_incident", id=inc["id"], impact="Commands could be run on the server.",
+                actions="Disabled the script.\n\nRotated the account's password.",
+                recommendations="Review Server Scripts weekly.", lessons="Watch for new scripts.")
+        self._s("add_incident_note", id=inc["id"], text="Script disabled on the business's ERPNext.")
+        self._s("set_incident_status", id=inc["id"], status="Investigating")
+        self.assertIn("root cause", self._refused_words("set_incident_status", id=inc["id"], status="Resolved"))
+        self._s("update_incident", id=inc["id"], root_cause="A compromised user account created the script.")
+        done = self._s("set_incident_status", id=inc["id"], status="Resolved", note="Closed after review.")
+        self.assertEqual(done["status"], "Resolved")
+        self.assertTrue(done["resolved_at"])
+        kinds = [n["kind"] for n in done["notes"]]
+        self.assertEqual(kinds[0], "opened")
+        self.assertIn("note", kinds)
+        self.assertEqual(kinds.count("status"), 2)
+        self.assertEqual(len(self._s("incidents")), 1)
+
+        seen = []
+        pdfmod = sys.modules["frappe.utils.pdf"]
+        with mock.patch.object(pdfmod, "get_pdf", lambda html, options=None: (seen.append((html, options)), b"%PDF")[1]), \
+                mock.patch("command_center.api.export._ensure_fonts", lambda: None):
+            r = self._s("incident_pdf", id=inc["id"])
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Incident Report", r["Content-Disposition"])
+        html, options = seen[0]
+        self.assertIn("Ultrasoft Insights", html)
+        self.assertIn("Incident Report", html)
+        for section in ("1. Summary", "2. Impact", "3. Timeline", "4. Evidence", "5. Actions Taken",
+                        "6. Root Cause", "7. Recommendations", "8. Sign-Off", "Lessons Learned"):
+            self.assertIn(section, html)
+        self.assertIn("A compromised user account created the script.", html)
+        self.assertIn("poc_v15_doctype_aef3", html)
+        self.assertIn("Prepared for <b>Test Medical Ltd</b>", html)
+        self.assertTrue(options["footer-left"].startswith("Ultrasoft Insights"))
+        r = self._s("incident_xlsx", id=inc["id"])
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.content.startswith(b"PK"))
+
+    # --- posture, changes, and the analyst -------------------------------------------------
+    def test_posture_runs_no_command(self):
+        import subprocess
+        boom = mock.Mock(side_effect=AssertionError("the web app ran a system command"))
+        with mock.patch.object(subprocess, "run", boom), mock.patch.object(subprocess, "Popen", boom), \
+                mock.patch("os.system", boom):
+            p = self._s("posture")
+        labels = {x["label"] for x in p["items"]}
+        for want in ("Debug Mode Off", "Session Cookie HTTPS Only", "Strict Transport Security (HSTS)",
+                     "Allowed Host Names", "insights.json Readable By Its Owner Only",
+                     "Backup In The Last 36 Hours"):
+            self.assertIn(want, labels)
+        self.assertIn("sudo ufw status verbose", [m["command"] for m in p["manual"]])
+        self._ok("set_claude_key", key="sk-ant-test-0000wxyz")
+        self._ok("set_paused", name=self._business().pk, paused=1)
+        rows = self._s("changes")
+        kinds = {r["what"]: r["kind"] for r in rows}
+        self.assertEqual(kinds["replaced the Claude key"], "Claude Key")
+        self.assertTrue(any(k == "Business Keys" for k in kinds.values()))
+        self.assertNotIn("paused Test Medical Ltd", kinds, "not security-relevant")
+        for r in rows:
+            self.assertNotIn("sk-ant-test-0000wxyz", r["what"])
+
+    def test_the_analyst_cannot_reach_security_data(self):
+        import pathlib
+
+        from django.conf import settings
+
+        from command_center.ask import tools
+        for doctype in ("Security Event", "Security Finding", "Security Incident", "Server Script",
+                        "Console Log", "Activity Log"):
+            with self.assertRaises(tools.ToolError):
+                tools._doctype_allowed(doctype, None)
+        self.assertFalse([t for t in tools.TOOLS if "secur" in t.lower()])
+        ask = pathlib.Path(settings.BASE_DIR, "command_center", "ask")
+        for py in ask.rglob("*.py"):
+            text = py.read_text()
+            self.assertNotIn("insights.core.security", text, py.name)
+            self.assertNotIn("insights_security", text, py.name)
+            self.assertNotIn("SecurityEvent", text, py.name)

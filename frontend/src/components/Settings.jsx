@@ -6,6 +6,7 @@ import SettingsEmail from "./SettingsEmail.jsx";
 import SettingsRecommend from "./SettingsRecommend.jsx";
 import SettingsBranding from "./SettingsBranding.jsx";
 import SettingsCustomers from "./SettingsCustomers.jsx";
+import SettingsSecurity from "./SettingsSecurity.jsx";
 import { SettingsChanges, SettingsClaude, SettingsCredentials } from "./SettingsKeys.jsx";
 import "../styles/settings.css";
 
@@ -31,6 +32,8 @@ const TABS = [
   ["keys", "Personal ERPNext Keys", SettingsCredentials],
   ["recommend", "Recommendations", SettingsRecommend],
   ["changes", "Changes", SettingsChanges],
+  // The administrator's alone: never given to anyone (insights/core/security.py).
+  ["security", "Security", SettingsSecurity],
 ];
 
 /** The Settings sections this person may open (empty: no Settings for them). */
@@ -53,7 +56,15 @@ export function isAdministrator(boot) {
 export default function Settings() {
   const mine = settingsSections(bootPayload);
   const tabs = TABS.filter((t) => mine.includes(t[0]));
-  const [tab, setTab] = useState(tabs[0]?.[0]);
+  const [tab, setTab] = useState(() => {
+    // The bell's security alerts open Settings on Security (Bell.jsx), once.
+    let want = null;
+    try {
+      want = sessionStorage.getItem("cc-settings-tab");
+      sessionStorage.removeItem("cc-settings-tab");
+    } catch { /* private mode */ }
+    return tabs.some((t) => t[0] === want) ? want : tabs[0]?.[0];
+  });
   const Section = (tabs.find((t) => t[0] === tab) || tabs[0])?.[2];
   const everything = tabs.length === TABS.length;
   return (

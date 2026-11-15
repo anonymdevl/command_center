@@ -79,6 +79,10 @@ class Command(BaseCommand):
         sched.add_job(_job("insights.core.plans.daily"), CronTrigger(hour=0, minute=30),
                       id="daily:insights.core.plans.daily")
         n += 1
+        # Settings -> Security: the read-only checks of every connected ERPNext.
+        sched.add_job(_job("insights.core.security_watch.scheduled"),
+                      CronTrigger(minute="*/30"), id="cron:insights.core.security_watch.scheduled")
+        n += 1
         self.stdout.write(f"scheduler: {n} jobs")
         for job in sched.get_jobs():
             self.stdout.write(f"  {job.id}")
