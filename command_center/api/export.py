@@ -117,8 +117,28 @@ def _document_html(question, answer, business_code, model, sanitize, md_to_html)
         as_of=escape_html(_pretty_date(_as_of())),
         who=escape_html(who),
         when=escape_html(when),
-        model=escape_html(model or "the analyst"),
+        footer=ANSWER_FOOTER.format(business=escape_html(_business(business_code)),
+                                    model=escape_html(model or "the analyst")),
     )
+
+
+def html_pdf(title: str, body_html: str, business_code: str | None = None,
+             footer: str | None = None) -> bytes:
+    """A document the platform built itself (the financial statements, api/statements.py)
+    as a PDF, in the answer's own layout: header, title, body, footer. `body_html` is
+    the caller's, built from escaped values; `title` and `footer` are escaped here."""
+    from frappe.utils.pdf import get_pdf
+
+    _ensure_fonts()
+    who = frappe.utils.get_fullname(frappe.session.user)
+    when = frappe.utils.format_datetime(frappe.utils.now_datetime(), "d MMMM yyyy, HH:mm")
+    html = PDF_TEMPLATE.format(
+        fonts=_font_css(), css=pdf_blocks.CSS,
+        business=escape_html(_business(business_code)), question=escape_html(title or ""),
+        body=body_html, as_of=escape_html(_pretty_date(frappe.utils.today())),
+        who=escape_html(who), when=escape_html(when), footer=escape_html(footer or ""))
+    with _with_fonts():
+        return get_pdf(html, dict(PDF_OPTIONS))
 
 
 def _ensure_fonts():
@@ -411,10 +431,13 @@ code{{font-family:Menlo,Consolas,monospace;font-size:8.5pt}}
 <td class="meta">Figures as at {as_of}<br>Prepared for {who} · {when}</td></tr></table>
 <h1>{question}</h1>
 {body}
-<div class="ft">Prepared by AI Business Intelligence from {business}'s ERPNext records, using {model}.
-It reads the records the person who asked may see and cannot change anything in ERPNext.
-Projections are indicative; recommendations are for management to decide on.</div>
+<div class="ft">{footer}</div>
 </body></html>"""
+
+ANSWER_FOOTER = ("Prepared by AI Business Intelligence from {business}'s ERPNext records, using "
+                 "{model}.\nIt reads the records the person who asked may see and cannot change "
+                 "anything in ERPNext.\nProjections are indicative; recommendations are for "
+                 "management to decide on.")
 
 
 @frappe.whitelist()
