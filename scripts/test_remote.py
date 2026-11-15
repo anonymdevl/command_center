@@ -135,6 +135,16 @@ check(len(rows) == len(ROWS) and rows[-1]["name"] == ROWS[-1]["name"],
 check(len(calls) == 3 and [int(c["params"]["limit_start"]) for c in calls] == [0, 500, 1000],
       f"in pages of 500 by limit_start: {[c['params'].get('limit_start') for c in calls]}")
 check(len(sleeps) == 2 and all(s == 0.25 for s in sleeps), f"with a pause between pages: {sleeps}")
+# 1b. A screen's read a person is waiting for (speed.interactive) skips the pause for
+#     its first pages; a system read (a load) never does.
+frappe.local.cc_interactive = True
+reset()
+conn.get_list("Sales Invoice", fields=["name", "modified"], limit=100000)
+check(len(calls) == 3 and not sleeps, f"a screen's read is not paced: {sleeps}")
+reset()
+conn.as_system().get_list("Sales Invoice", fields=["name", "modified"], limit=100000)
+check(len(sleeps) == 2, f"a load is paced even while a screen is being read: {sleeps}")
+del frappe.local.cc_interactive
 frappe.conf["command_center_remote_page"] = 1000
 reset()
 conn.get_list("Sales Invoice", limit=100000)

@@ -334,14 +334,14 @@ LIVE = {k.key: k for k in (
     Live("score_approvals", "Were the right people asked?", "percent", score_approvals,
          "/app/version", subset_of="purchase orders and payments with approval steps recorded"),
     Live("score_records", "Are our records clean?", "percent", score_records, "",
-         source="fact_stock_balance"),
+         source="fact_stock_balance", reads_erp=False),
     Live("score_access", "Who can see what?", "percent", score_access, "/app/user?enabled=1"),
     # Worked out mostly from the loaded records, so it is not held back when ERPNext is
     # down: the questions read from ERPNext are left out and the note says so.
     Live("control_score", "Control score", "count", control_score, "/app/version",
          source="fact_sales_invoice"),
     Live("alerts_open", "Open alerts", "count", alerts_open, "/app/version",
-         source="fact_sales_invoice"),
+         source="fact_sales_invoice", reads_erp=False),
     Live("findings_open", "Open findings", "count", findings_open, "/app/non-conformance"),
     Live("findings_repeat", "Repeat findings", "count", findings_repeat, "/app/non-conformance"),
     Live("actions_overdue", "Overdue corrective actions", "count", actions_overdue,

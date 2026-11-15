@@ -1470,6 +1470,12 @@ if _node:
                  capture_output=True, text=True, timeout=120)
     check(_t.returncode == 0,
           "scripts/test_charts.mjs failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+    # A screen's last answers (frontend/src/swr.js): shown only for the same person,
+    # business and call, and the minute's refresh never piles up behind a slow request.
+    _t = _sp.run([_node, os.path.join(ROOT, "scripts", "test_swr.mjs")],
+                 capture_output=True, text=True, timeout=120)
+    check(_t.returncode == 0,
+          "scripts/test_swr.mjs failed:\n" + (_t.stdout + _t.stderr)[-1500:])
 
 # --------------------------------------------------------------------------
 print(f"preflight: {checks} checks")

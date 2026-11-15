@@ -28,10 +28,21 @@ OUT = os.path.join(ROOT, "insights", "core", "models_generated.py")
 # Indexes the doctype controllers created in on_doctype_update (frappe.db.add_index).
 EXTRA_INDEXES = {
     "Command Center Fact Sales Invoice Line": [["business_code", "item_group"],
-                                               ["business_code", "posting_date"]],
+                                               ["business_code", "posting_date"],
+                                               ["business_code", "src_docstatus", "posting_date"]],
     "Command Center Fact Stock Balance": [["business_code", "warehouse"],
                                           ["business_code", "item_group"]],
     "Command Center Fact Party Balance": [["business_code", "party_type", "party"]],
+    # The figures' own filters (kpi/sales.py, buying.py, operations.py): every figure is
+    # one business's, and most then narrow to the submitted, the open or the unpaid.
+    "Command Center Fact Sales Invoice": [["business_code", "src_docstatus", "outstanding_amount"]],
+    "Command Center Fact Purchase Invoice": [["business_code", "src_docstatus", "outstanding_amount"]],
+    "Command Center Fact Purchase Invoice Line": [["business_code", "src_docstatus"]],
+    "Command Center Fact Sales Order": [["business_code", "is_open"]],
+    "Command Center Fact Case": [["business_code", "is_open"]],
+    "Command Center Fact Task": [["business_code", "is_open"]],
+    "Command Center Fact Person": [["business_code", "is_active"]],
+    "Command Center Fact Payment Allocation": [["business_code", "payment_type", "posting_date"]],
 }
 
 NO_COLUMN = {"Section Break", "Column Break", "Tab Break", "HTML", "Button", "Heading",

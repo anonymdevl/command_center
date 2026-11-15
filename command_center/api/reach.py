@@ -69,7 +69,7 @@ def retry(business_code: str | None = None) -> dict:
             frappe.log_error(title="Command Center: reachability check",
                              message=frappe.get_traceback())
         frappe.db.commit()
-        # Figures and panels cached while it was down are read again.
-        for view in ("command", "brief", "ops", "health", "risk", "it", "aud"):
-            frappe.cache().delete_value(f"cc:panels:{view}:{business_code or '__all__'}")
+        # Figures and panels kept from before are read again (speed.py).
+        from command_center import speed
+        speed.data_changed(code, hard=True)
     return status(business_code)
