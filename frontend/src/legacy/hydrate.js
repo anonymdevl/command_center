@@ -10,10 +10,8 @@
  * replaced with the one the KPI engine computes, and the card is wired to open the
  * real records. The markup, spacing, chevron and hairline are exactly as generated.
  *
- * A card with no KPI behind it keeps its designed figure and is marked on the card as
- * illustrative. Mixing real and demonstration figures without saying which is which
- * would make every figure on the screen worth less, and the flag slot already exists
- * in the card contract for exactly this.
+ * A card with no KPI behind it shows no figure at all ("—", "Not measured yet"): a
+ * production screen never shows a number it did not read from the business.
  *
  * Two kinds of thing carry a figure: the `.kpi` cards and the `.bk` tiles. Both are
  * hydrated here, by the same rules and through the same figure renderer, because a tile
@@ -29,8 +27,7 @@ import { money, count, exact } from "../format.js";
  *
  * Keyed on the label the designer wrote, so this file is the only place that knows
  * both vocabularies. A label that changes in the generators stops matching here and
- * the card falls back to illustrative rather than showing the wrong figure against
- * the wrong words.
+ * the card shows no figure rather than the wrong figure against the wrong words.
  */
 export const CARD_KPIS = {
   // Home. "Money in, month" read GHS 0 because it was a month measured from today on a
@@ -90,15 +87,20 @@ export const CARD_KPIS = {
     // stock line, so stock_lines is not that figure -- stock_lines_promised is.
     "Lines promised": "stock_lines_promised",
     "Worst shortfall": "stock_worst_shortfall",
-    // Batches holding stock that expire within ninety days; "—" when no batch carries
-    // an expiry date at all, which is a different statement from none expiring.
-    // "Off warehouse" stays illustrative: which location is "not a warehouse" is a
-    // judgement about one business's set-up, not something ERPNext records.
+    // Batches holding stock that expire within ninety days; the set-up guide when no
+    // batch carries an expiry date at all, which is a different statement from none
+    // expiring.
     "Near expiry": "batches_near_expiry",
+    // Stock in warehouses marked Transit or switched off (kpi/live_departments.py); the
+    // guide when no warehouse is marked either way.
+    "Off warehouse": "stock_off_warehouse",
   },
   eng: {
-    "Money held up": "order_book",
-    "Past due date": "order_book_late",
+    // What customers waiting on late jobs owe us -- the money the work is holding up.
+    "Money held up": "eng_money_held",
+    // Jobs past their promised date: a count of tasks, as the card says, never the value
+    // of late sales orders (which it was, and which reads right and is wrong).
+    "Past due date": "tasks_overdue",
     "Jobs open": "tasks_open",
     "Longest wait": "tasks_longest_wait",
     Engineers: "engineers",
@@ -125,8 +127,9 @@ export const CARD_KPIS = {
     "Past due time": "cases_past_due",
     // Open cases matched against the loaded receivable by customer.
     "Also owe us": "cases_owing",
-    // "Equipment down" stays illustrative: ERPNext's Issue has no field saying a
-    // machine is out of service, and guessing it from the subject would be wrong.
+    // Open cases whose Issue Type names equipment down; the guide to create that type
+    // when the business has none -- never a guess from the subject.
+    "Equipment down": "cases_equipment_down",
   },
   aud: {
     // "Unsupported" on Internal Audit is the invoices never issued, as its footnote says.
@@ -196,23 +199,24 @@ export const TILE_KPIS = {
   // home.js draws their score, bar and flag. The other three still need a source.
   health: {},
   // Where orders are held up. The stages overlap (an order not despatched is usually
-  // not invoiced either), so each box is its own count over open orders. Awaiting stock
-  // and Awaiting purchase need each order line against its warehouse and what is on
-  // order from suppliers, and the design does not say where one ends and the other
-  // begins; Awaiting install has no ERPNext record behind it; Awaiting payment needs
-  // invoices traced back to their orders, which no fact holds. Those four stay
-  // illustrative.
+  // not invoiced either), so each box is its own count (kpi/live_departments.py):
+  // stock -- an open order line its warehouse cannot cover; purchase -- of those, a
+  // shortfall nothing is on order for; install -- the order's linked project still open;
+  // payment -- an invoice raised against the order still unpaid.
   sales: {
+    "Awaiting stock": { key: "order_awaiting_stock" },
+    "Awaiting purchase": { key: "order_awaiting_purchase" },
     "Awaiting despatch": { key: "order_awaiting_despatch" },
     "Awaiting invoice": { key: "order_awaiting_invoice" },
+    "Awaiting install": { key: "order_awaiting_install" },
+    "Awaiting payment": { key: "order_awaiting_payment" },
   },
 };
 
 /**
  * While the figures are on their way, the cards that will receive one show a quiet
- * placeholder instead of their designed figure: a sample value that flashes and then
- * changes reads as the number being wrong. Cards with no KPI behind them are left as
- * designed (they will be marked illustrative). writeFigure clears the mark.
+ * placeholder instead of their designed figure: a value that flashes and then changes
+ * reads as the number being wrong. writeFigure clears the mark.
  */
 export function markLoading(root, viewKey, on) {
   if (!root) return;
@@ -270,7 +274,7 @@ export function hydrateCards(root, viewKey, figures, { onOpen, openDrawer } = {}
     const figure = key ? figures?.[key] : null;
 
     if (!figure) {
-      markIllustrative(card);
+      if (!key || figures) notMeasured(card);
       return;
     }
     // Nothing recorded in ERPNext yet: the card says how to set it up (guides.py).
@@ -308,11 +312,21 @@ export function hydrateTiles(root, viewKey, figures, { onOpen, openDrawer } = {}
     const figure = spec ? figures?.[spec.key] : null;
 
     if (!figure) {
-      markIllustrative(tile);
+      if (!spec || figures) notMeasured(tile);
       return;
     }
     if (figure.data_status?.state === "needs_setup" && figure.data_status.guide) {
-      if (!navigates(tile)) guideCard(tile, figure.data_status.guide, openDrawer);
+      if (!navigates(tile)) {
+        guideCard(tile, figure.data_status.guide, openDrawer);
+        // A tile's figure is .n and its footnote .v (a card's are .val and .delta).
+        const n = tile.querySelector(".n");
+        if (n) {
+          n.removeAttribute("style");
+          n.textContent = "—";
+        }
+        const v = tile.querySelector(".v");
+        if (v) v.textContent = "Not recorded yet · how to set it up";
+      }
       live += 1;
       return;
     }
@@ -361,7 +375,8 @@ function writeTileFigure(tile, figure, unit) {
   // ("Payroll shown as status only, names hidden", "Seeded for the demonstration") and
   // is left exactly as designed, because that is not what a KPI note is for.
   const v = tile.querySelector(".v");
-  if (v && figure.note && /\d/.test(v.textContent || "")) v.textContent = figure.note;
+  const foot = (v?.textContent || "").trim();
+  if (v && figure.note && (/\d/.test(foot) || !foot || foot === "—")) v.textContent = figure.note;
 
   provenance(tile, figure);
   tile.dataset.live = "1";
@@ -441,7 +456,11 @@ function provenance(node, figure) {
   if (state === "stale") setFlag(node, "as at", "f-asat");
   else if (state === "failed") setFlag(node, "load failed", "f-crit");
   else clearFlag(node);
-  delete node.dataset.illustrative;
+  // The business's ERPNext did not answer: no figure, and the footnote says why.
+  if (state === "unreachable") {
+    const foot = node.querySelector(".delta, .v");
+    if (foot) foot.textContent = "Can't reach ERPNext";
+  }
 }
 
 function titleFor(figure, closing) {
@@ -474,10 +493,19 @@ function wireOpen(card, figure, onOpen) {
   card.setAttribute("tabindex", "0");
 }
 
-function markIllustrative(node) {
+/**
+ * A card or tile with no figure behind it on this screen: no number is shown. A
+ * footnote that is a statement about the business (it carries no figure) is kept.
+ */
+function notMeasured(node) {
   if (node.dataset.live === "1") return;
-  node.dataset.illustrative = "1";
-  setFlag(node, "illustrative", "f-dim");
+  const val = node.querySelector(".val, .n");
+  if (val) {
+    val.removeAttribute("style");
+    val.textContent = "—";
+  }
+  const foot = node.querySelector(".delta, .v");
+  if (foot && /\d/.test(foot.textContent || "")) foot.textContent = "Not measured yet";
 }
 
 /**

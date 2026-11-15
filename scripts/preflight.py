@@ -388,9 +388,9 @@ check("card.onclick =" in _h,
 check('classList.add("clickable")' in _h,
       "hydrate.js does not mark hydrated cards clickable, so they would lose the "
       "chevron every other card has.")
-check('dataset.illustrative' in _h,
-      "hydrate.js does not mark unhydrated cards, so a demonstration figure would sit "
-      "beside a real one with nothing to tell them apart.")
+check('function notMeasured' in _h,
+      "hydrate.js does not blank cards with no figure behind them, so a designed figure "
+      "would sit beside a real one with nothing to tell them apart.")
 
 
 # --------------------------------------------------------------------------

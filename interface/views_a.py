@@ -22,44 +22,63 @@ def thin(t): return f'<div class="thin">{t}</div>'
 # alert() is defined once, in p2.py. Defining it here shadowed that copy and the two drifted apart.
 
 # ============ SALES ============
+# Production markup: every figure, name, date and currency on this screen is filled from
+# the selected business at runtime (legacy/hydrate.js for the cards and tiles,
+# api/panels.py + legacy/panels.js for the panels, findings and the line under the
+# heading). Nothing here is a sample: the marks are empty until the business answers.
+def dtable(heads):
+    """An empty designed table: its headings only. ("Value", True) is a number column,
+    and a heading ending in "$" carries the business's currency after it."""
+    th = []
+    for h in heads:
+        label, num = (h, False) if isinstance(h, str) else h
+        cur = label.endswith("$")
+        label = label.rstrip("$").strip()
+        style = ' style="text-align:right"' if num else ""
+        th.append(f'<th{style}>{label}{" <span data-cur></span>" if cur else ""}</th>')
+    return f'<table class="dt"><thead><tr>{"".join(th)}</tr></thead><tbody></tbody></table>'
+
+def bars0(): return '<div class="bars"></div>'
+
+def trend0(h=160):
+    return line_chart([""]*12, [{"data": [0]*12}], h=h, fmt=lambda v: "")
+
+def tile0(label, key):
+    return (f'<div class="bk" onclick="explain({SQ}{key}{SQ})"><div class="n">—</div>'
+            f'<div class="l">{label}</div><div class="v">—</div></div>')
+
+def warn0(): return '<div class="warn" hidden></div>'
+
 V_SALES=f'''<div class="topbar"><div><h3>Sales and Payments</h3>
-<div class="when">7,765 invoices · 1,436 orders · 806 still unpaid</div></div></div>
+<div class="when">Invoices, orders and what is still unpaid</div></div></div>
 <div class="kpis six">
-{kpi("Last full month","1.55","M GHS","July 2025","up","","rev")}
-{kpi("Best month","3.19","M GHS","June 2025","up","","rev")}
-{kpi("Owed to us","9.18","M GHS","74% over 3 months late","dn","review","ar")}
-{kpi("Unpaid invoices","806","","behind that balance","flat","","ar")}
-{kpi("Not despatched","4","","GHS 84,950","dn","","openorders")}
-{kpi("Never issued","88","","in nobody's figures","flat","","drafts")}
+{kpi("Last full month","—","","","flat","","rev")}
+{kpi("Best month","—","","","flat","","rev")}
+{kpi("Owed to us","—","","","flat","","ar")}
+{kpi("Unpaid invoices","—","","","flat","","ar")}
+{kpi("Not despatched","—","","","flat","","openorders")}
+{kpi("Never issued","—","","","flat","","drafts")}
 </div>
 <div class="two">
-{panel("How sales have moved","<div style='padding:0 0 4px'>"+line_chart(REV_LABELS,[{"data":REV}],h=160,fmt=lambda v:'GHS '+g(v))+"</div>",
+{panel("How sales have moved","<div style='padding:0 0 4px'>"+trend0(160)+"</div>",
  "Monthly, from confirmed orders","rev")}
 {panel("Who owes us, and how long it has been",
- stacked([("Under 1 month",0,"var(--ok)"),("1–2 months",0,"var(--med)"),("2–3 months",0,"var(--high)"),("Over 3 months",4592482,"var(--crit)")])
- +thin("Nearly three quarters sits beyond three months. GHS 2.40M across 159 invoices is still inside ninety days, so this is a collection problem rather than a total stop."),
+ stacked([("Under 1 month",0,"var(--ok)"),("1–2 months",0,"var(--med)"),("2–3 months",0,"var(--high)"),("Over 3 months",0,"var(--crit)")])
+ +thin("How the money owed by the ten largest balances is spread by age."),
  "Ten largest balances","ar")}
 </div>
 <div class="two">
-{panel("From enquiry to order", funnel([("Enquiries",17,0,"Barely used — 17 in the whole system"),
- ("Opportunities",0,0,"Not used at all"),("Quotations",122,1668921,"Only 122 against 1,436 orders"),
- ("Orders",1436,20363857,"Most orders never start as a quotation")]),
+{panel("From enquiry to order", funnel([("Enquiries",0,0,""),
+ ("Opportunities",0,0,""),("Quotations",0,0,""),
+ ("Orders",0,0,"")]),
  "Whole history","funnel")}
-{panel("Largest balances owed", bar_chart([(c,v,"var(--crit)") for c,v in AR[:8]], fmt=lambda v:g(v)),
- "GHS · the ten largest hold GHS 4,592,482, half of all money owed","ar")}
+{panel("Largest balances owed", bars0(),
+ "The ten largest balances","ar")}
 </div>
 {panel("Where orders are held up",
- '<div class="grid six">'+"".join(f'<div class="bk" onclick="explain({SQ}openorders{SQ})"><div class="n">{n}</div><div class="l">{l}</div><div class="v">{v}</div></div>'
- for n,l,v in [("2","Awaiting stock","GHS 18,450"),("1","Awaiting purchase","GHS 65,100"),
- ("4","Awaiting despatch","GHS 84,950"),("4","Awaiting invoice","GHS 84,950"),
- ("0","Awaiting install","—"),("4","Awaiting payment","GHS 13,537")])+'</div>',
+ '<div class="grid six">'+"".join(tile0(l,"openorders") for l in ["Awaiting stock","Awaiting purchase",
+ "Awaiting despatch","Awaiting invoice","Awaiting install","Awaiting payment"])+'</div>',
  "Click any box for the orders behind it","openorders")}
 {panel("Orders taken but not despatched",
- '<table class="dt"><thead><tr><th>Order</th><th>Customer</th><th style="text-align:right">Value GHS</th><th>Despatched</th><th></th></tr></thead><tbody>'
- +"".join(f'<tr><td><span class="lnk" onclick="openDrawer({SQ}{d}{SQ})">{n}</span></td><td>{c}</td><td class="num">{g(v)}</td>'
-          f'<td style="color:var(--dim)">None of it</td><td><button class="btn" onclick="ask2({SQ}Why is the {s} order still open?{SQ})">Ask why</button></td></tr>'
- for n,c,v,d,s in [("SAL-ORD-2025-00910","EJURA MUNICIPAL HOSPITAL",65100,"ejura","Ejura"),
-  ("SAL-ORD-2025-00909","ROSSY'S SUPPLY",16700,"order","Rossy's"),
-  ("SAL-ORD-2025-00906-1","ST MARYS HOSPITAL (DROBO)",1750,"order","St Marys"),
-  ("SAL-ORD-2025-00907","LILIAN ACHIAA",1400,"order","Lilian Achiaa")])+'</tbody></table>')}
-{panel("Discounts and price changes outside policy", thin("<b>Nothing to show from this demo extract.</b> The live system records discounts on each order; this copy has none above the threshold. The panel stays here so the shape of the screen is the shape of the finished product."),"","discount")}'''
+ dtable(["Order","Customer",("Value$",True),"Despatched",""]))}
+{panel("Discounts and price changes outside policy", thin("<b>Invoice lines sold below their price-list price with no pricing rule behind them.</b> A discount given by a pricing rule is policy; one typed in by hand is not."),"","discount")}'''

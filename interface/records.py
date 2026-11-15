@@ -235,3 +235,11 @@ RECORDS={
   ("<b>Total not presently usable</b>","<b>"+C(5853352)+"</b>","")],
  "Against a total stock holding of GHS 3,769,970. These three figures normally live in three different reports."),
 }
+
+# The department screens' explainers describe what a figure means and how it is worked
+# out. Their records are the business's own, opened from the card or the panel (the live
+# records drawer), never a table typed in here.
+for _k in ("ar", "worst", "reserved", "nodate", "over", "recon", "late", "supp", "lead",
+           "openorders", "cases", "depts", "turnover", "head", "capacity", "drafts", "funnel",
+           "stockval", "workingcap"):
+    RECORDS.pop(_k, None)

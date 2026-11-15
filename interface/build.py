@@ -187,7 +187,7 @@ def ex_html(k):
         recblock='<div class="sect" style="margin-top:16px">The records behind it</div>'+rec
     else:
         recblock=('<div class="sect" style="margin-top:16px">The records behind it</div>'
-                  '<div class="thin">Nothing to list for this one in the demo extract.</div>')
+                  '<div class="thin">Open the card, or a row of the panel, for the records behind it, read from ERPNext.</div>')
     return (f'<div class="dhead"><div><div class="dt">Where this comes from</div><h4>{t}</h4></div>'
             f'<button class="btn" onclick="closeDrawer()">Close &#10005;</button></div>'
             f'<p style="font-size:var(--fs-sm);color:var(--mut);margin-bottom:10px">{sub}</p>'

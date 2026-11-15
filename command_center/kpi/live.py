@@ -357,7 +357,14 @@ def cases_past_due(r):
         return 0, "no open cases"
     promised = [x for x in rows if x.get("resolution_by")]
     if not promised:
-        return None, "no response time set on any open case"
+        from command_center.guides import needs_setup
+        return None, "no response time set on any open case", None, needs_setup(
+            r.code, "No open case carries a promised resolution time.",
+            ["Open Service Level Agreement, click New, and set the response and resolution "
+             "time for each priority.",
+             "Tick Default Service Level Agreement so every new Issue gets it.",
+             "Open cases already raised: open each one and choose the agreement."],
+            "/app/service-level-agreement")
     now = frappe.utils.now_datetime()
     late = [frappe.utils.get_datetime(x["resolution_by"]) for x in promised
             if frappe.utils.get_datetime(x["resolution_by"]) < now]
@@ -398,7 +405,14 @@ def batches_near_expiry(r):
     rows = _read(r, "Batch", {"expiry_date": ["is", "set"], "batch_qty": [">", 0]},
                  ["name", "expiry_date", "batch_qty"])
     if not rows and not r.count("Batch", {"expiry_date": ["is", "set"]}):
-        return None, "no expiry dates recorded"
+        from command_center.guides import needs_setup
+        return None, "no expiry dates recorded", None, needs_setup(
+            r.code, "No batch in ERPNext carries an expiry date yet.",
+            ["Open each Item that expires, tick Has Batch No and Has Expiry Date, and save.",
+             "When goods arrive (Purchase Receipt), enter the Batch No and its Expiry Date "
+             "on each line.",
+             "Stock already on the shelf: give it a batch with its expiry date through a "
+             "Stock Reconciliation."], "/app/item")
     today = frappe.utils.getdate(frappe.utils.today())
     edge = frappe.utils.getdate(frappe.utils.add_days(today, EXPIRY_DAYS))
     dates = [frappe.utils.getdate(x["expiry_date"]) for x in rows if x.get("expiry_date")]
@@ -451,7 +465,13 @@ def bank_cleared_pct(r):
     banks = [a["name"] for a in r.all("Account", filters={"account_type": "Bank", "is_group": 0},
                                       fields=["name"], limit=500)]
     if not banks:
-        return None, "no bank accounts in ERPNext"
+        from command_center.guides import needs_setup
+        return None, "no bank accounts in ERPNext", None, needs_setup(
+            r.code, "No ledger account in ERPNext is marked as a bank account.",
+            ["Open Chart of Accounts and click each bank account.",
+             "Set Account Type to Bank and save.",
+             "Match payments to each statement in Bank Reconciliation Tool; that records "
+             "the clearance date this card counts."], "/app/account/view/tree")
     total = cleared = 0
     for side in ("paid_from", "paid_to"):
         base = {"docstatus": 1, side: ["in", banks]}
@@ -466,11 +486,20 @@ def bank_cleared_pct(r):
 def payroll_last_run(r):
     """When pay was last run: the latest pay period a submitted salary slip covers.
     Dates and a count only -- no amount is read."""
+    from command_center.guides import needs_setup
+    steps = ["Open Payroll Entry, choose the company, the pay period and the employees, "
+             "and click Get Employees.",
+             "Click Create Salary Slips, check them, then Submit Salary Slip."]
     if not r.has("Salary Slip"):
-        return None, "payroll is not in this ERPNext"
+        return None, "payroll is not in this ERPNext", None, needs_setup(
+            r.code, "Payroll is not set up in this ERPNext (the HR and payroll app is not "
+                    "installed).", ["Ask your ERPNext administrator to install the HRMS "
+                                    "app, then set up Salary Structures."] + steps, "/app")
     last = r.edge("Salary Slip", "end_date", {"docstatus": 1})
     if not last:
-        return None, "no pay run submitted"
+        return None, "no pay run submitted", None, needs_setup(
+            r.code, "No pay run has been submitted in ERPNext yet.", steps,
+            "/app/payroll-entry/new")
     n = r.count("Salary Slip", {"docstatus": 1, "end_date": str(last)[:10]})
     return str(last)[:10], f"{n:,} slip{'s' if n != 1 else ''} for that period"
 
@@ -519,7 +548,11 @@ def evaluate(keys, business_code=None) -> dict:
         return {}
     reader = None
     try:
-        reader = _Reader(business_code)
+        # Guarded: once the business has not answered, the other figures give up at once
+        # instead of each waiting out the retries (figures worked out from the loaded
+        # facts alone still answer).
+        from command_center.api.panels import _Guarded
+        reader = _Guarded(_Reader(business_code))
     except Exception:
         frappe.log_error(title="Command Center live figures", message=frappe.get_traceback())
     out = {}
@@ -532,11 +565,17 @@ def evaluate(keys, business_code=None) -> dict:
             got = spec.fn(reader)
             value, note = got[0], got[1]
             drill = got[2] if len(got) > 2 else None
-            state = {"state": "live", "message": None}
-        except Exception:
-            frappe.log_error(title=f"Command Center live figure {key}", message=frappe.get_traceback())
-            value, note, state = None, "could not be read", {"state": "failed",
-                                                            "message": "This figure could not be read."}
+            # A fourth element is the figure's own status: needs_setup (guides.py) when
+            # nothing behind it is recorded in ERPNext yet.
+            state = (got[3] if len(got) > 3 and got[3] else {"state": "live", "message": None})
+        except Exception as e:
+            from command_center.kpi.live_departments import is_down, unreachable_status
+            if is_down(e):
+                value, note, state = None, "Can't reach ERPNext", unreachable_status(e)
+            else:
+                frappe.log_error(title=f"Command Center live figure {key}", message=frappe.get_traceback())
+                value, note, state = None, "could not be read", {"state": "failed",
+                                                                "message": "This figure could not be read."}
         site = "" if not reader or reader.local else (reader.conn.base_url or "")
         as_of = {"date": frappe.utils.today(), "basis": "read from ERPNext just now"}
         if spec.source != "erp":
@@ -565,3 +604,8 @@ def evaluate(keys, business_code=None) -> dict:
             "drill": drill, "data_status": state, "period": None, "group": None,
         }
     return out
+
+
+# The department screens' figures (kpi/live_departments.py) join these.
+from command_center.kpi.live_departments import FIGURES as _DEPARTMENTS  # noqa: E402
+LIVE.update(_DEPARTMENTS)
