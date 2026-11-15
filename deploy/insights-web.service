@@ -14,6 +14,13 @@ Environment=DJANGO_SETTINGS_MODULE=insights.settings
 ExecStart=__DIR__/.venv-platform/bin/gunicorn insights.wsgi:application \
     --bind 127.0.0.1:__PORT__ --workers 2 --threads 8 --timeout 240 --graceful-timeout 30 \
     --access-logfile - --error-logfile -
+# Shares the server with ERPNext sites, which always come first: lower CPU and disk
+# priority, and a memory ceiling (if it is reached, only this service is restarted).
+Nice=10
+CPUWeight=50
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+MemoryMax=2G
 Restart=always
 RestartSec=3
 

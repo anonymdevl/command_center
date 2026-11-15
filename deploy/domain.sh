@@ -5,8 +5,10 @@
 #   cd ~/insights-platform && ./deploy/domain.sh insights.example.com [you@example.com]
 #
 # The name's DNS must already point at this server. It:
-#   1. adds an nginx site for that name only (/etc/nginx/conf.d/insights-<name>.conf),
-#      leaving every other site on this server -- Frappe benches included -- alone;
+#   1. adds an nginx site for that name only (/etc/nginx/conf.d/zz-insights-<name>.conf),
+#      leaving every other site on this server -- Frappe benches included -- alone. It
+#      records how every other site answers before, checks again after, and takes its
+#      own site out again if any of them changed;
 #   2. gets a Let's Encrypt certificate (certbot, webroot; renews on its own and reloads
 #      nginx);
 #   3. switches the site to HTTPS (http redirects to https);
@@ -22,7 +24,10 @@ DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${INSIGHTS_PORT:-8200}"
 CONFIG="$DIR/insights.json"
 PY="$DIR/.venv-platform/bin/python"
-CONF="/etc/nginx/conf.d/insights-$DOMAIN.conf"
+# "zz-": nginx sends a request that matches no site name to the first site it loaded
+# on that port (unless one is marked default_server). Loading last, this one can never
+# become that fallback for the server's other sites.
+CONF="/etc/nginx/conf.d/zz-insights-$DOMAIN.conf"
 WEBROOT="/var/www/insights-acme"
 CERT="/etc/letsencrypt/live/$DOMAIN"
 step() { printf '\n== %s\n' "$1"; }
@@ -39,6 +44,27 @@ if [ -z "$THERE" ]; then echo "   $DOMAIN does not resolve yet" >&2; exit 1; fi
 if [ -n "$HERE" ] && [ "$HERE" != "$THERE" ]; then
   echo "   $DOMAIN points elsewhere; the certificate would fail" >&2; exit 1
 fi
+
+# Every other site nginx serves here, by name, and how each answers (http and https,
+# asked of this server directly). Taken before the change and compared after it.
+other_sites() {
+  sudo nginx -T 2>/dev/null | awk '$1=="server_name"{for(i=2;i<=NF;i++)print $i}' \
+    | tr -d ';' | grep -vE '^(_|localhost|~.*|.*\*.*|'"${DOMAIN//./\\.}"')$' | sort -u || true
+}
+answers() {
+  local n h s
+  for n in $(other_sites); do
+    h="$(curl -s -o /dev/null -m 10 -w '%{http_code}' --resolve "$n:80:127.0.0.1" "http://$n/" || true)"
+    s="$(curl -sk -o /dev/null -m 10 -w '%{http_code}' --resolve "$n:443:127.0.0.1" "https://$n/" || true)"
+    echo "$n $h $s"
+  done
+}
+ok() { case "$1" in 2??|3??|401|403|404) return 0;; *) return 1;; esac; }
+
+step "the server's other sites, before"
+BEFORE="$(answers)"
+echo "$BEFORE" | awk 'NF{printf "   %-45s http %s  https %s\n", $1, $2, $3}'
+[ -n "$BEFORE" ] || echo "   (no other named sites found)"
 
 # The site's locations, shared by the http (before a certificate) and https versions.
 locations() {
@@ -108,16 +134,39 @@ step "nginx (https)"
   echo "    location / { return 301 https://\$host\$request_uri; }"
   echo "}"
   echo "server {"
-  echo "    listen 443 ssl http2;"
+  # Plain "listen 443 ssl": options such as http2 on a listen line apply to every
+  # site on that port, so none are set here; TLS settings are the server's own.
+  echo "    listen 443 ssl;"
   echo "    server_name $DOMAIN;"
   echo "    ssl_certificate $CERT/fullchain.pem;"
   echo "    ssl_certificate_key $CERT/privkey.pem;"
-  echo "    ssl_protocols TLSv1.2 TLSv1.3;"
   echo "    add_header Strict-Transport-Security \"max-age=31536000\" always;"
   locations
   echo "}"
 } | install_conf
 echo "   $CONF"
+
+step "the server's other sites, after"
+AFTER="$(answers)"
+CHANGED=""
+while read -r n h s; do
+  [ -n "$n" ] || continue
+  read -r _ h2 s2 <<<"$(echo "$AFTER" | awk -v n="$n" '$1==n')"
+  mark="same"
+  if { ok "$h" && ! ok "${h2:-000}"; } || { ok "$s" && ! ok "${s2:-000}"; }; then
+    mark="CHANGED"; CHANGED="$CHANGED $n"
+  elif [ "$h" != "${h2:-}" ] || [ "$s" != "${s2:-}" ]; then
+    mark="different code, still answering"
+  fi
+  printf "   %-45s http %s -> %s  https %s -> %s  %s\n" "$n" "$h" "${h2:-?}" "$s" "${s2:-?}" "$mark"
+done <<<"$BEFORE"
+if [ -n "$CHANGED" ]; then
+  echo "   a site that answered before no longer does:$CHANGED" >&2
+  echo "   taking the platform's nginx site out again" >&2
+  sudo rm -f "$CONF" && sudo nginx -t && sudo systemctl reload nginx
+  exit 1
+fi
+echo "   every other site answers as before"
 
 step "the platform's address"
 CONFIG="$CONFIG" DOMAIN="$DOMAIN" "$PY" - <<'PYCFG'

@@ -133,7 +133,8 @@ if [ "$HAS_BUSINESS" = "0" ]; then
   if [ "$(ask 'Connect a business now? (y/n)' y)" = "y" ]; then
     "$PY" manage.py register_business
     step "first full load (several minutes)"
-    "$PY" manage.py execute command_center.api.ingest.run_all --kwargs '{"full": true}'
+    # low priority: the ERPNext sites on this server come first
+    nice -n 10 "$PY" manage.py execute command_center.api.ingest.run_all --kwargs '{"full": true}'
     "$PY" manage.py execute command_center.api.kpi.verify
   fi
 fi

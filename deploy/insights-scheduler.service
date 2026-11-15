@@ -10,6 +10,13 @@ WorkingDirectory=__DIR__
 Environment=INSIGHTS_CONFIG=__DIR__/insights.json
 Environment=DJANGO_SETTINGS_MODULE=insights.settings
 ExecStart=__DIR__/.venv-platform/bin/python manage.py scheduler
+# Shares the server with ERPNext sites, which always come first: lower CPU and disk
+# priority, and a memory ceiling (if it is reached, only this service is restarted).
+Nice=10
+CPUWeight=50
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+MemoryMax=2G
 Restart=always
 RestartSec=10
 

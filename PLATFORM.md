@@ -56,6 +56,13 @@ It adds an nginx site for that name only (no other site or bench is touched), ge
 Let's Encrypt certificate that renews on its own, redirects http to https, sets the
 platform's address in `insights.json` and restarts it. The tunnel keeps working too.
 
+**The server's other sites are not affected.** The platform's nginx site matches its own
+name only, loads last (so it can never be the fallback for unknown names) and sets no
+port-wide options. `domain.sh` records how every other site answers before the change and
+checks them again after; if one that answered stops, it takes its own site out again.
+The platform's services run at lower CPU and disk priority with a 2 GB memory ceiling,
+in their own database, and read the businesses' ERPNext a page at a time.
+
 ## Everyday tasks
 
 | Task | How |
