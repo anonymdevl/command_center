@@ -525,6 +525,10 @@ div.work-table table.dt{min-width:560px}
 .rp-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 .rp-head b{font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em}
 .rp-sub{font-size:var(--fs-xs);color:var(--mut)}
+/* "View Last Report" under a row's Last run (legacy/reports.js). */
+.rp-view{display:block;background:none;border:0;padding:0;margin-top:4px;cursor:pointer;font-size:var(--fs-xs);
+ color:var(--accent-ink)}
+.rp-view:hover{text-decoration:underline}
 .rp-acts{margin-left:auto;display:flex;gap:8px}
 .rp-body{font-size:var(--fs-md);line-height:1.62;color:var(--ink2)}
 .rp-body b{color:var(--ink)}

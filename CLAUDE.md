@@ -370,9 +370,18 @@ the rendered figures. All reads; files are streamed, no File is written.
 `scripts/test_export.py` runs in preflight.
 
 `api/reports.py`: RP-01..RP-09 as briefs to the analyst (16 rounds), run as a job on the
-long queue as the asking user, result in the cache for an hour, polled by
-`legacy/reports.js`. The Reports screen's Last run shows what happened, never a designed
-tick. Scheduling and email distribution are **not built** and the screen says so.
+long queue as the asking user. Every run, manual or scheduled, is kept in `Command Center
+Report Run` (state, who, the report itself; latest 10 per report per business, pruned
+nightly by `insights/core/maintenance.py`), so leaving the Reports screen loses nothing:
+the job carries on (in the standalone platform, a thread of the web process with a
+30-second heartbeat), the screen fills each "Last run" and View Last Report from
+`reports.latest` on load and follows what is still being written, and the bell (Bell.jsx,
+`reports.mine`) says "Your ... is ready" to the person who ran it, with a toast if they are
+on another screen. A second Run of a report being written returns that run; a run past
+its 25-minute deadline fails with the reason; one whose worker died (restart) is picked
+up once more by `reports.sweep` (on read, and every five minutes), then failed. A run of a
+business that belongs to a customer is seen only by that customer's people and the
+administrator. Reopening never meters again.
 
 The analyst reaches the ledger, purchase orders and stock movements through
 `run_report` -- 23 allowlisted standard ERPNext reports, run with the asker's

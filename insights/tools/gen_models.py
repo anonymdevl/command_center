@@ -46,6 +46,8 @@ EXTRA_INDEXES = {
     # A figure's history, read per business and figure (recommend/metrics.py).
     "Command Center Metric Point": [["business_code", "metric", "grain", "period"]],
     "Command Center Recommendation Feedback": [["business_code", "rule", "acted_on"]],
+    # The Reports screen's "Last run": the latest run per business and report (api/reports.py).
+    "Command Center Report Run": [["business_code", "report", "started"]],
 }
 
 NO_COLUMN = {"Section Break", "Column Break", "Tab Break", "HTML", "Button", "Heading",

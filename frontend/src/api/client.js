@@ -250,10 +250,16 @@ export const api = {
   statementsPdf: (args) => download("command_center.api.statements.pdf", args, "statements.pdf"),
   recordsXlsx: (args) => download("command_center.api.export.records_xlsx", args, "records.xlsx"),
 
-  /* The nine management reports: started as a job, polled until written. */
+  /* The nine management reports: started as a job, followed until written. */
   reportGenerate: ({ code, business_code }) =>
     call("command_center.api.reports.generate", { code, business_code }),
   reportStatus: (job_id) => call("command_center.api.reports.status", { job_id }),
+  /* Every run is kept on the server: each report's latest, a written one to read again,
+     and this person's own -- finished and not yet seen, or still being written (the bell). */
+  reportLatest: (business_code) => call("command_center.api.reports.latest", { business_code }),
+  reportOpen: (run) => call("command_center.api.reports.open_run", { run }),
+  reportMine: () => call("command_center.api.reports.mine"),
+  reportSeen: (run) => call("command_center.api.reports.mark_seen", { run }),
 
   ingestStatus: () => call("command_center.api.ingest.status"),
   ingestHistory: (business_code) => call("command_center.api.ingest.history", { business_code }),

@@ -1,0 +1,176 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-15 00:00:00.000000",
+ "description": "One writing of a management report for one business, manual or scheduled: its state, who asked, and the report once written (command_center.api.reports).",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "business_code",
+  "report",
+  "title",
+  "state",
+  "kind",
+  "run_by",
+  "schedule",
+  "started",
+  "claimed",
+  "heartbeat",
+  "deadline",
+  "finished",
+  "attempts",
+  "worker",
+  "seen",
+  "error",
+  "result"
+ ],
+ "fields": [
+  {
+   "fieldname": "business_code",
+   "fieldtype": "Data",
+   "label": "Business",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "report",
+   "fieldtype": "Data",
+   "label": "Report",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "description": "The report's code, rp01..rp09 (api/reports.py REPORTS).",
+   "read_only": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "state",
+   "fieldtype": "Select",
+   "label": "State",
+   "options": "queued\nrunning\ndone\nfailed",
+   "default": "queued",
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Started by",
+   "options": "manual\nscheduled",
+   "default": "manual",
+   "description": "manual: someone pressed Run; scheduled: a Report Schedule wrote it.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "run_by",
+   "fieldtype": "Data",
+   "label": "Run by",
+   "search_index": 1,
+   "description": "The person who asked for it, or the person a schedule writes as.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "schedule",
+   "fieldtype": "Data",
+   "label": "Schedule",
+   "read_only": 1
+  },
+  {
+   "fieldname": "started",
+   "fieldtype": "Datetime",
+   "label": "Started",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "claimed",
+   "fieldtype": "Datetime",
+   "label": "Writing since",
+   "read_only": 1
+  },
+  {
+   "fieldname": "heartbeat",
+   "fieldtype": "Datetime",
+   "label": "Last sign of life",
+   "description": "Set every half minute while it is written; a run whose worker stopped answering is picked up again or failed.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deadline",
+   "fieldtype": "Datetime",
+   "label": "Deadline",
+   "read_only": 1
+  },
+  {
+   "fieldname": "finished",
+   "fieldtype": "Datetime",
+   "label": "Finished",
+   "read_only": 1
+  },
+  {
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Attempts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "worker",
+   "fieldtype": "Data",
+   "label": "Worker",
+   "read_only": 1
+  },
+  {
+   "fieldname": "seen",
+   "fieldtype": "Check",
+   "label": "Seen",
+   "description": "The person who ran it has seen the finished report (the bell stops showing it).",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Why it failed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "result",
+   "fieldtype": "Long Text",
+   "label": "The report",
+   "description": "The written report as JSON: answer, what it checked, the model.",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Report Run",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "autoname": "hash",
+ "in_create": 1
+}

@@ -5375,3 +5375,297 @@ class AdaptiveRecommendations(TransactionTestCase):
         whats = " | ".join(c["what"] for c in self._ok_settings("changes"))
         self.assertIn("daily AI review on", whats)
         self.assertIn("unusual movements off", whats)
+
+
+class ReportRuns(TransactionTestCase):
+    """The management reports as kept runs (command_center/api/reports.py): a report
+    started on the Reports screen goes on being written when the screen is left and is
+    readable from any other page, sign-in or device of the person; each report's last
+    run is returned on load; a second Run returns the one being written; a run that can
+    no longer finish fails with the reason (or is picked up again once after a restart);
+    scheduled runs are recorded too; the person who ran it is told in the bell once;
+    reopening a report never counts it again; and managers of another customer's
+    business never see the run. The analyst is a stub: what is under test is the run."""
+
+    databases = {"default", "aux"}
+    R = "command_center.api.reports"
+    PW = "a-long-test-pass-8"
+
+    def setUp(self):
+        import frappe
+        SettingsPage.setUp(self)
+        from insights.core.models import (ClientAccount, ClientBusiness, ClientMember,
+                                          ConnectedBusiness)
+        for code, name in (("biz_a", "Alpha Medical Ltd"), ("biz_b", "Beta Trading Ltd")):
+            ConnectedBusiness.objects.create(name=name, business_name=name, business_code=code,
+                                             status="Active", is_local=0, currency="GHS",
+                                             site_url=f"https://{code}.test")
+        a = ClientAccount.objects.create(name="Alpha Group", licensed_to="Alpha Group Ltd")
+        b = ClientAccount.objects.create(name="Beta Group", licensed_to="Beta Group Ltd")
+        ClientBusiness.objects.create(client=a, business_code="biz_a")
+        ClientBusiness.objects.create(client=b, business_code="biz_b")
+        frappe.conf["command_center_anthropic_key"] = "test-key-not-real"
+        U = get_user_model()
+        mgr = Group.objects.get(name="Insights Dashboard Manager")
+        self.users = {}
+        for who, first, client in (("ama@a.test", "Ama", a), ("kofi@a.test", "Kofi", a),
+                                   ("bea@b.test", "Bea", b)):
+            u = U.objects.create_user(who, who, self.PW, first_name=first)
+            u.groups.add(mgr)
+            ClientMember.objects.create(client=client, username=who, role="manager")
+            self.users[who] = self._client(who)
+        self.calls = []
+
+        def answer(question, business_code=None, **kw):
+            self.calls.append(business_code)
+            return {"answered": True, "answer": "Sales rose by GHS 1,200.\n\n## Recommendations\n\n"
+                    "1. Reconcile the receipts, led by the Finance Manager, by 30 November.",
+                    "model": "claude-opus-5-5", "checked": ["sales by month"]}
+        self.stubs = [mock.patch("command_center.ask.engine.analyst_enabled", lambda: True),
+                      mock.patch("command_center.ask.agent.answer", answer),
+                      mock.patch("command_center.api.export._business", lambda c: "Alpha Medical Ltd"),
+                      mock.patch("command_center.api.export._as_of", lambda: "15 Nov 2026")]
+        for p in self.stubs:
+            p.start()
+
+    def tearDown(self):
+        for p in reversed(self.stubs):
+            p.stop()
+        SettingsPage.tearDown(self)
+
+    # helpers
+    def _client(self, who):
+        c = Client()
+        self.assertTrue(c.login(username=who, password=self.PW))
+        return c
+
+    def _call(self, client, fn, **args):
+        return client.post(f"/api/method/{self.R}.{fn}", json.dumps(args),
+                           content_type="application/json")
+
+    def _ok(self, who, fn, **args):
+        c = who if isinstance(who, Client) else self.users[who]
+        r = self._call(c, fn, **args)
+        self.assertEqual(r.status_code, 200, f"{fn}: {r.content[:500]!r}")
+        return r.json()["message"]
+
+    def _jobs(self):
+        return [kw for fn, kw in self.enqueued if fn == f"{self.R}._run"]
+
+    def _work(self):
+        """Run what was queued, as the worker thread would: as the person, in a unit of
+        work of its own -- nobody's browser is involved."""
+        from command_center.api import reports
+        from insights.compat import run_as
+        jobs, self.enqueued[:] = self._jobs(), []
+        for kw in jobs:
+            with run_as(kw["user"]):
+                reports._run(**{k: kw[k] for k in ("report_id", "code", "business_code", "user")})
+        return jobs
+
+    def _row(self, name):
+        from insights.core.models import CommandCenterReportRun
+        return CommandCenterReportRun.objects.get(name=name)
+
+    # ------------------------------------------------------------------ tests
+    def test_run_is_kept_and_followed_from_anywhere(self):
+        started = self._ok("ama@a.test", "generate", code="rp01", business_code="biz_a")
+        run = started["job_id"]
+        self.assertEqual(started["run"]["state"], "queued")
+        self.assertEqual(len(self._jobs()), 1)
+        # "Leaving the page": a new client -- another tab, device or sign-in -- of the same
+        # person reads where it is, and finds it being written.
+        elsewhere = self._client("ama@a.test")
+        self.assertEqual(self._ok(elsewhere, "status", job_id=run)["state"], "running")
+        self.assertEqual(self._ok(elsewhere, "mine")["running"][0]["name"], run)
+        mid = self._ok(elsewhere, "latest", business_code="biz_a")["runs"]["rp01"]
+        self.assertEqual(mid["latest"]["state"], "queued")
+        self.assertIsNone(mid["last_done"])
+        self._work()
+        done = self._ok(elsewhere, "status", job_id=run)
+        self.assertEqual(done["state"], "done")
+        self.assertIn("Sales rose by GHS 1,200.", done["report"]["answer"])
+        self.assertEqual(done["report"]["title"], "Executive Summary")
+        self.assertEqual(done["report"]["checked"], ["sales by month"])
+        self.assertEqual(self.calls, ["biz_a"])
+        # what the Reports screen fills its "Last run" cells from, on load
+        slot = self._ok(elsewhere, "latest", business_code="biz_a")["runs"]["rp01"]
+        self.assertEqual(slot["latest"]["state"], "done")
+        self.assertEqual(slot["last_done"]["name"], run)
+        self.assertEqual(slot["latest"]["run_by_name"], "Ama")
+        self.assertTrue(slot["latest"]["finished_label"].endswith("today"))
+        self.assertTrue(slot["latest"]["mine"])
+        # another business's screen has no run of it
+        self.assertEqual(self._ok("ama@a.test", "latest", business_code="biz_b")["runs"], {})
+        # the same person's colleague at the same customer sees it, by name
+        seen = self._ok("kofi@a.test", "latest", business_code="biz_a")["runs"]["rp01"]["latest"]
+        self.assertEqual((seen["run_by_name"], seen["mine"]), ("Ama", False))
+
+    def test_a_second_run_returns_the_one_being_written(self):
+        first = self._ok("ama@a.test", "generate", code="rp05", business_code="biz_a")
+        again = self._ok("ama@a.test", "generate", code="rp05", business_code="biz_a")
+        colleague = self._ok("kofi@a.test", "generate", code="rp05", business_code="biz_a")
+        self.assertEqual(again["job_id"], first["job_id"])
+        self.assertEqual(colleague["job_id"], first["job_id"])
+        self.assertTrue(again["already"] and colleague["already"])
+        self.assertEqual(len(self._jobs()), 1, "written once")
+        # another report, or another business, is a run of its own
+        other = self._ok("ama@a.test", "generate", code="rp06", business_code="biz_a")
+        self.assertNotEqual(other["job_id"], first["job_id"])
+        self._work()
+        self.assertEqual(len(self.calls), 2)
+        # once written, Run writes it afresh
+        fresh = self._ok("ama@a.test", "generate", code="rp05", business_code="biz_a")
+        self.assertNotEqual(fresh["job_id"], first["job_id"])
+        self.assertNotIn("already", fresh)
+        # a job delivered twice writes it once: the second worker cannot claim it
+        self.enqueued.append((f"{self.R}._run", dict(self._jobs()[0])))
+        self._work()
+        self.assertEqual(len(self.calls), 3)
+
+    def test_a_run_that_cannot_finish_fails_with_the_reason(self):
+        from command_center.api import reports
+        from insights.core.models import CommandCenterReportRun as Run
+        now = dt.datetime.now()
+        run = self._ok("ama@a.test", "generate", code="rp02", business_code="biz_a")["job_id"]
+        self.enqueued[:] = []
+        # past its deadline (a hung analyst): failed, saying why
+        Run.objects.filter(name=run).update(state="running", worker="w1", attempts=1,
+                                            heartbeat=now, deadline=now - dt.timedelta(minutes=1))
+        st = self._ok("ama@a.test", "status", job_id=run)
+        self.assertEqual(st["state"], "failed")
+        self.assertIn("did not finish within 25 minutes", st["error"])
+        self.assertEqual(self._ok("ama@a.test", "latest", business_code="biz_a")["runs"]["rp02"]
+                         ["latest"]["state"], "failed")
+        # its worker gone silent (the server restarted under it): picked up again once ...
+        run = self._ok("ama@a.test", "generate", code="rp03", business_code="biz_a")["job_id"]
+        self.enqueued[:] = []
+        Run.objects.filter(name=run).update(state="running", worker="w1", attempts=1,
+                                            heartbeat=now - dt.timedelta(minutes=10))
+        self.assertEqual(self._ok("ama@a.test", "status", job_id=run)["state"], "running")
+        self.assertEqual(self._row(run).state, "queued")
+        self.assertEqual([j["report_id"] for j in self._jobs()], [run])
+        self._work()
+        self.assertEqual(self._row(run).state, "done")
+        self.assertEqual(self._row(run).attempts, 2)
+        # ... and failed if it goes silent again
+        run = self._ok("ama@a.test", "generate", code="rp07", business_code="biz_a")["job_id"]
+        self.enqueued[:] = []
+        Run.objects.filter(name=run).update(state="running", worker="w2", attempts=2,
+                                            heartbeat=now - dt.timedelta(minutes=10))
+        from insights.compat import run_as
+        with run_as("Administrator"):
+            self.assertEqual(reports.sweep(), 1)       # the scheduler's five-minute pass
+        self.assertEqual(self._row(run).state, "failed")
+        self.assertIn("server restarted", self._row(run).error)
+        self.assertEqual(self._jobs(), [])
+        # an analyst that returns nothing is a failure, not an empty report
+        with mock.patch("command_center.ask.agent.answer",
+                        lambda *a, **k: {"answered": False, "analyst_error": "tool x failed: Traceback"}):
+            run = self._ok("ama@a.test", "generate", code="rp08", business_code="biz_a")["job_id"]
+            self._work()
+        st = self._ok("ama@a.test", "status", job_id=run)
+        self.assertEqual(st["state"], "failed")
+        self.assertNotIn("Traceback", st["error"])
+
+    def test_scheduled_runs_are_recorded(self):
+        from command_center.api import reports
+        from insights.compat import run_as
+        from insights.core.models import CommandCenterReportSchedule
+        CommandCenterReportSchedule.objects.create(
+            name="rs-9", report="rp01", business_code="biz_a", enabled=1,
+            recipients="kofi@a.test", run_as="ama@a.test")
+        with mock.patch("command_center.api.export.pdf_bytes", lambda *a, **k: b"%PDF"), \
+                run_as("ama@a.test"):
+            reports.send_scheduled("rs-9")     # email is not set up: written, not sent
+        slot = self._ok("kofi@a.test", "latest", business_code="biz_a")["runs"]["rp01"]
+        self.assertEqual((slot["latest"]["kind"], slot["latest"]["state"]), ("scheduled", "done"))
+        self.assertIn("Written but not sent", slot["latest"]["error"])
+        self.assertEqual(slot["last_done"]["name"], slot["latest"]["name"])
+        opened = self._ok("kofi@a.test", "open_run", run=slot["last_done"]["name"])
+        self.assertIn("Sales rose", opened["report"]["answer"])
+        # emailed, so it waits in nobody's bell
+        self.assertEqual(self._ok("ama@a.test", "mine")["ready"], [])
+        # a scheduled run that cannot start is on record as failed, with why
+        with mock.patch("command_center.ask.engine.analyst_enabled", lambda: False), \
+                run_as("ama@a.test"):
+            reports.send_scheduled("rs-9")
+        slot = self._ok("ama@a.test", "latest", business_code="biz_a")["runs"]["rp01"]
+        self.assertEqual(slot["latest"]["state"], "failed")
+        self.assertIn("AI key", slot["latest"]["error"])
+        self.assertEqual(slot["last_done"]["state"], "done", "the last written one is still there")
+
+    def test_the_bell_says_once_and_reopening_counts_nothing(self):
+        from insights.core.models import UsageEvent
+        run = self._ok("ama@a.test", "generate", code="rp01", business_code="biz_a")["job_id"]
+        self.assertEqual(self._ok("ama@a.test", "mine")["ready"], [])
+        self._work()
+        ready = self._ok("ama@a.test", "mine")
+        self.assertEqual([r["name"] for r in ready["ready"]], [run])
+        self.assertEqual(ready["running"], [])
+        self.assertEqual(ready["ready"][0]["title"], "Executive Summary")
+        self.assertEqual(self._ok("kofi@a.test", "mine")["ready"], [], "only the one who ran it")
+        counted = UsageEvent.objects.filter(meter="ai_reports").count()
+        self.assertEqual(counted, 1, "one AI report, counted when written")
+        # opening it from the bell: shown, and the bell has said it
+        for _ in range(3):
+            got = self._ok("ama@a.test", "open_run", run=run)
+            self.assertIn("Sales rose", got["report"]["answer"])
+        self._ok("kofi@a.test", "open_run", run=run)
+        self.assertEqual(self._ok("ama@a.test", "mine")["ready"], [])
+        self.assertEqual(UsageEvent.objects.filter(meter="ai_reports").count(), counted,
+                         "reopening never counts it again")
+        self.assertEqual(len(self.calls), 1, "and never asks the analyst again")
+        # the job delivered again does not announce it again
+        self.enqueued.append((f"{self.R}._run", {"report_id": run, "code": "rp01",
+                                                 "business_code": "biz_a", "user": "ama@a.test"}))
+        self._work()
+        self.assertEqual(self._ok("ama@a.test", "mine")["ready"], [])
+        # a failure is announced too, and Dismiss clears it
+        with mock.patch("command_center.ask.agent.answer", lambda *a, **k: None):
+            bad = self._ok("ama@a.test", "generate", code="rp05", business_code="biz_a")["job_id"]
+            self._work()
+        ready = self._ok("ama@a.test", "mine")["ready"]
+        self.assertEqual([(r["name"], r["state"]) for r in ready], [(bad, "failed")])
+        self._ok("kofi@a.test", "mark_seen", run=bad)        # not his to dismiss
+        self.assertEqual(len(self._ok("ama@a.test", "mine")["ready"]), 1)
+        self._ok("ama@a.test", "mark_seen", run=bad)
+        self.assertEqual(self._ok("ama@a.test", "mine")["ready"], [])
+
+    def test_another_customers_managers_never_see_it(self):
+        run = self._ok("ama@a.test", "generate", code="rp01", business_code="biz_a")["job_id"]
+        self._work()
+        bea = self.users["bea@b.test"]
+        self.assertEqual(self._ok(bea, "latest", business_code="biz_a")["runs"], {})
+        self.assertEqual(self._ok(bea, "status", job_id=run), {"state": "unknown"})
+        r = self._call(bea, "open_run", run=run)
+        self.assertIn(r.status_code, (403, 417))
+        self.assertNotIn("Sales rose", r.content.decode())
+        self.assertEqual(self._ok(bea, "mine"), {"ready": [], "running": []})
+        # her own Run of the same report is her own run, not ama's
+        own = self._ok(bea, "generate", code="rp01", business_code="biz_a")
+        self.assertNotEqual(own["job_id"], run)
+        # the administrator sees every run; a signed-out visitor nothing
+        self.assertEqual(self._ok(self.admin, "status", job_id=run)["state"], "done")
+        self.assertIn(self._call(Client(), "latest", business_code="biz_a").status_code, (401, 403))
+
+    def test_old_runs_are_pruned_at_night(self):
+        from command_center.api import reports
+        from insights.compat import run_as
+        from insights.core.models import CommandCenterReportRun as Run
+        base = dt.datetime.now() - dt.timedelta(days=30)
+        for i in range(13):
+            Run.objects.create(name=f"old{i:02d}", business_code="biz_a", report="rp01",
+                               state="done", run_by="ama@a.test", started=base + dt.timedelta(hours=i))
+        Run.objects.create(name="live", business_code="biz_a", report="rp01", state="running",
+                           run_by="ama@a.test", started=base)
+        Run.objects.create(name="other", business_code="biz_b", report="rp01", state="done",
+                           run_by="bea@b.test", started=base)
+        with run_as("Administrator"):
+            self.assertEqual(reports.prune_runs(), 3)
+        left = set(Run.objects.values_list("name", flat=True))
+        self.assertEqual(len(left), 12)
+        self.assertIn("live", left, "a run being written is never dropped")
+        self.assertIn("other", left)
+        self.assertNotIn("old00", left)
+        self.assertIn("old12", left)
