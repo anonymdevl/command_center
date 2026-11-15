@@ -267,7 +267,12 @@ class Speed(TransactionTestCase):
     # ------------------------------------------------------------------ warm after refresh
     def test_the_refresh_leaves_screens_answered(self):
         from command_center.api import ingest
+        from command_center.recommend import engine
         from insights.compat import run_as
+        # The finding boxes show the business's recommendations once they are worked out
+        # (until then the older findings): worked out first, so both reads see the same.
+        with run_as("Administrator"):
+            engine.ensure_fresh(A, force=True)
         first, _ = self._post("panels.get", view="proc", business_code=A)
         figs, _ = self._post("kpi.get", keys=["po_count", "users_active"], business_code=A)
         # past their freshness, as they would be a few minutes later

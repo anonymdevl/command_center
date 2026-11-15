@@ -1017,6 +1017,20 @@ class SignInLimits(TransactionTestCase):
                       content_type="application/json", REMOTE_ADDR="127.0.0.1",
                       HTTP_X_FORWARDED_FOR=f"{fake_ip}, 41.66.1.1")
 
+    def test_sign_out_ends_the_session(self):
+        # The Sign Out menu (Topbar.jsx) posts to logout; afterwards the session is gone
+        # and the screens' data is refused until the person signs in again.
+        c = Client(enforce_csrf_checks=False)
+        self.assertEqual(self._api(c, "a-long-test-pass-1", "41.66.1.1").status_code, 200)
+        self.assertEqual(c.post("/api/method/command_center.api.businesses.get_visible_businesses",
+                                "{}", content_type="application/json").status_code, 200)
+        r = c.post("/api/method/logout", "{}", content_type="application/json")
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn("_auth_user_id", c.session)
+        r = c.post("/api/method/command_center.api.businesses.get_visible_businesses", "{}",
+                   content_type="application/json")
+        self.assertIn(r.status_code, (401, 403))
+
     def test_spoofed_forwarded_for_is_not_a_fresh_address(self):
         c = Client()
         codes = [self._api(c, "wrong-password-x", f"10.0.0.{i}").status_code for i in range(7)]

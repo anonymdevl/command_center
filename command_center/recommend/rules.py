@@ -1175,6 +1175,13 @@ APPROVAL_VALUE = {"Purchase Order": "base_grand_total", "Payment Entry": "base_p
                   "Material Request": None, "Stock Reconciliation": None}
 
 
+def _idx(v) -> int:
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _pending_states(r):
     """{doctype: (state field, [states waiting on someone])}: the active workflows'
     draft states other than the first (where a document starts) and the rejections."""
@@ -1190,7 +1197,7 @@ def _pending_states(r):
     out = {}
     skip = re.compile(r"draft|reject|cancel", re.I)
     for f in flows:
-        rows = sorted(by.get(f["name"], []), key=lambda s: int(s.get("idx") or 0))
+        rows = sorted(by.get(f["name"], []), key=lambda s: _idx(s.get("idx")))
         if not rows:
             continue
         first = rows[0]["state"]
