@@ -130,11 +130,44 @@ def bold(text) -> str:
     return f"<b>{text}</b>"
 
 
+_config_stamp = [None]
+
+
+def _refresh_config():
+    """Re-read insights.json when it has changed since this process last read it.
+
+    The web workers and the scheduler are separate processes. A setting changed from
+    one of them (Settings -> Claude key, Email) is written to the file; every other
+    process picks it up at its next unit of work, without a restart. One stat call."""
+    try:
+        from django.conf import settings
+        path = settings.CONFIG_PATH
+        stamp = os.stat(path).st_mtime_ns
+    except Exception:
+        return
+    if _config_stamp[0] is None:
+        _config_stamp[0] = stamp
+        return
+    if stamp == _config_stamp[0]:
+        return
+    try:
+        with open(path) as fh:
+            fresh = json.load(fh)
+    except Exception:
+        return  # mid-write or unreadable: keep what we have, try again next time
+    _config_stamp[0] = stamp
+    # Merged over what this process holds: a changed or added setting takes effect;
+    # nothing this process was started with is lost.
+    settings.CONFIG.update(fresh)
+    conf.update(fresh)
+
+
 @contextmanager
 def run_as(user: str, site: str = "", request=None):
     """One unit of work -- a request, a job, a scheduled run -- as `user`: fresh state,
     one transaction, committed if it finishes, rolled back if it raises."""
     from django.db import close_old_connections
+    _refresh_config()
     close_old_connections()
     local.reset(user=user or "Guest", site=site or conf.get("site_name", ""))
     local.request = request
@@ -191,6 +224,10 @@ def _update_site_config(key, value, *a, **k):
     os.replace(tmp, path)
     settings.CONFIG[key] = value
     conf[key] = value
+    try:
+        _config_stamp[0] = os.stat(path).st_mtime_ns  # this process is already current
+    except Exception:
+        pass
 
 
 class _RequestView:

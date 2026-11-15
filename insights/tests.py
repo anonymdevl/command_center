@@ -1449,3 +1449,38 @@ class EveryErpnextVersion(TransactionTestCase):
                 # a filter on a field the site lacks is never dropped: it still fails
                 with self.assertRaises(RequestRefused):
                     conn.get_list("Budget", fields=["name"], filters={"fiscal_year": "2026"})
+
+
+class SettingsReachEveryProcess(TransactionTestCase):
+    """A setting changed in one process (Settings -> Claude key) is what every other
+    process -- the other web workers, the scheduler -- uses from its next unit of work,
+    without a restart."""
+
+    databases = {"default", "aux"}
+
+    def test_key_change_seen_without_restart(self):
+        import os
+        import tempfile
+        import time
+        from django.conf import settings
+        import insights.compat as compat
+        from insights.compat import run_as
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "insights.json")
+            with open(path, "w") as fh:
+                json.dump({**settings.CONFIG, "command_center_anthropic_key": "sk-ant-old"}, fh)
+            saved = dict(settings.CONFIG)
+            with mock.patch.object(settings, "CONFIG_PATH", path):
+                compat._config_stamp[0] = None
+                with run_as("Administrator"):
+                    pass  # first look: remembers the file as it is
+                # "another process" writes a new key
+                time.sleep(0.01)
+                with open(path, "w") as fh:
+                    json.dump({**saved, "command_center_anthropic_key": "sk-ant-new"}, fh)
+                os.utime(path, None)
+                with run_as("Administrator"):
+                    self.assertEqual(compat.conf.get("command_center_anthropic_key"), "sk-ant-new")
+            settings.CONFIG.clear(); settings.CONFIG.update(saved)
+            compat.conf.clear(); compat.conf.update(saved)
+            compat._config_stamp[0] = None
