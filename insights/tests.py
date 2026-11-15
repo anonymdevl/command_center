@@ -233,6 +233,23 @@ class PlatformEndToEnd(TransactionTestCase):
                          json.dumps({"keys": ["ar_total"]}), content_type="application/json").json()
         self.assertGreater(figures["message"]["ar_total"]["value"] or 0, 0)
 
+        # the administration, with a loaded business in it: every list and the first
+        # record of each opens for the platform's administrator
+        from django.contrib import admin as dj_admin
+        boss = U.objects.create_superuser("boss@test.com", "boss@test.com", "a-long-test-pass-7")
+        ca = Client(raise_request_exception=True)
+        self.assertEqual(ca.post("/admin/login/?next=/admin/", {
+            "username": "boss@test.com", "password": "a-long-test-pass-7"}).status_code, 302)
+        self.assertEqual(ca.get("/admin/").status_code, 200)
+        for model in dj_admin.site._registry:
+            base = f"/admin/{model._meta.app_label}/{model._meta.model_name}/"
+            self.assertEqual(ca.get(base).status_code, 200, base)
+            first = model.objects.first()
+            if first is not None:
+                page = f"{base}{first.pk}/change/"
+                self.assertEqual(ca.get(page).status_code, 200, page)
+        boss.delete()
+
         # someone without the role is turned away from the interface
         U.objects.create_user("clerk@test.com", "clerk@test.com", "a-long-test-pass-8")
         c2 = Client()
@@ -276,6 +293,11 @@ class Upkeep(TransactionTestCase):
         ErrorLog.objects.using("aux").filter(pk=old.pk).update(
             creation=dt.datetime.now() - dt.timedelta(days=90))
         ErrorLog.objects.using("aux").create(title="recent", error="y")
+        import shutil
+        from django.db import connection
+        if connection.vendor == "mysql" and not (shutil.which("mariadb-dump")
+                                                 or shutil.which("mysqldump")):
+            self.skipTest("no mariadb-dump on this machine to back MariaDB up with")
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(
                 settings.CONFIG, {"backup_dir": d}):
             stale = Path(d, "insights-20200101-000000.sqlite3")
