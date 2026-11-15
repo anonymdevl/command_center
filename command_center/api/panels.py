@@ -55,10 +55,12 @@ def get(view: str, business_code: str | None = None) -> dict:
         return cached
     ctx = _Ctx(business_code)
     panels = {}
+    failed = False
     for title, fn in builders.items():
         try:
             out = fn(ctx)
         except Exception:
+            failed = True
             # One panel that cannot be read must not cost the screen its others; it
             # stays as designed, marked illustrative.
             frappe.log_error(title=f"Command Center panel {view}: {title}",
@@ -69,7 +71,11 @@ def get(view: str, business_code: str | None = None) -> dict:
     out = {"view": view, "currency": ctx.cur, "as_of": str(ctx.as_of), "panels": panels}
     # The facts change every fifteen minutes and the buying panels read the business's
     # ERPNext live, so ten minutes keeps a busy screen light on their site.
-    frappe.cache().set_value(key, out, expires_in_sec=600)
+    # Only a complete answer is kept: a panel that failed (the business's ERPNext did
+    # not answer, say) is asked again next time rather than staying blank for ten
+    # minutes.
+    if not failed:
+        frappe.cache().set_value(key, out, expires_in_sec=600)
     return out
 
 
@@ -97,12 +103,38 @@ class _Ctx:
     def reader(self):
         if self._reader is None:
             from command_center.kpi.live import _Reader
-            self._reader = _Reader(self.code)
+            self._reader = _Guarded(_Reader(self.code))
         return self._reader
 
     def site(self):
         r = self.reader()
         return "" if r.local else (r.conn.base_url or "")
+
+
+class _Guarded:
+    """The live reader, for one screen's panels. Once the business has not answered,
+    the screen's other panels give up at once instead of each waiting out the retries
+    (Internal Audit took 73 s to fail with Gigmann's ERPNext down; now one wait)."""
+
+    def __init__(self, reader):
+        self._r = reader
+        self._down = None
+
+    def __getattr__(self, name):
+        attr = getattr(self._r, name)
+        if not callable(attr):
+            return attr
+
+        def call(*a, **k):
+            from command_center.connectors.base import BusinessUnreachable
+            if self._down is not None:
+                raise self._down
+            try:
+                return attr(*a, **k)
+            except BusinessUnreachable as e:
+                self._down = e
+                raise
+        return call
 
 
 def _as_of(business_code):
