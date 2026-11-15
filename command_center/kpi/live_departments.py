@@ -66,22 +66,30 @@ def grouped(r, doctype, filters, group_by, aggs, parent=None):
     aggs: [(function, field, alias)]. v14 and v15 take an aggregate as the string
     "max(field) as alias"; v16 refuses that and takes {"MAX": field}, answering in
     "MAX(`field`)". The older form is tried first -- the businesses on this platform run
-    v14 -- and the newer on refusal."""
+    v14 -- and the newer on refusal (grouped_read)."""
     import frappe
-    groups = [g.strip() for g in group_by.split(",") if g.strip()]
-    old = groups + [f"{fn}({field}) as {alias}" for fn, field, alias in aggs]
     if r.local:
+        groups = [g.strip() for g in group_by.split(",") if g.strip()]
+        old = groups + [f"{fn}({field}) as {alias}" for fn, field, alias in aggs]
         return [dict(x) for x in frappe.get_all(doctype, filters=filters, fields=old,
                                                 group_by=group_by, limit=100000)]
+    return grouped_read(r.conn, doctype, filters, group_by, aggs, parent=parent)
+
+
+def grouped_read(conn, doctype, filters, group_by, aggs, parent=None, limit=100000):
+    """grouped(), straight on a connector: the one place the two aggregate dialects are
+    spoken (ingest reads the ledger with it as the system; the screens through grouped)."""
+    groups = [g.strip() for g in group_by.split(",") if g.strip()]
+    old = groups + [f"{fn}({field}) as {alias}" for fn, field, alias in aggs]
     try:
-        return r.conn.get_list(doctype, filters=filters, fields=old, group_by=group_by,
-                               limit=100000, parent_doctype=parent) or []
+        return conn.get_list(doctype, filters=filters, fields=old, group_by=group_by,
+                             limit=limit, parent_doctype=parent) or []
     except Exception as e:
         if is_down(e):
             raise
         new = groups + [{fn.upper(): field} for fn, field, _ in aggs]
-        rows = r.conn.get_list(doctype, filters=filters, fields=new, group_by=group_by,
-                               limit=100000, parent_doctype=parent) or []
+        rows = conn.get_list(doctype, filters=filters, fields=new, group_by=group_by,
+                             limit=limit, parent_doctype=parent) or []
         out = []
         for row in rows:
             got = {g: row.get(g) for g in groups}
@@ -308,10 +316,12 @@ def late_customers(r):
 
 
 def owed_by(r):
+    """What each customer owes by the ledger (fact_party_balance), not by its open
+    invoices: a payment never matched to an invoice is still a payment."""
     out = {}
-    for x in facts(r, "fact_sales_invoice", {"src_docstatus": 1, "outstanding_amount": [">", 0]},
-                   ["customer", "outstanding_amount"]):
-        out[x["customer"]] = out.get(x["customer"], 0.0) + num(x["outstanding_amount"])
+    for x in facts(r, "fact_party_balance", {"party_type": "Customer", "owed": [">", 0]},
+                   ["party", "owed"]):
+        out[x["party"]] = out.get(x["party"], 0.0) + num(x["owed"])
     return out
 
 
@@ -338,9 +348,9 @@ def eng_money_held(r):
         note = f"{owing[0]} alone" if len(owing) == 1 else f"{owing[0]}, most of it"
     else:
         note = f"across {len(owing)} customers"
-    return total, note, {"fact": "fact_sales_invoice",
-                         "filters": {"src_docstatus": 1, "outstanding_amount": [">", 0],
-                                     "customer": ["in", owing or ["-"]]}}
+    return total, note, {"fact": "fact_party_balance",
+                         "filters": {"party_type": "Customer", "owed": [">", 0],
+                                     "party": ["in", owing or ["-"]]}}
 
 
 FIGURES = {k.key: k for k in (

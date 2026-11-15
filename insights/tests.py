@@ -103,6 +103,36 @@ def _value(field: str, i: int, doctype: str):
     return f"{field}-{rnd.randint(1, 5)}"
 
 
+# The fake's ledger, so the ledger balances, their explanation and the matched ageing are
+# exercised on numbers that mean something: per party and kind of entry, (debit, credit).
+# Ridge Hospital paid more than it was billed and is in credit.
+LEDGER = {
+    ("Customer", "Ubuntu Ltd"): {"Sales Invoice": (90000, 2000), "Payment Entry": (0, 61000),
+                                 "Journal Entry": (5000, 1000)},
+    ("Customer", "Ejura Clinic"): {"Sales Invoice": (40000, 0), "Payment Entry": (0, 15000)},
+    ("Customer", "Korle Bu"): {"Sales Invoice": (25000, 0), "Journal Entry": (7000, 0)},
+    ("Customer", "Ridge Hospital"): {"Sales Invoice": (10000, 0), "Payment Entry": (0, 13000)},
+    ("Supplier", "Min-Medical"): {"Purchase Invoice": (0, 70000), "Payment Entry": (52000, 0),
+                                  "Journal Entry": (0, 3000)},
+    ("Supplier", "CT Consult"): {"Purchase Invoice": (0, 12000), "Payment Entry": (12000, 0)},
+}
+# Payments never matched (party_type, party, payment_type, amount), and journal lines
+# (party_type, party, debit, credit, reference_type).
+UNMATCHED = [("Customer", "Ubuntu Ltd", "Receive", 20000), ("Customer", "Ridge Hospital", "Receive", 3000),
+             ("Supplier", "Min-Medical", "Pay", 30000)]
+JOURNALS = [("Customer", "Ubuntu Ltd", 5000, 0, None), ("Customer", "Ubuntu Ltd", 0, 1000, None),
+            ("Customer", "Korle Bu", 7000, 0, None), ("Supplier", "Min-Medical", 0, 3000, None)]
+
+
+def _wanted(filters, field, value) -> bool:
+    rule = (filters or {}).get(field) if isinstance(filters, dict) else None
+    if rule is None:
+        return True
+    if isinstance(rule, list) and rule and rule[0] in ("in", "not in"):
+        return (value in rule[1]) == (rule[0] == "in")
+    return value == rule
+
+
 class FakeERPNext:
     """GET/POST /api/method/frappe.client.* and the few others the platform calls."""
 
@@ -132,6 +162,47 @@ class FakeERPNext:
             return _R(200, {"docs": [doc]})
         return _R(200, {"message": {}})
 
+    def ledger(self, doctype, fields, filters, group_by, start, n):
+        """The ledger, the unmatched payments and the journal lines, from LEDGER above:
+        grouped sums for the General Ledger, plain rows for the rest."""
+        if doctype == "GL Entry":
+            groups = [g.strip() for g in (group_by or "").split(",") if g.strip()]
+            sums = {}
+            for (pt, party), kinds in LEDGER.items():
+                if not _wanted(filters, "party_type", pt):
+                    continue
+                for vt, (d, c) in kinds.items():
+                    row = {"party_type": pt, "party": party, "voucher_type": vt, "docstatus": 1}
+                    key = tuple(row[g] for g in groups)
+                    got = sums.setdefault(key, {g: row[g] for g in groups} | {"d": 0, "c": 0})
+                    got["d"] += d
+                    got["c"] += c
+            out = []
+            for got in sums.values():
+                row = {g: got[g] for g in groups}
+                for f in fields:
+                    m = re.match(r"\s*sum\((debit|credit)\)\s+as\s+(\w+)", str(f))
+                    if m:
+                        row[m.group(2)] = got["d" if m.group(1) == "debit" else "c"]
+                out.append(row)
+            return out
+        if doctype == "Payment Entry":
+            rows = [{"name": f"PE-U-{i:03d}", "party_type": pt, "party": party, "payment_type": ptype,
+                     "posting_date": str(TODAY - dt.timedelta(days=40 + 10 * i)),
+                     "unallocated_amount": amt, "source_exchange_rate": 1, "target_exchange_rate": 1,
+                     "docstatus": 1}
+                    for i, (pt, party, ptype, amt) in enumerate(UNMATCHED)
+                    if _wanted(filters, "party_type", pt) and _wanted(filters, "payment_type", ptype)]
+            if group_by:
+                return [{"docstatus": 1, **{re.split(r"\s+as\s+", f)[-1]: sum(
+                    r["unallocated_amount"] for r in rows) for f in fields if " as " in str(f)}}]
+            return rows[start:start + n]
+        rows = [{"name": f"JEA-{i:03d}", "parent": f"JE-{i:03d}", "party_type": pt, "party": party,
+                 "debit": d, "credit": c, "reference_type": ref, "reference_name": None}
+                for i, (pt, party, d, c, ref) in enumerate(JOURNALS)
+                if _wanted(filters, "party_type", pt)]
+        return rows[start:start + n]
+
     def rows(self, p):
         doctype = p.get("doctype")
         fields = p.get("fields") or ["name"]
@@ -140,6 +211,11 @@ class FakeERPNext:
         filters = json.loads(filters) if isinstance(filters, str) else filters
         start = int(p.get("limit_start") or 0)
         n = int(p.get("limit_page_length") or 20)
+        if isinstance(filters, dict) and (
+                (doctype == "GL Entry" and "party_type" in str(p.get("group_by") or ""))
+                or (doctype == "Payment Entry" and "unallocated_amount" in filters)
+                or doctype == "Journal Entry Account"):
+            return self.ledger(doctype, fields, filters, p.get("group_by"), start, n)
         if doctype == "Company":
             return [{"name": "Test Medical Ltd", "default_currency": "GHS"}][:n]
         parents = names = None
@@ -220,6 +296,7 @@ class PlatformEndToEnd(TransactionTestCase):
         with run_as("Administrator"):
             check = kpi.verify()
         self.assertTrue(check["all_ok"], json.dumps(check, default=str)[:800])
+        self._ledger_positions()
 
         # an incremental reload is harmless (watermarks, upserts)
         with run_as("Administrator"):
@@ -338,6 +415,140 @@ class PlatformEndToEnd(TransactionTestCase):
         r = c2.get("/command-center")
         self.assertEqual(r.status_code, 302)
         self.assertIn("/management-only", r["Location"])
+
+
+    def _ledger_positions(self):
+        """Owed is the ledger, the explanation adds up, the ageing is the balance, and the
+        reconciliation check agrees with the fake ERPNext on the ledger."""
+        from command_center.api import audit
+        from command_center.kpi.engine import evaluate_set
+        from insights.compat import run_as
+        from insights.core.models import CommandCenterFactPartyBalance as PB
+
+        rows = list(PB.objects.filter(business_code="test_medical_ltd").values())
+        self.assertTrue(rows, "no ledger balances were loaded")
+        for pt in ("Customer", "Supplier"):
+            want = sum(LEDGER_SIGN[pt] * (d - c) for (t, _), kinds in LEDGER.items() if t == pt
+                       for d, c in kinds.values())
+            got = sum(float(r["ledger_balance"]) for r in rows if r["party_type"] == pt)
+            self.assertAlmostEqual(got, want, places=2, msg=f"{pt} ledger")
+        for r in rows:
+            f = {k: float(v or 0) for k, v in r.items() if k in (
+                "open_invoices", "unmatched_payments", "unlinked_journals", "unlinked_credit_notes",
+                "other_unlinked", "invoices_not_updated", "unexplained", "unlinked_debits",
+                "ledger_balance", "owed", "in_credit", "not_due", "d0_30", "d31_60", "d61_90",
+                "d90_plus", "undated")}
+            explained = (f["open_invoices"] - f["unmatched_payments"] - f["unlinked_journals"]
+                         - f["unlinked_credit_notes"] - f["other_unlinked"] - f["invoices_not_updated"]
+                         - f["unexplained"] + f["unlinked_debits"])
+            self.assertAlmostEqual(explained, f["ledger_balance"], places=2, msg=r["party"])
+            aged = sum(f[k] for k in ("not_due", "d0_30", "d31_60", "d61_90", "d90_plus", "undated"))
+            self.assertAlmostEqual(aged, f["owed"], places=2, msg=f"{r['party']} ageing")
+            self.assertEqual(f["owed"] * f["in_credit"], 0)
+        ridge = next(r for r in rows if r["party"] == "Ridge Hospital")
+        self.assertEqual(float(ridge["owed"]), 0)
+        self.assertEqual(float(ridge["in_credit"]), 3000)
+        self.assertEqual(float(ridge["unmatched_payments"]), 3000)
+        ubuntu = next(r for r in rows if r["party"] == "Ubuntu Ltd")
+        self.assertEqual(float(ubuntu["unlinked_debits"]), 5000)   # the opening balance
+        self.assertEqual(float(ubuntu["unlinked_journals"]), 1000)
+
+        # the figures are the ledger's; the invoices' own figure is kept beside them
+        figs = evaluate_set(["ar_total", "ap_total", "ar_open_invoices", "ar_in_credit",
+                             "ar_unmatched", "ap_unmatched"], "test_medical_ltd")
+        self.assertAlmostEqual(float(figs["ar_total"]["value"]),
+                               sum(float(r["owed"]) for r in rows if r["party_type"] == "Customer"), 2)
+        self.assertEqual(float(figs["ar_in_credit"]["value"]), 3000)
+        self.assertEqual(float(figs["ar_unmatched"]["value"]), 23000)
+        self.assertEqual(float(figs["ap_unmatched"]["value"]), 30000)
+        self.assertEqual(figs["ar_total"]["drill"]["fact"], "fact_party_balance")
+
+        with run_as("Administrator"):
+            check = audit.figures("test_medical_ltd")
+        lines = {x["key"]: x for x in check["lines"]}
+        for key in ("customer_ledger", "supplier_ledger", "customer_unmatched", "supplier_unmatched"):
+            self.assertTrue(lines[key]["ok"], f"{key}: {lines[key]}")
+        self.assertEqual(len(check["lines"]), len(audit.LINES))
+        for x in check["lines"]:
+            self.assertTrue(x["ok"] or x["reason"], f"{x['key']} differs and says nothing")
+        self.assertIn("Customer ledger balance", audit.table(check))
+
+
+LEDGER_SIGN = {"Customer": 1, "Supplier": -1}
+
+
+class LedgerArithmetic(TransactionTestCase):
+    """The matching and ageing, by hand. As at 30 Jun 2026 a customer has three open
+    invoices (1,000 due 10 Jan, 500 due 20 May, 800 due 10 Jul), an opening balance of
+    300 put in by journal on 31 Dec 2025, a payment of 1,300 never matched and a journal
+    credit of 100 not linked. The ledger: 2,300 + 300 - 1,300 - 100 = 1,200. The 1,400 of
+    credits (2,600 open less 1,200 owed) clear the opening balance (300), the January
+    invoice (1,000) and 100 of May's: 400 of May's is left, 41 days overdue, and July's
+    800 is not yet due."""
+
+    AS_OF = "2026-06-30"
+
+    def test_hand_worked(self):
+        from command_center.ingest.ledger import position, row_for
+        gl = {"Sales Invoice": (2300, 0), "Payment Entry": (0, 1300), "Journal Entry": (300, 100)}
+        invoices = [("2026-01-10", "2025-12-11", 1000), ("2026-05-20", "2026-04-20", 500),
+                    ("2026-07-10", "2026-06-10", 800)]
+        journals = [("2025-12-31", 300, 0, None), ("2026-03-01", 0, 100, None)]
+        pos = position("Customer", gl, invoices, {}, [("Receive", "2026-02-01", 1300)], journals)
+        for key, want in (("ledger_balance", 1200), ("open_invoices", 2300), ("open_invoice_count", 3),
+                          ("unmatched_payments", 1300), ("unmatched_payment_count", 1),
+                          ("unlinked_journals", 100), ("unlinked_debits", 300),
+                          ("unlinked_credit_notes", 0), ("other_unlinked", 0),
+                          ("invoices_not_updated", 0), ("unexplained", 0)):
+            self.assertAlmostEqual(pos[key], want, places=2, msg=key)
+        row = row_for("Customer", "A", pos, self.AS_OF)
+        self.assertEqual((row["not_due"], row["d0_30"], row["d31_60"], row["d61_90"], row["d90_plus"],
+                          row["undated"]), (800, 0, 400, 0, 0, 0))
+        self.assertEqual(str(row["oldest_due_after_matching"]), "2026-05-20")
+        self.assertEqual(row["days_overdue"], 41)
+        self.assertEqual((row["owed"], row["in_credit"], row["inside_90"], row["overdue"]),
+                         (1200, 0, 1200, 400))
+
+    def test_in_credit_owes_nothing(self):
+        """Billed 500, paid 800 of which 500 matched to the invoice: in credit by 300."""
+        from command_center.ingest.ledger import position, row_for
+        pos = position("Customer", {"Sales Invoice": (500, 0), "Payment Entry": (0, 800)}, [],
+                       {("Receive", "Sales Invoice"): 500}, [("Receive", "2026-03-01", 300)], [])
+        row = row_for("Customer", "B", pos, self.AS_OF)
+        self.assertEqual((row["ledger_balance"], row["owed"], row["in_credit"]), (-300, 0, 300))
+        self.assertEqual(sum(row[k] for k in ("not_due", "d0_30", "d31_60", "d61_90", "d90_plus",
+                                              "undated")), 0)
+        self.assertEqual((row["unmatched_payments"], row["unexplained"]), (300, 0))
+        self.assertIsNone(row["oldest_due_after_matching"])
+
+    def test_ledger_beyond_the_items_is_undated(self):
+        """A supplier's bill the ledger holds but whose own outstanding was cleared: owed
+        by the ledger, on no open item, so undated -- never guessed into a bucket."""
+        from command_center.ingest.ledger import position, row_for
+        pos = position("Supplier", {"Purchase Invoice": (0, 1000)}, [], {}, [], [])
+        self.assertEqual((pos["ledger_balance"], pos["invoices_not_updated"], pos["unexplained"]),
+                         (1000, -1000, 0))
+        row = row_for("Supplier", "C", pos, self.AS_OF)
+        self.assertEqual((row["owed"], row["undated"], row["d90_plus"]), (1000, 1000, 0))
+
+    def test_what_the_records_do_not_explain(self):
+        """The ledger has 1,000 of payments; the payments' own records account for 900."""
+        from command_center.ingest.ledger import position
+        pos = position("Customer", {"Sales Invoice": (1000, 0), "Payment Entry": (0, 1000)},
+                       [("2026-05-01", None, 100)], {("Receive", "Sales Invoice"): 900}, [], [])
+        self.assertEqual((pos["ledger_balance"], pos["invoices_not_updated"], pos["unexplained"]),
+                         (0, 0, 100))
+
+    def test_panels_say_why(self):
+        from command_center.api.panels import _why
+        r = {"unmatched_payments": 700003, "invoices_not_updated": 496719, "unlinked_journals": 0,
+             "unlinked_credit_notes": 0, "other_unlinked": 0, "unlinked_debits": 462067.85,
+             "unexplained": 0}
+        text = _why(r, "XYZ", "Customer")
+        self.assertTrue(text.startswith("XYZ 700,003 received but never matched to invoices"), text)
+        self.assertIn("XYZ 462,068 owed on journal entries", text)
+        self.assertNotIn("disagree", text)
+        self.assertIn("disagree by XYZ 5", _why({**r, "unexplained": 5}, "XYZ", "Customer"))
 
 
 class CommandLine(TransactionTestCase):

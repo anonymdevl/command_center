@@ -604,6 +604,21 @@ def test_business(name: str = ""):
 
 
 @frappe.whitelist(methods=["POST"])
+def check_figures(name: str = ""):
+    """Check Figures: what the platform holds for this business, line by line, against
+    what its ERPNext says right now (command_center/api/audit.py). Reads only."""
+    _require("businesses")
+    b = _get_business(name)
+    from command_center.api import audit
+    try:
+        return audit.figures(b.business_code)
+    except Exception as e:  # noqa: BLE001 -- said on the screen, recorded in the log
+        frappe.log_error(title=f"Settings: check figures of {b.business_code}",
+                         message=frappe.get_traceback())
+        _say(f"The figures could not be checked just now: {_plain_failure(e)}")
+
+
+@frappe.whitelist(methods=["POST"])
 def set_paused(name: str = "", paused=1):
     """Pause (no loads, not offered on the screens) or resume a business."""
     _require("businesses")

@@ -1,0 +1,317 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-11-15 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "in_create": 1,
+ "field_order": [
+  "business_code",
+  "src_doctype",
+  "src_name",
+  "src_row_name",
+  "src_modified",
+  "src_docstatus",
+  "ingested_at",
+  "fact_key",
+  "sec_party",
+  "party_type",
+  "party",
+  "as_of_date",
+  "col_ledger",
+  "ledger_balance",
+  "owed",
+  "in_credit",
+  "sec_explain",
+  "open_invoices",
+  "open_invoice_count",
+  "unmatched_payments",
+  "unmatched_payment_count",
+  "unlinked_journals",
+  "unlinked_credit_notes",
+  "other_unlinked",
+  "col_explain",
+  "unlinked_debits",
+  "invoices_not_updated",
+  "unexplained",
+  "sec_age",
+  "not_due",
+  "d0_30",
+  "d31_60",
+  "d61_90",
+  "d90_plus",
+  "col_age",
+  "undated",
+  "inside_90",
+  "overdue",
+  "oldest_due_after_matching",
+  "days_overdue"
+ ],
+ "fields": [
+  {
+   "fieldname": "business_code",
+   "fieldtype": "Data",
+   "label": "Business",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "description": "Which connected business this row belongs to. Consolidated is a GROUP BY on this column; a single business is a filter."
+  },
+  {
+   "fieldname": "src_doctype",
+   "fieldtype": "Data",
+   "label": "Source Doctype",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "src_name",
+   "fieldtype": "Data",
+   "label": "Source Document",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "src_row_name",
+   "fieldtype": "Data",
+   "label": "Source Row"
+  },
+  {
+   "fieldname": "src_modified",
+   "fieldtype": "Datetime",
+   "label": "Source Modified",
+   "search_index": 1,
+   "description": "The source document's modified timestamp at extraction. Drives the incremental watermark."
+  },
+  {
+   "fieldname": "src_docstatus",
+   "fieldtype": "Int",
+   "label": "Source Docstatus",
+   "description": "0 draft \u00b7 1 submitted \u00b7 2 cancelled"
+  },
+  {
+   "fieldname": "ingested_at",
+   "fieldtype": "Datetime",
+   "label": "Ingested At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fact_key",
+   "fieldtype": "Data",
+   "label": "Fact Key",
+   "unique": 1,
+   "read_only": 1,
+   "length": 64,
+   "description": "sha1 of business + source doctype + document + row. Makes a reload replace rather than duplicate."
+  },
+  {
+   "fieldname": "sec_party",
+   "fieldtype": "Section Break",
+   "label": "Party"
+  },
+  {
+   "fieldname": "party_type",
+   "fieldtype": "Data",
+   "label": "Party Type",
+   "search_index": 1,
+   "in_list_view": 1,
+   "description": "Customer or Supplier"
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Data",
+   "label": "Party",
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "as_of_date",
+   "fieldtype": "Date",
+   "label": "Aged As At",
+   "description": "The data horizon the ageing is measured to, never today by default."
+  },
+  {
+   "fieldname": "col_ledger",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ledger_balance",
+   "fieldtype": "Currency",
+   "label": "Ledger Balance",
+   "description": "From the General Ledger: for a customer debits less credits, for a supplier credits less debits. Negative means the party is in credit."
+  },
+  {
+   "fieldname": "owed",
+   "fieldtype": "Currency",
+   "label": "Owed",
+   "in_list_view": 1,
+   "description": "The ledger balance where positive: what the party really owes, or what we really owe them."
+  },
+  {
+   "fieldname": "in_credit",
+   "fieldtype": "Currency",
+   "label": "In Credit",
+   "description": "The ledger balance where negative, as a positive amount: paid in advance, or paid more than was billed."
+  },
+  {
+   "fieldname": "sec_explain",
+   "fieldtype": "Section Break",
+   "label": "Why the invoices say something else"
+  },
+  {
+   "fieldname": "open_invoices",
+   "fieldtype": "Currency",
+   "label": "On Open Invoices",
+   "description": "The outstanding amounts of submitted invoices that are still open, as the invoices themselves state them."
+  },
+  {
+   "fieldname": "open_invoice_count",
+   "fieldtype": "Int",
+   "label": "Open Invoices"
+  },
+  {
+   "fieldname": "unmatched_payments",
+   "fieldtype": "Currency",
+   "label": "Payments Not Matched",
+   "description": "Payments received from a customer (or made to a supplier) and never matched to an invoice: their unallocated amounts."
+  },
+  {
+   "fieldname": "unmatched_payment_count",
+   "fieldtype": "Int",
+   "label": "Payments Not Matched (Count)"
+  },
+  {
+   "fieldname": "unlinked_journals",
+   "fieldtype": "Currency",
+   "label": "Journal Credits Not Linked",
+   "description": "Journal entries that reduce what is owed and are not linked to any invoice."
+  },
+  {
+   "fieldname": "unlinked_credit_notes",
+   "fieldtype": "Currency",
+   "label": "Credit Notes Not Set Against An Invoice",
+   "description": "Credit notes (returns) whose own balance is still open because they were never set against the original invoice."
+  },
+  {
+   "fieldname": "other_unlinked",
+   "fieldtype": "Currency",
+   "label": "Other Unlinked",
+   "description": "Payments matched to orders or journal entries instead of invoices, and ledger entries of other kinds. Negative when they add to what is owed."
+  },
+  {
+   "fieldname": "col_explain",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "unlinked_debits",
+   "fieldtype": "Currency",
+   "label": "Debits Not On An Invoice",
+   "description": "Journal entries and refunds that add to what is owed without being on an invoice, such as opening balances."
+  },
+  {
+   "fieldname": "invoices_not_updated",
+   "fieldtype": "Currency",
+   "label": "Not Shown On The Invoices",
+   "description": "Payments and credit notes the ledger already records against these invoices that the invoices' own outstanding amounts do not show. Negative when the invoices show less than the ledger holds against them."
+  },
+  {
+   "fieldname": "unexplained",
+   "fieldtype": "Currency",
+   "label": "Unexplained",
+   "description": "Whatever the records do not account for. Open invoices less every credit above plus the debits equals the ledger balance; this is the remainder, normally zero."
+  },
+  {
+   "fieldname": "sec_age",
+   "fieldtype": "Section Break",
+   "label": "Ageing after matching"
+  },
+  {
+   "fieldname": "not_due",
+   "fieldtype": "Currency",
+   "label": "Not Yet Due"
+  },
+  {
+   "fieldname": "d0_30",
+   "fieldtype": "Currency",
+   "label": "1-30 Days Overdue"
+  },
+  {
+   "fieldname": "d31_60",
+   "fieldtype": "Currency",
+   "label": "31-60 Days Overdue"
+  },
+  {
+   "fieldname": "d61_90",
+   "fieldtype": "Currency",
+   "label": "61-90 Days Overdue"
+  },
+  {
+   "fieldname": "d90_plus",
+   "fieldtype": "Currency",
+   "label": "Over 90 Days Overdue"
+  },
+  {
+   "fieldname": "col_age",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "undated",
+   "fieldtype": "Currency",
+   "label": "Owed With No Date",
+   "description": "Owed by the ledger but on no dated item to age it by (the ledger holds more than the open items explain)."
+  },
+  {
+   "fieldname": "inside_90",
+   "fieldtype": "Currency",
+   "label": "Inside 90 Days",
+   "description": "Not yet due plus up to 90 days overdue."
+  },
+  {
+   "fieldname": "overdue",
+   "fieldtype": "Currency",
+   "label": "Overdue",
+   "description": "Everything past its due date, after matching."
+  },
+  {
+   "fieldname": "oldest_due_after_matching",
+   "fieldtype": "Date",
+   "label": "Oldest Due Date After Matching",
+   "description": "Unmatched payments and credits are set against the oldest open items first; this is the due date of the oldest item still open after that."
+  },
+  {
+   "fieldname": "days_overdue",
+   "fieldtype": "Int",
+   "label": "Days Overdue",
+   "description": "From the oldest due date after matching to the as-of date."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Fact Party Balance",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Insights Dashboard Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "owed",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

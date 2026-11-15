@@ -152,6 +152,7 @@ const DIMENSION_FIELD = {
   fact_task: "assigned_to",
   fact_person: "department",
   fact_case: "customer",
+  fact_party_balance: "party",
 };
 
 /** The records. Columns and their order are the server's, so every drawer agrees. */

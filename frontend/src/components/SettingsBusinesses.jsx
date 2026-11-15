@@ -141,6 +141,52 @@ function Access({ a }) {
   );
 }
 
+/** Check Figures: each figure the screens rest on, from the platform and from ERPNext now. */
+function FigureCheck({ c }) {
+  const fmt = (v, unit) => (v === null || v === undefined ? "—"
+    : unit === "count" ? Math.round(v).toLocaleString("en-GB")
+      : Number(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const bad = c.lines.filter((x) => !x.ok).length;
+  return (
+    <div className="dlg-sec">
+      <h4>Check Figures</h4>
+      <Msg tone={bad ? "note" : "ok"}>
+        {bad ? `${bad} of ${c.lines.length} figures differ from ERPNext.` : `All ${c.lines.length} figures agree with ERPNext.`}
+        {` Figures as at ${c.as_of}; checked ${when(c.checked_at)}.`}
+      </Msg>
+      <div className="dt-scroll">
+        <table className="dt">
+          <thead>
+            <tr>
+              <th>Figure</th>
+              <th style={{ textAlign: "right" }}>Platform</th>
+              <th style={{ textAlign: "right" }}>ERPNext</th>
+              <th style={{ textAlign: "right" }}>Difference</th>
+              <th aria-label="Agrees" />
+            </tr>
+          </thead>
+          <tbody>
+            {c.lines.map((x) => (
+              <tr key={x.key}>
+                <td>
+                  {x.check}
+                  {x.reason ? <span className="st-sub">{x.reason}</span> : null}
+                </td>
+                <td className="num">{fmt(x.platform, x.unit)}</td>
+                <td className="num">{fmt(x.erpnext, x.unit)}</td>
+                <td className="num" style={x.ok ? undefined : { color: "var(--crit)" }}>{fmt(x.difference, x.unit)}</td>
+                <td>
+                  <span className={`tag ${x.ok ? "t-ok" : "t-od"}`}>{x.ok ? "✓" : "✗"}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function AddBusiness({ onClose, onDone }) {
   const [f, setF] = useState({ business_name: "", site_url: "https://", api_key: "", api_secret: "", erpnext_company: "" });
   const [st, setSt] = useState({});
@@ -201,6 +247,7 @@ function ManageBusiness({ b, onClose, onDone }) {
   const [f, setF] = useState({ site_url: b?.site_url || "", api_key: "", api_secret: "" });
   const [st, setSt] = useState({});
   const [test, setTest] = useState(null);
+  const [check, setCheck] = useState(null);
   if (!b) return null;
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
 
@@ -213,6 +260,14 @@ function ManageBusiness({ b, onClose, onDone }) {
     if (out) {
       setF((x) => ({ ...x, api_key: "", api_secret: "" }));
       onDone();
+    }
+  };
+  const runCheck = async () => {
+    setCheck(null);
+    const out = await act(setSt, () => settingsApi.checkFigures(b.name));
+    if (out) {
+      setSt({});
+      setCheck(out);
     }
   };
   const runTest = async () => {
@@ -257,8 +312,14 @@ function ManageBusiness({ b, onClose, onDone }) {
             .then((o) => o && onDone())}>
           {b.status === "Paused" ? "Resume" : "Pause"}
         </button>
+        <button type="button" className="ap-act" disabled={st.busy || b.status === "Paused"}
+          title="Compare the platform's figures with what this business's ERPNext says now"
+          onClick={runCheck}>
+          {st.busy && !check ? "Checking…" : "Check Figures"}
+        </button>
       </div>
       {test ? <Msg tone={test.ok ? "ok" : "bad"}>{test.says}</Msg> : null}
+      {check ? <FigureCheck c={check} /> : null}
       {test?.access ? <Access a={{ ...test.access }} /> : null}
       <Msg tone="ok">{st.ok}</Msg>
       <Msg tone="bad">{st.bad}</Msg>

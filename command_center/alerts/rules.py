@@ -72,10 +72,42 @@ def ar_overdue(f, p):
     share = (late["value"] / whole["value"] * 100) if whole.get("value") else 0
     return _finding(
         f"{money(late)} of the {money(whole)} owed is more than three months late",
-        f"{share:.0f}% of everything owed. The largest single debtor is "
+        f"{share:.0f}% of everything owed by the ledger, after payments not yet matched "
+        f"are set against the oldest invoices. The largest single debtor is "
         f"{(top.get('group') or {}).get('label') or 'unknown'}, at {money(top)}.",
         "Pick the three largest and agree payment dates this week.",
         late, "Finance")
+
+
+def ar_unmatched(f, p):
+    """Data hygiene: customer payments never matched to an invoice. Until they are, the
+    invoices show these customers owing money they have paid."""
+    paid, n = f["ar_unmatched"], f["ar_unmatched_count"]
+    if (paid.get("value") or 0) <= _t(p, 'threshold_amount'):
+        return None
+    return _finding(
+        f"{money(paid)} received from customers ({_n(n):,} payments) was never matched "
+        f"to invoices",
+        f"Until it is, ERPNext's invoices show these customers owing money they have "
+        f"paid: open invoices say {money(f['ar_open_invoices'])}, the ledger "
+        f"{money(f['ar_total'])}. Every list of debtors and every reminder drawn from the "
+        f"invoices is wrong by that much.",
+        "Match them in ERPNext: Accounts, Payment Reconciliation, one customer at a time.",
+        paid, "Finance")
+
+
+def ap_unmatched(f, p):
+    paid, n = f["ap_unmatched"], f["ap_unmatched_count"]
+    if (paid.get("value") or 0) <= _t(p, 'threshold_amount'):
+        return None
+    return _finding(
+        f"{money(paid)} paid to suppliers ({_n(n):,} payments) was never matched to "
+        f"their bills",
+        f"Until it is, the bills show {money(f['ap_open_invoices'])} still to pay where the "
+        f"ledger says {money(f['ap_total'])}, and a payment run drawn from the bills would "
+        f"pay some of them twice.",
+        "Match them in ERPNext: Accounts, Payment Reconciliation, one supplier at a time.",
+        paid, "Finance")
 
 
 def stock_shortfall(f, p):
@@ -148,7 +180,8 @@ def ap_overdue(f, p):
         return None
     return _finding(
         f"{money(late)} we owe suppliers is more than three months overdue",
-        f"Of {money(f['ap_total'])} owed to suppliers in all. Suppliers this far "
+        f"Of {money(f['ap_total'])} owed to suppliers in all, by the ledger, after payments "
+        f"not yet matched are set against the oldest bills. Suppliers this far "
         f"behind start holding deliveries.",
         "Agree a payment plan with the largest before supply is held.",
         late, "Finance")
@@ -158,7 +191,7 @@ RULES = (
     Rule("Overdue receivables", "crit",
          "Money owed to us more than three months late, above the amount set here.",
          ("ar_over_90", "ar_total", "largest_debt"), ar_overdue,
-         threshold_amount=50000, since=("ar_over_90", "due_date")),
+         threshold_amount=50000, since=("ar_over_90", "oldest_due_after_matching")),
     Rule("Stock promised but not there", "crit",
          "Products reserved for customers beyond what is physically on hand.",
          ("stock_short_products", "stock_worst_shortfall"), stock_shortfall),
@@ -181,7 +214,19 @@ RULES = (
     Rule("Overdue supplier invoices", "med",
          "What we owe suppliers more than three months overdue, above the amount set here.",
          ("ap_over_90", "ap_total"), ap_overdue,
-         threshold_amount=50000, since=("ap_over_90", "due_date")),
+         threshold_amount=50000, since=("ap_over_90", "oldest_due_after_matching")),
+    # Data hygiene (15 Nov 2026): payments never matched make the invoices overstate what
+    # is owed. One alert a side, deduplicated like every other.
+    Rule("Customer payments not matched", "med",
+         "Money received from customers that was never matched to an invoice, above the "
+         "amount set here.",
+         ("ar_unmatched", "ar_unmatched_count", "ar_open_invoices", "ar_total"), ar_unmatched,
+         threshold_amount=1000),
+    Rule("Supplier payments not matched", "med",
+         "Money paid to suppliers that was never matched to their bills, above the amount "
+         "set here.",
+         ("ap_unmatched", "ap_unmatched_count", "ap_open_invoices", "ap_total"), ap_unmatched,
+         threshold_amount=1000),
 )
 
 SEVERITY_RANK = {"crit": 0, "high": 1, "med": 2, "info": 3}

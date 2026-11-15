@@ -221,6 +221,15 @@ rows("fact_sales_invoice",
      {"customer": "PAID", "outstanding_amount": 0, "src_docstatus": 1, "base_grand_total": 900},
      {"customer": "DRAFT", "outstanding_amount": 5000, "src_docstatus": 0, "base_grand_total": 5000})
 
+# What is owed is the ledger's, per party: HAIRASH's open invoices say 737 but a payment
+# never matched means it owes 13 by the ledger -- the largest debt is UBUNTU's 600. A
+# customer in credit, and a supplier, are never a customer's debt.
+rows("fact_party_balance",
+     {"party_type": "Customer", "party": "HAIRASH", "owed": 13, "open_invoices": 737},
+     {"party_type": "Customer", "party": "UBUNTU", "owed": 600, "open_invoices": 600},
+     {"party_type": "Customer", "party": "AHEAD", "owed": 0, "in_credit": 900},
+     {"party_type": "Supplier", "party": "CYNSEL", "owed": 5000})
+
 rows("fact_purchase_invoice_line",
      {"supplier": "CYNSEL", "base_net_amount": 57, "src_docstatus": 1},
      {"supplier": "MEDI", "base_net_amount": 38, "src_docstatus": 1},
@@ -280,8 +289,8 @@ check(b["drill"]["filters"].get("posting_date") == ["between", ["2025-06-01", "2
       f"revenue_best_month: drill should open June only, got {b['drill']['filters']}")
 
 d = r["largest_debt"]
-check(d["value"] == 737 and d["note"] == "HAIRASH" and d["drill"]["filters"]["customer"] == "HAIRASH",
-      f"largest_debt: HAIRASH 737, got {d['value']} / {d['note']!r} / {d['drill']['filters']}")
+check(d["value"] == 600 and d["note"] == "UBUNTU, by the ledger" and d["drill"]["filters"]["party"] == "UBUNTU",
+      f"largest_debt: UBUNTU 600 by the ledger, got {d['value']} / {d['note']!r} / {d['drill']['filters']}")
 check(r["invoices_draft"]["value"] == 1 and "5,000.00" in r["invoices_draft"]["note"],
       f"invoices_draft: {r['invoices_draft']}")
 

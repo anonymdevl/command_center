@@ -394,10 +394,11 @@ def cases_owing(r):
                            fields=["customer"], limit=100000)
     if not cases:
         return 0, "no open cases", {"fact": "fact_case", "filters": {"is_open": 1}}
-    owing = {x["customer"] for x in frappe.get_all(
-        FACTS["fact_sales_invoice"],
-        filters={**scope, "src_docstatus": 1, "outstanding_amount": [">", 0]},
-        fields=["customer"], limit=100000) if x.get("customer")}
+    # Owing by the ledger, not by open invoices a payment may already have settled.
+    owing = {x["party"] for x in frappe.get_all(
+        FACTS["fact_party_balance"],
+        filters={**scope, "party_type": "Customer", "owed": [">", 0]},
+        fields=["party"], limit=100000) if x.get("party")}
     both = sorted({c["customer"] for c in cases if c.get("customer") in owing})
     n = sum(1 for c in cases if c.get("customer") in owing)
     return n, f"of {len(cases)} open", {"fact": "fact_case", "filters": (

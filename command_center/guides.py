@@ -50,3 +50,23 @@ def needs_setup(business_code, text, steps=None, path=None) -> dict:
     """A figure's data_status for 'nothing recorded yet': message plus the guide."""
     return {"state": "needs_setup", "message": str(text),
             "guide": guide(business_code, text, steps, path)}
+
+
+# Matching payments to the invoices they pay (15 Nov 2026). Where they are not matched the
+# invoices overstate what is owed; this is the fix at source, in ERPNext's own tool.
+RECONCILE_STEPS = [
+    "In ERPNext open Accounts, then Payment Reconciliation.",
+    "Choose the Company, the Party Type (Customer or Supplier) and the Party.",
+    "Press Get Unreconciled Entries: the payments not yet matched are listed on one side, "
+    "the open invoices on the other.",
+    "Press Allocate to set each payment against the invoices it pays (oldest first, or "
+    "as the remittance says), check the amounts, then press Reconcile.",
+    "Repeat for the next customer or supplier. The invoices' outstanding amounts then "
+    "agree with the ledger, and this platform shows the difference gone at its next load.",
+]
+
+
+def payment_reconciliation(business_code, text: str) -> dict:
+    """The guide to matching payments in ERPNext, opening its Payment Reconciliation."""
+    return guide(business_code, text, RECONCILE_STEPS, "/app/payment-reconciliation",
+                 label="Open Payment Reconciliation")

@@ -19,8 +19,14 @@ V_FIN=f'''<div class="topbar"><div><h3>Finances</h3>
  bars0()+thin("Money the business cannot presently use: debts over three months old, stock on the shelves and orders not yet despatched."),
  "","workingcap")}
 </div>
+{warn0()}
+{warn0()}
+{panel("Receivables and payables",
+ '<div class="dt-scroll">'+dtable(["Customer or Supplier",("On Open Invoices$",True),("Ledger Balance$",True),("Difference$",True),"Why",
+ ("Not Yet Due",True),("1–30 Days",True),("31–60 Days",True),("61–90 Days",True),("Over 90 Days",True)])+'</div>',
+ "What each really owes by the ledger, beside the open invoices and bills","ledger")}
 <div class="two">
-{panel("What we owe suppliers", thin("<b>Unpaid supplier invoices by when they fall due.</b> What is overdue and what falls due in the next 7, 30 and 60 days, against the cash customers are due to pay, so a payment run can be planned rather than guessed."))}
+{panel("What we owe suppliers", thin("<b>What the ledger says we owe suppliers, by when it falls due.</b> What is overdue and what falls due in the next 7, 30 and 60 days, after payments not yet matched are set against the oldest bills, against the cash customers are due to pay, so a payment run can be planned rather than guessed."))}
 {panel("Cash and bank position", thin("<b>The balance on every bank and cash account in the ledger.</b> Each balance is only as good as the last time the account was checked against the bank statement, so that date is shown beside it."))}
 </div>
 <div class="two">

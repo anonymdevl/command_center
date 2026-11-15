@@ -49,6 +49,10 @@ class Ingestor:
     # cancelled since the last load would otherwise keep its rows here as if it still
     # stood. Its cancellation is found by the same watermark and its rows removed.
     cancellable: str | None = None
+    # A fact rebuilt whole whenever its extract finds something changed (one row per
+    # party, say, rather than per document): every load that returns rows replaces all
+    # of the business's rows, and an extract that returns None means nothing changed.
+    whole: bool = False
 
     @property
     def target(self) -> str:
@@ -103,10 +107,11 @@ class Ingestor:
 
         try:
             rows = self.extract(conn, since=since, limit=limit, as_of=as_of)
-            rows = [self.stamp(r, conn.code) for r in rows]
+            changed = rows is not None
+            rows = [self.stamp(r, conn.code) for r in rows or []]
 
             withdrawn = set() if full or not since else self.withdrawn(conn, since)
-            if full:
+            if full or (self.whole and changed):
                 # A full load means the table is rebuilt from what the source holds
                 # now. Purging only the batch leaves rows behind for documents that
                 # have since been deleted, and those orphans keep being counted: 49

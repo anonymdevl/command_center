@@ -108,7 +108,7 @@ class AskFlow(TransactionTestCase):
             # period are what is wanted, and then the answer says so.
             with self.assertRaises(tools.ToolError):
                 tools.compare_periods(figure="ar_total", business_code=CODE)
-            a = tools.compare_periods(figure="ar_total", date_column="posting_date",
+            a = tools.compare_periods(figure="ar_open_invoices", date_column="posting_date",
                                       business_code=CODE)
             self.assertIn("not the position as it stood", a["note"])
             with self.assertRaises(tools.ToolError):

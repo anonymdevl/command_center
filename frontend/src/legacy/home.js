@@ -212,7 +212,8 @@ function loadDebts(panel, scope, onOpen) {
     .then((d) => {
       if (seq !== debtState.seq || !document.body.contains(panel)) return;
       panel.dataset.loaded = mode;
-      setText(panel, "#debt-n", `${count(d.invoices)} invoice${d.invoices === 1 ? "" : "s"}`);
+      // By the ledger: how many customers owe, not how many invoices are open.
+      setText(panel, "#debt-n", `${count(d.customers)} customer${d.customers === 1 ? "" : "s"}`);
       rows.textContent = "";
       if (!d.rows.length) {
         rows.append(el("div", "home-wait", mode === "all" ? "Nobody owes us anything." : "Nothing in this band."));
@@ -234,24 +235,25 @@ function loadDebts(panel, scope, onOpen) {
 function debtRow(r, currency, onOpen) {
   const row = el("button", "debt-row");
   row.type = "button";
-  row.title = `Open ${r.customer}'s unpaid invoices`;
+  row.title = `Open what ${r.customer} owes`;
   const who = el("span", "debt-who");
   who.append(el("span", "av2", initials(r.customer)));
   const name = el("span", "debt-name");
   name.append(el("b", null, r.customer),
-    el("span", null, `${count(r.invoices)} invoice${r.invoices === 1 ? "" : "s"}`
+    el("span", null, `${count(r.invoices)} open invoice${r.invoices === 1 ? "" : "s"}`
       + (r.last_paid ? ` · last paid ${shortDate(r.last_paid)}` : " · no payment on record")));
   who.append(name);
   const days = el("span", `dpill ${r.days > 90 ? "crit" : r.days > 30 ? "high" : "ok"}`,
     r.days > 0 ? `${count(r.days)} days` : "not yet due");
   const amt = el("span", "debt-amt");
   const inv = el("span", "debt-a");
-  inv.append(el("b", null, exact(r.invoiced, { decimals: 0 })), el("small", null, "Invoiced"));
+  // What the open invoices say, then what the ledger says is really owed.
+  inv.append(el("b", null, exact(r.on_invoices ?? r.invoiced, { decimals: 0 })), el("small", null, "On invoices"));
   const owed = el("span", "debt-a");
-  owed.append(el("b", null, exact(r.owed, { decimals: 0 })), el("small", null, `Still owed${currency ? `, ${currency}` : ""}`));
+  owed.append(el("b", null, exact(r.owed, { decimals: 0 })), el("small", null, `Owed by the ledger${currency ? `, ${currency}` : ""}`));
   amt.append(inv, el("span", "debt-arrow", "→"), owed);
   row.append(who, days, amt);
-  row.onclick = () => onOpen?.({ label: `${r.customer}: unpaid invoices`, drill: r.drill });
+  row.onclick = () => onOpen?.({ label: `${r.customer}: what they owe`, drill: r.drill });
   return row;
 }
 
