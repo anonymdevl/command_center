@@ -143,6 +143,13 @@ CACHES = {"default": {
     "LOCATION": "cc_cache",
     "OPTIONS": {"MAX_ENTRIES": 20000},
 }}
+# Keys such as "cc:fields:<business>:Sales Invoice" hold spaces, which only memcached
+# minds; the platform's cache is a database table, so Django's warning is noise.
+import warnings  # noqa: E402
+
+from django.core.cache.backends.base import CacheKeyWarning  # noqa: E402
+
+warnings.simplefilter("ignore", CacheKeyWarning)
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
