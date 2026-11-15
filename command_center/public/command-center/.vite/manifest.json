@@ -1,11 +1,14 @@
 {
   "index.html": {
-    "file": "command-center.C2NE7Qyt.js",
+    "file": "command-center.DetReXKL.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
+    "dynamicImports": [
+      "src/legacy/echarts-lib.js"
+    ],
     "css": [
-      "index.DgDmodqm.css"
+      "index.Blpv_KRi.css"
     ],
     "assets": [
       "manrope-cyrillic-wght-normal.Dvxsihut.woff2",
@@ -34,5 +37,11 @@
   "node_modules/@fontsource-variable/manrope/files/manrope-vietnamese-wght-normal.woff2": {
     "file": "manrope-vietnamese-wght-normal.usUDDRr7.woff2",
     "src": "node_modules/@fontsource-variable/manrope/files/manrope-vietnamese-wght-normal.woff2"
+  },
+  "src/legacy/echarts-lib.js": {
+    "file": "echarts-lib.B37XLgg5.js",
+    "name": "echarts-lib",
+    "src": "src/legacy/echarts-lib.js",
+    "isDynamicEntry": true
   }
 }
