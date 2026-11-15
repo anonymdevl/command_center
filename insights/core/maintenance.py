@@ -4,7 +4,8 @@ Run every night by the scheduler (manage.py scheduler), or by hand:
 
     manage.py execute insights.core.maintenance.daily
 
-- the error log keeps `error_log_days` (default 30) days;
+- the error log keeps `error_log_days` (default 30) days, the sign-in record
+  `security_event_days` (default 730);
 - expired sign-in sessions are cleared (Django never clears them by itself);
 - the platform's database is backed up to `backup_dir` (default ~/insights-backups),
   with a copy of insights.json and the uploaded logos, keeping `backup_days` (default 14)
@@ -39,6 +40,21 @@ def prune_error_log() -> int:
     cutoff = dt.datetime.now() - dt.timedelta(days=int(_conf("error_log_days", 30)))
     n, _ = ErrorLog.objects.using("aux").filter(creation__lt=cutoff).delete()
     return n
+
+
+def prune_security_events() -> int:
+    """The sign-in record is append-only for everyone (models._AppendOnly); its one
+    exception is age. Kept `security_event_days` (default 730, two years) -- long enough
+    for any incident review -- then dropped here, by date only."""
+    from django.db import connections
+
+    from insights.core.models import SecurityEvent
+    cutoff = dt.datetime.now() - dt.timedelta(days=int(_conf("security_event_days", 730)))
+    conn = connections[SecurityEvent.objects.db]
+    table = conn.ops.quote_name(SecurityEvent._meta.db_table)
+    with conn.cursor() as cur:
+        cur.execute(f"delete from {table} where at < %s", [cutoff])
+        return cur.rowcount or 0
 
 
 def clear_sessions() -> None:
@@ -136,7 +152,8 @@ def _drop_old(target: Path) -> None:
 
 def daily() -> dict:
     import frappe  # insights.compat
-    done = {"error_log_pruned": prune_error_log()}
+    done = {"error_log_pruned": prune_error_log(),
+            "security_events_pruned": prune_security_events()}
     clear_sessions()
     done["sessions"] = "cleared expired"
     try:
