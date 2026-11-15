@@ -74,6 +74,7 @@ def summary(business_code: str | None = None):
     late = [t for t in open_ if t["late_days"] > 0]
     check = [t for t in handed if t["status"] == "Closed" and not t["accepted"]]
     high = [t for t in open_ if t["priority"] == "High"]
+    reopened = _sent_back_twice(open_, src)
     due_today = [t for t in mine if t["date"] and getdate(t["date"]) <= now]
     value = sum(a["value"] or 0 for a in approvals)
     oldest = max((t["late_days"] for t in late), default=0)
@@ -100,7 +101,14 @@ def summary(business_code: str | None = None):
                           f"{site}/app/todo?status=Open&assigned_by={user}"),
         "work_high": _fig("work_high", "High risk", len(high), "marked high priority",
                           f"{site}/app/todo?status=Open&priority=High&assigned_by={user}"),
+        "work_reopened": _fig("work_reopened", "Reopened twice+", len(reopened or []),
+                              "sent back more than once",
+                              f"{site}/app/todo?status=Open&assigned_by={user}"),
     }
+    if reopened is None:
+        # The comments could not be read: the tile stays as designed, marked
+        # illustrative, rather than saying nothing was ever sent back.
+        figures.pop("work_reopened")
     return {"available": True, "user": user, "today": str(now), "currency": currency,
             "approvals": approvals, "open": open_, "late": late, "check": check,
             "mine": mine, "figures": figures}
@@ -204,6 +212,31 @@ def _approvals(user, src):
             })
     out.sort(key=lambda a: -(a["waiting_days"] or 0))
     return out
+
+
+def _sent_back_twice(open_, src):
+    """Open work handed out that has been sent back more than once.
+
+    "Send it back" (review) reopens the To-Do and leaves a comment beginning "Sent back
+    by", so the comments are the record of each return. None when they cannot be read.
+    """
+    names = [t["name"] for t in open_]
+    if not names:
+        return []
+    try:
+        rows = src.list("Comment", filters={"reference_doctype": "ToDo",
+                                            "reference_name": ["in", names],
+                                            "comment_type": "Comment",
+                                            "content": ["like", "Sent back by %"]},
+                        fields=["reference_name"], limit=5000)
+    except Exception:
+        return None
+    times = {}
+    for r in rows:
+        if "reference_name" not in r:
+            return None   # the reply lost the column: unreadable, not "none"
+        times[r["reference_name"]] = times.get(r["reference_name"], 0) + 1
+    return [t for t in open_ if times.get(t["name"], 0) >= 2]
 
 
 def _todos(filters, src, limit=200):

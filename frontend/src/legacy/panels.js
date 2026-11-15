@@ -79,6 +79,8 @@ function draw(panel, spec, onOpen) {
       return drawStack(panel, spec);
     case "table":
       return drawTable(panel, spec, onOpen);
+    case "funnel":
+      return drawFunnel(panel, spec, onOpen);
     default:
       return false;
   }
@@ -166,6 +168,34 @@ function drawStack(panel, spec) {
   return true;
 }
 
+/* ------------------------------------------------------------------ funnel */
+function drawFunnel(panel, spec, onOpen) {
+  // The designed stages are redrawn in place, one for one: the bar, "Stage · count ·
+  // value", and the line under it.
+  const stages = [...panel.querySelectorAll(".funnel .fstage")];
+  const rows = spec.stages || [];
+  if (!stages.length || stages.length !== rows.length) return false;
+  const max = Math.max(...rows.map((r) => Number(r.count) || 0), 0) || 1;
+  rows.forEach((r, i) => {
+    const stage = stages[i];
+    const bar = stage.querySelector(".fbar");
+    if (bar) bar.style.width = `${Math.max(2, (100 * (Number(r.count) || 0)) / max).toFixed(1)}%`;
+    const txt = stage.querySelector(".ftxt");
+    if (txt) {
+      txt.textContent = "";
+      txt.append(el("b", null, r.label), document.createTextNode(
+        ` · ${Number(r.count || 0).toLocaleString("en-GB")}${r.display ? ` · ${r.display}` : ""}`));
+    }
+    const note = stage.querySelector(".fnote");
+    if (note) {
+      note.textContent = r.note || "";
+      note.hidden = !r.note;
+    }
+    if (r.drill && onOpen) clickable(stage, () => onOpen({ drill: r.drill, label: r.label }));
+  });
+  return true;
+}
+
 /* ------------------------------------------------------------------ table */
 function drawTable(panel, spec, onOpen) {
   const table = panel.querySelector("table.dt");
@@ -185,6 +215,8 @@ function drawTable(panel, spec, onOpen) {
   }
   rows.forEach((r) => {
     const tr = el("tr");
+    // A rule above a subtotal row, as the designed tables draw one.
+    if (r.rule) tr.style.borderTop = "2px solid var(--line2)";
     (r.cells || []).forEach((c) => {
       const td = el("td", c.num ? "num" : null);
       if (c.tone) td.style.color = `var(--${c.tone})`;
@@ -200,8 +232,25 @@ function drawTable(panel, spec, onOpen) {
         const a = el("span", "lnk", c.text || "");
         a.addEventListener("click", () => onOpen({ drill: c.drill, label: c.text }));
         td.append(a);
+      } else if (c.bold) {
+        td.append(el("b", null, c.text ?? ""));
       } else {
         td.textContent = c.text ?? "";
+      }
+      // The designed cells' small print: a coloured dot before the text, a smaller face,
+      // and a second line under it (a doctype, an address, what a role allows).
+      if (c.dot) {
+        const dot = el("span", null, "\u25CF ");
+        dot.style.color = `var(--${c.dot})`;
+        td.prepend(dot);
+      }
+      if (c.small) td.style.fontSize = "var(--fs-xs)";
+      if (c.sub) {
+        const sub = el("div", null, c.sub);
+        sub.style.fontSize = "var(--fs-2xs)";
+        sub.style.color = `var(--${c.sub_tone || "dim"})`;
+        if (c.sub_tone) sub.style.marginTop = "3px";
+        td.append(sub);
       }
       tr.append(td);
     });

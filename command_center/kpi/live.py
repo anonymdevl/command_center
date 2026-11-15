@@ -26,6 +26,21 @@ MANAGER_ROLES = ("System Manager", "Accounts Manager", "Purchase Manager", "Sale
                  "Stock Manager")
 BUY_ROLES = ("Purchase User", "Purchase Manager")
 PAY_ROLES = ("Accounts User", "Accounts Manager")
+# The pairs of duties one account should not hold together, and how a screen says so.
+# The first is the "Role conflicts" card's own test, so the card and the table beside it
+# can never disagree about it.
+CONFLICTS = (
+    (BUY_ROLES, PAY_ROLES, "can raise a purchase and approve its payment"),
+    (("Stock User", "Stock Manager"), PAY_ROLES, "can adjust stock and post the accounting for it"),
+    (("HR User", "HR Manager"), PAY_ROLES, "can change pay and approve the payment of it"),
+)
+# The roles that say what an account can do in the business, as the access tables list
+# them. ERPNext gives every account a dozen others (Employee, Desk User, ...) that say
+# nothing about it.
+KEY_ROLES = ("System Manager", "Accounts Manager", "Accounts User", "Purchase Manager",
+             "Purchase User", "Sales Manager", "Sales User", "Stock Manager", "Stock User",
+             "HR Manager", "HR User", "Projects Manager", "Manufacturing Manager",
+             "Maintenance Manager", "Quality Manager", "Auditor")
 BUSINESS_DOCTYPES = ("Sales Invoice", "Purchase Invoice", "Sales Order", "Purchase Order",
                      "Payment Entry", "Journal Entry", "Delivery Note", "Purchase Receipt",
                      "Stock Entry", "Quotation")
@@ -36,8 +51,14 @@ class Live:
     key: str
     label: str
     unit: str
-    fn: Callable          # (reader) -> (value, note)
+    fn: Callable          # (reader) -> (value, note) or (value, note, drill)
     href: str
+    # What a figure over a ranked or limited set is a subset of, as on a Kpi.
+    subset_of: str | None = None
+    # "erp" reads the business's ERPNext now. A fact name means the figure is worked out
+    # from that loaded fact (matched against another), so it carries the fact's as-of
+    # date and load state rather than "read just now".
+    source: str = "erp"
 
 
 # --------------------------------------------------------------------------- reading
@@ -240,6 +261,220 @@ def po_longest_wait(r):
                   f"{frappe.utils.format_date(x['transaction_date'], 'MMM yyyy')}{due}")
 
 
+# --------------------------------------------------------------------------- guards
+def _read(r, doctype, filters, fields, **kw):
+    """r.all, refusing a reply that lost a column.
+
+    A doctype the key may list but not read field by field (Issue on Gigmann's site has
+    Custom DocPerms granting read to no role) comes back with name and modified only, and
+    Frappe says nothing. Reading "no resolution date" off such a row would turn an
+    unreadable source into a finding, so the card says "could not be read" instead.
+    """
+    from command_center.ingest.base import require_fields
+    return require_fields(r.all(doctype, filters=filters, fields=fields, **kw),
+                          [f for f in fields if " as " not in f], doctype)
+
+
+def _cur(r):
+    from command_center.api.businesses import currency_for
+    return currency_for(r.code) or ""
+
+
+# --------------------------------------------------------------------------- buying, more
+def po_spend_top14(r):
+    """The fourteen largest submitted purchase orders, as the panel beside it shows them."""
+    rows = _read(r, "Purchase Order", {"docstatus": 1}, ["supplier", "base_grand_total"],
+                 limit=14, order_by="base_grand_total desc")
+    total = sum(float(x.get("base_grand_total") or 0) for x in rows)
+    if not rows:
+        return None, "no purchase orders submitted"
+    by = {}
+    for x in rows:
+        by[x.get("supplier")] = by.get(x.get("supplier"), 0.0) + float(x.get("base_grand_total") or 0)
+    ranked = sorted(by.values(), reverse=True)
+    if len(ranked) == 1:
+        return total, "one supplier, all of it"
+    two = sum(ranked[:2])
+    return total, f"2 suppliers are {round(100 * two / total) if total else 0}% of it"
+
+
+def _no_due_date(r):
+    rows = _read(r, "Purchase Order", {"docstatus": 1},
+                 ["name", "transaction_date", "schedule_date", "base_grand_total"])
+    return [x for x in rows if not x.get("schedule_date")
+            or str(x["schedule_date"])[:10] == str(x.get("transaction_date") or "")[:10]]
+
+
+def po_no_due_date(r):
+    rows = _no_due_date(r)
+    total = sum(float(x.get("base_grand_total") or 0) for x in rows)
+    return len(rows), (f"{_cur(r)} {total:,.0f}".strip() if rows else "every order has a date")
+
+
+# --------------------------------------------------------------------------- money in & out
+def postings_count(r):
+    pay = r.count("Payment Entry", {"docstatus": 1})
+    jour = r.count("Journal Entry", {"docstatus": 1})
+    return pay + jour, f"{pay:,} payments and {jour:,} journals"
+
+
+# --------------------------------------------------------------------------- projects
+PROJECT_COSTS = ("total_costing_amount", "total_expense_claim", "total_purchase_cost",
+                 "total_consumed_material_cost")
+
+
+def tasks_costed(r):
+    """Open jobs that carry any cost: hours or expenses booked to the job, or any cost
+    (hours, expenses, purchases, materials issued) booked to its project -- parts can
+    only be issued to a project in ERPNext, never to one task."""
+    from command_center.ingest.operations import CLOSED_TASK
+    tasks = _read(r, "Task", {}, ["name", "status", "project", "total_costing_amount",
+                                  "total_expense_claim"])
+    open_ = [t for t in tasks if (t.get("status") or "") not in CLOSED_TASK]
+    if not open_:
+        return 0, "no open jobs"
+    projects = sorted({t["project"] for t in open_ if t.get("project")})
+    costed_projects = set()
+    if projects:
+        for p in _read(r, "Project", {"name": ["in", projects]}, ["name", *PROJECT_COSTS]):
+            if any(float(p.get(f) or 0) > 0 for f in PROJECT_COSTS):
+                costed_projects.add(p["name"])
+    n = sum(1 for t in open_
+            if float(t.get("total_costing_amount") or 0) > 0
+            or float(t.get("total_expense_claim") or 0) > 0
+            or t.get("project") in costed_projects)
+    return n, f"of {len(open_)}"
+
+
+# --------------------------------------------------------------------------- service
+def cases_past_due(r):
+    """Open cases past the resolution time their service level promised."""
+    import frappe
+    from command_center.ingest.operations import CLOSED_CASE
+    rows = _read(r, "Issue", {"status": ["not in", sorted(CLOSED_CASE)]},
+                 ["name", "status", "resolution_by"])
+    if not rows:
+        return 0, "no open cases"
+    promised = [x for x in rows if x.get("resolution_by")]
+    if not promised:
+        return None, "no response time set on any open case"
+    now = frappe.utils.now_datetime()
+    late = [frappe.utils.get_datetime(x["resolution_by"]) for x in promised
+            if frappe.utils.get_datetime(x["resolution_by"]) < now]
+    if not late:
+        return 0, "every open case within its promise"
+    worst = max((now - d).days for d in late)
+    return len(late), f"up to {worst} day{'' if worst == 1 else 's'}"
+
+
+def cases_owing(r):
+    """Open cases from customers who also owe the business money: two loaded facts,
+    matched by customer."""
+    import frappe
+
+    from command_center.facts.schema import FACTS
+    scope = {"business_code": r.code} if r.code else {}
+    cases = frappe.get_all(FACTS["fact_case"], filters={**scope, "is_open": 1},
+                           fields=["customer"], limit=100000)
+    if not cases:
+        return 0, "no open cases", {"fact": "fact_case", "filters": {"is_open": 1}}
+    owing = {x["customer"] for x in frappe.get_all(
+        FACTS["fact_sales_invoice"],
+        filters={**scope, "src_docstatus": 1, "outstanding_amount": [">", 0]},
+        fields=["customer"], limit=100000) if x.get("customer")}
+    both = sorted({c["customer"] for c in cases if c.get("customer") in owing})
+    n = sum(1 for c in cases if c.get("customer") in owing)
+    return n, f"of {len(cases)} open", {"fact": "fact_case", "filters": (
+        {"is_open": 1, "customer": ["in", both]} if both else {"is_open": 1})}
+
+
+# --------------------------------------------------------------------------- stock
+EXPIRY_DAYS = 90
+
+
+def batches_near_expiry(r):
+    """Batches still holding stock whose expiry date falls in the next ninety days."""
+    import frappe
+    rows = _read(r, "Batch", {"expiry_date": ["is", "set"], "batch_qty": [">", 0]},
+                 ["name", "expiry_date", "batch_qty"])
+    if not rows and not r.count("Batch", {"expiry_date": ["is", "set"]}):
+        return None, "no expiry dates recorded"
+    today = frappe.utils.getdate(frappe.utils.today())
+    edge = frappe.utils.getdate(frappe.utils.add_days(today, EXPIRY_DAYS))
+    dates = [frappe.utils.getdate(x["expiry_date"]) for x in rows if x.get("expiry_date")]
+    soon = sum(1 for d in dates if today <= d <= edge)
+    gone = sum(1 for d in dates if d < today)
+    return soon, (f"within {EXPIRY_DAYS} days" + (f" · {gone} already past expiry" if gone else ""))
+
+
+# --------------------------------------------------------------------------- approvals
+APPROVED_DOCTYPES = ("Purchase Order", "Payment Entry")
+
+
+def self_approved(r):
+    """Submitted purchase orders and payments whose every recorded approval step was
+    taken by the account that raised them.
+
+    The change log records each step as a change to workflow_state, with who made it.
+    A document whose steps are not in the log (no workflow, or the log not kept for that
+    doctype) is not counted either way. Cached for ten minutes: the change log is the
+    largest table on a site, and the card sits on a screen people reopen.
+    """
+    import frappe
+    key = f"cc:live:self_approved:{r.code or 'local'}"
+    hit = frappe.cache().get_value(key)
+    if hit:
+        return tuple(hit)
+    steps = {}
+    for v in _read(r, "Version", {"ref_doctype": ["in", list(APPROVED_DOCTYPES)],
+                                  "data": ["like", '%"workflow_state"%']},
+                   ["ref_doctype", "docname", "owner"]):
+        steps.setdefault((v["ref_doctype"], v["docname"]), set()).add(v["owner"])
+    found = 0
+    for doctype in APPROVED_DOCTYPES:
+        names = [n for d, n in steps if d == doctype]
+        for i in range(0, len(names), 500):
+            for d in _read(r, doctype, {"name": ["in", names[i:i + 500]], "docstatus": 1},
+                           ["name", "owner"]):
+                if steps.get((doctype, d["name"])) == {d["owner"]}:
+                    found += 1
+    out = (found, "found in the change history")
+    frappe.cache().set_value(key, list(out), expires_in_sec=600)
+    return out
+
+
+# --------------------------------------------------------------------------- bank
+def bank_cleared_pct(r):
+    """Of the payments made through a bank account, how many carry a clearance date --
+    the date ERPNext's bank reconciliation records when a payment is matched to the
+    statement."""
+    banks = [a["name"] for a in r.all("Account", filters={"account_type": "Bank", "is_group": 0},
+                                      fields=["name"], limit=500)]
+    if not banks:
+        return None, "no bank accounts in ERPNext"
+    total = cleared = 0
+    for side in ("paid_from", "paid_to"):
+        base = {"docstatus": 1, side: ["in", banks]}
+        total += r.count("Payment Entry", base)
+        cleared += r.count("Payment Entry", {**base, "clearance_date": ["is", "set"]})
+    if not total:
+        return None, "no payments through a bank account"
+    return round(100 * cleared / total, 4), f"of {total:,} bank payments matched to a statement"
+
+
+# --------------------------------------------------------------------------- payroll
+def payroll_last_run(r):
+    """When pay was last run: the latest pay period a submitted salary slip covers.
+    Dates and a count only -- no amount is read."""
+    if not r.has("Salary Slip"):
+        return None, "payroll is not in this ERPNext"
+    last = r.edge("Salary Slip", "end_date", {"docstatus": 1})
+    if not last:
+        return None, "no pay run submitted"
+    n = r.count("Salary Slip", {"docstatus": 1, "end_date": str(last)[:10]})
+    return str(last)[:10], f"{n:,} slip{'s' if n != 1 else ''} for that period"
+
+
 LIVE = {k.key: k for k in (
     Live("users_active", "Staff accounts", "count", users_active, "/app/user?enabled=1"),
     Live("users_disabled", "Disabled accounts", "count", users_disabled, "/app/user?enabled=0"),
@@ -255,6 +490,21 @@ LIVE = {k.key: k for k in (
     Live("po_drafts_oldest", "Oldest unsubmitted purchase order", "days", po_drafts_oldest, "/app/purchase-order?docstatus=0"),
     Live("po_cancelled", "Purchase orders withdrawn", "count", po_cancelled, "/app/purchase-order?docstatus=2"),
     Live("po_longest_wait", "Longest wait for a purchase order", "days", po_longest_wait, "/app/purchase-order?docstatus=1"),
+    Live("po_spend_top14", "Spend on the 14 largest purchase orders", "currency", po_spend_top14,
+         "/app/purchase-order?docstatus=1", subset_of="the fourteen largest submitted purchase orders"),
+    Live("po_no_due_date", "Purchase orders with no due date", "count", po_no_due_date, "/app/purchase-order?docstatus=1"),
+    Live("postings_count", "Payments and journals", "count", postings_count, "/app/payment-entry?docstatus=1"),
+    Live("tasks_costed", "Open jobs with a cost", "count", tasks_costed, "/app/task"),
+    Live("cases_past_due", "Cases past their promised time", "count", cases_past_due, "/app/issue"),
+    Live("cases_owing", "Open cases from customers who owe us", "count", cases_owing, "",
+         source="fact_case"),
+    Live("batches_near_expiry", "Batches near expiry", "count", batches_near_expiry,
+         "/app/batch?disabled=0"),
+    Live("self_approved", "Approved by whoever raised them", "count", self_approved, "/app/version"),
+    Live("bank_cleared_pct", "Bank payments matched to a statement", "percent", bank_cleared_pct,
+         "/app/payment-entry?docstatus=1"),
+    Live("payroll_last_run", "Last pay run", "date", payroll_last_run,
+         "/app/salary-slip?docstatus=1"),
 )}
 
 
@@ -275,27 +525,43 @@ def evaluate(keys, business_code=None) -> dict:
     out = {}
     for key in wanted:
         spec = LIVE[key]
+        drill = None
         try:
             if reader is None:
                 raise RuntimeError("no business to read")
-            value, note = spec.fn(reader)
+            got = spec.fn(reader)
+            value, note = got[0], got[1]
+            drill = got[2] if len(got) > 2 else None
             state = {"state": "live", "message": None}
         except Exception:
             frappe.log_error(title=f"Command Center live figure {key}", message=frappe.get_traceback())
             value, note, state = None, "could not be read", {"state": "failed",
                                                             "message": "This figure could not be read."}
         site = "" if not reader or reader.local else (reader.conn.base_url or "")
+        as_of = {"date": frappe.utils.today(), "basis": "read from ERPNext just now"}
+        if spec.source != "erp":
+            # Worked out from loaded facts: as of the data they cover, and as fresh as
+            # their last load -- the same statement an engine figure makes.
+            from command_center.kpi.engine import _load_state, _status
+            loaded = _load_state(spec.source, reader.code if reader else business_code)
+            as_of = ({"date": str(loaded["as_of_date"]),
+                      "basis": "the latest date the data covers"}
+                     if loaded and loaded.get("as_of_date") else None)
+            if state["state"] == "live":
+                state = _status(loaded)
+        if drill is None:
+            # The ERPNext list itself: on this site, or on the business's own site.
+            # (The load history is this platform's own list, wherever the business is.)
+            drill = {"href": spec.href if key == "last_refreshed" else site + spec.href}
+        elif drill.get("href"):
+            drill = {"href": site + drill["href"]}
         out[key] = {
             "key": key, "label": spec.label, "value": value, "unit": spec.unit,
             "direction": "neutral",
             "currency": currency_for(reader.code if reader else business_code)
             if spec.unit == "currency" else None,
             "mixed_currency": False, "scope": business_code or "__all__",
-            "as_of": {"date": frappe.utils.today(), "basis": "read from ERPNext just now"},
-            "basis": None, "note": note,
-            # The ERPNext list itself: on this site, or on the business's own site.
-            # (The load history is this platform's own list, wherever the business is.)
-            "drill": {"href": spec.href if key == "last_refreshed" else site + spec.href},
-            "data_status": state, "period": None, "group": None,
+            "as_of": as_of, "basis": spec.subset_of, "note": note,
+            "drill": drill, "data_status": state, "period": None, "group": None,
         }
     return out

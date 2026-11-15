@@ -56,21 +56,22 @@ export const CARD_KPIS = {
     "Last full month": "revenue_last_month",
     "Best month": "revenue_best_month",
     "Never issued": "invoices_draft",
+    // Bank payments carrying the clearance date ERPNext's bank reconciliation sets.
+    "Bank checks": "bank_cleared_pct",
   },
-  // Nothing on Buying yet. "Purchase orders" is a count of orders and the nearest
-  // figure I have is unpaid supplier invoices; "Spend, top 14" is a subset and
-  // spend_total is all of it. Either mapping would have put a figure under a label that
-  // does not describe it, which is worse than leaving the card illustrative -- a wrong
-  // number that reads as right is the one kind of error this platform cannot afford.
-  //
-  // The two concentration cards are now shares of all submitted supplier spend, which
-  // is what their labels say; "Spend, top 14" stays illustrative for the reason above.
+  // The two concentration cards are shares of all submitted supplier spend, which is
+  // what their labels say. "Spend, top 14" is the fourteen largest purchase orders
+  // themselves (read live, the same fourteen "Where the money goes" draws), never
+  // spend_total, which is all of it.
   proc: {
     "Top supplier": "supplier_top_share",
     "Top 2 suppliers": "supplier_top2_share",
     // Read straight from ERPNext's purchase orders (kpi/live.py): no fact loads them yet.
     "Purchase orders": "po_count",
     "Longest wait": "po_longest_wait",
+    "Spend, top 14": "po_spend_top14",
+    // Submitted orders with no promised date, or one equal to the order date.
+    "No due date": "po_no_due_date",
   },
   // Systems and Access: the accounts and roles themselves, read from ERPNext.
   it: {
@@ -88,6 +89,11 @@ export const CARD_KPIS = {
     // stock line, so stock_lines is not that figure -- stock_lines_promised is.
     "Lines promised": "stock_lines_promised",
     "Worst shortfall": "stock_worst_shortfall",
+    // Batches holding stock that expire within ninety days; "—" when no batch carries
+    // an expiry date at all, which is a different statement from none expiring.
+    // "Off warehouse" stays illustrative: which location is "not a warehouse" is a
+    // judgement about one business's set-up, not something ERPNext records.
+    "Near expiry": "batches_near_expiry",
   },
   eng: {
     "Money held up": "order_book",
@@ -95,6 +101,8 @@ export const CARD_KPIS = {
     "Jobs open": "tasks_open",
     "Longest wait": "tasks_longest_wait",
     Engineers: "engineers",
+    // Open jobs with hours, expenses or project costs booked against them.
+    "Jobs costed": "tasks_costed",
   },
   hr: {
     // Two different cards, two different figures. Both were mapped to headcount, which
@@ -104,13 +112,20 @@ export const CARD_KPIS = {
     Departments: "departments",
     Left: "people_left",
     Engineers: "engineers",
+    // When pay was last run, from submitted salary slips: dates and a count, no amounts.
+    Payroll: "payroll_last_run",
   },
   cx: {
     Open: "cases_open",
     Closed: "cases_closed",
     "Average wait": "cases_avg_wait",
-    // "Past due time" is about the response-time commitment, which this platform does
-    // not read. Waiting over a month is a different statement.
+    // Against the resolution time each case's service level promised, read live --
+    // never "waiting over a month", which is a different statement.
+    "Past due time": "cases_past_due",
+    // Open cases matched against the loaded receivable by customer.
+    "Also owe us": "cases_owing",
+    // "Equipment down" stays illustrative: ERPNext's Issue has no field saying a
+    // machine is out of service, and guessing it from the subject would be wrong.
   },
   aud: {
     // "Unsupported" on Internal Audit is the invoices never issued, as its footnote says.
@@ -122,6 +137,13 @@ export const CARD_KPIS = {
     Unsubmitted: "po_drafts_value",
     "Oldest of those": "po_drafts_oldest",
     Withdrawn: "po_cancelled",
+    // Purchase orders and payments whose every recorded approval step was taken by the
+    // account that raised them, from the change log.
+    "Self-approved": "self_approved",
+    // Open findings, Raise today, Overdue actions, Repeat findings and Control score stay
+    // illustrative: findings and corrective actions are kept nowhere in ERPNext, and the
+    // control score needs all six Business Health questions, three of which are not
+    // scored. "Can be deleted" is a statement about the log, not a figure.
   },
 };
 
@@ -142,12 +164,9 @@ export const CARD_KPIS = {
  * Only Business Overview can be served from facts today. The tiles on Today and
  * Outstanding Tasks measure work handed out and promises kept, which is the task and
  * approval engine and not a fact; Risk and Compliance measures deadlines this platform
- * does not yet hold; Business Health's tiles are scores out of a hundred, which is a
- * composite and not any single KPI; and the six "Awaiting ..." tiles on Sales are
- * mutually exclusive pipeline stages, so mapping one of them to the whole order book
- * would count orders waiting on stock as orders waiting on despatch. Each of those is
- * a mapping that would read as right and be wrong, so each stays illustrative and says
- * so on the tile.
+ * does not yet hold; and Business Health's tiles are scores out of a hundred, which is a
+ * composite and not any single KPI. Each of those is a mapping that would read as right
+ * and be wrong, so each stays illustrative and says so on the tile.
  */
 export const TILE_KPIS = {
   ops: {
@@ -157,9 +176,9 @@ export const TILE_KPIS = {
     "Engineering & installs": { key: "tasks_open", unit: "tasks" },
     "Customer Service & Issues": { key: "cases_open", unit: "open cases" },
     People: { key: "people_total", unit: "employees" },
-    // "Money in & out" is 7,751 payment entries plus 7,065 journals on the site. The
-    // facts hold neither count, and cash_applied is money in only, so a figure under
-    // that label would be half of what the label says. Illustrative.
+    // Payment entries plus journals, counted live: the facts hold neither, and
+    // cash_applied is money in only, so it would be half of what the label says.
+    "Money in & out": { key: "postings_count", unit: "postings" },
     // "Systems & access" and "Internal Audit" say on themselves that ERPNext holds no
     // record of either; both are flagged "Not yet" as designed.
   },
@@ -175,7 +194,17 @@ export const TILE_KPIS = {
   // Three of the six questions are now one stated ratio each (kpi score_*); legacy/
   // home.js draws their score, bar and flag. The other three still need a source.
   health: {},
-  sales: {},
+  // Where orders are held up. The stages overlap (an order not despatched is usually
+  // not invoiced either), so each box is its own count over open orders. Awaiting stock
+  // and Awaiting purchase need each order line against its warehouse and what is on
+  // order from suppliers, and the design does not say where one ends and the other
+  // begins; Awaiting install has no ERPNext record behind it; Awaiting payment needs
+  // invoices traced back to their orders, which no fact holds. Those four stay
+  // illustrative.
+  sales: {
+    "Awaiting despatch": { key: "order_awaiting_despatch" },
+    "Awaiting invoice": { key: "order_awaiting_invoice" },
+  },
 };
 
 /**
