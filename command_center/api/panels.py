@@ -154,6 +154,15 @@ class _Guarded:
     def __init__(self, reader):
         self._r = reader
         self._down = None
+        # Already known to be down (the shell's banner says so): fail at once rather than
+        # make every screen wait out the retries first. The 15-minute refresh and the
+        # banner's Retry still reach out, and the first answer marks the business Active.
+        conn = getattr(reader, "conn", None)
+        business = getattr(conn, "business", None) if conn is not None else None
+        if business is not None and getattr(business, "status", None) == "Unreachable":
+            from command_center.connectors.base import BusinessUnreachable
+            self._down = BusinessUnreachable(
+                f"{getattr(conn, 'name', 'The business')} is marked unreachable")
 
     def __getattr__(self, name):
         attr = getattr(self._r, name)

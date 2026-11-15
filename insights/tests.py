@@ -1351,3 +1351,35 @@ class RefusedIsNotUnreachable(TransactionTestCase):
                     if status == 503:
                         self.assertNotIsInstance(caught.exception, RequestRefused)
             self.assertEqual(ConnectedBusiness.objects.get().status, expect, f"after HTTP {status}")
+
+
+class KnownDownFailsFast(TransactionTestCase):
+    """A business already marked Unreachable costs a screen no network wait: its live
+    reads give up at once (the banner says why), while loaded-data panels still answer."""
+
+    databases = {"default", "aux"}
+
+    def test_no_network_call(self):
+        from cryptography.fernet import Fernet
+        from django.conf import settings
+        settings.CONFIG.setdefault("encryption_key", Fernet.generate_key().decode())
+        from command_center import install
+        from command_center.api import panels
+        from insights.compat import run_as
+        from insights.core.models import ConnectedBusiness
+        fake = FakeERPNext()
+        with mock.patch("requests.get", fake("GET")), mock.patch("requests.post", fake("POST")), \
+                mock.patch("time.sleep", lambda s: None):
+            with run_as("Administrator"):
+                code = install.register_business("Test Medical Ltd", "https://erp.test", "key",
+                                                 "s3cret")["code"]
+        ConnectedBusiness.objects.update(status="Unreachable")
+
+        def no_network(*a, **k):
+            raise AssertionError("a known-down business was contacted")
+        with mock.patch("requests.get", no_network), mock.patch("requests.post", no_network):
+            with run_as("Administrator"):
+                out = panels.get("proc", code)
+        # the purchase-order panels read ERPNext live: they say so, without waiting
+        for title in ("Where the money goes", "How long each supplier takes", "Orders still open"):
+            self.assertEqual(out["panels"][title]["kind"], "unreachable", title)
