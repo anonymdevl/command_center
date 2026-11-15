@@ -1,11 +1,11 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 
 /**
  * The panel that answers "which records?".
  *
- * `content` is either a React node or { html } for markup that has not been
- * converted yet. The html branch exists only for the legacy views and goes when
- * they do.
+ * `content` is a React node, { html } for markup that has not been converted yet
+ * (the legacy views' own generated markup only), or { node } for an element built
+ * with DOM calls (legacy/guide.js) -- data is never passed as html.
  */
 export default function Drawer({ content, onClose }) {
   const open = Boolean(content);
@@ -23,10 +23,24 @@ export default function Drawer({ content, onClose }) {
       <div className={`drawer${open ? " on" : ""}`}>
         {content && content.html ? (
           <div dangerouslySetInnerHTML={{ __html: content.html }} />
+        ) : content && content.node ? (
+          <Mounted node={content.node} />
         ) : (
           content
         )}
       </div>
     </>
   );
+}
+
+/** An element built with DOM calls, placed as it is. */
+function Mounted({ node }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const host = ref.current;
+    if (!host || !node) return undefined;
+    host.replaceChildren(node);
+    return () => host.replaceChildren();
+  }, [node]);
+  return <div ref={ref} />;
 }
