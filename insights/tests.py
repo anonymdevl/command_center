@@ -1383,3 +1383,69 @@ class KnownDownFailsFast(TransactionTestCase):
         # the purchase-order panels read ERPNext live: they say so, without waiting
         for title in ("Where the money goes", "How long each supplier takes", "Orders still open"):
             self.assertEqual(out["panels"][title]["kind"], "unreachable", title)
+
+
+class EveryErpnextVersion(TransactionTestCase):
+    """One platform for ERPNext 14, 15 and 16. Reads are fitted to the site's own
+    definition: a renamed field is asked for by the site's name and handed back under
+    the asked-for one; an optional column the site lacks comes back empty instead of
+    failing the read; a filter on a field the site lacks is never dropped."""
+
+    databases = {"default", "aux"}
+
+    def test_v16_shaped_site(self):
+        from cryptography.fernet import Fernet
+        from django.conf import settings
+        from django.core.cache import cache
+        settings.CONFIG.setdefault("encryption_key", Fernet.generate_key().decode())
+        from command_center import install
+        from command_center.connectors.base import RequestRefused
+        from command_center.connectors.registry import connector_for
+        from insights.compat import run_as
+        cache.clear()
+        fake = FakeERPNext()
+        with mock.patch("requests.get", fake("GET")), mock.patch("requests.post", fake("POST")), \
+                mock.patch("time.sleep", lambda s: None):
+            with run_as("Administrator"):
+                code = install.register_business("Test Medical Ltd", "https://erp.test", "k",
+                                                 "s")["code"]
+        site = {"Issue": ["subject", "status", "sla_resolution_by", "sla_resolution_date"],
+                "Employee": ["employee_name", "department", "status"],
+                "Budget": ["cost_center", "account", "budget_amount", "from_fiscal_year"]}
+        asked = []
+
+        def answer(m, p):
+            if m == "frappe.desk.form.load.getdoctype":
+                dt = p.get("doctype")
+                return _R(200, {"docs": [{"name": dt, "fields": [
+                    {"fieldname": f} for f in site.get(dt, [])]}]})
+            if m == "frappe.client.get_list":
+                f = json.loads(p["fields"]) if isinstance(p["fields"], str) else p["fields"]
+                flt = p.get("filters") or {}
+                flt = json.loads(flt) if isinstance(flt, str) else flt
+                asked.append((p["doctype"], list(f), flt))
+                known = set(site.get(p["doctype"], [])) | {"name"}
+                keys = flt.keys() if isinstance(flt, dict) else [x[0] for x in flt]
+                if any(k not in known for k in list(f) + list(keys)):
+                    return _R(417, {"exc": "Field not permitted in query"})
+                return _R(200, {"message": [{c: f"{c}-1" for c in f}]})
+            return fake.answer(m, p)
+        fake.answer = answer
+        with mock.patch("requests.get", fake("GET")), mock.patch("requests.post", fake("POST")), \
+                mock.patch("time.sleep", lambda s: None):
+            with run_as("Administrator"):
+                conn = connector_for(code)
+                # renamed: asked as sla_resolution_by, handed back as resolution_by
+                rows = conn.get_list("Issue", fields=["name", "resolution_by", "resolution_date"],
+                                     filters={"resolution_by": ["is", "set"]}, limit=5)
+                self.assertEqual(rows[0]["resolution_by"], "sla_resolution_by-1")
+                self.assertEqual(rows[0]["resolution_date"], "sla_resolution_date-1")
+                self.assertIn("sla_resolution_by", asked[-1][2])
+                # optional column the site lacks: empty, the read still succeeds
+                rows = conn.get_list("Employee", fields=["name", "employee_name", "employment_type"],
+                                     limit=5)
+                self.assertIsNone(rows[0]["employment_type"])
+                self.assertEqual(rows[0]["employee_name"], "employee_name-1")
+                # a filter on a field the site lacks is never dropped: it still fails
+                with self.assertRaises(RequestRefused):
+                    conn.get_list("Budget", fields=["name"], filters={"fiscal_year": "2026"})

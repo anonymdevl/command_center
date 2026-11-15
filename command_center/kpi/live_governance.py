@@ -77,7 +77,7 @@ def approval_record(r) -> dict:
                 if steps.get((doctype, d["name"])) == {d["owner"]}:
                     alone += 1
     out = {"decided": decided, "alone": alone}
-    frappe.cache().set_value(key, out, expires_in_sec=600)
+    frappe.cache().set_value(key, out, expires_in_sec=300)
     return out
 
 
@@ -283,7 +283,7 @@ def deadlines(r) -> list:
                   "fulfilment_status", "status"], limit=5000)
     out = [{**x, "fulfilment_deadline": str(x["fulfilment_deadline"])[:10]
             if x.get("fulfilment_deadline") else None} for x in rows]
-    frappe.cache().set_value(key, out, expires_in_sec=600)
+    frappe.cache().set_value(key, out, expires_in_sec=300)
     return out
 
 

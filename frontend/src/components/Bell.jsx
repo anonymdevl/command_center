@@ -21,7 +21,7 @@ export default function Bell({ scope, onGo }) {
     let alive = true;
     const load = () => api.alerts(scope).then((d) => alive && setData(d)).catch(() => {});
     load();
-    const t = setInterval(load, 5 * 60000);
+    const t = setInterval(load, 60000);
     window.addEventListener("cc-alerts-changed", load);
     return () => {
       alive = false;

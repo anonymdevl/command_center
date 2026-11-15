@@ -101,7 +101,7 @@ IT_DETAIL=f'''{panel("Who can sign in to this platform",
 IT_GAPS=f'''<div class="two">
 {panel("Is the data current",
  _tbl("Records","Covers up to","Last read","Status")
- +thin("The platform reads what changed in ERPNext every fifteen minutes and everything again once a week."),"")}
+ +thin("The platform reads what changed in ERPNext every two minutes and everything again once a week; open screens refresh themselves every minute."),"")}
 {panel("Backups and recovery",
  _tbl("Backup","Taken","Size")
  +thin("The platform&#39;s own database is backed up every night and the last fourteen days are kept. "

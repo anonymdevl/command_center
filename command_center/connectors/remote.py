@@ -206,10 +206,11 @@ class RemoteConnector(BusinessConnector):
         """
         import time
 
+        fields, filters, renamed, missing = self._fit(doctype, fields or ["name"], filters or {})
         base = {
             "doctype": doctype,
-            "filters": filters or {},
-            "fields": fields or ["name"],
+            "filters": filters,
+            "fields": fields,
             "order_by": order_by,
             "group_by": group_by,
             "parent": parent_doctype,
@@ -217,8 +218,8 @@ class RemoteConnector(BusinessConnector):
         want = int(limit or 20)
         page = _page()
         if group_by or want <= page:
-            return self._call("frappe.client.get_list",
-                              {**base, "limit_page_length": want}) or []
+            return _refit(self._call("frappe.client.get_list",
+                                     {**base, "limit_page_length": want}) or [], renamed, missing)
         out, start = [], 0
         while len(out) < want:
             n = min(page, want - len(out))
@@ -229,7 +230,74 @@ class RemoteConnector(BusinessConnector):
                 break
             start += n
             time.sleep(_pace())
-        return out
+        return _refit(out, renamed, missing)
+
+    # -- one platform, every ERPNext version ------------------------------------
+    def fieldnames(self, doctype) -> set | None:
+        """The fields this site's version of a doctype has (its own custom fields
+        included), from its own definition; cached for six hours. None when it cannot
+        be told -- the read then goes out exactly as written."""
+        key = f"cc:fields:{getattr(self, 'code', '') or self.name}:{doctype}"
+        cache = frappe.cache() if callable(getattr(frappe, "cache", None)) else None
+        cached = cache.get_value(key) if cache else None
+        if cached is not None:
+            return set(cached) or None
+        try:
+            meta = self.get_meta(doctype)
+        except BusinessUnreachable as e:
+            if isinstance(e, RequestRefused):
+                return None
+            raise  # the site is down: the read itself would fail the same way
+        except Exception:
+            return None  # cannot tell: the read goes out as written
+        names = sorted({f.get("fieldname") for f in ((meta or {}).get("fields") or [])
+                        if isinstance(f, dict) and f.get("fieldname")})
+        if cache:
+            cache.set_value(key, names, expires_in_sec=6 * 3600)
+        return set(names) or None
+
+    def _fit(self, doctype, fields, filters):
+        """Ask this site for what it has, by the names it uses.
+
+        A field another version names differently (FIELD_ALIASES) is asked for by
+        this site's name and handed back under the asked-for one. A plain column the
+        site does not have at all -- an HR-app field where HR is not installed, a
+        workflow field where there is no workflow -- is left out of the request and
+        comes back empty, instead of failing the whole read. Filters are never
+        dropped: a filter on a field the site lacks still fails, so no figure can
+        quietly widen to rows it should not count."""
+        plain = [f for f in fields if isinstance(f, str) and _PLAIN.match(f)
+                 and f not in _STANDARD]
+        if not plain and not filters:
+            return fields, filters, {}, []
+        have = self.fieldnames(doctype)
+        if not have:
+            return fields, filters, {}, []
+        aliases = FIELD_ALIASES.get(doctype, {})
+        renamed, missing, out = {}, [], []
+        for f in fields:
+            if f in plain and f not in have:
+                alt = aliases.get(f)
+                if alt and alt in have:
+                    renamed[alt] = f
+                    out.append(alt)
+                else:
+                    missing.append(f)
+                continue
+            out.append(f)
+        if not out:
+            out = ["name"]
+
+        def key(k):
+            alt = aliases.get(k)
+            return alt if (k not in have and alt and alt in have) else k
+        if isinstance(filters, dict):
+            filters = {key(k): v for k, v in filters.items()}
+        elif isinstance(filters, list):
+            filters = [([key(x[0])] + list(x[1:]) if len(x) == 3 else
+                        [x[0], key(x[1])] + list(x[2:]) if len(x) == 4 else x)
+                       if isinstance(x, (list, tuple)) else x for x in filters]
+        return out, filters, renamed, missing
 
     def get_doc(self, doctype, name):
         return self._call("frappe.client.get", {"doctype": doctype, "name": name})
@@ -327,7 +395,8 @@ class RemoteConnector(BusinessConnector):
                          whole=True) or {}
         docs = res.get("docs")
         if not docs:
-            raise BusinessUnreachable(f"{self.name} did not describe {doctype}.")
+            # It answered, but not with a definition: refused, not unreachable.
+            raise RequestRefused(f"{self.name} did not describe {doctype}.")
         return next((d for d in docs if d.get("name") == doctype), docs[0])
 
     # -- health ------------------------------------------------------------
@@ -337,6 +406,35 @@ class RemoteConnector(BusinessConnector):
             return True
         except BusinessUnreachable:
             return False
+
+
+# Renamed between ERPNext versions: the platform asks by whichever name the site has.
+# (Checked on live sites, 15 Nov 2026: v14 Issue has resolution_by / resolution_date;
+# v15 and v16 have sla_resolution_by / sla_resolution_date.)
+FIELD_ALIASES = {
+    "Issue": {"resolution_by": "sla_resolution_by", "sla_resolution_by": "resolution_by",
+              "resolution_date": "sla_resolution_date",
+              "sla_resolution_date": "resolution_date"},
+}
+_STANDARD = {"name", "owner", "creation", "modified", "modified_by", "docstatus", "idx",
+             "parent", "parenttype", "parentfield", "_assign", "_comments", "_liked_by",
+             "_user_tags", "_seen"}
+_PLAIN = __import__("re").compile(r"^[a-z_][a-z0-9_]*$")
+
+
+def _refit(rows, renamed, missing):
+    """Rows back under the names asked for; left-out columns present and empty."""
+    if not (renamed or missing):
+        return rows
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        for alt, want in renamed.items():
+            if alt in r:
+                r[want] = r.pop(alt)
+        for f in missing:
+            r.setdefault(f, None)
+    return rows
 
 
 def _page() -> int:

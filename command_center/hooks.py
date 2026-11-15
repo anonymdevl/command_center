@@ -101,14 +101,14 @@ doc_events = {
 
 scheduler_events = {
     "cron": {
-        # Peer refresh: every connected business on another site is polled for what
-        # it modified since its watermarks, and those documents are reloaded. Reads
-        # only, with that business's read-only service account. See
+        # Peer refresh, every two minutes: every connected business on another site is
+        # polled for what it modified since its watermarks, and only those documents
+        # are reloaded (about twenty small reads when nothing changed). Reads only. See
         # api/changes.refresh_peers and connectors/remote.py.
-        "*/15 * * * *": ["command_center.api.changes.refresh_peers",
-                         # Access follows the role on each business's ERPNext: whoever
-                         # lost it there loses the platform within 15 minutes.
-                         "command_center.api.sso.sync_members"],
+        "*/2 * * * *": ["command_center.api.changes.refresh_peers"],
+        # Access follows the role on each business's ERPNext: whoever lost it there
+        # loses the platform within 15 minutes.
+        "*/15 * * * *": ["command_center.api.sso.sync_members"],
     },
     # Alerts, from the KPIs. Also evaluated when they are read and the last pass is
     # stale, so they do not depend on the workers running.

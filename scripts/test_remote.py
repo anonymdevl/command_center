@@ -88,6 +88,12 @@ sys.modules["command_center.hooks"] = hooks
 from command_center.connectors.base import RemotePermissionDenied  # noqa: E402
 from command_center.connectors.remote import RemoteConnector  # noqa: E402
 
+# This file tests the transport (paging, GET vs POST, retries, whose key). Fitting reads
+# to each site's field names asks the site for a doctype's definition first; that has its
+# own test (insights/tests.py EveryErpnextVersion), so here it is switched off and every
+# request counted below is the read itself.
+RemoteConnector.fieldnames = lambda self, doctype: None
+
 
 class Business:
     business_code, business_name, currency, name = "GMS", "Gigmann", "GHS", "CB-1"

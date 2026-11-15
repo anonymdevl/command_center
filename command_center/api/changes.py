@@ -82,7 +82,7 @@ def get_changes(since: str | None = None, limit: int = 500):
 
 
 def refresh_peers():
-    """Scheduled every fifteen minutes: bring each peer's facts up to date.
+    """Scheduled every two minutes: bring each peer's facts up to date.
 
     A peer on the hosted service has nothing of ours installed, so there is no change
     feed to read there (record_event above only fires where this app is installed).

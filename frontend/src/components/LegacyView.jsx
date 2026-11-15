@@ -85,6 +85,30 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     return () => window.removeEventListener("cc-alerts-changed", again);
   }, [hasAlerts, alerts.reload]);
 
+  // Live: while the screen is being looked at, its figures, panels, work and alerts are
+  // read again every minute (the platform refreshes each business's data every two
+  // minutes), and at once when the tab comes back into view. The figures on screen stay
+  // in place while the new ones load, so nothing flickers.
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      if (keys.length) figures.reload();
+      if (hasPanels) panels.reload();
+      if (isWork) work.reload();
+      if (hasAlerts) alerts.reload();
+    };
+    const t = setInterval(tick, 60000);
+    const onShow = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onShow);
+    };
+  }, [viewKey, scope, keys.length, hasPanels, isWork, hasAlerts,
+      figures.reload, panels.reload, work.reload, alerts.reload]);
+
   // Whether the selected business's ERPNext answers (components/ReachBanner.jsx).
   const [reachDown, setReachDown] = useState(false);
   useEffect(() => {

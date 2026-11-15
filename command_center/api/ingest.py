@@ -406,7 +406,7 @@ def _load_all(full: bool, remote_only: bool = False):
 
 
 def poll_peers():
-    """Every fifteen minutes (changes.refresh_peers): each business on another site is
+    """Every two minutes (changes.refresh_peers): each business on another site is
     asked, fact by fact, for the documents modified after that fact's stored watermark
     -- one small request per fact when nothing changed -- and only those are reloaded;
     documents cancelled since are taken out (Ingestor.load). Read with the peer's
@@ -417,6 +417,8 @@ def poll_peers():
 
     from command_center.connectors.base import ConnectorError
 
+    was_down = {b.business_code: b.status == "Unreachable"
+                for b in frappe.get_all("Connected Business", fields=["business_code", "status"])}
     for code in loaded_codes():
         try:
             conn = connector_for(code, acting_user="Administrator")
@@ -432,7 +434,14 @@ def poll_peers():
                                 now_datetime(), update_modified=False)
             frappe.db.commit()
         except (ConnectorError, ValueError) as e:
-            frappe.log_error(title=f"Command Center peer refresh: {code}", message=str(e))
+            # Polled every two minutes: a business that was already down before this
+            # attempt is not logged again (its going down was), so the error log is not
+            # filled 720 times a day while it stays down. Anything else is always logged.
+            from command_center.connectors.base import BusinessUnreachable, RequestRefused
+            already_down = (isinstance(e, BusinessUnreachable) and not isinstance(e, RequestRefused)
+                            and was_down.get(code))
+            if not already_down:
+                frappe.log_error(title=f"Command Center peer refresh: {code}", message=str(e))
     frappe.db.commit()
 
 

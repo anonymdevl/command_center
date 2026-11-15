@@ -95,13 +95,12 @@ def get(view: str, business_code: str | None = None) -> dict:
                                  message=frappe.get_traceback())
     if down:
         out.update({"unreachable": True, **ctx.business()})
-    # The facts change every fifteen minutes and some panels read the business's
-    # ERPNext live, so ten minutes keeps a busy screen light on their site.
-    # Only a complete answer is kept: a panel that failed (the business's ERPNext did
-    # not answer, say) is asked again next time rather than staying blank for ten
-    # minutes.
+    # Facts are refreshed every two minutes and some panels read the business's ERPNext
+    # live; ninety seconds keeps a busy screen light on their site while an open screen
+    # (which refreshes itself every minute) stays current. Only a complete answer is
+    # kept: a panel that failed is asked again next time.
     if not failed:
-        frappe.cache().set_value(key, out, expires_in_sec=600)
+        frappe.cache().set_value(key, out, expires_in_sec=90)
     return out
 
 
@@ -1646,6 +1645,20 @@ def fin_cash(ctx):
             "note": f"{ctx.cur} {_money(total)} across {_plural(len(accounts), 'account')}, as the ledger has it."}
 
 
+def _site_has(ctx, doctype, field):
+    """Whether the business's ERPNext has this field on this doctype: True, False, or
+    None when it cannot be told (a business on this site, or no definition readable).
+    For the few places where versions differ in shape, not just in a field's name."""
+    try:
+        conn = getattr(ctx.reader(), "conn", None)
+    except Exception:
+        return None
+    if conn is None or not hasattr(conn, "fieldnames"):
+        return None
+    have = conn.fieldnames(doctype)
+    return None if have is None else field in have
+
+
 def fin_budget(ctx):
     steps = ["Open Budget, click New, and set Budget Against to Cost Center (a department's "
              "cost centre) and the Fiscal Year.",
@@ -1662,21 +1675,40 @@ def fin_budget(ctx):
                       ["Open Fiscal Year, click New, and set this year's start and end dates."],
                       "/app/fiscal-year/new")
     fy = years[0]
-    budgets = _guarded(ctx, "Budget", {"docstatus": 1, "fiscal_year": fy["name"],
-                                       "budget_against": "Cost Center"},
-                       ["name", "cost_center"], limit=500)
+    window = (str(fy["year_start_date"]), str(fy["year_end_date"]))
+    if _site_has(ctx, "Budget", "fiscal_year") is False:
+        # ERPNext 16: a budget names its own account and amount and runs from one fiscal
+        # year to another (budget_start_date..budget_end_date); no per-account table.
+        budgets = _guarded(ctx, "Budget", {"docstatus": 1, "budget_against": "Cost Center",
+                                           "budget_start_date": ["<=", today],
+                                           "budget_end_date": [">=", today]},
+                           ["name", "cost_center", "account", "budget_amount",
+                            "budget_start_date", "budget_end_date"], limit=500)
+        lines = [{"parent": b["name"], "account": b["account"],
+                  "budget_amount": b["budget_amount"]} for b in budgets if b.get("account")]
+        if budgets:
+            window = (str(min(b["budget_start_date"] for b in budgets)),
+                      str(max(b["budget_end_date"] for b in budgets)))
+        label = (fy["name"] if not budgets or window == (str(fy["year_start_date"]),
+                                                         str(fy["year_end_date"]))
+                 else f"{_date(window[0])} to {_date(window[1])}")
+    else:
+        budgets = _guarded(ctx, "Budget", {"docstatus": 1, "fiscal_year": fy["name"],
+                                           "budget_against": "Cost Center"},
+                           ["name", "cost_center"], limit=500)
+        lines = (_guarded(ctx, "Budget Account", {"parent": ["in", [b["name"] for b in budgets]]},
+                          ["parent", "account", "budget_amount"], parent="Budget", limit=5000)
+                 if budgets else [])
+        label = fy["name"]
     if not budgets:
         return _guide(ctx, f"No cost-centre budget is set for {fy['name']}.", steps,
                       "/app/budget/new")
-    lines = _guarded(ctx, "Budget Account", {"parent": ["in", [b["name"] for b in budgets]]},
-                     ["parent", "account", "budget_amount"], parent="Budget", limit=5000)
     cc = {b["name"]: b["cost_center"] for b in budgets}
     accounts = sorted({x["account"] for x in lines})
     actual = {}
     if accounts:
         for r in _grouped(ctx, "GL Entry", {"account": ["in", accounts], "is_cancelled": 0,
-                                            "posting_date": ["between", [str(fy["year_start_date"]),
-                                                                         str(fy["year_end_date"])]]},
+                                            "posting_date": ["between", list(window)]},
                           "account, cost_center",
                           [("sum", "debit", "debit_total"), ("sum", "credit", "credit_total")]):
             actual[(r["account"], r.get("cost_center"))] = (_num(r.get("debit_total"))
@@ -1694,7 +1726,7 @@ def fin_budget(ctx):
     rows.sort(key=lambda r: -r[0])
     out = _bars([r for _, r in rows[:10]])
     over = sum(1 for u, _ in rows if u > 100)
-    out["subtitle"] = f"{fy['name']}, spending against each budget line"
+    out["subtitle"] = f"{label}, spending against each budget line"
     out["note"] = (f"{_plural(over, 'budget line')} already over budget." if over else
                    "No budget line is over budget so far this year.")
     return out
