@@ -5,6 +5,7 @@ import DataTable from "./DataTable.jsx";
 import ExportButton from "./ExportButton.jsx";
 import { Loading, Failed, Empty } from "./States.jsx";
 import { exact, count, shortDate } from "../format.js";
+import Understanding from "./Understanding.jsx";
 
 /**
  * What is behind a figure, as something to decide on.
@@ -24,7 +25,7 @@ import { exact, count, shortDate } from "../format.js";
  *   The records.   Largest first, in business columns, each opening the actual
  *                  document in ERPNext.
  */
-export default function Records({ scope, title, fact, filters, subset, explainedBy, openDrawer }) {
+export default function Records({ scope, title, fact, filters, subset, explainedBy, openDrawer, kpi = null }) {
   const { data, error, loading, reload } = useApi(
     () => api.records({ fact, filters, business_code: scope, limit: 100 }),
     [scope, fact, JSON.stringify(filters)]
@@ -43,10 +44,13 @@ export default function Records({ scope, title, fact, filters, subset, explained
           <ExportButton
             label={`Excel · all ${count(data.summary.count)}`}
             title="Download every record behind this figure as an Excel sheet"
-            run={() => api.recordsXlsx({ fact, filters, business_code: scope, title })}
+            run={() => api.recordsXlsx({ fact, filters, business_code: scope, title, kpi })}
           />
         ) : null}
       </div>
+
+      {/* A figure's drawer explains before it lists (Understanding.jsx). */}
+      {kpi ? <Understanding figureKey={kpi} scope={scope} openDrawer={openDrawer} /> : null}
 
       {loading ? <Loading what="Reading the records" /> : null}
       {error ? <Failed error={error} onRetry={reload} what="the records" /> : null}

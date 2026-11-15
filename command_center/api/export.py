@@ -422,8 +422,10 @@ def tables_xlsx(title: str, tables, business_code: str | None = None):
 
 
 @frappe.whitelist(methods=["POST"])
-def records_xlsx(fact: str, filters=None, business_code: str | None = None, title: str | None = None):
-    """Every record behind a figure, up to EXPORT_CAP, in the drawer's own columns."""
+def records_xlsx(fact: str, filters=None, business_code: str | None = None, title: str | None = None,
+                 kpi: str | None = None):
+    """Every record behind a figure, up to EXPORT_CAP, in the drawer's own columns -- and,
+    for a figure's drawer (kpi), its Understanding This Figure section as the first sheet."""
     require_manager()
     from command_center.api.facts import _records
 
@@ -435,8 +437,11 @@ def records_xlsx(fact: str, filters=None, business_code: str | None = None, titl
     s = data.get("summary") or {}
     note = (f"{s.get('shown', len(rows))} of {s.get('count', len(rows))} records"
             + (" -- the export cap was reached" if s.get("count", 0) > len(rows) else ""))
-    _send_xlsx(title or data.get("noun") or fact, [(title or "Records", header, rows)],
-               business_code, note=note)
+    sheets = [(title or "Records", header, rows)]
+    if kpi:
+        from command_center.insight.build import sheet, understand
+        sheets.insert(0, sheet(understand(kpi, business_code)))
+    _send_xlsx(title or data.get("noun") or fact, sheets, business_code, note=note)
 
 
 def _cell(v):

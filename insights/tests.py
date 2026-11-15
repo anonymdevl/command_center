@@ -4526,3 +4526,383 @@ class OrderCover(TransactionTestCase):
         self.assertIn("order_cover", [d["name"] for d in tools.declarations()])
         from command_center.ask.agent import SYSTEM
         self.assertIn("order_cover", SYSTEM)
+
+
+class FigureUnderstanding(TransactionTestCase):
+    """Every figure's drawer explains, not just lists (command_center/insight): the
+    receivables and payables bridge reconciles to the cent on crafted data (and shows its
+    unexplained remainder), the largest contributors and oldest unmatched payments are
+    named, the expected-position checks flag what is wrong, every registered figure
+    renders a section, an empty business gets a guide, Explain This rejects a number it
+    was not given and is metered, and only managers may read any of it."""
+
+    databases = {"default", "aux"}
+    MOD = "command_center.api.insight"
+    setUp_settings = SettingsPage.setUp
+    tearDown = SettingsPage.tearDown
+    _call = SettingsPage._call
+
+    def setUp(self):
+        self.setUp_settings()
+        from command_center import install
+        from command_center.recommend import engine
+        from insights.compat import run_as
+        with run_as("Administrator"):
+            install.register_business("Test Medical Ltd", "https://erp.test", "key", "s3cret")
+        d = lambda n: str(TODAY - dt.timedelta(days=n))  # noqa: E731
+
+        def payments(f):
+            rows = {"Customer": [("PE-1", "Alpha Clinic", 200, 30000), ("PE-2", "Alpha Clinic", 10, 15000),
+                                 ("PE-3", "Alpha Clinic", 60, 5000), ("PE-4", "Beta Hospital", 5, 8000),
+                                 ("PE-5", "Delta", 400, 2000)],
+                    "Supplier": [("PE-9", "Sup One", 100, 8000), ("PE-10", "Sup Two", 3, 1000)]}
+            return [{"name": n, "party": p, "posting_date": d(age), "unallocated_amount": amt,
+                     "source_exchange_rate": 1, "target_exchange_rate": 1}
+                    for n, p, age, amt in rows.get(f.get("party_type"), [])]
+        self.live = {"Payment Entry": payments, "Stock Ledger Entry": [],
+                     "Account": [{"name": "Bank - T"}]}
+        self.reader = _RecReader(self.live)
+        real = engine._context
+
+        def ctx(code):
+            c = real(code)
+            c._reader = self.reader
+            return c
+        p = mock.patch.object(engine, "_context", ctx)
+        p.start()
+        self.patches.append(p)
+        self._crafted()
+
+    def _fact(self, model, **kw):
+        import uuid
+        key = uuid.uuid4().hex
+        kw.setdefault("src_docstatus", 1)
+        if hasattr(model, "as_of_date"):
+            kw.setdefault("as_of_date", TODAY)
+        return model.objects.create(name=key, fact_key=key, business_code=REC_CODE, **kw)
+
+    def _crafted(self):
+        from insights.core import models as M
+        PB, SI = M.CommandCenterFactPartyBalance, M.CommandCenterFactSalesInvoice
+        d = lambda n: TODAY - dt.timedelta(days=n)  # noqa: E731
+        # Each row keeps the ledger identity of ingest/ledger.py:
+        # open - unmatched - credit notes - journals - other - not updated + debits
+        #      - unexplained = ledger balance.
+        self._fact(PB, party_type="Customer", party="Alpha Clinic", open_invoices=160000,
+                   open_invoice_count=4, unmatched_payments=50000, unmatched_payment_count=3,
+                   unlinked_credit_notes=5000, unlinked_journals=2000, unlinked_debits=1000,
+                   ledger_balance=104000, owed=104000, d90_plus=80000, not_due=24000,
+                   oldest_due_after_matching=d(200))
+        self._fact(PB, party_type="Customer", party="Beta Hospital", unmatched_payments=8000,
+                   unmatched_payment_count=1, ledger_balance=-8000, in_credit=8000)
+        self._fact(PB, party_type="Customer", party="Gamma Labs", open_invoices=30000,
+                   open_invoice_count=2, ledger_balance=30000, owed=30000, d0_30=30000)
+        self._fact(PB, party_type="Customer", party="Delta", open_invoices=12000,
+                   open_invoice_count=1, unmatched_payments=2000, unmatched_payment_count=1,
+                   unexplained=500, ledger_balance=9500, owed=9500, d31_60=9500)
+        self._fact(PB, party_type="Supplier", party="Sup One", open_invoices=208000,
+                   open_invoice_count=3, unmatched_payments=8000, unmatched_payment_count=1,
+                   ledger_balance=200000, owed=200000, d90_plus=50000, not_due=150000)
+        self._fact(PB, party_type="Supplier", party="Sup Two", unmatched_payments=1000,
+                   unmatched_payment_count=1, ledger_balance=-1000, in_credit=1000)
+        for name, cust, amt, bucket, age in (("SI-A1", "Alpha Clinic", 160000, "90+", 200),
+                                             ("SI-G1", "Gamma Labs", 30000, "0-30", 20),
+                                             ("SI-D1", "Delta", 12000, "31-60", 45)):
+            self._fact(SI, src_name=name, customer=cust, posting_date=d(age), due_date=d(age),
+                       base_grand_total=amt, outstanding_amount=amt, ageing_bucket=bucket)
+        PI = M.CommandCenterFactPurchaseInvoice
+        self._fact(PI, src_name="PINV-1", supplier="Sup One", posting_date=d(120),
+                   due_date=d(100), base_grand_total=208000, outstanding_amount=208000,
+                   ageing_bucket="90+")
+
+    def _understand(self, key, client=None, code=REC_CODE):
+        r = self._call(client or self.manager, "understand", key=key, business_code=code)
+        self.assertEqual(r.status_code, 200, f"{key}: {r.content[:600]!r}")
+        return r.json()["message"]
+
+    @staticmethod
+    def _step(s, sid):
+        return next(x for x in s["diagnosis"]["bridge"]["steps"] if x["id"] == sid)
+
+    # ------------------------------------------------------------------ the bridge
+    def test_receivables_bridge_reconciles_to_the_cent(self):
+        s = self._understand("ar_open_invoices")
+        self.assertEqual(s["depth"], "deep")
+        b = s["diagnosis"]["bridge"]
+        self.assertTrue(b["reconciles"], b)
+        self.assertEqual(b["residual"], 0.0)
+        step = lambda i: self._step(s, i)["value"]  # noqa: E731
+        self.assertEqual(step("open"), 202000.0)
+        self.assertEqual(step("open"), s["figure"]["value"], "the bridge starts at the figure")
+        self.assertEqual(step("unmatched"), -60000.0)
+        self.assertEqual(self._step(s, "unmatched")["count"], 5)
+        self.assertEqual(step("credit_notes"), -5000.0)
+        self.assertEqual(step("journals"), -2000.0)
+        self.assertEqual(step("debits"), 1000.0)
+        self.assertEqual(step("unexplained"), -500.0, "the remainder is said, never forced")
+        self.assertEqual(step("net"), 135500.0)
+        self.assertEqual(step("in_credit"), 8000.0)
+        self.assertEqual(step("owed"), 143500.0)
+        moves = [x["value"] for x in b["steps"] if x["kind"] != "total"]
+        self.assertAlmostEqual(step("open") + sum(moves[:7]), step("net"), places=2)
+        # the owed figure the bridge ends on is the card's own
+        owed = self._understand("ar_total")
+        self.assertEqual(self._step(owed, "owed")["value"], owed["figure"]["value"])
+        self.assertEqual(b["gap"], 58500.0)
+
+    def test_payables_bridge_reconciles(self):
+        s = self._understand("ap_open_invoices")
+        b = s["diagnosis"]["bridge"]
+        self.assertTrue(b["reconciles"])
+        self.assertEqual([self._step(s, i)["value"] for i in ("open", "unmatched", "net", "in_credit", "owed")],
+                         [208000.0, -9000.0, 199000.0, 1000.0, 200000.0])
+        self.assertEqual(self._step(s, "unexplained")["value"], 0.0)
+        self.assertIn("Purchase Invoice", s["prevention"][0]["text"])
+
+    def test_top_contributors_and_oldest_unmatched(self):
+        s = self._understand("ar_open_invoices")
+        c = s["diagnosis"]["contributors"]
+        self.assertEqual([(r["party"], r["value"]) for r in c["rows"]],
+                         [("Alpha Clinic", 56000.0), ("Delta", 2500.0)])
+        self.assertEqual(c["total"], 58500.0)
+        self.assertEqual(c["rows"][0]["share"], 95.7)
+        self.assertEqual(c["rows"][0]["open"]["filters"]["customer"], "Alpha Clinic")
+        self.assertTrue(c["rows"][0]["links"][0]["href"].startswith("https://erp.test/app/payment-reconciliation"))
+        u = s["diagnosis"]["unmatched"]
+        self.assertEqual((u["count"], u["total"]), (5, 60000.0))
+        self.assertEqual((u["recent"]["count"], u["recent"]["total"]), (2, 23000.0))
+        self.assertEqual((u["old"]["count"], u["old"]["total"]), (3, 37000.0))
+        self.assertEqual([i["name"] for i in u["oldest"][:2]], ["PE-5", "PE-1"])
+        self.assertTrue(u["oldest"][0]["href"].endswith("/app/payment-entry/PE-5"))
+        said = " ".join(s["diagnosis"]["sentences"])
+        self.assertIn("GHS 58,500.00", said)
+        self.assertIn("Alpha Clinic (GHS 56,000.00)", said)
+        self.assertIn("GHS 37,000.00 is over 30 days old", said)
+        # The ageing focus names the parties over 90 days instead.
+        aged = self._understand("ar_over_90")
+        self.assertEqual(aged["diagnosis"]["focus"], "ageing")
+        self.assertEqual(aged["diagnosis"]["contributors"]["rows"][0]["party"], "Alpha Clinic")
+        self.assertEqual(aged["diagnosis"]["ageing"]["invoices_over_90"], 160000.0)
+
+    def test_expected_position_flags(self):
+        s = self._understand("ar_total")
+        checks = {c["label"]: c for c in s["expected"]["checks"]}
+        gap = checks["Open invoices should equal what the ledger says is owed"]
+        self.assertEqual(gap["state"], "bad")
+        self.assertIn("GHS 58,500.00", gap["text"])
+        self.assertEqual(checks["Every payment should be matched to its invoice within the month"]["state"], "bad")
+        over = checks["Most of what is owed should be inside its terms, little over 90 days"]
+        self.assertEqual(over["state"], "bad")
+        self.assertIn("55.7%", over["text"])
+        self.assertEqual(checks["Every difference should be explained by the records"]["state"], "warn")
+        self.assertEqual(checks["Customers in credit should be few, and settled"]["state"], "info")
+        # A clean book flags nothing.
+        from insights.core import models as M
+        M.CommandCenterFactPartyBalance.objects.filter(business_code=REC_CODE).delete()
+        self._fact(M.CommandCenterFactPartyBalance, party_type="Customer", party="Gamma Labs",
+                   open_invoices=30000, open_invoice_count=1, ledger_balance=30000, owed=30000,
+                   d0_30=30000)
+        self.live["Payment Entry"] = []
+        from django.core.cache import cache
+        cache.clear()
+        clean = self._understand("ar_total")
+        states = {c["label"]: c["state"] for c in clean["expected"]["checks"]}
+        self.assertEqual(states["Open invoices should equal what the ledger says is owed"], "ok")
+        self.assertEqual(states["Every difference should be explained by the records"], "ok")
+        self.assertNotIn("Every payment should be matched to its invoice within the month", states)
+
+    def test_resolution_prevention_related(self):
+        from command_center.guides import RECONCILE_STEPS
+        s = self._understand("ar_open_invoices")
+        res = s["resolution"]
+        self.assertEqual(res["owner"], "Accounts")
+        for step in RECONCILE_STEPS:
+            self.assertIn(step, res["steps"], "the one reconciliation guide, reused")
+        self.assertTrue(res["guide"]["href"].endswith("/app/payment-reconciliation"))
+        texts = " ".join(p["text"] for p in s["prevention"])
+        self.assertIn("Create, then Payment", texts)
+        self.assertTrue(all(p["href"].startswith("https://erp.test/app/") for p in s["prevention"]))
+        rel = {r["key"] for r in s["related"]}
+        self.assertTrue({"ar_total", "ar_unmatched", "ar_in_credit"} <= rel, rel)
+        self.assertTrue(all("drill" in r for r in s["related"]), "a related figure opens its drawer")
+
+    def test_auto_reconcile_is_read_from_the_site(self):
+        from command_center.insight.build import auto_reconcile
+
+        class Conn:
+            def __init__(self, fields, on=None):
+                self.fields, self.on = fields, on
+
+            def fieldnames(self, doctype):
+                return self.fields
+
+            def get_value(self, doctype, filters, field):
+                return {field: self.on}
+
+        class Ctx:
+            code = REC_CODE
+
+            def __init__(self, conn):
+                self.conn = conn
+
+            def reader(self):
+                return self
+        v14 = auto_reconcile(Ctx(Conn({"unlink_payment_on_cancellation_of_invoice"})))
+        self.assertIn("no automatic reconciliation", v14["text"])
+        self.assertEqual(auto_reconcile(Ctx(Conn({"auto_reconcile_payments"}, 0)))["state"], "warn")
+        self.assertEqual(auto_reconcile(Ctx(Conn({"auto_reconcile_payments"}, 1)))["state"], "ok")
+
+    # ------------------------------------------------------------------ every figure
+    def test_every_registered_figure_renders_a_section(self):
+        from command_center.insight.build import as_text, sheet, understand
+        from command_center.insight.specs import SPECS
+        from command_center.kpi.live import LIVE
+        from command_center.kpi.registry import REGISTRY, load_all
+        from insights.compat import run_as
+        load_all()
+        with run_as("manager@test.com"):
+            for key in sorted(REGISTRY) + sorted(LIVE):
+                s = understand(key, REC_CODE)
+                self.assertTrue(s["what"]["text"] and s["what"]["how"], key)
+                self.assertTrue(s["expected"]["text"], key)
+                json.dumps(s, default=str)
+                self.assertIn(s["label"], as_text(s))
+                self.assertEqual(sheet(s)[0], "Understanding")
+                if key in SPECS and not SPECS[key].light and not s["guide"]:
+                    self.assertTrue(s["resolution"]["steps"], f"{key}: a deep spec says what to do")
+                elif not s["guide"]:
+                    self.assertTrue(s["resolution"].get("improve") or SPECS.get(key), key)
+
+    def test_specs_name_real_figures_and_rules(self):
+        from command_center.insight.specs import SPECS
+        from command_center.kpi.live import LIVE
+        from command_center.kpi.registry import REGISTRY, load_all
+        from command_center.recommend.rules import RULES
+        load_all()
+        rules = {r.rule_id for r in RULES}
+        for key, spec in SPECS.items():
+            self.assertTrue(key in REGISTRY or key in LIVE, f"spec for unknown figure {key}")
+            for r in spec.related:
+                self.assertTrue(r in REGISTRY or r in LIVE, f"{key}: related {r} unknown")
+            for r in spec.recs:
+                self.assertIn(r, rules, f"{key}: recommendation rule {r} unknown")
+        for key in ("ar_total", "ar_open_invoices", "ar_unmatched", "ar_over_90", "ap_total",
+                    "ap_open_invoices", "ap_unmatched", "revenue_invoiced", "revenue_uncosted",
+                    "margin_pct", "stock_value", "bank_cleared_pct", "order_book"):
+            self.assertIn(key, SPECS, f"{key} needs a deep spec")
+        self.assertTrue(SPECS["order_book"].light, "the order book's explanation is the cover view's")
+
+    def test_a_flow_has_its_own_history(self):
+        from insights.core import models as M
+        SL = M.CommandCenterFactSalesInvoiceLine
+        end = TODAY.replace(day=1) - dt.timedelta(days=1)
+        for i in range(14):
+            m = (end.replace(day=10) - dt.timedelta(days=30 * i))
+            self._fact(SL, src_name=f"SI-L{i}", customer="C1" if i % 2 else "C2",
+                       posting_date=m, base_net_amount=1000 + 100 * i, has_cost=1,
+                       base_margin_amount=200, item_group="G", item_code="I")
+        self._fact(SL, src_name="SI-NOW", customer="C1", posting_date=TODAY,
+                   base_net_amount=50, has_cost=1, base_margin_amount=10, item_group="G",
+                   item_code="I")
+        s = self._understand("revenue_invoiced")
+        t = s["trend"]
+        self.assertEqual(t["mode"], "flow")
+        self.assertEqual(len(t["points"]), 12)
+        self.assertEqual(t["typical"]["low"], 1000.0)
+        self.assertTrue(any(c["label"] == "Inside its own usual range" for c in s["expected"]["checks"]))
+        self.assertTrue(s["diagnosis"]["chips"])
+        # A balance has none in the facts: the platform keeps one, and says so.
+        bal = self._understand("ar_total")
+        self.assertEqual(bal["trend"]["mode"], "snapshot")
+        self.assertIn("recorded every day", bal["trend"]["text"])
+        from command_center.insight.build import history
+        self.assertEqual(history(REC_CODE, "ar_total")[-1][1], 143500.0)
+
+    def test_missing_data_gives_the_guide(self):
+        from insights.core.models import ConnectedBusiness
+        ConnectedBusiness.objects.create(name="Empty Ltd", business_name="Empty Ltd",
+                                         business_code="empty_ltd", status="Active", is_local=0,
+                                         currency="GHS", site_url="https://empty.test")
+        s = self._understand("ar_total", code="empty_ltd")
+        self.assertTrue(s["guide"], "nothing behind it is a guide, not a blank")
+        self.assertIn("Sales Invoice", " ".join(s["guide"]["steps"]))
+        self.assertTrue(s["guide"]["href"].startswith("https://empty.test/app/"))
+        self.assertIsNone(s["diagnosis"])
+        generic = self._understand("tasks_open", code="empty_ltd")
+        self.assertTrue(generic["guide"]["text"])
+
+    # ------------------------------------------------------------------ Explain This
+    def test_explain_this_is_grounded_and_metered(self):
+        import frappe
+        from insights.core.models import UsageEvent
+        frappe.conf["command_center_anthropic_key"] = "test-key-not-real"
+        fake = _FakeAnthropic([_Reply(text="Customers owe GHS 999,999.00.\n- Chase it.",
+                                      usage=(900, 80, 0, 0)),
+                               _Reply(text="The invoices overstate the debt by GHS 58,500.00.\n"
+                                           "- Alpha Clinic accounts for GHS 56,000.00.\n"
+                                           "- Accounts should reconcile it first.",
+                                      usage=(900, 90, 0, 0))])
+        with mock.patch("command_center.ask.claude._client", lambda: fake), \
+                mock.patch("command_center.ask.llm.provider", lambda: "claude"):
+            r = self._call(self.manager, "explain", key="ar_open_invoices", business_code=REC_CODE)
+            self.assertEqual(r.status_code, 200, r.content[:400])
+            bad = r.json()["message"]
+            self.assertIn("999999", bad["error"])
+            self.assertNotIn("text", bad)
+            sent = fake.sent[0]
+            given = sent["messages"][0]["content"]
+            self.assertIn("GHS 58,500.00", given, "the drawer's own numbers, in words")
+            self.assertIn("Use only the numbers given below", str(sent["system"]))
+            self.assertNotIn("tools", sent, "no tools: the drawer's numbers only")
+            good = self._call(self.manager, "explain", key="ar_open_invoices",
+                              business_code=REC_CODE).json()["message"]
+            self.assertIn("GHS 56,000.00", good["text"])
+            again = self._call(self.manager, "explain", key="ar_open_invoices",
+                               business_code=REC_CODE).json()["message"]
+            self.assertTrue(again["kept"], "opened again, it costs nothing")
+            self.assertEqual(len(fake.sent), 2)
+        ev = list(UsageEvent.objects.filter(meter="ai_questions").order_by("id"))
+        self.assertEqual([(e.quantity, e.outcome, e.input_tokens) for e in ev],
+                         [(0, "failed", 900), (1, "ok", 900)])
+        self.assertEqual(ev[0].ref, "ar_open_invoices")
+        # The plan's gate: no allowance, no call.
+        with mock.patch("insights.core.plans.gate", lambda meter, code=None, user=None:
+                        "This month's AI allowance is used up — your administrator can extend it."), \
+                mock.patch("command_center.ask.llm.provider", lambda: "claude"):
+            from django.core.cache import cache
+            cache.clear()
+            got = self._call(self.manager, "explain", key="ar_total",
+                             business_code=REC_CODE).json()["message"]
+        self.assertIn("allowance is used up", got["error"])
+        self.assertEqual(len(fake.sent), 2)
+
+    # ------------------------------------------------------------------ access and export
+    def test_managers_only(self):
+        U = get_user_model()
+        U.objects.create_user("staff@test.com", "staff@test.com", "a-long-test-pass-8")
+        staff = Client()
+        self.assertTrue(staff.login(username="staff@test.com", password="a-long-test-pass-8"))
+        for fn in ("understand", "explain", "xlsx"):
+            self.assertEqual(self._call(Client(), fn, key="ar_total", business_code=REC_CODE).status_code, 401, fn)
+            self.assertEqual(self._call(staff, fn, key="ar_total", business_code=REC_CODE).status_code, 403, fn)
+        self.assertEqual(self._call(self.manager, "understand", key="no_such_figure",
+                                    business_code=REC_CODE).status_code, 417)
+
+    def test_export_carries_the_section(self):
+        import io
+        from openpyxl import load_workbook
+        r = self.manager.post("/api/method/command_center.api.export.records_xlsx",
+                              json.dumps({"fact": "fact_sales_invoice", "kpi": "ar_open_invoices",
+                                          "filters": {"outstanding_amount": [">", 0], "src_docstatus": 1},
+                                          "business_code": REC_CODE, "title": "On open invoices"}),
+                              content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        wb = load_workbook(io.BytesIO(r.content))
+        self.assertEqual(wb.sheetnames[0], "Understanding")
+        rows = [[c.value for c in row] for row in wb["Understanding"].iter_rows()]
+        self.assertIn(["Reconciliation", "Not explained by the records", -500, 1, "unexplained"], rows)
+        r = self.manager.post(f"/api/method/{self.MOD}.xlsx",
+                              json.dumps({"key": "bank_cleared_pct", "business_code": REC_CODE}),
+                              content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        self.assertEqual(load_workbook(io.BytesIO(r.content)).sheetnames, ["Understanding"])

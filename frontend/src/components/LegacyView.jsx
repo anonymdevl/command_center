@@ -7,6 +7,7 @@ import { api } from "../api/client.js";
 import { useApi } from "../useApi.js";
 import { keyFor } from "../swr.js";
 import Records from "./Records.jsx";
+import { FigureDrawer } from "./Understanding.jsx";
 import { hydrateCards, hydrateTiles, keysFor, markLoading } from "../legacy/hydrate.js";
 import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js";
 import { clearTurns, historyFor, remember, replaceAnswer, restore, turnsFor } from "../askHistory.js";
@@ -488,8 +489,9 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
   useEffect(() => {
     const root = ref.current;
     if (!root || !html) return;
-    const opts = {
-      onOpen: (figure) =>
+    // The records behind a figure, or its ERPNext list (the work queue's tiles, a row of
+    // a panel, an alert).
+    const records = (figure) =>
         figure.drill?.href
           ? window.open(figure.drill.href, "_blank", "noopener")
           : figure.drill?.fact
@@ -504,13 +506,20 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
                 openDrawer={openDrawer}
               />
             )
-          : undefined,
+          : undefined;
+    const opts = {
+      // A figure of the KPI engine opens its drawer: what it is, why, what to do, then
+      // its records (Understanding.jsx). Everything else opens its records as before.
+      onOpen: (figure) =>
+        figure.key
+          ? openDrawer(<FigureDrawer figure={figure} scope={scope} openDrawer={openDrawer} />)
+          : records(figure),
     };
     opts.openDrawer = openDrawer;
     setLiveCount(
       hydrateCards(root, viewKey, figures.data, opts) +
       hydrateTiles(root, viewKey, figures.data, opts) +
-      (isWork ? renderWork(root, viewKey, work.data, opts) : 0));
+      (isWork ? renderWork(root, viewKey, work.data, { ...opts, onOpen: records }) : 0));
     if (hasAlerts) renderAlerts(root, viewKey, alerts.data, opts);
     if (viewKey === "command") {
       renderHome(root, { figures: figures.data, alerts: alerts.data, scope, onOpen: opts.onOpen });

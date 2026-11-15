@@ -179,6 +179,12 @@ export const api = {
   kpis: ({ keys, business_code }) =>
     call("command_center.api.kpi.get", { keys, business_code }),
   kpiCatalogue: () => call("command_center.api.kpi.catalogue"),
+  /* A figure's drawer: what it is, what it should be, why, and what to do (api/insight.py). */
+  insight: ({ key, business_code }, opts) =>
+    call("command_center.api.insight.understand", { key, business_code }, opts),
+  insightExplain: ({ key, business_code }) =>
+    call("command_center.api.insight.explain", { key, business_code }),
+  insightXlsx: (args) => download("command_center.api.insight.xlsx", args, "figure.xlsx"),
   /* The designed screens' charts and tables, by panel heading (api/panels.py). */
   panels: (view, business_code) => call("command_center.api.panels.get", { view, business_code }),
   /* Finances' financial statements, as the business's ERPNext draws them (api/statements.py). */
