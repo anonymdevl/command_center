@@ -49,6 +49,13 @@ def tile0(label, key):
 
 def warn0(): return '<div class="warn" hidden></div>'
 
+def cover0():
+    """Promised Orders — Cover (api/coverage.py, legacy/cover.js): every open order line and
+    what covers it. Empty until the business answers; the same panel on Sales, Buying and
+    Stock."""
+    return panel("Promised Orders — Cover", '<div class="cover"></div>',
+                 "Every open order line, and what covers it", "cover")
+
 V_SALES=f'''<div class="topbar"><div><h3>Sales and Payments</h3>
 <div class="when">Invoices, orders and what is still unpaid</div></div></div>
 <div class="kpis six">
@@ -85,6 +92,7 @@ V_SALES=f'''<div class="topbar"><div><h3>Sales and Payments</h3>
  '<div class="grid six">'+"".join(tile0(l,"openorders") for l in ["Awaiting stock","Awaiting purchase",
  "Awaiting despatch","Awaiting invoice","Awaiting install","Awaiting payment"])+'</div>',
  "Click any box for the orders behind it","openorders")}
+{cover0()}
 {panel("Orders taken but not despatched",
  dtable(["Order","Customer",("Value$",True),"Despatched",""]))}
 {panel("Discounts and price changes outside policy", thin("<b>Invoice lines sold below their price-list price with no pricing rule behind them.</b> A discount given by a pricing rule is policy; one typed in by hand is not."),"","discount")}'''

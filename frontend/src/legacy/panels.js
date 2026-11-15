@@ -20,6 +20,7 @@
  * read. Nothing from the API is written as HTML; every node is built here.
  */
 
+import { drawCover } from "./cover.js";
 import { guideBox } from "./guide.js";
 import { createViz, vizOf } from "./viz.js";
 
@@ -38,9 +39,9 @@ const COMPOSITION = {
 };
 
 // The designed marks a panel draws its answer into.
-const MARKS = ".chartwrap, .bars, .stack, .stackkey, table.dt, .funnel, ul.bul";
+const MARKS = ".chartwrap, .bars, .stack, .stackkey, table.dt, .funnel, ul.bul, .cover";
 
-export function renderPanels(root, viewKey, data, { onOpen, openDrawer, failed = false } = {}) {
+export function renderPanels(root, viewKey, data, { onOpen, openDrawer, scope, failed = false } = {}) {
   if (!root || !PANEL_VIEWS.has(viewKey)) return 0;
   // The previous screen's answer, still in hand while this one's is on its way.
   if (data?.view && data.view !== viewKey) return 0;
@@ -79,7 +80,7 @@ export function renderPanels(root, viewKey, data, { onOpen, openDrawer, failed =
       return;
     }
     try {
-      if (draw(panel, { ...spec, _cur: data?.currency || "" }, onOpen)) {
+      if (draw(panel, { ...spec, _cur: data?.currency || "" }, onOpen, { openDrawer, scope })) {
         panel.dataset.live = "1";
         live += 1;
       } else {
@@ -138,7 +139,7 @@ function notice(panel, text) {
   panel.querySelector(".ph")?.after(n);
 }
 
-function draw(panel, spec, onOpen) {
+function draw(panel, spec, onOpen, ctx = {}) {
   if (spec.subtitle) {
     const sub = panel.querySelector(".ph b + span");
     if (sub) sub.textContent = spec.subtitle;
@@ -164,6 +165,9 @@ function draw(panel, spec, onOpen) {
       break;
     case "guide":
       return drawGuide(panel, spec);
+    case "cover":
+      // Promised Orders — Cover (legacy/cover.js) draws its own reading and guide.
+      return drawCover(panel, spec, ctx);
     case "funnel":
       ok = drawFunnel(panel, spec, onOpen);
       break;

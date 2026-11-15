@@ -171,6 +171,9 @@ export const api = {
   /* What is behind a figure: the summary, the concentration, the records. */
   records: ({ fact, filters, business_code, limit }) =>
     call("command_center.api.facts.records", { fact, filters, business_code, limit }),
+  /* A promise split by what covers it: stock, on order, not ordered (api/coverage.py). */
+  coverSummary: ({ business_code, late_only }) =>
+    call("command_center.api.coverage.summary", { business_code, late_only: late_only ? 1 : 0 }),
 
   /* Figures. The screen names them; the server decides what they mean. */
   kpis: ({ keys, business_code }) =>

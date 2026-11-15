@@ -2142,6 +2142,17 @@ def hr_appraisals(ctx):
     return out
 
 
+# --------------------------------------------------------------------------- promised orders: what covers them
+def _cover(view):
+    """The "Promised Orders — Cover" panel (api/coverage.py), the same on each screen
+    but for the state it opens on."""
+    def build(ctx):
+        from command_center.api.coverage import panel
+        return panel(ctx, view)
+    build.__name__ = f"cover_{view}"
+    return build
+
+
 # --------------------------------------------------------------------------- the line under each heading
 def _n(ctx, fact, where=None):
     return len(ctx.rows(fact, ["src_name"], where))
@@ -2238,9 +2249,9 @@ def find_inv(ctx):
     for r in ctx.rows("fact_stock_balance", ["warehouse", "stock_value"]):
         held[r["warehouse"]] += _num(r["stock_value"])
     total = sum(held.values())
-    from command_center.kpi.live_departments import off_warehouses
+    from command_center.kpi.live_departments import NOT_FOR_SALE, off_warehouses
     off, _ = off_warehouses(ctx.reader())
-    odd = re.compile(r"adjust|transit|damage|expired|reject|quarantine|return|scrap", re.I)
+    odd = re.compile(NOT_FOR_SALE, re.I)
     suspect = sorted([(w, v) for w, v in held.items() if v > 0 and (w in off or odd.search(w or ""))],
                      key=lambda kv: -kv[1])
     if suspect and total:
@@ -2381,6 +2392,7 @@ SCREENS = {
         "Orders taken but not despatched": sales_not_despatched,
         "From enquiry to order": sales_funnel,
         "Discounts and price changes outside policy": sales_discounts,
+        "Promised Orders — Cover": _cover("sales"),
     },
     "proc": {
         "Where the money goes": proc_money,
@@ -2389,12 +2401,14 @@ SCREENS = {
         "Checks before we pay": proc_checks,
         "Supplier performance": proc_performance,
         "Money paid to suppliers in advance": proc_advances,
+        "Promised Orders — Cover": _cover("proc"),
     },
     "inv": {
         "Where the value sits": inv_where,
         "Reserved against what is available": inv_reserved,
         "Stock that is not moving": inv_not_moving,
         "Expiry": inv_expiry,
+        "Promised Orders — Cover": _cover("inv"),
     },
     "eng": {
         "Can we actually deliver the work we are holding?": eng_capacity,

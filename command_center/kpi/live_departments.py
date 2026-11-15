@@ -237,6 +237,9 @@ def order_awaiting_payment(r):
 
 # --------------------------------------------------------------------------- stock
 OFF_TYPES = ("Transit",)
+# A warehouse whose name says goods are not sold from it (Stock & Warehouses' finding,
+# and the stock that may cover a promised order: coverage.py).
+NOT_FOR_SALE = r"adjust|transit|damage|expired|reject|quarantine|return|scrap"
 
 
 def off_warehouses(r):

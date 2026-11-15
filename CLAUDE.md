@@ -287,6 +287,23 @@ disagrees with its GL by GHS 2.82M on journals. `ar_total`/`ap_total` are the po
 balances; `ar_open_invoices`/`ap_open_invoices` keep the invoice view. `api/audit.py` is
 Check Figures (Settings → Businesses), line by line against the business's ERPNext.
 
+## What covers a promise (15 Nov 2026)
+
+"Promised, not delivered" read as stock promised and not there. `command_center/coverage.py`
+works out, per open sales-order line (stock units), what covers it: goods received against
+its own purchase order, stock (its warehouse, then any other sold from; oldest promise
+first), purchase-order and material-request lines that name the order (linked; MR -> PO ->
+receipt or Update Stock invoice -> invoice), then open purchase orders for the same item
+linked to no order, raised 14 days before to 90 after the order (likely, each unit once,
+oldest promise first, with the reason). States: In Stock, Received, On Order, Requested,
+Partly Covered, Not Ordered, Not a Stock Item; Late to Customer, Supplier Late. Read live,
+kept per business (speed.py kind "cover"). Shown as "Promised Orders — Cover" on Sales,
+Stock and Buying (`api/coverage.py`, `legacy/cover.js`), as "What Covers It" in the
+order_book / order_book_late drawers (`Kpi.explained_by`), the rule
+`promised_not_ordered` (its params are the window), and the analyst's `order_cover`.
+Gigmann (v14) links nothing: no PO or MR names a sales order, and goods are received on
+supplier invoices (Update Stock), not Purchase Receipts.
+
 ## The question box
 
 **Decision of 18 Oct 2026 (Michael), replacing "Gemini routes; the facts answer":**

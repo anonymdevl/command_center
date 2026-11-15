@@ -53,7 +53,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import frappe
 
-FRESH = {"live": 150, "panels": 120}
+FRESH = {"live": 150, "panels": 120, "cover": 300}
 STALE_MAX = 20 * 60
 ENGINE_TTL = 6 * 3600
 KEEP = STALE_MAX + 60          # how long an answer is kept at all
