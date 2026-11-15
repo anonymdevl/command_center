@@ -43,6 +43,9 @@ EXTRA_INDEXES = {
     "Command Center Fact Task": [["business_code", "is_open"]],
     "Command Center Fact Person": [["business_code", "is_active"]],
     "Command Center Fact Payment Allocation": [["business_code", "payment_type", "posting_date"]],
+    # A figure's history, read per business and figure (recommend/metrics.py).
+    "Command Center Metric Point": [["business_code", "metric", "grain", "period"]],
+    "Command Center Recommendation Feedback": [["business_code", "rule", "acted_on"]],
 }
 
 NO_COLUMN = {"Section Break", "Column Break", "Tab Break", "HTML", "Button", "Heading",

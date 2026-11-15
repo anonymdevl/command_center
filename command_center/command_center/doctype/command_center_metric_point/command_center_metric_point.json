@@ -1,0 +1,103 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-15 00:00:00.000000",
+ "description": "One value of one figure for one business on one day (grain day) or for one month (grain month): the history a business's normal range is learned from (command_center.recommend.metrics).",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "business_code",
+  "metric",
+  "grain",
+  "period",
+  "value",
+  "source",
+  "captured_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "business_code",
+   "fieldtype": "Data",
+   "label": "Business",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "metric",
+   "fieldtype": "Data",
+   "label": "Figure",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "grain",
+   "fieldtype": "Select",
+   "label": "Grain",
+   "options": "day\nmonth",
+   "default": "day",
+   "read_only": 1
+  },
+  {
+   "fieldname": "period",
+   "fieldtype": "Date",
+   "label": "Day or month",
+   "reqd": 1,
+   "in_list_view": 1,
+   "read_only": 1,
+   "description": "The day for a daily figure; the first of the month for a monthly one."
+  },
+  {
+   "fieldname": "value",
+   "fieldtype": "Float",
+   "label": "Value",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Data",
+   "label": "Worked out from",
+   "read_only": 1,
+   "description": "snapshot (the day's figures), facts (rebuilt from the loaded invoices and payments) or rule (what a recommendation rule measured)."
+  },
+  {
+   "fieldname": "captured_at",
+   "fieldtype": "Datetime",
+   "label": "Captured",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Metric Point",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Insights Dashboard Manager",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "autoname": "hash",
+ "in_create": 1
+}

@@ -300,11 +300,14 @@ Object.assign(settingsApi, {
   notifications: () => call(`${PS}.notifications`),
 
   recommend: (business_code) => call(`${PS}.recommendations`, { business_code }),
-  setRecommend: ({ business_code, rules, digest, brief }) =>
+  setRecommend: ({ business_code, rules, digest, brief, anomalies, ai_review }) =>
     call(`${PS}.set_recommendations`, { business_code, rules: JSON.stringify(rules || {}),
       digest: digest === undefined ? undefined : digest ? 1 : 0,
-      brief: brief === undefined ? undefined : brief ? 1 : 0 }),
+      brief: brief === undefined ? undefined : brief ? 1 : 0,
+      anomalies: anomalies === undefined ? undefined : anomalies ? 1 : 0,
+      ai_review: ai_review === undefined ? undefined : ai_review ? 1 : 0 }),
   writeBriefNow: (business_code) => call(`${PS}.write_brief_now`, { business_code }),
+  runReviewNow: (business_code) => call(`${PS}.run_review_now`, { business_code }),
 });
 
 /* Branding (administrator only) and a business's co-brand (Businesses). Logos are sent

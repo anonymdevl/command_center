@@ -3758,3 +3758,472 @@ class PlansAndUsage(TransactionTestCase):
         self.assertEqual(wb.sheetnames, ["Usage", "Ledger"])
         rows = [[c.value for c in row] for row in wb["Usage"].iter_rows()]
         self.assertIn(["Total for the month", None, None, None, None, None, 100], rows)
+
+
+def _months(n, start=dt.date(2023, 1, 1)):
+    out, d = [], start
+    for _ in range(n):
+        out.append(d)
+        d = dt.date(d.year + (d.month == 12), d.month % 12 + 1, 1)
+    return out
+
+
+class AdaptiveRecommendations(TransactionTestCase):
+    """The adaptive layer over the rules (recommend/baselines, metrics, adaptive, learning,
+    review): a business's own normal range, seasonal and not; anomaly flags on crafted
+    series; adaptive thresholds against the fixed floor and cap; what managers' decisions
+    teach (weights and their decay); outcomes of advice marked done; the daily AI review's
+    validation, storage, metering and gates; the ranking; and who may see and change it."""
+
+    databases = {"default", "aux"}
+    setUp_settings = SettingsPage.setUp
+    setUp = Recommendations.setUp
+    tearDown = SettingsPage.tearDown
+    _fact = Recommendations._fact
+    _rich = Recommendations._rich
+    _live = Recommendations._live
+    _compute = Recommendations._compute
+    _ok_settings = Recommendations._ok_settings
+    _call = SettingsPage._call
+    MOD = "command_center.api.recommend"
+
+    # ------------------------------------------------------------------ helpers
+    def _points(self, metric, grain, series):
+        from command_center.recommend import metrics
+        import uuid
+        from insights.core.models import CommandCenterMetricPoint as MP
+        for d, v in series:
+            MP.objects.create(name=uuid.uuid4().hex, business_code=REC_CODE, metric=metric,
+                              grain=grain, period=d, value=v, source="test")
+        self.assertIn(metric, metrics.BY_KEY)
+
+    # ------------------------------------------------------------------ baselines
+    def test_baselines_rolling_learning_and_anomaly(self):
+        from command_center.recommend import baselines, metrics
+        days = [TODAY - dt.timedelta(days=40 - i) for i in range(41)]
+        flat = [(d, 100 + (i % 5)) for i, d in enumerate(days[:-1])]
+        b = baselines.baseline(flat + [(days[-1], 102)], "day", "up_bad")
+        self.assertEqual((b["status"], b["method"], b["anomaly"]), ("ready", "rolling", False))
+        self.assertLessEqual(b["low"], 102)
+        self.assertGreaterEqual(b["high"], 102)
+        spike = baselines.baseline(flat + [(days[-1], 300)], "day", "up_bad")
+        self.assertTrue(spike["anomaly"])
+        self.assertEqual(spike["ratio"], 2.94)
+        # the wrong direction is not a problem: a fall in what is owed late is no anomaly
+        fell = baselines.baseline(flat + [(days[-1], 10)], "day", "up_bad")
+        self.assertFalse(fell["anomaly"])
+        mt = metrics.BY_KEY["unmatched_receipts"]
+        self.assertIsNone(metrics.why_now(mt, fell, "GHS"))     # nor a reason to act now
+        words = metrics.why_now(mt, spike, "GHS")
+        self.assertIn("2.94× their usual level", words)
+        self.assertIn("GHS 300", words)
+        # too little history: no range is invented
+        short = baselines.baseline(flat[:10], "day", "up_bad")
+        self.assertEqual(short["status"], "learning")
+        self.assertEqual(short["says"], "Learning: needs 3 more weeks of data.")
+        self.assertIsNone(metrics.why_now(mt, short, "GHS"))
+        self.assertEqual(baselines.baseline([(d, 5) for d in _months(3)], "month")["says"],
+                         "Learning: needs 4 more months of data.")
+        # a level shift: three months running well above the year before them
+        shift = baselines.baseline([(d, 100 + (i % 3)) for i, d in enumerate(_months(10))]
+                                   + [(d, v) for d, v in zip(_months(3, dt.date(2023, 11, 1)),
+                                                             (140, 145, 150))], "month", "up_bad")
+        self.assertEqual(shift["shift"]["direction"], "up")
+        self.assertTrue(shift["shift"]["bad"])
+
+    def test_baselines_seasonal(self):
+        from command_center.recommend import baselines
+        months = _months(24)
+        series = [(d, (200 if d.month == 12 else 100) * 1.01 ** i + (i % 3))
+                  for i, d in enumerate(months)]
+        b = baselines.baseline(series, "month", "either")
+        self.assertEqual(b["method"], "seasonal")
+        self.assertFalse(b["anomaly"], b)             # December is always high here
+        # the same December judged without the year before it looks extraordinary
+        rolling = baselines.baseline(series[-12:], "month", "either")
+        self.assertEqual(rolling["method"], "rolling")
+        self.assertTrue(rolling["anomaly"])
+        # and a December with no December rise is the anomaly, in the bad direction
+        flat_dec = series[:-1] + [(months[-1], 120.0)]
+        bad = baselines.baseline(flat_dec, "month", "down_bad")
+        self.assertTrue(bad["anomaly"])
+        self.assertLess(bad["z"], -3)
+        # changes are against the same month a year before once a year exists
+        band = baselines.change_band(series, "pct")
+        self.assertEqual(band["basis"], "the same month a year earlier")
+        self.assertLess(band["typical"], 15)
+
+    # ------------------------------------------------------------------ thresholds
+    def test_adaptive_threshold_floor_cap_and_learning(self):
+        from command_center.recommend import adaptive
+        months = _months(14)
+        steady = {"uncosted_share": [(d, 1.0 + 0.1 * (i % 3)) for i, d in enumerate(months)]}
+        t = adaptive.threshold("lines_without_cost", 5, steady)
+        self.assertEqual((t["status"], t["value"]), ("ready", 5.0))   # the fixed value is the floor
+        self.assertIn("the fixed value is the floor", t["says"])
+        noisy = {"uncosted_share": [(d, 30.0 + (i % 4)) for i, d in enumerate(months)]}
+        t = adaptive.threshold("lines_without_cost", 5, noisy)
+        self.assertEqual(t["value"], 10.0)                            # capped at twice the fixed
+        self.assertGreater(t["learned"], 30)
+        t = adaptive.threshold("lines_without_cost", 20, noisy)
+        self.assertGreater(t["value"], 30)
+        self.assertLessEqual(t["value"], 40)
+        self.assertEqual(t["value"], t["learned"])
+        # managers marking it not relevant make it less sensitive, inside the cap
+        self.assertGreater(adaptive.threshold("lines_without_cost", 20, noisy, 1.2)["value"],
+                           t["value"])
+        self.assertEqual(adaptive.threshold("lines_without_cost", 20, noisy, 1.5)["value"], 40)
+        learning = adaptive.threshold("lines_without_cost", 5, {"uncosted_share": noisy["uncosted_share"][:3]})
+        self.assertEqual((learning["status"], learning["value"]), ("learning", 5.0))
+        self.assertIn("needs 3 more months", learning["says"])
+        # a change rule: the business's usual swing
+        rev = {"revenue": [(d, 1000 * (1.6 if i % 2 else 1.0)) for i, d in enumerate(months)]}
+        t = adaptive.threshold("sales_falling", 25, rev)
+        self.assertGreater(t["learned"], 25)
+        self.assertLessEqual(t["value"], 50)
+
+    def test_adaptive_versus_fixed_on_the_rules(self):
+        from command_center.recommend import engine
+        # crafted data: 25.97% of the year's sales carry no cost
+        conf = engine.settings(REC_CODE)
+        self.assertEqual(conf["rules"]["lines_without_cost"]["mode"], "adaptive")
+        conf["rules"]["lines_without_cost"]["params"]["pct"] = 15
+        engine.save_settings(REC_CODE, conf)
+        fixed = {r["rule"]: r for r in self._compute()["recs"]}
+        self.assertIn("lines_without_cost", fixed)     # no history: the fixed 15% decides
+        self.assertEqual(fixed["lines_without_cost"]["source"], "rule")
+        self.assertIn("Learning", fixed["lines_without_cost"]["baseline"]["says"])
+        # this business always has about 30% with no cost: 26% is its normal
+        self._points("uncosted_share", "month", [(d, 30.0 + (i % 4))
+                                                 for i, d in enumerate(_months(14))])
+        out = {r["rule"]: r for r in self._compute()["recs"]}
+        self.assertNotIn("lines_without_cost", out)
+        conf = engine.settings(REC_CODE)
+        conf["rules"]["lines_without_cost"]["mode"] = "fixed"
+        engine.save_settings(REC_CODE, conf)
+        self.assertIn("lines_without_cost", {r["rule"] for r in self._compute()["recs"]})
+        # Settings shows both values and lets the administrator choose
+        view = self._ok_settings("set_recommendations", business_code=REC_CODE,
+                                 rules=json.dumps({"lines_without_cost": {"mode": "adaptive"}}))
+        rule = next(r for r in view["rules"] if r["rule_id"] == "lines_without_cost")
+        self.assertEqual(rule["mode"], "adaptive")
+        self.assertEqual(rule["threshold"]["fixed"], 15)
+        self.assertEqual(rule["threshold"]["value"], 30)
+        self.assertIn("Adaptive: 30.0%", rule["threshold"]["says"])
+        self.assertIsNone(next(r for r in view["rules"] if r["rule_id"] == "overdue_customers")["mode"])
+        r = self.admin.post("/api/method/insights.core.platform_settings.set_recommendations",
+                            json.dumps({"business_code": REC_CODE, "rules": json.dumps(
+                                {"lines_without_cost": {"mode": "clever"}})}),
+                            content_type="application/json")
+        self.assertEqual(r.status_code, 417)
+
+    def test_unusual_movement_and_why_now(self):
+        from command_center.recommend import engine
+        days = [TODAY - dt.timedelta(days=40 - i) for i in range(40)]
+        # payments not matched: usually about GHS 3,000; today's crafted data says 10,000
+        self._points("unmatched_receipts", "day", [(d, 3000 + 10 * (i % 7)) for i, d in enumerate(days)])
+        # stock held: never an anomaly (either direction is not a problem in itself)
+        self._points("stock_value", "day", [(d, 900000) for d in days])
+        # owed to suppliers, by the ledger: usually 50,000; now 200,000, and its rule is off
+        self._points("ap_ledger", "day", [(d, 50000 + 100 * (i % 5)) for i, d in enumerate(days)])
+        conf = engine.settings(REC_CODE)
+        for rid in ("supplier_payments_due", "long_unpaid_bills"):
+            conf["rules"][rid]["enabled"] = False
+        engine.save_settings(REC_CODE, conf)
+        from insights.compat import run_as
+        with run_as("Administrator"):
+            engine.refresh(REC_CODE)
+            recs = {r["id"]: r for r in engine.visible(REC_CODE)}
+        um = recs["unmatched_receipts"]
+        self.assertIn("their usual level", um["why_now"])
+        self.assertEqual(um["baseline"]["status"], "ready")
+        self.assertTrue(um["baseline"]["chart"]["points"])
+        self.assertIn("low", um["baseline"]["chart"])
+        odd = recs["adaptive_anomaly:ap_ledger"]
+        self.assertEqual((odd["source"], odd["source_label"]), ("adaptive", "Adaptive"))
+        self.assertIn("Owed to Suppliers, by the Ledger", odd["title"])
+        self.assertTrue(2 <= len(odd["what_to_do"]) <= 4)
+        self.assertNotIn("adaptive_anomaly:stock_value", recs)
+        # a figure a firing rule already speaks to is not said twice
+        self.assertNotIn("adaptive_anomaly:unmatched_receipts", recs)
+        # switched off: gone from the list
+        conf = engine.settings(REC_CODE)
+        conf["anomalies"] = False
+        engine.save_settings(REC_CODE, conf)
+        self.assertNotIn("adaptive_anomaly:ap_ledger", {r["id"] for r in engine.visible(REC_CODE)})
+
+    def test_snapshots_and_monthly_backfill(self):
+        from command_center.recommend import engine, metrics
+        from insights.compat import run_as
+        from insights.core.models import CommandCenterMetricPoint as MP
+        with run_as("Administrator"):
+            engine.refresh(REC_CODE)
+            engine.refresh(REC_CODE)                   # the same day: updated, not doubled
+        hist = metrics.history(REC_CODE)
+        self.assertEqual(hist["unmatched_receipts"], [(TODAY, 10000.0)])
+        self.assertEqual(hist["ar_ledger"][-1][1], 150000.0)
+        self.assertEqual(hist["slow_stock"][-1][0], TODAY)          # what the rule measured
+        months = dict(hist["revenue"])
+        last_month = (TODAY.replace(day=1) - dt.timedelta(days=1)).replace(day=1)
+        from insights.core.models import CommandCenterFactSalesInvoiceLine as SL
+        sold = sum(float(x.base_net_amount) for x in SL.objects.filter(
+            business_code=REC_CODE, src_docstatus=1, posting_date__gte=last_month,
+            posting_date__lt=TODAY.replace(day=1)))
+        self.assertGreaterEqual(sold, 35000)                        # Monitors 5,000 + Beds 30,000 at least
+        self.assertEqual(months[last_month], sold)
+        self.assertNotIn(TODAY.replace(day=1), months)             # the month still running
+        self.assertEqual(MP.objects.filter(metric="unmatched_receipts").count(), 1)
+        # a month with no sales inside the span is a real zero
+        self.assertIn(0.0, months.values())
+
+    # ------------------------------------------------------------------ feedback
+    def test_feedback_weights_decay_and_ranking(self):
+        from command_center.recommend import learning
+        from insights.compat import run_as
+        from insights.core.models import CommandCenterRecommendationFeedback as F
+        from command_center.recommend import engine
+        now = dt.datetime.now()
+        with run_as("Administrator"):
+            engine.refresh(REC_CODE)
+            shown = {r["id"]: r for r in engine.visible(REC_CODE)}
+        R = engine.DOCTYPE
+        import frappe
+        doc = frappe.get_doc(R, shown["credit_hold"]["name"])
+        with run_as("boss@test.com"):
+            for _ in range(3):
+                learning.record(doc, "not_relevant", {})
+        w = learning.weights(REC_CODE)["credit_hold"]
+        self.assertLess(w["weight"], 0.6)
+        self.assertGreaterEqual(w["weight"], learning.W_MIN)
+        self.assertGreater(w["sensitivity"], 1.25)
+        self.assertEqual(w["explain"], "Shown less prominently because managers marked it Not "
+                                       "Relevant 3 times in the last 30 days.")
+        # a month later they count half; past the horizon, not at all
+        F.objects.update(acted_on=now - dt.timedelta(days=30))
+        self.assertAlmostEqual(learning.weights(REC_CODE)["credit_hold"]["weight"], 1 - 0.45 / 2, 2)
+        F.objects.update(acted_on=now - dt.timedelta(days=130))
+        self.assertNotIn("credit_hold", learning.weights(REC_CODE))
+        # the weight is in the ranking: same money, lower weight, lower place
+        F.objects.update(acted_on=now)
+        with run_as("Administrator"):
+            engine.refresh(REC_CODE)
+        recs = {r["id"]: r for r in engine.visible(REC_CODE)}
+        ch = recs["credit_hold"]
+        self.assertAlmostEqual(ch["score"], ch["base_score"] * ch["learned"]["weight"], 1)
+        self.assertIn("Not Relevant 3 times", ch["learned"]["explain"])
+        self.assertEqual(recs["overdue_customers:Alpha Clinic"]["learned"]["weight"], 1.0)
+        self.assertEqual(learning.freshness(now - dt.timedelta(days=3)), 1.0)
+        self.assertEqual(learning.freshness(now - dt.timedelta(days=200)), 0.85)
+        # what Done is worth when the advice works
+        self.assertEqual(learning.judge(1000, 500, None, None, None, False), "Improved")
+        self.assertEqual(learning.judge(1000, 1200, None, None, None, False), "Worse")
+        self.assertEqual(learning.judge(1000, 980, None, None, None, False), "No Change")
+        self.assertEqual(learning.judge(1000, 1000, None, None, None, True), "Improved")
+        self.assertEqual(learning.judge(0, None, 30.0, 26.0, "down_bad", False), "Worse")
+        self.assertEqual(learning.judge(0, None, 30.0, 26.0, "up_bad", False), "Improved")
+        self.assertEqual(learning.judge(0, None, None, 26.0, "up_bad", False), "Unknown")
+
+    def test_outcomes_of_advice_marked_done(self):
+        from command_center.api import recommend as api
+        from command_center.recommend import engine, learning
+        from insights.compat import run_as
+        from insights.core.models import CommandCenterFactPartyBalance as PB
+        from insights.core.models import CommandCenterRecommendationFeedback as F
+        with run_as("boss@test.com"):
+            engine.refresh(REC_CODE)
+            shown = {r["id"]: r for r in engine.visible(REC_CODE)}
+            api.act(shown["unmatched_receipts"]["name"], "done")
+            api.act(shown["customers_in_credit"]["name"], "done")
+            f = F.objects.get(rule="unmatched_receipts")
+            self.assertEqual((f.action, float(f.money_at), float(f.value_at)), ("Done", 10000, 10000))
+            self.assertEqual(f.review_on, TODAY + dt.timedelta(days=14))
+            # nothing is judged before its date
+            self.assertEqual(learning.evaluate(REC_CODE), 0)
+            PB.objects.filter(party="Alpha Clinic").update(unmatched_payments=4000)
+            PB.objects.filter(party="Beta Hospital").update(in_credit=9000)
+            F.objects.update(review_on=TODAY - dt.timedelta(days=1))
+            engine.refresh(REC_CODE)                     # judges what is due
+        f = F.objects.get(rule="unmatched_receipts")
+        self.assertEqual(f.outcome, "Improved")
+        self.assertIn("GHS 10k when marked done, GHS 4k when checked", f.outcome_note)
+        self.assertEqual(F.objects.get(rule="customers_in_credit").outcome, "Worse")
+        w = learning.weights(REC_CODE)
+        self.assertGreater(w["unmatched_receipts"]["weight"], 1.0)
+        self.assertLess(w["customers_in_credit"]["weight"], 1.0)
+        self.assertIn("1 of 1 times it was done, the figure improved",
+                      w["unmatched_receipts"]["explain"])
+        # Recently Closed carries the outcome; What Worked sums the month
+        hist = {h["id"]: h for h in engine.history(REC_CODE)}
+        self.assertEqual(hist["unmatched_receipts"]["outcome"]["outcome"], "Improved")
+        got = self._call(self.manager, "current", business_code=REC_CODE).json()["message"]
+        ww = got["what_worked"]
+        self.assertEqual((ww["judged"], ww["improved"], ww["worse"]), (2, 1, 1))
+        self.assertEqual(ww["money_freed"], 6000)
+        self.assertIn("1 improved the figure, 1 got worse", ww["says"])
+        # the analyst sees source, why-now and outcomes
+        from command_center.ask import tools
+        with run_as("manager@test.com"):
+            rec = tools.run("current_recommendations", {}, REC_CODE)
+        self.assertTrue(all(r.get("source_label") for r in rec["recommendations"]))
+        self.assertEqual({o["outcome"] for o in rec["recent_outcomes"]}, {"Improved", "Worse"})
+
+    # ------------------------------------------------------------------ the AI review
+    def _claude(self, replies):
+        import frappe
+        fake = _FakeAnthropic(replies)
+        frappe.conf["command_center_anthropic_key"] = "test-key-not-real"
+        self.addCleanup(frappe.conf.pop, "command_center_anthropic_key", None)
+        for p in (mock.patch("command_center.ask.claude._client", lambda: fake),
+                  mock.patch("command_center.ask.llm.provider", lambda: "claude")):
+            p.start()
+            self.addCleanup(p.stop)
+        return fake
+
+    def test_ai_review_validation_storage_and_metering(self):
+        import frappe
+        from command_center.recommend import engine, review
+        from insights.compat import run_as
+        from insights.core.models import CommandCenterRecommendation as R, UsageEvent
+        fake = self._claude([])
+        self.assertTrue(engine.settings(REC_CODE)["ai_review"])       # on: a key exists
+        with run_as("Administrator"):
+            engine.refresh(REC_CODE)
+            p, refs = review.pack(REC_CODE)
+        f1, f2 = p["findings"][0], p["findings"][1]
+        self.assertTrue(p["figures"])
+        good = {"key": "cash_squeeze", "title": "Hold supplier payments to what customers pay.",
+                "why": f"{f1['title']} {f2['title']} Together {f1['money_text']} is at risk.",
+                "evidence": ["F1", "F2"], "steps": ["Agree this week which bills are paid first.",
+                                                    "Call the largest late customer today."],
+                "owner": "Finance", "timeframe": "This Week", "money_at_stake": f1["money"],
+                "confidence": "high", "area": "cash"}
+        reply = {"patterns": [{"title": "Cash in and out", "explanation": "F1 and F2 meet.",
+                               "evidence": ["F1", "F2"]}],
+                 "recommendations": [
+                     good,
+                     {**good, "key": "invented", "why": "Pay GHS 999,999 now."},
+                     {**good, "key": "unknown", "evidence": ["F1", "Z9"]},
+                     {**good, "key": "single", "evidence": ["F1"]},
+                     {**good, "key": "made_up_money", "money_at_stake": 123.45}],
+                 "priorities": [{"finding": "F2", "rank": 1, "reason": "The largest risk."},
+                                {"finding": "F99", "rank": 2, "reason": "Unknown."}]}
+        fake.replies.append(_Reply(text=json.dumps(reply), usage=(6000, 3000, 0, 0)))
+        with run_as("Administrator"):
+            out = review.review(REC_CODE)
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(out["accepted"], 1)
+        why = {r["title"]: r["why"] for r in out["rejected"]}
+        reasons = " | ".join(r["why"] for r in out["rejected"])
+        self.assertIn("999999", reasons)
+        self.assertIn("not in the pack: Z9", reasons)
+        self.assertIn("one piece of evidence", reasons)
+        self.assertIn("money at stake is not one of the amounts", reasons)
+        self.assertEqual(len(why), 1)                      # all four share the good title
+        self.assertEqual(len(out["rejected"]), 4)
+        # what was sent: tool-free, JSON schema, cached instructions, the configured model
+        body = fake.sent[0]
+        from command_center.ask import claude
+        self.assertEqual(body["model"], claude.model_for("analyst"))
+        self.assertNotIn("tools", body)
+        self.assertEqual(body["output_config"]["format"]["type"], "json_schema")
+        self.assertIn("cache_control", body["system"][0])
+        self.assertIn("Use only numbers that appear in the pack", body["system"][0]["text"])
+        self.assertNotIn(str(TODAY), body["system"][0]["text"])  # the fixed part never changes
+        # stored as AI-found, with its evidence, in the same lifecycle
+        row = R.objects.get(rule="ai_review")
+        rec = json.loads(row.payload)
+        self.assertEqual((rec["source"], rec["source_label"]), ("ai", "AI-found"))
+        self.assertEqual([e["key"] for e in rec["evidence"]], ["F1", "F2"])
+        self.assertEqual(rec["evidence"][0]["text"], f1["title"])
+        shown = {r["id"]: r for r in engine.visible(REC_CODE)}
+        self.assertIn("ai_review:cash_squeeze", shown)
+        self.assertEqual(shown[refs["F2"]["rec_key"]]["ai_priority"]["rank"], 1)
+        self.assertEqual(self._call(self.manager, "act", name=row.name, action="snooze",
+                                    days=7).status_code, 200)
+        # metered once, as an AI review, with its tokens
+        ev = UsageEvent.objects.get(meter="ai_review")
+        self.assertEqual((ev.quantity, ev.input_tokens, ev.output_tokens), (1, 6000, 3000))
+        # one a day: a second run sends nothing
+        with run_as("Administrator"):
+            again = review.review(REC_CODE)
+        self.assertIn("Already reviewed today", again["skipped"])
+        self.assertEqual(len(fake.sent), 1)
+        # the next day's review does not propose it again: closed
+        st = review.state(REC_CODE)
+        st["date"] = str(TODAY - dt.timedelta(days=1))
+        review._put(REC_CODE, st)
+        fake.replies.append(_Reply(text=json.dumps({"patterns": [], "recommendations": [],
+                                                    "priorities": []})))
+        with run_as("Administrator"):
+            self.assertTrue(review.review(REC_CODE)["ok"])
+        self.assertEqual(R.objects.get(rule="ai_review").status, "Resolved")
+        # a reply that is not JSON: nothing stored, the reason kept
+        st = review.state(REC_CODE)
+        st["date"] = str(TODAY - dt.timedelta(days=1))
+        review._put(REC_CODE, st)
+        fake.replies.append(_Reply(text="Here are my thoughts."))
+        with run_as("Administrator"):
+            bad = review.review(REC_CODE)
+        self.assertEqual(bad["accepted"], 0)
+        self.assertIn("not the JSON", bad["rejected"][0]["why"])
+        self.assertEqual(frappe.db.count(engine.DOCTYPE, {"rule": "ai_review"}), 1)
+
+    def test_ai_review_switched_off_lapsed_and_without_key(self):
+        import frappe
+        from command_center.recommend import engine, review
+        from insights.compat import run_as
+        fake = self._claude([])
+        conf = engine.settings(REC_CODE)
+        conf["ai_review"], conf["ai_review_set"] = False, True
+        engine.save_settings(REC_CODE, conf)
+        with run_as("Administrator"):
+            self.assertIn("switched off", review.review(REC_CODE)["error"])
+            review.run_reviews()
+        self.assertEqual(fake.sent, [])
+        self.assertFalse(engine.settings(REC_CODE)["ai_review"])     # the choice is kept
+        # back to the default: on while a key exists, off without one
+        conf = engine.settings(REC_CODE)
+        conf["ai_review_set"] = False
+        engine.save_settings(REC_CODE, conf)
+        self.assertTrue(engine.settings(REC_CODE)["ai_review"])
+        frappe.conf.pop("command_center_anthropic_key")
+        self.assertFalse(engine.settings(REC_CODE)["ai_review"])
+        frappe.conf["command_center_anthropic_key"] = "test-key-not-real"
+        # a lapsed licence: skipped, with the reason
+        r = self.admin.post("/api/method/insights.core.plans.save_customer", json.dumps({
+            "name": "Test Group", "licensed_to": "Test Group Ltd", "plan": "essentials",
+            "businesses": [REC_CODE], "grace_days": 30,
+            "renewal_date": (TODAY - dt.timedelta(days=40)).isoformat()}),
+            content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        with run_as("Administrator"):
+            out = review.review(REC_CODE)
+        self.assertIn("Skipped", out["error"])
+        self.assertEqual(fake.sent, [])
+        self.assertIn("Skipped", review.state(REC_CODE)["error"])
+
+    # ------------------------------------------------------------------ access
+    def test_access_and_settings(self):
+        for fn in ("run_review_now",):
+            r = self.manager.post(f"/api/method/insights.core.platform_settings.{fn}", "{}",
+                                  content_type="application/json")
+            self.assertEqual(r.status_code, 403, fn)
+        self.assertEqual(self._call(Client(), "current").status_code, 401)
+        view = self._ok_settings("recommendations", business_code=REC_CODE)
+        self.assertFalse(view["ai_review"])                  # no Claude key in this test
+        self.assertIn("One Claude request per business per day", view["ai_review_cost"])
+        self.assertTrue(view["anomalies"])
+        figs = {f["key"]: f for f in view["learning"]["figures"]}
+        self.assertEqual(figs["unmatched_receipts"]["status"], "learning")
+        self.assertIn("Learning: needs", figs["unmatched_receipts"]["says"])
+        self.assertIn("No recommendation marked done", view["learning"]["what_worked"]["says"])
+        r = self.admin.post("/api/method/insights.core.platform_settings.run_review_now",
+                            json.dumps({"business_code": REC_CODE}), content_type="application/json")
+        self.assertEqual(r.status_code, 417)                 # switched off: say so
+        view = self._ok_settings("set_recommendations", business_code=REC_CODE, ai_review=1,
+                                 anomalies=0)
+        self.assertTrue(view["ai_review"])
+        self.assertFalse(view["anomalies"])
+        whats = " | ".join(c["what"] for c in self._ok_settings("changes"))
+        self.assertIn("daily AI review on", whats)
+        self.assertIn("unusual movements off", whats)

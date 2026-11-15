@@ -321,17 +321,21 @@ def get_figures(keys, business_code=None):
 
 def current_recommendations(business_code=None):
     """The platform's current recommendations for the business, ranked by money at stake
-    times urgency -- the same list as Home's Top actions. Reads only."""
+    times urgency times what managers' decisions taught -- the same list as Home's Top
+    actions -- each with its source (Rule, Adaptive, AI-found), why now, its usual range
+    and learned weight where known; and the outcomes of advice already marked done.
+    Reads only."""
     from command_center.recommend import engine
     if business_code and business_code != "__all__":
         codes = [business_code]
     else:
         from command_center.api.businesses import loaded_codes
         codes = loaded_codes()
-    out = {"recommendations": [], "total": 0}
+    out = {"recommendations": [], "total": 0, "recent_outcomes": []}
     for code in codes:
         got = engine.snapshot(code)
         out["recommendations"] += got["recommendations"]
+        out["recent_outcomes"] += got.get("recent_outcomes") or []
         out["total"] += got["total"]
         out["worked_out"] = got["worked_out"]
     out["recommendations"].sort(key=lambda r: -(r.get("money_at_stake") or 0))
@@ -875,9 +879,13 @@ TOOLS = {
         "current_recommendations",
         "The platform's current recommendations for this business -- what its figures say "
         "is worth doing, ranked by money at stake: each with its title, the evidence, the "
-        "steps, the money at stake, the area and who would act. First choice for 'what "
-        "should I focus on', 'what needs my attention', 'where are we losing money', "
-        "'what should we do'. The same list as the screens' Top actions.")),
+        "steps, the money at stake, the area and who would act; its source (Rule, "
+        "Adaptive -- judged against the business's own usual range -- or AI-found by the "
+        "daily review, with its evidence), why now, and the learned weight; and the "
+        "outcomes of advice already marked done (improved, no change, worse). First "
+        "choice for 'what should I focus on', 'what needs my attention', 'where are we "
+        "losing money', 'what should we do', 'did it work'. The same list as the screens' "
+        "Top actions.")),
     "find": (find, _decl(
         "find",
         "Look up customers, suppliers, items or warehouses by name or part of a name, to get "

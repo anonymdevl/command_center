@@ -62,3 +62,15 @@
 .st-rec-params input{width:120px;font:inherit;font-size:var(--fs-sm);color:var(--ink);background:var(--bg);
  border:1px solid var(--line2);border-radius:var(--r-sm);padding:6px 10px}
 .st-rec-params input:disabled{opacity:.5}
+.st-rec-params select{width:120px;font:inherit;font-size:var(--fs-sm);color:var(--ink);background:var(--bg);
+ border:1px solid var(--line2);border-radius:var(--r-sm);padding:6px 8px}
+.st-rec-params select:disabled{opacity:.5}
+.st-rec .st-sub{display:block;margin-top:6px}
+.st-rec-h{margin:var(--sp-4) 0 var(--sp-2);font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--ink)}
+.st-rec-list{margin:var(--sp-2) 0 0 18px;padding:0;font-size:var(--fs-sm);color:var(--ink2);line-height:1.55}
+.st-rec-list li{margin:3px 0}
+.st-rec-worked{margin:0 0 var(--sp-3)}
+.st-rec td{white-space:normal}
+.st-rec .st-rec-flag{color:var(--high)}
+@media (max-width:560px){.st-rec-params label{min-width:0;flex:1 1 100%}
+ .st-rec-params input,.st-rec-params select{width:100%}}

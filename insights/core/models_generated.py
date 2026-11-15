@@ -478,6 +478,22 @@ class CommandCenterLoadLog(DocModel):
         verbose_name_plural = "Command Center Load Log"
 
 
+class CommandCenterMetricPoint(DocModel):
+    business_code = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    metric = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    grain = models.CharField(max_length=140, null=True, blank=True, default="day")
+    period = models.DateField(null=True, blank=True)
+    value = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    source = models.CharField(max_length=140, null=True, blank=True)
+    captured_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "tabCommand Center Metric Point"
+        verbose_name = "Command Center Metric Point"
+        verbose_name_plural = "Command Center Metric Point"
+        indexes = [models.Index(fields=['business_code', 'metric', 'grain', 'period'], name="ix_terMetricPoint_busine_metri")]
+
+
 class CommandCenterRecommendation(DocModel):
     business_code = models.CharField(max_length=140, null=True, blank=True, db_index=True)
     rec_key = models.CharField(max_length=140, null=True, blank=True, db_index=True)
@@ -501,6 +517,33 @@ class CommandCenterRecommendation(DocModel):
         db_table = "tabCommand Center Recommendation"
         verbose_name = "Command Center Recommendation"
         verbose_name_plural = "Command Center Recommendation"
+
+
+class CommandCenterRecommendationFeedback(DocModel):
+    business_code = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    recommendation = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    rec_key = models.CharField(max_length=140, null=True, blank=True)
+    rule = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    source = models.CharField(max_length=140, null=True, blank=True)
+    action = models.CharField(max_length=140, null=True, blank=True)
+    acted_by = models.CharField(max_length=140, null=True, blank=True)
+    acted_on = models.DateTimeField(null=True, blank=True, db_index=True)
+    title = models.CharField(max_length=255, null=True, blank=True)
+    metric = models.CharField(max_length=140, null=True, blank=True)
+    value_at = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    money_at = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    review_on = models.DateField(null=True, blank=True)
+    outcome = models.CharField(max_length=140, null=True, blank=True)
+    value_after = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    money_after = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    outcome_on = models.DateTimeField(null=True, blank=True)
+    outcome_note = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = "tabCommand Center Recommendation Feedback"
+        verbose_name = "Command Center Recommendation Feedback"
+        verbose_name_plural = "Command Center Recommendation Feedback"
+        indexes = [models.Index(fields=['business_code', 'rule', 'acted_on'], name="ix_dationFeedback_busine_rule_")]
 
 
 class CommandCenterReportSchedule(DocModel):
@@ -578,7 +621,9 @@ DOCTYPE_MODELS = {
     "Command Center Fact Task": CommandCenterFactTask,
     "Command Center Ingest State": CommandCenterIngestState,
     "Command Center Load Log": CommandCenterLoadLog,
+    "Command Center Metric Point": CommandCenterMetricPoint,
     "Command Center Recommendation": CommandCenterRecommendation,
+    "Command Center Recommendation Feedback": CommandCenterRecommendationFeedback,
     "Command Center Report Schedule": CommandCenterReportSchedule,
     "Command Center Site Credential": CommandCenterSiteCredential,
     "Connected Business": ConnectedBusiness,

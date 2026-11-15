@@ -111,6 +111,9 @@ scheduler_events = {
         "*/15 * * * *": ["command_center.api.sso.sync_members"],
         # Recommendations, once a day per business: the Daily Brief by Claude (only where
         # an administrator switched it on), then the email digest to the managers.
+        # Before them, at 06:15 once the morning's loads have settled, the daily AI review
+        # (one Claude request per business where it is on; recommend/review.py).
+        "15 6 * * *": ["command_center.recommend.review.run_reviews"],
         "30 6 * * *": ["command_center.recommend.daily.write_briefs"],
         "0 7 * * *": ["command_center.recommend.daily.send_digests"],
     },

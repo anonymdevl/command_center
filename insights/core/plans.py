@@ -61,6 +61,7 @@ METERS = [
     ("ai_reports", "AI Reports", "count", "report"),
     ("scheduled_reports", "Scheduled Reports Sent", "count", "report"),
     ("daily_briefs", "Daily Briefs", "count", "brief"),
+    ("ai_review", "AI Reviews", "count", "review"),
     ("seats", "User Seats", "peak", "seat"),
     ("businesses", "Connected Businesses", "peak", "business"),
 ]
@@ -68,7 +69,7 @@ METER = {m[0]: m for m in METERS}
 # Tokens spent outside a billable event (a connection check, anything new that calls
 # Claude without saying what for): on record with their cost, never counted as an event.
 TOKENS_ONLY = "ai_tokens"
-AI_METERS = ("ai_questions", "ai_reports", "scheduled_reports", "daily_briefs")
+AI_METERS = ("ai_questions", "ai_reports", "scheduled_reports", "daily_briefs", "ai_review")
 
 STATE_WORDS = {"active": "Active", "due": "Due Soon", "grace": "In Grace", "lapsed": "Lapsed"}
 
@@ -79,7 +80,7 @@ PLANS = {
         "name": "Essentials", "order": 1,
         "summary": "For one business and a small management team.",
         "limits": {"ai_questions": 200, "ai_reports": 4, "scheduled_reports": 4,
-                   "daily_briefs": None, "seats": 5, "businesses": 1},
+                   "daily_briefs": None, "ai_review": None, "seats": 5, "businesses": 1},
         "refresh": "Every 15 minutes", "support": "Email, next business day",
         "features": ["All nineteen management screens", "AI analyst questions in plain English",
                      "AI-written management reports", "Alerts and daily recommendations",
@@ -88,7 +89,7 @@ PLANS = {
         "name": "Professional", "order": 2,
         "summary": "For a growing group with several businesses.",
         "limits": {"ai_questions": 1000, "ai_reports": 20, "scheduled_reports": 20,
-                   "daily_briefs": None, "seats": 15, "businesses": 3},
+                   "daily_briefs": None, "ai_review": None, "seats": 15, "businesses": 3},
         "refresh": "Every 15 minutes", "support": "Email and phone, same business day",
         "features": ["Everything in Essentials", "Several businesses, and all of them together",
                      "Reports scheduled and sent by email", "The Daily Brief, written by the AI",
@@ -97,7 +98,7 @@ PLANS = {
         "name": "Enterprise", "order": 3,
         "summary": "For larger teams that rely on the platform every day.",
         "limits": {"ai_questions": 5000, "ai_reports": 100, "scheduled_reports": 100,
-                   "daily_briefs": None, "seats": 50, "businesses": 10},
+                   "daily_briefs": None, "ai_review": None, "seats": 50, "businesses": 10},
         "refresh": "Every 15 minutes", "support": "Priority, with a named contact",
         "features": ["Everything in Professional", "The largest allowances",
                      "Priority support with a named contact", "Help setting up reports and rules"]},

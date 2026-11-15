@@ -7,12 +7,20 @@
  * in ERPNext; Ask AI asks the analyst; Done, Not Relevant (with a reason, optional) and
  * Snooze 7 or 30 days are remembered on the server. Built as DOM in the designed
  * classes, never as HTML from the server.
+ *
+ * The adaptive layer (recommend/adaptive.py, learning.py, review.py) adds to each card:
+ * its source (Rule, Adaptive -- judged against the business's own usual range -- or
+ * AI-found by the daily review), "why now", a small chart of the figure with its usual
+ * band, and under What To Do the learned weight and why, the threshold it ran with and,
+ * for an AI-found one, the evidence it rests on. Recently Closed says what came of
+ * advice marked done; the Executive Summary ends with What Worked.
  */
 
 import { api } from "../api/client.js";
 import { count, money } from "../format.js";
 import { menu } from "./actions.js";
 import { guideBox } from "./guide.js";
+import { sparkline } from "./spark.js";
 
 export const REC_VIEWS = new Set(["command", "brief"]);
 const WORDS = { crit: "Critical", high: "High", med: "Medium", info: "For information" };
@@ -50,6 +58,7 @@ export function renderRecs(root, view, data, { onOpen } = {}) {
       data.history.forEach((h) => ul.append(el("li", null, `${h.title} — ${closed(h)}`)));
       list.append(ul);
     }
+    if (data.what_worked) list.append(worked(data.what_worked));
   }
   if (data.unreachable || (data.failed || []).length) {
     list.append(el("div", "rec-done", data.unreachable
@@ -82,9 +91,29 @@ function empty(data) {
 
 function closed(h) {
   if (h.status === "Not Relevant") return `marked not relevant${h.reason ? `: ${h.reason}` : ""}`;
-  if (h.status === "Done") return "marked done";
-  return h.acted_by ? "cleared after it was marked done" : "cleared in the data";
+  const o = h.outcome;
+  const checked = o?.outcome
+    ? `; checked: ${OUTCOME[o.outcome] || o.outcome}${o.note ? ` (${o.note})` : ""}`
+    : o?.review_on ? `; checked again on ${o.review_on}` : "";
+  if (h.status === "Done") return `marked done${checked}`;
+  return (h.acted_by ? "cleared after it was marked done" : "cleared in the data") + checked;
 }
+
+const OUTCOME = { Improved: "improved", "No Change": "no change", Worse: "got worse", Unknown: "not enough history to judge" };
+
+/** What Worked: a month of advice marked done, and what came of it (learning.what_worked). */
+function worked(w) {
+  const box = el("div", "rec-worked");
+  box.append(el("b", null, `What Worked${w.period ? ` — ${w.period}` : ""}`), el("p", null, w.says || ""));
+  if ((w.rules || []).length) {
+    const ul = el("ul");
+    w.rules.forEach((r) => ul.append(el("li", null, `${r.title}: improved ${r.improved} of ${r.judged}`)));
+    box.append(ul);
+  }
+  return box;
+}
+
+const ORDINAL = ["", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"];
 
 function brief(root, b) {
   const box = root.querySelector("#rec-brief");
@@ -114,8 +143,19 @@ function card(r, onOpen) {
   const row = el("div", "arow");
   const body = el("div");
   body.append(el("span", "asev", WORDS[r.severity] || r.severity),
-    el("span", "asev rec-area-tag", r.area_label || ""),
-    el("div", "awhat", r.title), el("div", "awhy", r.why || ""));
+    el("span", "asev rec-area-tag", r.area_label || ""));
+  if (r.source_label) {
+    const src = el("span", `asev rec-src rec-src-${r.source || "rule"}`, r.source_label);
+    if (r.learned?.explain) src.title = r.learned.explain;
+    body.append(src);
+  }
+  if (r.timeframe) body.append(el("span", "asev rec-area-tag", r.timeframe));
+  body.append(el("div", "awhat", r.title), el("div", "awhy", r.why || ""));
+  if (r.why_now) body.append(el("div", "rec-why-now", `Why now: ${r.why_now}`));
+  if (r.ai_priority?.reason) {
+    const nth = ORDINAL[r.ai_priority.rank] || `number ${r.ai_priority.rank}`;
+    body.append(el("div", "rec-why-now", `The daily AI review puts this ${nth} today: ${r.ai_priority.reason}`));
+  }
   if (r.reopened_after_done) {
     body.append(el("div", "asw", `→ Marked done on ${r.reopened_after_done}, and the figures still show it.`));
   } else if (r.what_to_do?.length) {
@@ -123,7 +163,13 @@ function card(r, onOpen) {
   }
   row.append(body);
   const fig = figure(r);
-  if (fig) row.append(fig);
+  const chart = r.baseline?.chart ? sparkline(r.baseline.chart, r.baseline.says) : null;
+  if (fig || chart) {
+    const side = el("div", "rec-side");
+    if (fig) side.append(fig);
+    if (chart) side.append(chart);
+    row.append(side);
+  }
   c.append(row);
 
   const steps = el("div", "rec-steps");
@@ -132,6 +178,7 @@ function card(r, onOpen) {
   (r.what_to_do || []).forEach((s) => ol.append(el("li", null, s)));
   steps.append(ol);
   if (r.how_in_erpnext) steps.append(guideBox(r.how_in_erpnext, { compact: true }));
+  steps.append(...learnedNotes(r));
   c.append(steps);
 
   const meta = el("div", "ameta");
@@ -164,6 +211,34 @@ function card(r, onOpen) {
   );
   c.append(acts);
   return c;
+}
+
+/** Under What To Do: the evidence (AI-found), the usual range, the threshold, the weight. */
+function learnedNotes(r) {
+  const out = [];
+  if ((r.evidence || []).length) {
+    const box = el("div", "rec-learned");
+    box.append(el("b", null, "The Evidence It Rests On"));
+    const ul = el("ul");
+    r.evidence.forEach((e) => ul.append(el("li", null, e.text)));
+    box.append(ul);
+    if (r.confidence) box.append(el("p", null, `Confidence: ${r.confidence}. Found by the daily AI review; every figure in it was checked against the evidence.`));
+    out.push(box);
+  }
+  const lines = [];
+  if (r.baseline?.says) lines.push([r.baseline.label || "The Figure", r.baseline.says]);
+  if (r.threshold?.says) lines.push(["Threshold", r.threshold.says]);
+  if (r.learned?.explain) lines.push(["Why It Ranks Here", r.learned.explain]);
+  if (lines.length) {
+    const box = el("div", "rec-learned");
+    lines.forEach(([k, v]) => {
+      const p = el("p");
+      p.append(el("b", null, `${k}: `), document.createTextNode(v));
+      box.append(p);
+    });
+    out.push(box);
+  }
+  return out;
 }
 
 function figure(r) {

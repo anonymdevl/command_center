@@ -1,0 +1,186 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-15 00:00:00.000000",
+ "description": "A manager's decision about a recommendation, and -- for Done -- whether the figure improved afterwards (command_center.recommend.learning). Feeds the rule's learned weight.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "business_code",
+  "recommendation",
+  "rec_key",
+  "rule",
+  "source",
+  "action",
+  "acted_by",
+  "acted_on",
+  "title",
+  "col1",
+  "metric",
+  "value_at",
+  "money_at",
+  "review_on",
+  "outcome",
+  "value_after",
+  "money_after",
+  "outcome_on",
+  "outcome_note"
+ ],
+ "fields": [
+  {
+   "fieldname": "business_code",
+   "fieldtype": "Data",
+   "label": "Business",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "recommendation",
+   "fieldtype": "Data",
+   "label": "Recommendation",
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "rec_key",
+   "fieldtype": "Data",
+   "label": "Key",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rule",
+   "fieldtype": "Data",
+   "label": "Rule",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Data",
+   "label": "Source",
+   "read_only": 1
+  },
+  {
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "label": "Decision",
+   "options": "Done\nNot Relevant\nSnoozed\nReopened",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "acted_by",
+   "fieldtype": "Data",
+   "label": "Decided by",
+   "read_only": 1
+  },
+  {
+   "fieldname": "acted_on",
+   "fieldtype": "Datetime",
+   "label": "Decided on",
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "length": 255,
+   "read_only": 1
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "metric",
+   "fieldtype": "Data",
+   "label": "Figure watched",
+   "read_only": 1
+  },
+  {
+   "fieldname": "value_at",
+   "fieldtype": "Float",
+   "label": "Figure when decided",
+   "read_only": 1
+  },
+  {
+   "fieldname": "money_at",
+   "fieldtype": "Currency",
+   "label": "At stake when decided",
+   "read_only": 1
+  },
+  {
+   "fieldname": "review_on",
+   "fieldtype": "Date",
+   "label": "Checked again on",
+   "read_only": 1
+  },
+  {
+   "fieldname": "outcome",
+   "fieldtype": "Select",
+   "label": "Outcome",
+   "options": "\nImproved\nNo Change\nWorse\nUnknown",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "value_after",
+   "fieldtype": "Float",
+   "label": "Figure when checked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "money_after",
+   "fieldtype": "Currency",
+   "label": "At stake when checked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "outcome_on",
+   "fieldtype": "Datetime",
+   "label": "Checked on",
+   "read_only": 1
+  },
+  {
+   "fieldname": "outcome_note",
+   "fieldtype": "Small Text",
+   "label": "What happened",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Recommendation Feedback",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Insights Dashboard Manager",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "autoname": "hash",
+ "in_create": 1
+}
