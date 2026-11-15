@@ -159,4 +159,4 @@ echo "   Open it from your own computer through a tunnel (nothing is exposed pub
 echo "     ssh -L $PORT:127.0.0.1:$PORT $(id -un)@<this server>"
 echo "     then http://localhost:$PORT/command-center-login"
 echo "   Administration (businesses, people, error log): http://localhost:$PORT/admin/"
-echo "   With a domain later: deploy/nginx.conf.example, then certbot."
+echo "   With a domain: ./deploy/domain.sh <domain> <your email> (nginx + HTTPS)."

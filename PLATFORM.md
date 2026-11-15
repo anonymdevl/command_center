@@ -46,10 +46,15 @@ Then:
 - the platform: http://localhost:8200/command-center-login
 - administration: http://localhost:8200/admin/
 
-With a domain later:
-1. Use `deploy/nginx.conf.example` and get a certificate with certbot.
-2. In `insights.json`, set `allowed_hosts` to the domain and `secure_cookies` to `true`.
-3. Restart.
+With a domain (its DNS pointing at this server), one command puts it on HTTPS:
+
+```bash
+./deploy/domain.sh insights.ultrasoft-systems.com you@ultrasoft-systems.com
+```
+
+It adds an nginx site for that name only (no other site or bench is touched), gets a
+Let's Encrypt certificate that renews on its own, redirects http to https, sets the
+platform's address in `insights.json` and restarts it. The tunnel keeps working too.
 
 ## Everyday tasks
 
@@ -78,5 +83,4 @@ It also checks that the generated models match the doctype JSON and that migrati
 - **The Settings page:** the designed screen for businesses, people and keys. Until then, the admin covers it.
 - **Approvals and delegation from the platform:** these work with each manager's own ERPNext key, linked in Admin → Site credentials.
 - **Agent mode** (Claude proposing actions you confirm).
-- **A domain and HTTPS.**
 - **Sign-in wording:** the sign-in page still mentions ERPNext in its error messages.
