@@ -43,7 +43,7 @@ _FIGURE = re.compile(r"\d[\d,]*(?:\.\d+)?\s*(?:%|[kKMB]\b)|\b(?:GHS|USD|EUR|GBP)
 
 def answer(question: str, business_code: str | None = None, history=None,
            max_steps: int = MAX_STEPS, on_step=None, deadline: int = DEADLINE,
-           resume: dict | None = None, deep: bool = False) -> dict | None:
+           resume: dict | None = None, deep: bool = False, should_stop=None) -> dict | None:
     """max_steps: rounds of tool use. A question gets twelve; a report (api/reports.py)
     gathers across every area and gets more. on_step(text) is told each lookup, in plain
     words, as it starts -- the live "what it is doing" under the question bar.
@@ -54,7 +54,13 @@ def answer(question: str, business_code: str | None = None, history=None,
     look further -- comes back with cut_short and _resume for that purpose.
 
     deep: the deeper look and the reports, which run on the provider's deeper model
-    (Claude Opus rather than Sonnet; Gemini has one model for both)."""
+    (Claude Opus rather than Sonnet; Gemini has one model for both).
+
+    should_stop(): true once the person has pressed Stop (api/ask.py keeps the flag in
+    the cache). It is asked between rounds and before each lookup -- a model call
+    already under way is not interrupted -- and a stopped question ends at once, with
+    no further model call, in a partial answer built from what had been gathered.
+    Unset, api/ask.py's flag for this request is read from frappe.local."""
     ad = _adapter(deep)
     if ad is None:
         return {"answered": False, "analyst_error": "no AI model is configured on this site"}
@@ -68,6 +74,18 @@ def answer(question: str, business_code: str | None = None, history=None,
         checked = []
     errors, drill = [], None
     text, steps, cut_short, snapshot = None, 0, False, None
+    should_stop = should_stop or getattr(frappe.local, "cc_should_stop", None)
+    stopped, gathered, drafts = False, [], []
+
+    def halted():
+        nonlocal stopped
+        if not stopped and should_stop:
+            try:
+                stopped = bool(should_stop())
+            except Exception:
+                pass  # a flag that cannot be read never stops an answer
+        return stopped
+
     force = None  # "ANY" when the model must look something up this round (Gemini only)
     writes_before = _writes()
     import time
@@ -92,6 +110,8 @@ def answer(question: str, business_code: str | None = None, history=None,
         return int(max(5, min(call_cap, left() - 3)))
 
     for steps in range(1, max_steps + 2):
+        if halted():
+            break
         remaining = left()
         if remaining < 8:
             # Not even time to ask for an answer: stop, and say so.
@@ -139,6 +159,11 @@ def answer(question: str, business_code: str | None = None, history=None,
                 force, text = "ANY", None
                 continue
             break
+        if halted():
+            # Stopped while the model was choosing its next lookups: they are not run.
+            drafts.append(ad.text(reply))
+            break
+        drafts.append(ad.text(reply))  # words written alongside the lookups, if any
 
         results = []
         # Every call gets a result, in order: both providers refuse the next turn if a
@@ -152,6 +177,8 @@ def answer(question: str, business_code: str | None = None, history=None,
             # A lookup started with too little time left would run past the deadline, and
             # an ERPNext report can take a minute on its own.
             need = 45 if name == "run_report" else 12
+            if halted():
+                break
             if left() < need:
                 results.append((call_id, name, {
                     "error": "Out of time for more lookups. Answer from what you have, and "
@@ -159,15 +186,17 @@ def answer(question: str, business_code: str | None = None, history=None,
                 continue
             if on_step:
                 try:
-                    on_step(tools.describe(name, args))
+                    on_step(tools.step(name, args))
                 except Exception:
                     pass  # progress is a courtesy; it never stops an answer
             try:
                 with _statement_limit(max(3, min(25, int(left() - 8)))):
                     result = tools.run(name, args, business_code)
                 checked.append(tools.summary(name, args))
-                if name in ("query_data", "list_records") and isinstance(result, dict):
+                if name in ("query_data", "list_records", "compare_periods") \
+                        and isinstance(result, dict) and result.get("data_set"):
                     drill = {"fact": result.get("data_set"), "filters": result.get("filters")}
+                gathered.append((name, result))
             except tools.ToolError as e:
                 result = {"error": str(e)}
                 checked.append(tools.summary(name, args) + " -- refused: " + str(e)[:120])
@@ -177,6 +206,8 @@ def answer(question: str, business_code: str | None = None, history=None,
                                    "say the figure could not be checked."}
                 checked.append(tools.summary(name, args) + " -- failed")
             results.append((call_id, name, _fit(result)))
+        if stopped:
+            break
         contents.append(ad.results(results))
 
     frappe.local.cc_deadline = None
@@ -191,6 +222,8 @@ def answer(question: str, business_code: str | None = None, history=None,
     for e in errors:
         frappe.log_error(title="Command Center analyst", message=f"Q: {question}\n\n{e}")
 
+    if stopped and not text:
+        text = _partial(drafts, gathered)
     if not text:
         # Not None: engine.py falls back to the patterns, and says why the analyst
         # did not answer instead of letting the fallback pass for the analyst.
@@ -211,10 +244,51 @@ def answer(question: str, business_code: str | None = None, history=None,
         "records": drill,
         "figures": [],
         "degraded": errors or None,
-        "cut_short": cut_short,
+        "cut_short": cut_short and not stopped,
+        "stopped": stopped or None,
         "_resume": ({"contents": snapshot, "checked": checked, "provider": ad.name}
-                    if cut_short else None),
+                    if cut_short and not stopped else None),
     }
+
+
+STOPPED = "Stopped — here is what I had so far."
+
+
+def _partial(drafts: list, gathered: list) -> str:
+    """The answer to a question stopped part-way: no further model call, only what was
+    already in hand -- anything the model had written, and the figures its lookups had
+    returned, stated exactly as the tools gave them."""
+    from command_center.kpi.engine import _plain
+
+    lines = []
+    for name, res in gathered:
+        if not isinstance(res, dict) or res.get("error"):
+            continue
+        if name == "get_figures":
+            for f in res.values():
+                if isinstance(f, dict) and f.get("value") is not None and f.get("unit"):
+                    lines.append(f"- {f.get('label')}: {_plain(f)}"
+                                 + (f" ({f['note']})" if f.get("note") else ""))
+        elif name == "compare_periods" and res.get("current"):
+            cur, old = res["current"], res.get("earlier") or {}
+            pct = res.get("change_pct")
+            lines.append(f"- {res.get('what')}: {cur.get('text', cur.get('value'))} in "
+                         f"{cur.get('period')}, against {old.get('text', old.get('value'))} "
+                         f"in {old.get('period')}"
+                         + (f" ({pct:+.1f}%)" if isinstance(pct, (int, float)) else ""))
+    said = "\n\n".join(d for d in drafts if d).strip()
+    out = [f"**{STOPPED}**"]
+    if said:
+        out.append(said)
+    if lines:
+        out.append("Figures it had read:\n" + "\n".join(lines))
+    if not said and not lines:
+        out.append("It stopped before it had found anything worth reporting. "
+                   + ("The lookups it made are listed under what it checked."
+                      if gathered else "Nothing had been looked up yet."))
+    else:
+        out.append("This is incomplete: it stopped before it could finish working it out.")
+    return "\n\n".join(out)
 
 
 ANSWER_NOW = ("Answer now from what you have gathered. If it is incomplete, say what you "
@@ -411,11 +485,19 @@ def _system_parts(business_code) -> tuple:
         for f in FACTS)
     figures = _definitions(load_all())
     static = SYSTEM.format(data_sets=data_sets, figures=figures)
-    dynamic = CONTEXT.format(today=frappe.utils.today(),
+    dynamic = CONTEXT.format(today=_today(),
                              as_of=_as_of(business_code) or "unknown",
                              business=_business_name(business_code),
                              currency=_currency(business_code))
     return static, dynamic
+
+
+def _today() -> str:
+    """Today as a person writes it, with the weekday ("Sunday 15 November 2026,
+    2026-11-15"), so "this week" and "yesterday" need no working out. It is sent after
+    the cache marker (CONTEXT), so a new day never rewrites the cached opening."""
+    d = frappe.utils.getdate(frappe.utils.today())
+    return f"{d:%A} {d.day} {d:%B %Y}, {d.isoformat()}"
 
 
 def _currency(business_code) -> str:
@@ -515,9 +597,14 @@ down, so your totals agree with the screens:
 any doctype the person asking may read -- quotations, leads, opportunities, journal entries, \
 projects, assets, employees, issues and the rest. Use it for anything the loaded sets do \
 not hold, and for the detail behind a figure.
-4. Six ready analyses: who_owes_most, has_party_ever_paid, why_order_open, \
+4. compare_periods: one figure (by key) or one measure of a data set in two periods -- \
+the latest full month against the month before or the same month last year, the latest \
+full quarter against the one before or a year earlier, twelve months against the twelve \
+before, or two date ranges you give -- with both values, the change and the % change, by \
+the same rules as the figures.
+5. Six ready analyses: who_owes_most, has_party_ever_paid, why_order_open, \
 supplier_concentration, owes_and_waiting, party_brief.
-5. ERPNext's own standard reports, through report_filters / run_report: profit and loss, \
+6. ERPNext's own standard reports, through report_filters / run_report: profit and loss, \
 balance sheet, cash flow, trial balance, general ledger, receivables and payables, gross \
 profit, sales and purchase analytics, purchase order analysis, stock balance, ledger and \
 ageing. Use them for finance, purchase orders and stock movements -- the loaded sets do \
@@ -526,16 +613,21 @@ horizon.
 
 HOW TO FIND THE ANSWER -- in this order, stopping as soon as you have it
 1. A defined figure answers it: get_figures, one call with every key you need.
-2. A breakdown, ranking, comparison or period: ONE query_data call that makes the \
+2. Up or down against an earlier period ("than last month", "against last year", "why \
+did it fall"): compare_periods, one call per number. Use its change and % change as \
+given; do not work them out again. A figure that is a position now (owed, stock, open \
+orders) has no history -- say so; compare it only with a date_column, and then say it \
+counts the records dated in each period.
+3. A breakdown, ranking or period: ONE query_data call that makes the \
 database do the work -- conditions in filters, the split in group_by (up to two \
 columns), the period and date range, the order and a limit. Use the same rules as the \
 figure definitions above. Never fetch rows to count or add them up yourself.
-3. Individual records (the largest, latest, most overdue): list_records with filters, \
+4. Individual records (the largest, latest, most overdue): list_records with filters, \
 order_by and a small limit.
-4. A name you are not sure of: find first, then filter on the exact name it returns.
-5. Something the loaded sets do not hold: erpnext_count, or erpnext_list with filters, \
+5. A name you are not sure of: find first, then filter on the exact name it returns.
+6. Something the loaded sets do not hold: erpnext_count, or erpnext_list with filters, \
 only the fields you need and a limit; erpnext_document for one document.
-6. Ledger, profit and loss, balance sheet, cash flow, stock movements: run_report. It is \
+7. Ledger, profit and loss, balance sheet, cash flow, stock movements: run_report. It is \
 slow; use it only for these.
 Put independent lookups in the same round. Most questions need one or two rounds; once \
 you can answer, stop looking and answer.

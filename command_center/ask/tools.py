@@ -360,6 +360,213 @@ def trend(fact: str, measure: str, function: str = "sum", date_column: str | Non
     return out
 
 
+# "This month against last month", "this quarter against the same quarter last year".
+# Measured back from where the data ends, as the figures' own periods are (kpi/engine.py
+# _period): on a dataset that stops in August, "this month" measured from today is an
+# empty month, and comparing it with the one before reports a collapse that never was.
+COMPARISONS = {
+    "month_vs_previous": "the latest full month against the month before it",
+    "month_vs_last_year": "the latest full month against the same month a year earlier",
+    "quarter_vs_previous": "the latest full quarter against the quarter before it",
+    "quarter_vs_last_year": "the latest full quarter against the same quarter a year earlier",
+    "twelve_months_vs_previous": "the latest twelve full months against the twelve before them",
+    "custom": "two date ranges, as given",
+}
+
+
+def _spans(horizon, compare: str, current_from=None, current_to=None, earlier_from=None,
+           earlier_to=None) -> tuple:
+    """((from, to, label), (from, to, label)) for the current and the earlier period."""
+    u = frappe.utils
+    if compare == "custom":
+        if not (current_from and current_to and earlier_from and earlier_to):
+            raise ToolError("A custom comparison needs current_from, current_to, earlier_from "
+                            "and earlier_to (YYYY-MM-DD).")
+        spans = []
+        for a, b in ((current_from, current_to), (earlier_from, earlier_to)):
+            a, b = u.getdate(a), u.getdate(b)
+            if a > b:
+                raise ToolError(f"{a} is after {b}: each range runs from its first date to its last.")
+            spans.append((a, b, f"{a:%d %b %Y} – {b:%d %b %Y}"))
+        return spans[0], spans[1]
+    if compare not in COMPARISONS:
+        raise ToolError(f"compare must be one of {', '.join(COMPARISONS)}")
+    h = u.getdate(horizon)
+    # The latest calendar month the data covers to its last day (as the engine's
+    # last_full_month): data stopping on 12 August makes that July.
+    end = h if h == u.getdate(u.get_last_day(h)) else u.getdate(u.add_days(u.get_first_day(h), -1))
+    if compare.startswith("quarter"):
+        while end.month % 3:
+            end = u.getdate(u.add_days(u.get_first_day(end), -1))
+        months, back = 3, 3 if compare.endswith("previous") else 12
+    elif compare.startswith("twelve"):
+        months, back = 12, 12
+    else:
+        months, back = 1, 1 if compare.endswith("previous") else 12
+    start = u.getdate(u.get_first_day(u.add_months(end, -(months - 1))))
+    e_start = u.getdate(u.get_first_day(u.add_months(start, -back)))
+    e_end = u.getdate(u.get_last_day(u.add_months(end, -back)))
+
+    def label(a, b):
+        if months == 1:
+            return f"{a:%B %Y}"
+        if months == 3:
+            return f"Q{(a.month - 1) // 3 + 1} {a.year}"
+        return f"{a:%b %Y} – {b:%b %Y}"
+
+    return (start, end, label(start, end)), (e_start, e_end, label(e_start, e_end))
+
+
+def _figure_between(kpi, field: str, a, b, business_code) -> tuple:
+    """(value, group, drill filters) of one defined figure over [a, b] on `field`, by the
+    engine's own queries: its filters, its aggregate, its ratio rule."""
+    from command_center.kpi import engine
+    from command_center.kpi.registry import get
+
+    span = ["between", [str(a), str(b)]]
+    if kpi.agg == "ratio":
+        parts = {}
+        for k in (kpi.numerator, kpi.denominator):
+            parts[k] = {"value": _figure_between(get(k), field, a, b, business_code)[0]}
+        return engine._ratio(kpi, parts), None, None
+    filters = {**(kpi.filters or {}), field: span}
+    drill = {**(kpi.drill_filters or {}), field: span}
+    if kpi.agg == "top":
+        value, group = engine._top(kpi, business_code, filters)
+        if group and group.get("drill"):
+            drill.update(group.pop("drill"))
+        return value, group, drill
+    return engine._aggregate(kpi, business_code, filters), None, drill
+
+
+def _figure_field(kpi, date_column) -> tuple:
+    """(the date a figure is compared on, whether that date is not the figure's own):
+    its own period's date, or one named for it."""
+    from command_center.facts.schema import DATE_FIELDS
+    from command_center.kpi.registry import get
+
+    if kpi.agg == "ratio":
+        got = [_figure_field(get(k), date_column) for k in (kpi.numerator, kpi.denominator)]
+        if len({f for f, _ in got}) != 1:
+            raise ToolError(f"{kpi.key}'s two parts are dated differently, so it cannot be "
+                            f"compared over periods.")
+        return got[0][0], any(u for _, u in got)
+    if kpi.period and (not date_column or date_column == kpi.period["field"]):
+        return kpi.period["field"], False
+    dates = ", ".join(DATE_FIELDS.get(kpi.fact, [])) or "none"
+    if not date_column:
+        raise ToolError(
+            f"{kpi.key} ({kpi.label}) is a position as it stands now, not a total over a "
+            f"period, and the platform keeps no history of it. To compare the records dated "
+            f"in each period instead, name a date_column ({dates}) -- and say that is what "
+            f"was compared.")
+    if date_column not in DATE_FIELDS.get(kpi.fact, ()):
+        raise ToolError(f"{date_column!r} is not a date of {kpi.fact}: use one of {dates}.")
+    return date_column, True
+
+
+def compare_periods(figure: str | None = None, fact: str | None = None,
+                    measure: str | None = None, function: str = "sum",
+                    date_column: str | None = None, compare: str = "month_vs_previous",
+                    current_from: str | None = None, current_to: str | None = None,
+                    earlier_from: str | None = None, earlier_to: str | None = None,
+                    filters=None, business_code=None):
+    """One figure, or one measure of a data set, in two periods: both values, the change
+    and the percentage change, computed by the same queries as the figures themselves
+    (a figure through the KPI engine, a measure through query_data)."""
+    from command_center.api.businesses import currency_for
+    from command_center.kpi import engine
+
+    if bool(figure) == bool(fact):
+        raise ToolError("Name either a figure (a key from get_figures) or a data set with a "
+                        "measure -- one of the two.")
+    notes = []
+    if figure:
+        from command_center.kpi.live import LIVE
+        from command_center.kpi.registry import get, load_all
+        known = load_all()
+        if figure in LIVE:
+            raise ToolError(f"{figure} is read straight from ERPNext as it stands now; there is "
+                            f"no earlier value to compare it with.")
+        if figure not in known:
+            raise ToolError(f"Unknown figure {figure!r}. Known: {', '.join(sorted(known))}")
+        kpi = get(figure)
+        field, undated = _figure_field(kpi, date_column)
+        base = get(kpi.numerator) if kpi.agg == "ratio" else kpi
+        t = engine._table(base)
+        row = engine._scoped(frappe.qb.from_(t).select(Max(t[field])), t, business_code,
+                             base.filters).run()
+        horizon = row[0][0] if row and row[0] else None
+        what, unit, data_set = kpi.label, kpi.unit, kpi.fact
+        if undated:
+            notes.append(f"{kpi.label} has no period of its own, so each value counts only the "
+                         f"records whose {field.replace('_', ' ')} falls in that period -- not "
+                         f"the position as it stood at the time.")
+    else:
+        if not (measure and date_column):
+            raise ToolError("A data set comparison needs a measure and a date_column.")
+        fn = (function or "sum").lower()
+        got = query_data(fact, measures=[{"function": "max", "column": date_column}],
+                         filters=filters, business_code=business_code)
+        horizon = (got["rows"][0] if got["rows"] else {}).get(f"max_{date_column}")
+        what = f"{fn} of {measure.replace('_', ' ')} in {FACT_WORDS.get(fact, fact)}"
+        unit = "count" if fn == "count" else (
+            "currency" if fn != "count" and any(w in measure for w in ("amount", "total", "value"))
+            else None)
+        data_set = fact
+    if not horizon and compare != "custom":
+        raise ToolError("There are no dated records to compare.")
+
+    cur, old = _spans(horizon, compare, current_from, current_to, earlier_from, earlier_to)
+    currency = currency_for(business_code) if unit == "currency" else None
+    sides, drills = [], []
+    for a, b, label in (cur, old):
+        group = None
+        if figure:
+            value, group, drill = _figure_between(kpi, field, a, b, business_code)
+        else:
+            res = query_data(fact, measures=[{"function": fn, "column": measure}],
+                             date_column=date_column, date_from=str(a), date_to=str(b),
+                             filters=filters, business_code=business_code)
+            value = (res["rows"][0] if res["rows"] else {}).get(f"{fn}_{measure}")
+            if value is None and fn in ("sum", "count"):
+                value = 0  # a sum or a count of nothing is 0; an average of nothing is unknown
+            drill = {**res["filters"], date_column: ["between", [str(a), str(b)]]}
+        if isinstance(value, decimal.Decimal):
+            value = float(value)
+        side = {"period": label, "from": str(a), "to": str(b), "value": value}
+        if unit:
+            side["text"] = engine._plain({"value": value, "unit": unit, "currency": currency})
+        if group and group.get("label"):
+            side["group"] = group["label"]
+        sides.append(side)
+        drills.append(drill)
+
+    now, then = sides[0]["value"], sides[1]["value"]
+    out = {"what": what, "comparison": COMPARISONS[compare], "data_horizon": str(horizon or ""),
+           "unit": unit, "currency": currency, "current": sides[0], "earlier": sides[1]}
+    if now is None or then is None:
+        out["change"] = out["change_pct"] = None
+        notes.append("One of the two periods has no value, so there is no change to state.")
+    else:
+        change = round(float(now) - float(then), 4)
+        out["change"] = change
+        out["change_pct"] = round(change / abs(float(then)) * 100, 1) if then else None
+        out["direction"] = "up" if change > 0 else "down" if change < 0 else "no change"
+        if unit == "percent":
+            notes.append("Both values are percentages: the change is in percentage points.")
+        elif unit:
+            out["change_text"] = engine._plain({"value": abs(change), "unit": unit,
+                                                "currency": currency})
+        if not then:
+            notes.append("The earlier value is zero, so there is no percentage change.")
+    if drills[0] is not None:
+        out["data_set"], out["filters"], out["earlier_filters"] = data_set, drills[0], drills[1]
+    if notes:
+        out["note"] = " ".join(notes)
+    return _clean(out)
+
+
 def erpnext_fields(doctype: str, business_code=None):
     """The fields of an ERPNext doctype, so a list or a lookup can be asked correctly."""
     _doctype_allowed(doctype, business_code)
@@ -627,6 +834,28 @@ TOOLS = {
          "periods": {"type": "integer"}, "project_ahead": {"type": "integer"},
          "filters": _FILTERS},
         ["fact", "measure", "date_column"])),
+    "compare_periods": (compare_periods, _decl(
+        "compare_periods",
+        "One number in two periods -- both values, the change and the % change, by the "
+        "same rules as the figures. Give a figure key (e.g. revenue_last_month, "
+        "cash_in_month, revenue_invoiced) OR a data set with a measure, function and "
+        "date_column. compare: month_vs_previous, month_vs_last_year, quarter_vs_previous, "
+        "quarter_vs_last_year, twelve_months_vs_previous (full periods, counted back from "
+        "where the data ends), or custom with current_from/current_to/earlier_from/"
+        "earlier_to. Use for 'up or down on last month', 'against last year', 'why did it "
+        "fall'. A figure that is a position now (amount owed, stock) has no history: it "
+        "is compared only if you name a date_column, and then counts the records dated in "
+        "each period.",
+        {"figure": {"type": "string", "description": "a figure key, as for get_figures"},
+         "fact": _FACT, "measure": {"type": "string"},
+         "function": {"type": "string", "enum": list(FUNCS)},
+         "date_column": {"type": "string"},
+         "compare": {"type": "string", "enum": list(COMPARISONS)},
+         "current_from": {"type": "string", "description": "YYYY-MM-DD, custom only"},
+         "current_to": {"type": "string", "description": "YYYY-MM-DD, custom only"},
+         "earlier_from": {"type": "string", "description": "YYYY-MM-DD, custom only"},
+         "earlier_to": {"type": "string", "description": "YYYY-MM-DD, custom only"},
+         "filters": _FILTERS})),
     "erpnext_fields": (erpnext_fields, _decl(
         "erpnext_fields",
         "The fields of any ERPNext doctype (Sales Order, Quotation, Lead, Journal Entry, "
@@ -739,6 +968,10 @@ def describe(name: str, args: dict) -> str:
         return f"Reading the {fact}"
     if name == "trend":
         return f"Working out the trend in {fact}"
+    if name == "compare_periods":
+        what = _figure_label(a.get("figure")) or (
+            f"{str(a.get('measure') or 'the total').replace('_', ' ')} in {fact}")
+        return f"Comparing {what} with an earlier period"
     if name == "get_figures":
         return "Reading the headline figures"
     if name == "find":
@@ -756,6 +989,49 @@ def describe(name: str, args: dict) -> str:
     if name in INTENT_WORDS:
         return INTENT_WORDS[name].format(s=a.get("subject") or "it")
     return "Looking something up"
+
+
+def _figure_label(key) -> str | None:
+    if not key:
+        return None
+    try:
+        from command_center.kpi.registry import load_all
+        k = load_all().get(key)
+        return f"“{k.label}”" if k else None
+    except Exception:
+        return None
+
+
+# Steps of one kind in a row are shown as one line with a count ("Running an ERPNext
+# report ×6"), the detail of each under "Show all". The kind's words are the line.
+STEP_KINDS = {
+    "query_data": "Adding up the records", "trend": "Working out a trend",
+    "compare_periods": "Comparing with an earlier period", "list_records": "Reading records",
+    "get_figures": "Reading the headline figures", "find": "Looking up a name",
+    "describe_data": "Checking what data is loaded", "run_report": "Running an ERPNext report",
+    "report_filters": "Checking how a report is filtered",
+    "erpnext_list": "Reading ERPNext records", "erpnext_count": "Reading ERPNext records",
+    "erpnext_fields": "Reading ERPNext records", "erpnext_document": "Opening an ERPNext document",
+    "who_owes_most": "Working out who owes the most",
+    "has_party_ever_paid": "Reading a payment history", "why_order_open": "Looking at an open order",
+    "supplier_concentration": "Measuring dependence on a supplier",
+    "owes_and_waiting": "Finding customers who owe and are waiting", "party_brief": "Preparing a brief",
+}
+
+
+class Step(str):
+    """One live step: its words (it is a str, so anything that showed a string still
+    does), plus the kind of lookup it is, so the page can group a run of them."""
+    kind: str | None = None
+    group: str | None = None
+
+
+def step(name: str, args: dict) -> Step:
+    s = Step(describe(name, args))
+    s.group = STEP_KINDS.get(name)
+    s.kind = ("erpnext" if name in ("erpnext_list", "erpnext_count", "erpnext_fields")
+              else name) if s.group else None
+    return s
 
 
 def summary(name: str, args: dict) -> str:

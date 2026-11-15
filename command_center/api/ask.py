@@ -30,12 +30,17 @@ def answer(question: str, business_code: str | None = None, history=None, ask_id
     if ask_id:
         key, state = _ask_key(str(ask_id)[:40]), {"state": "running", "steps": []}
         frappe.cache().set_value(key, state, expires_in_sec=ASK_KEEP)
+        frappe.cache().delete_value(key + "::stop")
 
         def on_step(text):
-            if not state["steps"] or state["steps"][-1] != text:
-                state["steps"].append(text)
+            if _record(state["steps"], text):
                 frappe.cache().set_value(key, state, expires_in_sec=ASK_KEEP)
-    result = engine.answer(question, business_code, history, on_step=on_step)
+        # Stop (below): the analyst asks between rounds and before each lookup.
+        frappe.local.cc_should_stop = lambda: bool(frappe.cache().get_value(key + "::stop"))
+    try:
+        result = engine.answer(question, business_code, history, on_step=on_step)
+    finally:
+        frappe.local.cc_should_stop = None
     resume = result.pop("_resume", None) if isinstance(result, dict) else None
     if resume and result.get("cut_short") and ask_id:
         _start_deep(str(ask_id)[:40], question, business_code, resume)
@@ -73,8 +78,7 @@ def _deep(ask_id: str, question: str, business_code, user: str):
     frappe.cache().set_value(base + "::deep", state, expires_in_sec=ASK_KEEP)
 
     def step(text):
-        if not state["steps"] or state["steps"][-1] != text:
-            state["steps"].append(text)
+        if _record(state["steps"], text):
             frappe.cache().set_value(base + "::deep", state, expires_in_sec=ASK_KEEP)
 
     try:
@@ -84,7 +88,14 @@ def _deep(ask_id: str, question: str, business_code, user: str):
         # The deeper look runs on the deeper model (Claude Opus), carrying on from the
         # everyday model's conversation exactly where it stopped.
         result = agent.answer(question, business_code, resume=resume, max_steps=DEEP_STEPS,
-                              deadline=DEEP_DEADLINE, on_step=step, deep=True)
+                              deadline=DEEP_DEADLINE, on_step=step, deep=True,
+                              should_stop=lambda: bool(frappe.cache().get_value(base + "::stop")))
+        if result and result.get("stopped"):
+            # Stopped by the person: the first answer stands, and a partial deeper look
+            # never replaces it.
+            frappe.cache().set_value(base + "::deep", {"state": "stopped", "steps": state["steps"]},
+                                     expires_in_sec=ASK_KEEP)
+            return
         if not result or not result.get("answered"):
             raise RuntimeError((result or {}).get("analyst_error") or "no answer came back")
         result.pop("_resume", None)
@@ -105,6 +116,29 @@ ASK_KEEP = 1800
 
 def _ask_key(ask_id: str) -> str:
     return f"cc_ask::{frappe.session.user}::{ask_id}"
+
+
+def _record(steps: list, text) -> bool:
+    """Add one live step: {text, kind, group}, the kind letting the page show a run of
+    one kind of lookup as one line with a count. A repeated message with no kind (a
+    model is slow and another is tried) is said once."""
+    item = {"text": str(text), "kind": getattr(text, "kind", None),
+            "group": getattr(text, "group", None)}
+    if steps and not item["kind"] and steps[-1].get("text") == item["text"]:
+        return False
+    steps.append(item)
+    return True
+
+
+@frappe.whitelist()
+def stop(ask_id: str):
+    """Stop a question (or its deeper look) that is still being worked out. The analyst
+    reads the flag between rounds and before each lookup, and answers at once with what
+    it had; nothing gathered is thrown away. The page stops waiting on its own."""
+    require_manager()
+    key = _ask_key(str(ask_id)[:40]) + "::stop"
+    frappe.cache().set_value(key, 1, expires_in_sec=ASK_KEEP)
+    return {"stopping": True}
 
 
 @frappe.whitelist()

@@ -1,4 +1,4 @@
-"""A scorecard for the assistant: fifteen real questions, checked against the figures.
+"""A scorecard for the assistant: seventeen real questions, checked against the figures.
 
     bench --site <site> execute command_center.ask.evaluate.run
     bench --site <site> execute command_center.ask.evaluate.run --kwargs "{'limit': 5}"
@@ -7,8 +7,9 @@
 prompt or tools. Each question here has a known right answer -- the platform's own
 figure for it -- and the scorecard says, per question, whether the answer contains that
 figure, how long it took, whether the instant path or the analyst answered, how many
-lookups it made, and why it failed if it did. The same fifteen, run on two models, is
-the comparison.
+lookups it made, and why it failed if it did. The same seventeen, run on two models, is
+the comparison. The two comparisons with an earlier period must quote the latest full
+month's figure itself, which compare_periods reads by the figure's own rule.
 
 Each question costs model requests (the instant ones cost none). On a free-tier key,
 run a few at a time with limit.
@@ -36,6 +37,10 @@ QUESTIONS = [
     ("How many people do we employ, and in which departments?", ["headcount"], "analysis"),
     ("How did invoiced sales trend over the last 12 months?", [], "analysis"),
     ("Show our open quotations and their total value.", [], "analysis"),
+    ("Did invoiced sales go up or down last month, against the month before?",
+     ["revenue_last_month"], "analysis"),
+    ("How does the money we received last month compare with the month before?",
+     ["cash_in_month"], "analysis"),
     ("Issue a credit note for A1 Medicalsupplies.", [], "refusal"),
 ]
 

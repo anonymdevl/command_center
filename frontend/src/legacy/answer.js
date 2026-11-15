@@ -16,6 +16,7 @@
 
 import { exact, count, shortDate } from "../format.js";
 import { renderMarkdown, enhanceTable, answerAsText } from "./markdown.js";
+import { renderSteps } from "./steps.js";
 
 export function renderAnswer(container, payload, { onOpen, onPdf, onFollowup, inThread } = {}) {
   container.textContent = "";
@@ -31,17 +32,7 @@ export function renderThinking(container, question, steps = []) {
   const t = document.createElement("div");
   t.append(bold(`Looking into “${question}”`),
     span("", steps.length ? "Working through it" : "Reading the question"));
-  if (steps.length) {
-    const ol = document.createElement("ol");
-    ol.className = "ap-steps";
-    steps.forEach((s, i) => {
-      const li = document.createElement("li");
-      li.className = i === steps.length - 1 ? "now" : "done";
-      li.textContent = s;
-      ol.append(li);
-    });
-    t.append(ol);
-  }
+  if (steps.length) t.append(renderSteps(steps, container)); // grouped: legacy/steps.js
   box.append(t);
   container.append(box);
 }
