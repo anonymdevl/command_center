@@ -25,9 +25,20 @@ ask() { local p="$1" d="${2:-}" v; read -r -p "   $p${d:+ [$d]}: " v; echo "${v:
 secret() { local p="$1" v; read -r -s -p "   $p: " v; echo >&2; echo "$v"; }
 export INSIGHTS_CONFIG="$CONFIG" DJANGO_SETTINGS_MODULE=insights.settings
 
+# Bash reads a script as it runs, so a pull that changes this file must not be followed
+# by reading the rest of it: the whole update is one function (read in full before it
+# runs) that starts the new script afresh when the code changed.
+update_code() {
+  local before; before="$(git rev-parse HEAD)"
+  git pull --ff-only || echo "   (not pulled: $(git rev-parse --abbrev-ref HEAD) has local changes)"
+  echo "   $(git log -1 --format='%h %s' | cut -c1-90)"
+  if [ "$(git rev-parse HEAD)" != "$before" ] && [ -z "${INSIGHTS_UPDATED:-}" ]; then
+    echo "   updated: starting the new version of this script"
+    INSIGHTS_UPDATED=1 exec "$DIR/deploy/platform.sh" "$@"
+  fi
+}
 step "code"
-git pull --ff-only || echo "   (not pulled: $(git rev-parse --abbrev-ref HEAD) has local changes)"
-echo "   $(git log -1 --format='%h %s' | cut -c1-90)"
+update_code "$@"
 
 step "python"
 if [ ! -x "$PY" ]; then
