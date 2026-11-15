@@ -60,8 +60,10 @@ BLOCKS_CSS = """
 .tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:none;opacity:.9}
 
 /* ---- panels become cards ---- */
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;
+/* .ppanel: a card drawn by its own script (HR's People Lookup and Leave, legacy/people.js) */
+.panel,.ppanel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;
  margin-bottom:16px}
+.ppanel{min-width:0}
 .panel .panel{border:0;padding:0;background:none;margin-bottom:10px}
 .ph{align-items:baseline;margin-bottom:12px;gap:10px}
 .ph b{font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.015em}

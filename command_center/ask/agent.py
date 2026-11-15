@@ -610,6 +610,14 @@ profit, sales and purchase analytics, purchase order analysis, stock balance, le
 ageing. Use them for finance, purchase orders and stock movements -- the loaded sets do \
 not hold the ledger. Date filters must fall within the data, which ends at the data \
 horizon.
+7. People and leave, read live from ERPNext as the HR screen reads them: people (find \
+employees by name or ID, department or status -- job, department, branch, manager, \
+joining date, length of service) and leave (one person's balance by leave type -- \
+allocated, taken, pending approval, remaining -- and their recent leave; or, with no \
+person, who is on approved leave today and this week, requests waiting for approval, \
+everyone's balances, and days taken this year by department). Leave is counted as \
+ERPNext's own leave balance counts it, and is measured against today, not the data \
+horizon. Neither returns contact details or pay.
 
 HOW TO FIND THE ANSWER -- in this order, stopping as soon as you have it
 1. A defined figure answers it: get_figures, one call with every key you need.
@@ -629,6 +637,10 @@ order_by and a small limit.
 only the fields you need and a limit; erpnext_document for one document.
 7. Ledger, profit and loss, balance sheet, cash flow, stock movements: run_report. It is \
 slow; use it only for these.
+8. Who is on leave, who is away this week, leave waiting for approval, or how many days \
+someone has left: leave (with the person's name or ID for one person). Who someone is, \
+who they report to, who is in a department: people. Do not rebuild a leave balance from \
+erpnext_list rows -- the leave tool already counts it as ERPNext does.
 Put independent lookups in the same round. Most questions need one or two rounds; once \
 you can answer, stop looking and answer.
 The loaded sets count submitted documents only, as the screens do. For drafts or \

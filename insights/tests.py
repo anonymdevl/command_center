@@ -136,8 +136,13 @@ def _wanted(filters, field, value) -> bool:
 class FakeERPNext:
     """GET/POST /api/method/frappe.client.* and the few others the platform calls."""
 
-    def __init__(self):
+    def __init__(self, hr=None):
         self.calls = []
+        # People and leave (api/people.py): with an HR set (hr_dataset), the HR doctypes
+        # are answered from it -- filtered, paged and counted as ERPNext would -- and
+        # every read of them is kept in hr_reads as (doctype, fields).
+        self.hr = hr
+        self.hr_reads = []
 
     def __call__(self, method_name):
         def call(url, headers=None, params=None, data=None, json=None, timeout=None):
@@ -150,6 +155,9 @@ class FakeERPNext:
     def answer(self, m, p):
         if m == "frappe.auth.get_logged_user":
             return _R(200, {"message": "reader@test.com"})
+        if self.hr is not None and p.get("doctype") in HR_DOCTYPES and m in (
+                "frappe.client.get_count", "frappe.client.get_list"):
+            return self.hr_answer(m, p)
         if m == "frappe.client.get_count":
             return _R(200, {"message": N})
         if m in ("frappe.client.get_list",):
@@ -245,6 +253,213 @@ class FakeERPNext:
                 row["name"] = f"row-{doctype[:4]}-{i}"
             out.append(row)
         return out[:n]
+
+
+    def hr_answer(self, m, p):
+        doctype = p["doctype"]
+        if not self.hr.get("installed", True) and doctype in HRMS_DOCTYPES:
+            return _R(404, {"exc_type": "DoesNotExistError",
+                            "_server_messages": json.dumps([json.dumps(
+                                {"message": f"DocType {doctype} not found"})])})
+        filters = p.get("filters") or {}
+        filters = json.loads(filters) if isinstance(filters, str) else filters
+        rows = [r for r in self.hr.get(doctype, []) if _hr_match(r, filters)]
+        if m == "frappe.client.get_count":
+            return _R(200, {"message": len(rows)})
+        fields = p.get("fields") or ["name"]
+        fields = json.loads(fields) if isinstance(fields, str) else fields
+        self.hr_reads.append((doctype, list(fields)))
+        start = int(p.get("limit_start") or 0)
+        n = int(p.get("limit_page_length") or 20)
+        cols = [re.split(r"\s+as\s+", str(f))[-1].strip() for f in fields]
+        return _R(200, {"message": [{c: r.get(c) for c in cols} for r in rows[start:start + n]]})
+
+
+# Doctypes the HR set answers; those that only exist with the HR app (HRMS) installed.
+HR_DOCTYPES = {"Employee", "Leave Type", "Leave Allocation", "Leave Application",
+               "Leave Ledger Entry", "Attendance", "Holiday", "Holiday List", "ToDo",
+               "Appraisal", "Training Event", "Training Event Employee", "Asset",
+               "Salary Slip", "Salary Structure Assignment"}
+HRMS_DOCTYPES = HR_DOCTYPES - {"Employee", "ToDo", "Asset", "Holiday", "Holiday List"}
+
+
+def _hr_cmp(a, b):
+    try:
+        return float(a), float(b)
+    except (TypeError, ValueError):
+        return str(a if a is not None else ""), str(b if b is not None else "")
+
+
+def _hr_match(row, filters) -> bool:
+    for field, rule in (filters.items() if isinstance(filters, dict) else
+                        ((f[-3], f[-2:]) for f in filters)):
+        op, val = (rule[0], rule[1]) if isinstance(rule, list) and len(rule) == 2 \
+            and isinstance(rule[0], str) and rule[0] in (
+                "=", "!=", "<", "<=", ">", ">=", "in", "not in", "between", "is", "like") \
+            else ("=", rule)
+        v = row.get(field)
+        if op == "in" and v not in val:
+            return False
+        if op == "not in" and v in val:
+            return False
+        if op == "between" and not (_hr_cmp(val[0], v)[0] <= _hr_cmp(val[0], v)[1]
+                                     and _hr_cmp(v, val[1])[0] <= _hr_cmp(v, val[1])[1]):
+            return False
+        if op == "is" and (val == "set") != bool(v):
+            return False
+        if op in ("=", "!=", "<", "<=", ">", ">="):
+            a, b = _hr_cmp(v, val)
+            ok = {"=": a == b, "!=": a != b, "<": a < b, "<=": a <= b, ">": a > b,
+                  ">=": a >= b}[op]
+            if not ok:
+                return False
+    return True
+
+
+def _day(n):
+    return str(TODAY + dt.timedelta(days=n))
+
+
+def hr_dataset(installed=True, allocations=True) -> dict:
+    """A small business's people and leave, with dates around today.
+
+    The hand-worked leave (LeaveArithmetic), with P = the leave period in force, from 100
+    days ago to 200 days ahead, and HL a holiday list holding two dates:
+
+      Ama Mensah, Annual Leave: 20 new + 3 carried forward = 23 allocated. Taken: 5 days
+        on a seven-day application with HL's two holidays inside it; 1.5 days with a half
+        day; a five-day application that began two days before P, of which three days
+        fall inside it; and 1 day encashed = 10.5. An expired entry from her last
+        allocation is ignored. Remaining 23 - 10.5 = 12.5. Pending: an Open application
+        for 2 days. Sick Leave: 5 allocated, none taken, 1 day pending.
+      Kofi Boateng, Annual Leave: 10 new + 4 carried forward whose carry-forward expired
+        thirty days into P, after he had taken 3 days. HRMS then keeps the new leave
+        only: remaining 10, taken 3, expired 14 - (10 + 3) = 1.
+      Esi Owusu: active, no leave allocated. Yaw Darko: has left.
+    """
+    p_from, p_to = _day(-100), _day(200)
+    hl = "HL"
+    emp = [
+        {"name": "HR-EMP-001", "employee_name": "Ama Mensah", "status": "Active",
+         "department": "Sales", "designation": "Sales Lead", "branch": "North",
+         "employment_type": "Full-time", "date_of_joining": _day(-800), "relieving_date": None,
+         "reports_to": "HR-EMP-002", "company_email": "ama@test.example", "cell_number": "0200000001",
+         "user_id": "ama@test.example", "image": "/files/ama.jpg", "holiday_list": hl,
+         "company": "Test Medical Ltd", "ctc": 99999.5, "bank_ac_no": "0123456789",
+         "salary_mode": "Bank", "date_of_birth": "1990-01-01"},
+        {"name": "HR-EMP-002", "employee_name": "Kofi Boateng", "status": "Active",
+         "department": "Stores", "designation": "Store Manager", "branch": "South",
+         "employment_type": "Full-time", "date_of_joining": _day(-2000), "relieving_date": None,
+         "reports_to": None, "company_email": None, "cell_number": None, "user_id": None,
+         "image": "/private/files/kofi.jpg", "holiday_list": hl, "company": "Test Medical Ltd",
+         "ctc": 88888.25, "bank_ac_no": "9876543210"},
+        {"name": "HR-EMP-003", "employee_name": "Esi Owusu", "status": "Active",
+         "department": "Sales", "designation": "Sales Officer", "branch": "North",
+         "employment_type": "Intern", "date_of_joining": _day(-40), "relieving_date": None,
+         "reports_to": "HR-EMP-001", "company_email": None, "cell_number": None, "user_id": None,
+         "image": None, "holiday_list": hl, "company": "Test Medical Ltd"},
+        {"name": "HR-EMP-004", "employee_name": "Yaw Darko", "status": "Left",
+         "department": "Stores", "designation": "Driver", "branch": "South",
+         "employment_type": "Full-time", "date_of_joining": _day(-900),
+         "relieving_date": _day(-30), "reports_to": "HR-EMP-002", "company_email": None,
+         "cell_number": None, "user_id": None, "image": None, "holiday_list": hl,
+         "company": "Test Medical Ltd"},
+    ]
+    if not installed:
+        return {"installed": False, "Employee": emp}
+
+    def led(name, e, lt, kind, tn, leaves, frm, to, cf=0, expired=0):
+        return {"name": name, "employee": e, "leave_type": lt, "transaction_type": kind,
+                "transaction_name": tn, "leaves": leaves, "from_date": frm, "to_date": to,
+                "is_carry_forward": cf, "is_expired": expired, "is_lwp": 0, "holiday_list": hl,
+                "docstatus": 1}
+    A, L, ENC = "Leave Allocation", "Leave Application", "Leave Encashment"
+    allocs = [
+        {"name": "LA-1", "employee": "HR-EMP-001", "leave_type": "Annual Leave",
+         "from_date": p_from, "to_date": p_to, "docstatus": 1},
+        {"name": "LA-2", "employee": "HR-EMP-001", "leave_type": "Sick Leave",
+         "from_date": p_from, "to_date": p_to, "docstatus": 1},
+        {"name": "LA-3", "employee": "HR-EMP-002", "leave_type": "Annual Leave",
+         "from_date": p_from, "to_date": p_to, "docstatus": 1},
+        {"name": "LA-0", "employee": "HR-EMP-001", "leave_type": "Annual Leave",
+         "from_date": _day(-465), "to_date": _day(-101), "docstatus": 1},
+    ] if allocations else []
+    ledger = [
+        led("LLE-01", "HR-EMP-001", "Annual Leave", A, "LA-1", 20, p_from, p_to),
+        led("LLE-02", "HR-EMP-001", "Annual Leave", A, "LA-1", 3, p_from, p_to, cf=1),
+        led("LLE-03", "HR-EMP-001", "Annual Leave", L, "LAP-1", -5, _day(-60), _day(-54)),
+        led("LLE-04", "HR-EMP-001", "Annual Leave", L, "LAP-2", -1.5, _day(-30), _day(-29)),
+        led("LLE-05", "HR-EMP-001", "Annual Leave", L, "LAP-3", -5, _day(-102), _day(-98)),
+        led("LLE-06", "HR-EMP-001", "Annual Leave", ENC, "ENC-1", -1, _day(-20), _day(-20)),
+        led("LLE-07", "HR-EMP-001", "Annual Leave", A, "LA-0", 20, _day(-465), _day(-101)),
+        led("LLE-08", "HR-EMP-001", "Annual Leave", A, "LA-0", -2, _day(-101), _day(-101),
+            expired=1),
+        led("LLE-09", "HR-EMP-001", "Sick Leave", A, "LA-2", 5, p_from, p_to),
+        led("LLE-10", "HR-EMP-002", "Annual Leave", A, "LA-3", 10, p_from, p_to),
+        led("LLE-11", "HR-EMP-002", "Annual Leave", A, "LA-3", 4, p_from, _day(-70), cf=1),
+        led("LLE-12", "HR-EMP-002", "Annual Leave", L, "LAP-4", -3, _day(-95), _day(-93)),
+    ] if allocations else []
+
+    def app(name, e, who, lt, frm, to, days, status, docstatus, posted, half=0, hd=None):
+        return {"name": name, "employee": e, "employee_name": who, "leave_type": lt,
+                "from_date": frm, "to_date": to, "total_leave_days": days, "half_day": half,
+                "half_day_date": hd, "status": status, "docstatus": docstatus,
+                "posting_date": posted, "leave_approver": "boss@test.example",
+                "leave_approver_name": "The Boss", "department": None,
+                "description": "a private reason never shown"}
+    apps = [
+        app("LAP-1", "HR-EMP-001", "Ama Mensah", "Annual Leave", _day(-60), _day(-54), 5,
+            "Approved", 1, _day(-70)),
+        app("LAP-2", "HR-EMP-001", "Ama Mensah", "Annual Leave", _day(-30), _day(-29), 1.5,
+            "Approved", 1, _day(-35), half=1, hd=_day(-29)),
+        app("LAP-3", "HR-EMP-001", "Ama Mensah", "Annual Leave", _day(-102), _day(-98), 5,
+            "Approved", 1, _day(-110)),
+        app("LAP-4", "HR-EMP-002", "Kofi Boateng", "Annual Leave", _day(-95), _day(-93), 3,
+            "Approved", 1, _day(-99)),
+        app("LAP-5", "HR-EMP-001", "Ama Mensah", "Annual Leave", _day(10), _day(11), 2,
+            "Open", 0, _day(-4)),
+        app("LAP-6", "HR-EMP-001", "Ama Mensah", "Sick Leave", _day(3), _day(3), 1,
+            "Open", 0, _day(-1)),
+        app("LAP-7", "HR-EMP-003", "Esi Owusu", "Leave Without Pay", _day(0), _day(0), 1,
+            "Approved", 1, _day(-2)),
+        app("LAP-8", "HR-EMP-001", "Ama Mensah", "Annual Leave", _day(-300), _day(-299), 2,
+            "Cancelled", 2, _day(-305)),
+    ]
+    return {
+        "installed": True, "Employee": emp,
+        "Leave Type": [{"name": "Annual Leave", "include_holiday": 0, "is_lwp": 0},
+                       {"name": "Sick Leave", "include_holiday": 0, "is_lwp": 0},
+                       {"name": "Leave Without Pay", "include_holiday": 1, "is_lwp": 1}],
+        "Leave Allocation": allocs, "Leave Ledger Entry": ledger, "Leave Application": apps,
+        "Holiday List": [{"name": hl}],
+        "Holiday": [{"name": "H-1", "parent": hl, "holiday_date": _day(-58)},
+                    {"name": "H-2", "parent": hl, "holiday_date": _day(-57)},
+                    {"name": "H-3", "parent": hl, "holiday_date": _day(-200)}],
+        "Attendance": [{"name": f"ATT-{i}", "employee": "HR-EMP-001", "docstatus": 1,
+                        "attendance_date": str(TODAY.replace(day=1) + dt.timedelta(days=i)),
+                        "status": "Present" if i else "Absent", "late_entry": 1 if i == 1 else 0,
+                        "early_exit": 0} for i in range(min(3, TODAY.day))],
+        "ToDo": [{"name": "TD-1", "allocated_to": "ama@test.example", "status": "Open",
+                  "description": "<p>Call <b>Ridge Hospital</b> about the order</p>",
+                  "reference_type": "Sales Order", "reference_name": "SO-00001",
+                  "date": _day(2), "priority": "High"}],
+        "Appraisal": [{"name": "APR-1", "employee": "HR-EMP-001", "start_date": _day(-365),
+                       "end_date": _day(-1), "status": "Completed", "docstatus": 1,
+                       "final_score": 4.2, "total_score": None}],
+        "Training Event": [{"name": "TE-1", "event_name": "Equipment Safety",
+                            "start_time": _day(-50) + " 09:00:00", "docstatus": 1}],
+        "Training Event Employee": [{"name": "TEE-1", "parent": "TE-1",
+                                     "employee": "HR-EMP-001", "status": "Completed",
+                                     "attendance": "Present"}],
+        "Asset": [{"name": "AST-1", "asset_name": "Laptop", "custodian": "HR-EMP-001",
+                   "status": "In Location", "location": "Head Office", "docstatus": 1,
+                   "gross_purchase_amount": 7777.77}],
+        "Salary Slip": [{"name": "SS-1", "employee": "HR-EMP-001", "docstatus": 1,
+                         "start_date": _day(-45), "end_date": _day(-15), "gross_pay": 4321.0,
+                         "net_pay": 3210.0}],
+        "Salary Structure Assignment": [{"name": "SSA-1", "employee": "HR-EMP-001",
+                                         "docstatus": 1, "base": 55555.0}],
+    }
 
 
 class PlatformEndToEnd(TransactionTestCase):
@@ -1695,3 +1910,233 @@ class SettingsReachEveryProcess(TransactionTestCase):
             settings.CONFIG.clear(); settings.CONFIG.update(saved)
             compat.conf.clear(); compat.conf.update(saved)
             compat._config_stamp[0] = None
+
+
+class LeaveArithmetic(TransactionTestCase):
+    """People Lookup and Leave (api/people.py) against a fake ERPNext with HR records:
+    the directory's search, filters and paging; the leave balances worked by hand
+    (hr_dataset), carry-forward and a pending application included; no pay or bank
+    detail ever asked for or returned; guides where the HR app or the allocations are
+    missing; "can't reach" when the business does not answer; and the analyst's tools.
+
+    The same arithmetic was checked against HRMS's own Employee Leave Balance report on
+    Gigmann's ERPNext (v14, HRMS 14), read-only, on 15 Nov 2026: for HR-EMP-00018,
+    -00023 and -00036 every leave type's closing balance and leave taken agreed --
+    including a maternity leave running from December into the year, of which the
+    report counts the 62 days inside the year and the balance the whole 84."""
+
+    databases = {"default", "aux"}
+
+    def setUp(self):
+        from django.conf import settings
+        from django.core.cache import cache
+        from cryptography.fernet import Fernet
+        from command_center import install
+        from insights.compat import run_as
+        settings.CONFIG.setdefault("encryption_key", Fernet.generate_key().decode())
+        Group.objects.get_or_create(name="Insights Dashboard Manager")
+        cache.clear()
+        self.fake = FakeERPNext(hr=hr_dataset())
+        up = [mock.patch("requests.get", self.fake("GET")),
+              mock.patch("requests.post", self.fake("POST")),
+              mock.patch("time.sleep", lambda s: None)]
+        for p in up:
+            p.start()
+        self.addCleanup(lambda: [p.stop() for p in up])
+        self.addCleanup(cache.clear)
+        with run_as("Administrator"):
+            install.register_business("Test Medical Ltd", "https://erp.test", "key", "s3cret")
+        U = get_user_model()
+        m = U.objects.create_user("boss@test.com", "boss@test.com", "a-long-test-pass-9")
+        m.groups.add(Group.objects.get(name="Insights Dashboard Manager"))
+        self.c = Client()
+        self.assertTrue(self.c.login(username="boss@test.com", password="a-long-test-pass-9"))
+
+    def post(self, fn, **args):
+        r = self.c.post(f"/api/method/command_center.api.people.{fn}",
+                        json.dumps({"business_code": "test_medical_ltd", **args}),
+                        content_type="application/json")
+        self.assertEqual(r.status_code, 200, f"{fn}: {r.content[:400]!r}")
+        return r.json()["message"]
+
+    def _reset(self, hr):
+        from django.core.cache import cache
+        cache.clear()
+        self.fake.hr = hr
+
+    def test_directory_search_filters_paging(self):
+        d = self.post("directory")
+        self.assertEqual(d["kind"], "directory")
+        self.assertEqual((d["total"], d["on_books"]), (4, 4))
+        # active people first, by name; the leaver last
+        self.assertEqual([r["name"] for r in d["rows"]],
+                         ["Ama Mensah", "Esi Owusu", "Kofi Boateng", "Yaw Darko"])
+        ama = d["rows"][0]
+        self.assertEqual(ama["reports_to_name"], "Kofi Boateng")
+        self.assertTrue(ama["has_user"])
+        self.assertEqual(ama["photo"], "https://erp.test/files/ama.jpg")
+        self.assertEqual(d["rows"][2]["photo"], "")       # a private file is not offered
+        self.assertEqual(d["rows"][3]["tenure"], "2 years 4 months")  # ends when they left
+        self.assertNotIn("_user", ama)
+        self.assertEqual(d["filters"]["departments"], ["Sales", "Stores"])
+        self.assertEqual([r["employee"] for r in self.post("directory", q="mensah")["rows"]],
+                         ["HR-EMP-001"])
+        self.assertEqual(self.post("directory", q="sales north")["total"], 2)
+        self.assertEqual(self.post("directory", q="HR-EMP-004")["rows"][0]["status"], "Left")
+        self.assertEqual(self.post("directory", department="Stores", status="Active")["total"], 1)
+        self.assertEqual(self.post("directory", status="Active")["total"], 3)
+        self.assertEqual(self.post("directory", q="nobody at all")["rows"], [])
+        p2 = self.post("directory", page=2, page_size=3)
+        self.assertEqual((p2["page"], p2["pages"], len(p2["rows"])), (2, 2, 1))
+        self.assertEqual(self.post("directory", page=9, page_size=3)["page"], 2)
+
+    def test_leave_by_hand(self):
+        from command_center.api import people as P
+        prof = self.post("profile", employee="HR-EMP-001")
+        self.assertEqual(prof["kind"], "profile")
+        self.assertEqual(prof["leave"]["state"], "ok")
+        got = {t["leave_type"]: t for t in prof["leave"]["types"]}
+        self.assertEqual({k: got["Annual Leave"][k] for k in
+                          ("allocated", "carried_forward", "new", "taken", "pending",
+                           "remaining", "expired")},
+                         {"allocated": 23, "carried_forward": 3, "new": 20, "taken": 10.5,
+                          "pending": 2, "remaining": 12.5, "expired": 0})
+        self.assertEqual({k: got["Sick Leave"][k] for k in ("allocated", "taken", "pending",
+                                                            "remaining")},
+                         {"allocated": 5, "taken": 0, "pending": 1, "remaining": 5})
+        kofi = self.post("profile", employee="HR-EMP-002")["leave"]["types"][0]
+        self.assertEqual({k: kofi[k] for k in ("allocated", "taken", "remaining", "expired")},
+                         {"allocated": 14, "taken": 3, "remaining": 10, "expired": 1})
+        # the pieces, alone: a half day, holidays out, clipping to the period
+        self.assertEqual(P.leave_days(TODAY, TODAY + dt.timedelta(days=1), True,
+                                      TODAY + dt.timedelta(days=1)), 1.5)
+        self.assertEqual(P.leave_days(TODAY, TODAY + dt.timedelta(days=6), holidays=2), 5)
+        self.assertEqual(P.leave_days(TODAY, TODAY + dt.timedelta(days=6), include_holiday=True,
+                                      holidays=2), 7)
+        self.assertEqual(P.leave_days(TODAY, TODAY, True), 0.5)
+
+        # the rest of the profile
+        self.assertEqual(prof["manager"]["name"], "Kofi Boateng")
+        self.assertEqual([r["name"] for r in prof["reports"]], ["Esi Owusu"])
+        self.assertEqual(len(prof["applications"]["items"]), 6)
+        self.assertEqual(prof["attendance"]["marked"], min(3, TODAY.day))
+        self.assertEqual(prof["todos"]["open"], 1)
+        self.assertEqual(prof["todos"]["items"][0]["text"], "Call Ridge Hospital about the order")
+        self.assertEqual(prof["todos"]["items"][0]["href"], "https://erp.test/app/sales-order/SO-00001")
+        self.assertEqual(prof["appraisals"]["items"][0]["score"], 4.2)
+        self.assertEqual(prof["training"]["items"][0]["event"], "Equipment Safety")
+        self.assertEqual(prof["assets"]["items"][0]["asset"], "Laptop")
+        self.assertEqual(prof["payroll"], {"state": "ok", "structure": True, "last_slip": _day(-15)})
+        self.assertEqual(self.post("profile", employee="HR-EMP-002")["todos"]["state"], "no_user")
+        self.assertEqual(self.post("profile", employee="HR-EMP-999")["kind"], "missing")
+
+        # the overview: everyone active, who is away, what is waiting
+        lv = self.post("leave_overview")
+        self.assertEqual(lv["kind"], "leave")
+        self.assertEqual([t["name"] for t in lv["types"]], ["Annual Leave", "Sick Leave"])
+        rows = {r["employee"]: r for r in lv["rows"]}
+        self.assertEqual(sorted(rows), ["HR-EMP-001", "HR-EMP-002", "HR-EMP-003"])  # no leaver
+        self.assertEqual(rows["HR-EMP-001"]["balances"]["Annual Leave"]["remaining"], 12.5)
+        self.assertEqual(rows["HR-EMP-002"]["balances"]["Annual Leave"]["remaining"], 10)
+        self.assertEqual(lv["without"], 1)
+        self.assertEqual([a["name"] for a in lv["away_today"]], ["LAP-7"])
+        self.assertEqual([a["name"] for a in lv["pending"]], ["LAP-5", "LAP-6"])  # longest wait first
+        self.assertEqual(lv["pending"][0]["waiting_days"], 4)
+        self.assertEqual(lv["pending"][0]["approver"], "The Boss")
+        self.assertEqual(sum(d["people"] for d in lv["departments"]), 3)
+        # leave taken over a window, for the by-department table
+        with mock.patch.object(P, "require_manager", lambda: None):
+            from insights.compat import run_as
+            with run_as("Administrator"):
+                ctx = P._Ctx("test_medical_ltd")
+                book = P._LeaveBook(ctx, ["HR-EMP-001"])
+                self.assertEqual(book.taken("HR-EMP-001", TODAY - dt.timedelta(days=100), TODAY, "HL"),
+                                 10.5)
+
+    def test_no_pay_ever(self):
+        # written out here, not imported: a field added to the reads must be argued for
+        allowed = {"name", "employee_name", "status", "department", "designation", "branch",
+                   "employment_type", "date_of_joining", "relieving_date", "reports_to",
+                   "company_email", "cell_number", "user_id", "image", "holiday_list",
+                   "company"}
+        out = json.dumps([self.post("directory"), self.post("profile", employee="HR-EMP-001"),
+                          self.post("profile", employee="HR-EMP-002"), self.post("leave_overview")])
+        for secret in ("99999", "88888", "0123456789", "9876543210", "4321", "3210", "55555",
+                       "7777", "private reason", "1990-01-01", "salary_mode"):
+            self.assertNotIn(secret, out)
+        asked = defaultdict_list(self.fake.hr_reads)
+        self.assertTrue(set().union(*asked["Employee"]) <= allowed, asked["Employee"])
+        self.assertEqual(set().union(*asked["Salary Slip"]), {"end_date"})
+        self.assertNotIn("Salary Structure Assignment", asked)   # counted, never listed
+        self.assertNotIn("gross_purchase_amount", set().union(*asked["Asset"]))
+        self.assertNotIn("description", set().union(*asked["Leave Application"]))
+
+    def test_guides_without_hrms_or_allocations(self):
+        self._reset(hr_dataset(installed=False))
+        self.assertEqual(self.post("directory")["total"], 4)   # Employee is ERPNext's own
+        lv = self.post("leave_overview")
+        self.assertEqual(lv["kind"], "guide")
+        self.assertIn("HR app", lv["guide"]["text"])
+        self.assertIn("Leave Type", " ".join(lv["guide"]["steps"]))
+        self.assertIn("Holiday List", " ".join(lv["guide"]["steps"]))
+        self.assertTrue(lv["guide"]["href"].startswith("https://erp.test/"))
+        prof = self.post("profile", employee="HR-EMP-001")
+        self.assertEqual(prof["leave"]["state"], "guide")
+        for part in ("applications", "attendance", "appraisals", "training", "payroll"):
+            self.assertEqual(prof[part]["state"], "not_installed", part)
+
+        self._reset(hr_dataset(allocations=False))
+        lv = self.post("leave_overview")
+        self.assertEqual(lv["kind"], "guide")
+        self.assertIn("No one has leave allocated", lv["guide"]["text"])
+        self.assertIn("Leave Allocation", " ".join(lv["guide"]["steps"]))
+        self.assertEqual(self.post("profile", employee="HR-EMP-001")["leave"]["state"], "none")
+
+        self._reset({"installed": True, "Employee": []})
+        self.assertEqual(self.post("directory")["kind"], "guide")
+
+    def test_analyst_tools(self):
+        from command_center.ask import tools
+        from insights.compat import run_as
+        with run_as("boss@test.com"):
+            one = tools.run("leave", {"person": "ama"}, "test_medical_ltd")
+            self.assertTrue(one["answered"])
+            annual = [t for t in one["leave"]["types"] if t["leave_type"] == "Annual Leave"][0]
+            self.assertEqual(annual["remaining"], 12.5)
+            everyone = tools.run("leave", {}, "test_medical_ltd")
+            self.assertEqual([a["employee_name"] for a in everyone["away_this_week"]], ["Esi Owusu"])
+            self.assertEqual(len(everyone["pending_approval"]), 2)
+            found = tools.run("people", {"text": "kofi"}, "test_medical_ltd")
+            self.assertEqual(found["people"][0]["designation"], "Store Manager")
+            self.assertNotIn("0200000001", json.dumps(tools.run("people", {}, "test_medical_ltd")))
+            self.assertFalse(tools.run("leave", {"person": "nobody"}, "test_medical_ltd")["answered"])
+        self.assertIn("leave", [d["name"] for d in tools.declarations()])
+
+    def test_managers_only_and_unreachable(self):
+        import requests
+        U = get_user_model()
+        U.objects.create_user("clerk@test.com", "clerk@test.com", "a-long-test-pass-8")
+        c2 = Client()
+        c2.login(username="clerk@test.com", password="a-long-test-pass-8")
+        r = c2.post("/api/method/command_center.api.people.directory", "{}",
+                    content_type="application/json")
+        self.assertNotEqual(r.status_code, 200)
+
+        def down(*a, **k):
+            raise requests.ConnectionError("no route to host")
+        from django.core.cache import cache
+        cache.clear()
+        with mock.patch("requests.get", down), mock.patch("requests.post", down):
+            for fn, args in (("directory", {}), ("profile", {"employee": "HR-EMP-001"}),
+                             ("leave_overview", {})):
+                got = self.post(fn, **args)
+                self.assertEqual(got["kind"], "unreachable", fn)
+                self.assertEqual(got["business"], "Test Medical Ltd", fn)
+
+
+def defaultdict_list(reads):
+    """(doctype, fields) reads -> doctype: [set of fields asked, per read]."""
+    out = {}
+    for doctype, fields in reads:
+        out.setdefault(doctype, []).append(set(fields))
+    return out

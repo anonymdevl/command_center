@@ -70,3 +70,19 @@ def payment_reconciliation(business_code, text: str) -> dict:
     """The guide to matching payments in ERPNext, opening its Payment Reconciliation."""
     return guide(business_code, text, RECONCILE_STEPS, "/app/payment-reconciliation",
                  label="Open Payment Reconciliation")
+
+
+# Leave, for the HR screen's People Lookup and Leave (api/people.py, 15 Nov 2026): what
+# to set up in ERPNext so that each person has a balance to show.
+LEAVE_STEPS = [
+    "Create each kind of leave once under Leave Type (Annual Leave, Sick Leave ...): the "
+    "days allowed, whether unused days carry forward, and whether holidays count.",
+    "Create a Holiday List for the year with the weekly off days and public holidays, and "
+    "set it on the Company (or on each Employee).",
+    "Give each person their leave for the year: a Leave Policy assigned with Leave Policy "
+    "Assignment, or a Leave Allocation per person and leave type, then Submit it.",
+    "Staff apply with Leave Application; the leave approver approves and submits it, and "
+    "the balance here updates on its own.",
+]
+NO_HRMS_STEPS = ["Ask your ERPNext administrator to install the HR and payroll app (HRMS) "
+                 "on this ERPNext."] + LEAVE_STEPS

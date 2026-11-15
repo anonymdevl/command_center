@@ -18,6 +18,7 @@ exec(_src('explain.py'))
 exec(_src('records.py'))
 exec(_src('tidy.py'))
 exec(_src('blocks.py'))
+exec(_src('lookup.py'))
 exec(_src('auth.py'))
 exec(_src('shell.py'))
 
@@ -154,7 +155,7 @@ VIEWS={"command":V_COMMAND,"brief":V_BRIEF,"myday":V_MYDAY,"ops":V_OPS,"health":
  "sales":V_SALES,"proc":V_PROC,"inv":V_INV,"eng":V_ENG,"cx":V_CX,
  "fin":V_FIN,"hr":V_HR,"it":V_IT,"aud":V_AUD}
 ROLE_OF={k:r for k,lab,b,r in NAV}; ROLE_OF.update({k:r for k,lab,r in DOMS})
-for _k in ["sales","proc","inv","cx","fin","hr","health","risk"]:
+for _k in ["sales","proc","inv","cx","fin","health","risk"]:  # hr has its own tabs (views_d.py)
     VIEWS[_k]=tabify(VIEWS[_k], ov_count=2)
 
 viewh="".join(f'<div class="view" id="v-{k}" data-roles="{",".join(ROLE_OF[k])}">{v}</div>' for k,v in VIEWS.items())
@@ -684,7 +685,7 @@ _i = BODY.index("<script>")
 _j = BODY.rindex("</script>")
 PARTS = {
     # The shell goes last: it is the one owner of its rules, so nothing may follow it.
-    "css": CSS + EXTRA_CSS + BOOT_CSS + BLOCKS_CSS + AUTH_CSS + SHELL_CSS,
+    "css": CSS + EXTRA_CSS + BOOT_CSS + BLOCKS_CSS + LOOKUP_CSS + AUTH_CSS + SHELL_CSS,
     "body": BODY[:_i],
     "js": BODY[_i + len("<script>"):_j] + BOOT_JS,
 }

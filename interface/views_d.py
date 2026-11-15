@@ -36,6 +36,22 @@ V_FIN=f'''<div class="topbar"><div><h3>Finances</h3>
 {panel("Profit on what we sell", thin("<b>What each product group earns over its cost, over the last twelve months.</b> Margin needs the cost of each item against its selling price; lines sold with no recorded cost are counted separately rather than as pure profit."))}'''
 
 # ============ HR ============
+# People Lookup and Leave are not chart panels: frontend/src/legacy/people.js draws them
+# from api/people.py (search, the profile in the drawer, every balance). They are
+# .ppanel, not .panel, so the panels' renderer (legacy/panels.js) leaves them alone.
+def pp_section(key, title, sub):
+    return (f'<div class="ppanel" data-pp="{key}"><div class="ph"><div><b>{title}</b>'
+            f'<span>{sub}</span></div></div><div class="pp-body"></div></div>')
+
+HR_LOOKUP = pp_section("lookup", "People Lookup",
+    "Search anyone on the books, then open their profile")
+HR_LEAVE = ('<div class="two">'
+    + pp_section("away", "Away Today and This Week", "Approved leave, from the leave applications")
+    + pp_section("pending", "Waiting for Approval", "Leave requests not yet approved, longest wait first")
+    + '</div>'
+    + pp_section("balances", "Leave Balances", "Every active person, by leave type, as ERPNext counts it")
+    + pp_section("bydept", "Leave Taken by Department", "Days taken this year, to date"))
+
 V_HR=f'''<div class="topbar"><div><h3>HR &amp; Payroll</h3>
 <div class="when">Everyone on the books · pay is never read here</div></div></div>
 <div class="banner"><b>Pay is never read by this screen.</b> It shows people by department, branch and
@@ -49,6 +65,12 @@ under its own permissions.</div>
 {kpi("Engineers","—","","","flat","","capacity")}
 {kpi("Payroll","—","","","flat","","payroll")}
 </div>
+<div class="tabbar" data-g="thr">
+<button class="tab on" onclick="tab(this,&#39;thr&#39;,0)">Overview</button>
+<button class="tab" onclick="tab(this,&#39;thr&#39;,1)">People</button>
+<button class="tab" onclick="tab(this,&#39;thr&#39;,2)">Leave</button>
+<button class="tab" onclick="tab(this,&#39;thr&#39;,3)">Detail</button></div>
+<div class="tabpane on" data-g="thr" data-i="0">
 <div class="two">
 {panel("Where people work", bars0(),
  "By department","depts")}
@@ -56,16 +78,20 @@ under its own permissions.</div>
  +'<div style="margin-top:12px">'+stacked([("Active",0,"var(--ok)"),("Inactive",0,"var(--med)"),("Left",0,"var(--crit)")])+'</div>',"By branch, and standing","head")}
 </div>
 {warn0()}
+</div>
+<div class="tabpane" data-g="thr" data-i="1">
+{HR_LOOKUP}
+</div>
+<div class="tabpane" data-g="thr" data-i="2">
+{HR_LEAVE}
+</div>
+<div class="tabpane" data-g="thr" data-i="3">
 <div class="two">
 {panel("Departments are recorded inconsistently",
  '<ul class="bul"></ul>'
  +thin("Departments whose names suggest the same department typed twice. Headcount by department cannot be counted reliably until they are merged."),"","depts")}
-{panel("One person, everything about them",
- thin("<b>How much of each person's record ERPNext holds.</b> A single view of an employee is only as complete as what is recorded against them: a login, leave, attendance and appraisals."))}
-</div>
-<div class="two">
-{panel("Leave and attendance", thin("<b>Who is off, what is waiting for approval, and absence marked.</b> From the leave applications and attendance recorded in ERPNext."))}
 {panel("Appraisals and training", thin("<b>Reviews completed and training held, over the last twelve months.</b> For engineers working on medical equipment, a lapsed review or certificate is a compliance matter, not an HR nicety."))}
+</div>
 </div>'''
 
 # ============ IT ============
