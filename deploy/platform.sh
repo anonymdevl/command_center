@@ -8,7 +8,8 @@
 # the configuration with new keys, creates the tables, asks for your administrator
 # account, the Anthropic key and the first business, runs the first full load, and
 # installs two systemd services (web on 127.0.0.1:PORT, and the scheduler).
-# Later runs: pull, install, migrate, restart -- nothing is asked.
+# Later runs: pull, install, migrate, restart; they ask only for what a first run left
+# unfinished (no administrator yet, no Claude key, no business).
 #
 # It never touches a Frappe bench or site. Secrets are read without echo and passed in
 # the environment, never on a command line.
@@ -45,9 +46,7 @@ fi
 "$DIR/.venv-platform/bin/pip" install -q -r requirements-platform.txt
 echo "   $("$PY" -c 'import sys,django; print("python", sys.version.split()[0], "django", django.get_version())')"
 
-FIRST=0
 if [ ! -f "$CONFIG" ]; then
-  FIRST=1
   step "database (its own, on this server's MariaDB)"
   DB_NAME="$(ask 'Database name' 'insights')"
   DB_USER="$(ask 'Database user' 'insights')"
@@ -83,11 +82,26 @@ step "tables, cache, role"
 "$PY" manage.py setup
 "$PY" manage.py collectstatic --noinput -v 0
 
-if [ "$FIRST" = "1" ]; then
+# What a first run still has to do, judged from what is there -- so a run that stopped
+# part-way (a rejected password, a typo) picks up where it left off when run again.
+read -r HAS_ADMIN HAS_BUSINESS <<<"$("$PY" - <<'PYSTATE'
+import django; django.setup()
+from django.contrib.auth import get_user_model
+from insights.core.models import ConnectedBusiness
+print(int(get_user_model().objects.filter(is_superuser=True, is_active=True).exists()),
+      int(ConnectedBusiness.objects.exists()))
+PYSTATE
+)"
+HAS_KEY=0
+grep -q '"command_center_anthropic_key"' "$CONFIG" && HAS_KEY=1
+
+if [ "$HAS_ADMIN" = "0" ]; then
   step "your administrator account"
   ADMIN="$(ask 'Your email (you sign in with it)' '')"
   "$PY" manage.py add_manager "$ADMIN" "$(ask 'Your full name' '')" --admin
+fi
 
+if [ "$HAS_KEY" = "0" ]; then
   step "Claude"
   CC_KEY="$(secret 'Anthropic API key (sk-ant-..., blank to set later)')"
   if [ -n "$CC_KEY" ]; then
@@ -101,7 +115,9 @@ print("   key stored in insights.json")
 PYKEY
   fi
   unset CC_KEY
+fi
 
+if [ "$HAS_BUSINESS" = "0" ]; then
   step "the first business"
   if [ "$(ask 'Connect a business now? (y/n)' y)" = "y" ]; then
     "$PY" manage.py register_business
