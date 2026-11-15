@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { readImage, settingsApi } from "../api/client.js";
+import { IMAGE_TYPES, PRINT_TYPES, readImage, settingsApi } from "../api/client.js";
 import { useApi } from "../useApi.js";
 import { Failed, Loading } from "./States.jsx";
 import { Msg, act } from "./SettingsParts.jsx";
@@ -15,10 +15,16 @@ const FIELDS = [
 ];
 
 const LOGOS = [
-  ["logo_light", "Logo on light backgrounds", "Used on the PDFs, on paper and in the light theme."],
+  ["logo_light", "Logo on light backgrounds", "Used in the light theme, and on PDFs when no Report Logo is set."],
   ["logo_dark", "Logo on dark backgrounds", "Used in the dark theme. Leave empty to use the other one."],
   ["favicon", "Browser tab icon", "A small square image, at least 32 by 32 pixels."],
 ];
+
+const REPORT_USES = {
+  report: "PDFs print the Report Logo.",
+  light: "No Report Logo is set, so PDFs print the logo for light backgrounds.",
+  name: "No logo PDFs can show is set, so PDFs print the product name.",
+};
 
 /** Administrator only: the product's name, tagline, logos and the vendor's footer. */
 export default function SettingsBranding() {
@@ -29,6 +35,7 @@ export default function SettingsBranding() {
     <div className="st-stack">
       <BrandText data={data} onSaved={reload} />
       <BrandLogos data={data} onSaved={reload} />
+      <BrandReports data={data} onSaved={reload} />
     </div>
   );
 }
@@ -91,10 +98,10 @@ function BrandLogos({ data, onSaved }) {
     <div className="panel">
       <div className="ph">
         <div>
-          <b>Logos</b>
+          <b>Platform Logos</b>
           <span>
-            PNG, JPEG or WebP, at most {data.max_kb} KB. SVG is not accepted, because it can carry scripts.
-            PDFs show PNG and JPEG logos; a WebP logo is shown on screen and the PDFs print the name instead.
+            The screens' logos. PNG, JPEG or WebP, at most {data.max_kb} KB. SVG is not accepted, because it can carry scripts.
+            PDFs have their own Report Logo, below.
           </span>
         </div>
       </div>
@@ -111,14 +118,85 @@ function BrandLogos({ data, onSaved }) {
   );
 }
 
+/** The PDFs' own logo (PNG or JPEG only), and a preview of a document in the platform's brand. */
+function BrandReports({ data, onSaved }) {
+  return (
+    <div className="panel">
+      <div className="ph">
+        <div>
+          <b>Reports</b>
+          <span>
+            The logo on PDFs in Platform Branding, instead of the logo for light backgrounds. PNG or JPEG only, at
+            most {data.max_kb} KB: the PDF engine cannot draw WebP, and SVG is not accepted.
+            Each business can instead carry its own logo or letterhead: Businesses → Manage → Co-Branding.
+          </span>
+        </div>
+      </div>
+      <div className="st-logos">
+        <LogoSlot label="Report Logo" hint={REPORT_USES[data.report_uses] || ""} url={data.logo_report_url}
+          maxKb={data.max_kb} types={PRINT_TYPES}
+          onUpload={(dataUrl) => settingsApi.uploadBrandLogo("logo_report", dataUrl)}
+          onRemove={() => settingsApi.removeBrandLogo("logo_report")}
+          onSaved={onSaved} />
+      </div>
+      <div style={{ marginTop: 14 }}>
+        <ReportPreview run={() => settingsApi.previewReportStyle("", "platform", "show")} />
+      </div>
+    </div>
+  );
+}
+
+/** Preview: a one-page sample PDF (or its HTML where the server has no PDF engine), shown
+ *  here, labelled as a preview. Nothing is stored. Shared with Businesses → Manage. */
+export function ReportPreview({ run, label = "Preview" }) {
+  const [st, setSt] = useState({});
+  const [view, setView] = useState(null);
+  useEffect(() => () => view?.url && URL.revokeObjectURL(view.url), [view]);
+  const go = async () => {
+    const out = await act(setSt, run);
+    if (!out) return;
+    setSt({});
+    if (out.pdf) {
+      const bytes = Uint8Array.from(atob(out.pdf), (c) => c.charCodeAt(0));
+      setView({ url: URL.createObjectURL(new Blob([bytes], { type: "application/pdf" })), label: out.style_label });
+    } else {
+      setView({ html: out.html, label: out.style_label, reason: out.reason });
+    }
+  };
+  return (
+    <div className="st-preview">
+      <div className="st-acts" style={{ justifyContent: "flex-start" }}>
+        <button type="button" className="btn" onClick={go} disabled={st.busy}>
+          {st.busy ? "Preparing…" : label}
+        </button>
+        {view ? <button type="button" className="btn" onClick={() => setView(null)}>Close Preview</button> : null}
+        {view?.url ? <a className="btn" href={view.url} target="_blank" rel="noreferrer">Open PDF</a> : null}
+      </div>
+      <Msg tone="bad">{st.bad}</Msg>
+      {view ? (
+        <>
+          <span className="st-sub">
+            Preview, {view.label}: sample wording, nothing saved.
+            {view.html ? " No PDF engine here, so this is the page as HTML; the PDF is laid out the same way." : ""}
+          </span>
+          {view.url
+            ? <iframe title="Report preview" src={view.url} />
+            : <iframe title="Report preview" sandbox="allow-same-origin" srcDoc={view.html} />}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 /** One logo: what is set now, Choose File, Remove. Shared with Businesses → Manage. */
-export function LogoSlot({ label, hint, url, maxKb = 1024, dark = false, onUpload, onRemove, onSaved }) {
+export function LogoSlot({ label, hint, url, maxKb = 1024, dark = false, wide = false, types = IMAGE_TYPES,
+  onUpload, onRemove, onSaved }) {
   const [st, setSt] = useState({});
   const choose = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    const out = await act(setSt, async () => onUpload(await readImage(file, maxKb)),
+    const out = await act(setSt, async () => onUpload(await readImage(file, maxKb, types)),
       "Uploaded. Reload the page to see it everywhere.");
     if (out) onSaved(out);
   };
@@ -130,13 +208,13 @@ export function LogoSlot({ label, hint, url, maxKb = 1024, dark = false, onUploa
     <div className="st-logo">
       <b>{label}</b>
       <span className="st-sub">{hint}</span>
-      <div className={`st-logo-box${dark ? " dark" : ""}`}>
+      <div className={`st-logo-box${dark ? " dark" : ""}${wide ? " wide" : ""}`}>
         {url ? <img src={url} alt={label} /> : <span className="st-dim">None</span>}
       </div>
       <div className="st-acts" style={{ justifyContent: "flex-start" }}>
         <label className="btn st-file">
           {st.busy ? "Uploading…" : url ? "Replace" : "Choose File"}
-          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={choose} disabled={st.busy} />
+          <input type="file" accept={types.join(",")} onChange={choose} disabled={st.busy} />
         </label>
         {url ? <button type="button" className="btn" onClick={remove} disabled={st.busy}>Remove</button> : null}
       </div>

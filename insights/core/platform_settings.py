@@ -21,7 +21,10 @@ Security (insights/core/security.py) is the administrator's alone and can never 
 The Claude key, Email (and its Notifications status), Branding, Customers (plans,
 licences, usage and rates: insights/core/plans.py), Recommendations, the Changes list
 and giving Settings access stay with the administrator. A business's own
-co-brand (the name and logo its documents are prepared for) is part of Businesses.
+co-brand (the name and logo its documents are prepared for) and its Report Style
+(Platform Branding, Client Branding or Client Letterhead, with the letterhead's images)
+are part of Businesses -- except hiding the vendor's credit, which only the
+administrator may choose (it is the owner's own marketing).
 Every call starts with _require(section)
 or _require_admin(); the boot payload's settings_sections (sections_for) tells the
 screen which sections to show.
@@ -1266,8 +1269,16 @@ def _brand_view() -> dict:
             "defaults": dict(branding.DEFAULTS),
             "max_len": dict(branding.MAX_LEN),
             "max_kb": branding.MAX_BYTES // 1024,
-            **{f"{k}_url": branding.url_for(s[k]) for k in branding.LOGO_KINDS},
+            **{f"{k}_url": branding.url_for(s[k]) for k in branding.PLATFORM_KINDS},
+            # What the PDFs print now: the Report Logo, else the light-background logo,
+            # else the product's name (a WebP logo cannot be drawn in a PDF).
+            "report_uses": ("report" if s[branding.REPORT_KIND] else
+                            "light" if _printable(s["logo_light"] or s["logo_dark"]) else "name"),
             "preview": branding.public()}
+
+
+def _printable(name) -> bool:
+    return bool(name) and name.endswith(tuple("." + t for t in branding.PRINT_TYPES))
 
 
 def _brand_image(kind: str, raw: bytes) -> str:
@@ -1278,9 +1289,9 @@ def _brand_image(kind: str, raw: bytes) -> str:
         _say(str(e))
 
 
-def _decoded(data) -> bytes:
+def _decoded(data, max_bytes: int = branding.MAX_BYTES) -> bytes:
     try:
-        return branding.decode_upload(data)
+        return branding.decode_upload(data, max_bytes)
     except branding.BrandError as e:
         _say(str(e))
 
@@ -1328,9 +1339,11 @@ def set_brand(product_name: str = "", tagline: str = "", company: str = "", pers
 @frappe.whitelist(methods=["POST"])
 def upload_brand_logo(kind: str = "", data: str = ""):
     """A logo for light backgrounds, one for dark backgrounds, or the favicon: PNG, JPEG
-    or WebP, at most branding.MAX_BYTES, checked by its content (never SVG)."""
+    or WebP, at most branding.MAX_BYTES, checked by its content (never SVG). Or the
+    Report Logo the PDFs use instead of the light-background one: PNG or JPEG only (the
+    PDF engine cannot draw WebP)."""
     _require_admin()
-    if kind not in branding.LOGO_KINDS:
+    if kind not in branding.PLATFORM_KINDS:
         _say("Choose which logo this is.")
     name = _brand_image(kind, _decoded(data))
     cfg = _brand_cfg()
@@ -1345,7 +1358,7 @@ def upload_brand_logo(kind: str = "", data: str = ""):
 @frappe.whitelist(methods=["POST"])
 def remove_brand_logo(kind: str = ""):
     _require_admin()
-    if kind not in branding.LOGO_KINDS:
+    if kind not in branding.PLATFORM_KINDS:
         _say("Choose which logo to remove.")
     cfg = _brand_cfg()
     old = cfg.pop(kind, None)
@@ -1357,27 +1370,45 @@ def remove_brand_logo(kind: str = ""):
     return _brand_view()
 
 
+def _is_admin() -> bool:
+    u = _users._find(local.user)
+    return bool(u is not None and u.is_active and u.is_superuser)
+
+
 def _client_brand(code: str) -> dict:
     c = (branding.stored().get("businesses") or {}).get(code) or {}
     return {"client_name": c.get("display_name") or "",
-            "client_logo_url": branding.url_for(c.get("logo"))}
+            "client_logo_url": branding.url_for(c.get("logo")),
+            "report_style": c.get("style") or "platform",
+            "credit": c.get("credit") or "show",
+            "letterhead_url": branding.url_for(c.get("header")),
+            "letterfoot_url": branding.url_for(c.get("footer")),
+            "may_hide_credit": _is_admin(),
+            "letter_max_kb": branding.LETTER_MAX_BYTES // 1024}
+
+
+# What a business's co-brand keeps when it is the default, so a business with nothing
+# chosen has no entry at all.
+_CLIENT_DEFAULTS = {"style": "platform", "credit": "show"}
+_CLIENT_FILES = ("logo", "header", "footer")
 
 
 def _set_client(b, **changes) -> dict:
     cfg = _brand_cfg()
     clients = dict(cfg.get("businesses") or {})
     mine = dict(clients.get(b.business_code) or {})
-    old_logo = mine.get("logo")
+    old = {k: mine.get(k) for k in _CLIENT_FILES}
     mine.update(changes)
-    mine = {k: v for k, v in mine.items() if v}
+    mine = {k: v for k, v in mine.items() if v and _CLIENT_DEFAULTS.get(k) != v}
     if mine:
         clients[b.business_code] = mine
     else:
         clients.pop(b.business_code, None)
     cfg["businesses"] = clients
     _save_brand(cfg)
-    if old_logo and old_logo != mine.get("logo"):
-        branding.forget(old_logo, cfg)
+    for k, name in old.items():
+        if name and name != mine.get(k):
+            branding.forget(name, cfg)
     return _business_row(_get_business(b.pk))
 
 
@@ -1413,3 +1444,102 @@ def remove_business_logo(name: str = ""):
     b = _get_business(name)
     _audit(f"removed {b.business_name}'s logo", b)
     return _set_client(b, logo=None)
+
+
+# --- a business's Report Style ------------------------------------------------------------
+def _check_credit(credit: str, current: str) -> None:
+    """Hiding the vendor's credit is the administrator's alone: a delegate may choose
+    Show or Small, and may leave a Hide the administrator set as it is."""
+    if credit == "hide" and current != "hide" and not _is_admin():
+        raise PermissionError("Only the platform's administrator can hide the vendor's credit. "
+                              "Choose Show or Small.")
+
+
+@frappe.whitelist(methods=["POST"])
+def set_business_report_style(name: str = "", style: str = "", credit: str = ""):
+    """Whose brand leads this business's PDFs and workbooks (Platform Branding, Client
+    Branding, Client Letterhead) and how the vendor's credit appears (Show, Small,
+    Hide -- Hide by the administrator only). A blank value leaves it as it is."""
+    _require("businesses")
+    b = _get_business(name)
+    now = (branding.stored().get("businesses") or {}).get(b.business_code) or {}
+    style = str(style or "").strip() or now.get("style") or "platform"
+    credit = str(credit or "").strip() or now.get("credit") or "show"
+    if style not in branding.STYLES:
+        _say("Choose Platform Branding, Client Branding or Client Letterhead.")
+    if credit not in branding.CREDITS:
+        _say("Choose Show, Small or Hide for the vendor's credit.")
+    _check_credit(credit, now.get("credit") or "show")
+    if style == "letterhead" and not now.get("header"):
+        _say("Upload the letterhead's header image first, then choose Client Letterhead.")
+    if style == (now.get("style") or "platform") and credit == (now.get("credit") or "show"):
+        _say("Nothing was changed.")
+    _audit(f"set {b.business_name}'s report style to {branding.STYLES[style]}, vendor credit "
+           f"{branding.CREDITS[credit]}", b)
+    return _set_client(b, style=style, credit=credit)
+
+
+def _letter_part(part: str) -> str:
+    kind = branding.LETTER_KINDS.get(str(part or ""))
+    if not kind:
+        _say("Choose the letterhead's header or footer.")
+    return kind
+
+
+@frappe.whitelist(methods=["POST"])
+def upload_business_letterhead(name: str = "", part: str = "header", data: str = ""):
+    """The business's letterhead: the header strip printed across the top of every page
+    of its PDFs, or the footer strip across the foot. PNG or JPEG, at most
+    branding.LETTER_MAX_BYTES, a wide strip (branding.RULES), checked by content."""
+    _require("businesses")
+    b = _get_business(name)
+    kind = _letter_part(part)
+    image = _brand_image(kind, _decoded(data, branding.LETTER_MAX_BYTES))
+    _audit(f"uploaded a letterhead {part} for {b.business_name}", b)
+    return _set_client(b, **{part: image})
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_business_letterhead(name: str = "", part: str = "header"):
+    """Remove the letterhead's header or footer image. Without a header image a
+    letterhead cannot print, so the business goes to Client Branding."""
+    _require("businesses")
+    b = _get_business(name)
+    _letter_part(part)
+    now = (branding.stored().get("businesses") or {}).get(b.business_code) or {}
+    if not now.get(part):
+        _say("There is no such image to remove.")
+    changes = {part: None}
+    if part == "header" and now.get("style") == "letterhead":
+        changes["style"] = "client"
+    _audit(f"removed {b.business_name}'s letterhead {part}"
+           + (" (its report style is now Client Branding)" if "style" in changes else ""), b)
+    return _set_client(b, **changes)
+
+
+@frappe.whitelist(methods=["POST"])
+def preview_report_style(name: str = "", style: str = "", credit: str = ""):
+    """A one-page sample PDF in the Report Style and credit chosen on the screen (saved
+    or not), with the business's stored logo and letterhead; without a business, the
+    platform's own brand (Settings -> Branding, the administrator's). Stores nothing.
+    Where there is no PDF engine (a laptop), the page's HTML instead."""
+    import base64
+
+    from command_center.api import export
+    if name:
+        _require("businesses")
+        b = _get_business(name)
+        code = b.business_code
+        now = (branding.stored().get("businesses") or {}).get(code) or {}
+        style = style if style in branding.STYLES else None
+        credit = credit if credit in branding.CREDITS else None
+        _check_credit(credit or "", now.get("credit") or "show")
+    else:
+        _require_admin()
+        code, style, credit = None, "platform", "show"
+    out = export.preview(code, style=style, credit=credit)
+    look = branding.document(code, style=style, credit=credit)
+    return {"pdf": base64.b64encode(out["pdf"]).decode() if out["pdf"] else None,
+            "html": out["html"], "reason": out["reason"],
+            "style": look["look"], "style_label": branding.STYLES[look["look"]],
+            "credit": look["credit"]}

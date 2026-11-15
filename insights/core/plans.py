@@ -1005,8 +1005,9 @@ def _send_pdf(st: dict, money: bool):
     from command_center.api.export import _name, html_pdf
     title = f"Usage Statement · {st['period_label']}"
     code = (st["businesses"][0]["code"] if len(st["businesses"]) == 1 else None)
+    # The platform's own document: its brand, whatever the business's Report Style.
     pdf = html_pdf(title, _statement_html(st, money), code, footer=_statement_note(money),
-                   kicker="Usage Statement", business=st["licensed_to"],
+                   kicker="Usage Statement", business=st["licensed_to"], own=True,
                    period=st["period_label"] + ("" if st["complete"] else " (month in progress)"))
     frappe.local.response.filename = _name(f"Usage Statement {st['client']} {st['period']}", "pdf")
     frappe.local.response.filecontent = pdf
@@ -1036,7 +1037,8 @@ def _send_sheet(c, st: dict, money: bool):
                                   "Row", "Corrects row"], led))
     code = (st["businesses"][0]["code"] if len(st["businesses"]) == 1 else None)
     _send_xlsx(f"Usage Statement · {st['period_label']}", sheets, code,
-               note=_statement_note(money), business=st["licensed_to"], period=st["period_label"])
+               note=_statement_note(money), business=st["licensed_to"], period=st["period_label"],
+               own=True)
     from command_center.api.export import _name
     frappe.local.response.filename = _name(f"Usage Statement {st['client']} {st['period']}", "xlsx")
 

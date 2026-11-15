@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { settingsApi } from "../api/client.js";
+import { PRINT_TYPES, settingsApi } from "../api/client.js";
 import { useApi } from "../useApi.js";
 import { Failed, Loading } from "./States.jsx";
 import { Dialog, Msg, act, when } from "./SettingsParts.jsx";
-import { LogoSlot } from "./SettingsBranding.jsx";
+import { LogoSlot, ReportPreview } from "./SettingsBranding.jsx";
 
 const STATUS_TAG = { Active: "t-ok", Paused: "t-dr", Unreachable: "t-od" };
 
@@ -345,6 +345,7 @@ function ManageBusiness({ b, onClose, onDone }) {
       ) : null}
 
       <CoBrand b={b} onDone={onDone} />
+      <ReportStyle b={b} onDone={onDone} />
 
       <div className="dlg-acts">
         <button type="button" className="ap-act pri" onClick={onClose}>Done</button>
@@ -381,9 +382,97 @@ function CoBrand({ b, onDone }) {
           <Msg tone="bad">{st.bad}</Msg>
         </form>
         <LogoSlot label="Client logo" hint="PNG or JPEG, on a light background." url={b.client_logo_url}
+          types={PRINT_TYPES}
           onUpload={(dataUrl) => settingsApi.uploadBusinessLogo(b.name, dataUrl)}
           onRemove={() => settingsApi.removeBusinessLogo(b.name)}
           onSaved={onDone} />
+      </div>
+    </div>
+  );
+}
+
+const STYLES = [
+  ["platform", "Platform Branding",
+    "The platform's Report Logo leads; the document says \"Prepared for\" this business, with its logo if set."],
+  ["client", "Client Branding",
+    "This business's logo and display name lead the document; the platform appears only in the vendor's credit."],
+  ["letterhead", "Client Letterhead",
+    "This business's letterhead image prints across the top of every page, and its footer image, if any, across the foot."],
+];
+const CREDITS = [
+  ["show", "Show", "The vendor's full line on every page."],
+  ["small", "Small", "One short line."],
+  ["hide", "Hide", "None. The administrator alone may choose this."],
+];
+
+/** How this business's PDFs and workbooks carry a brand, and the vendor's credit on them. */
+function ReportStyle({ b, onDone }) {
+  const [f, setF] = useState({ style: b.report_style || "platform", credit: b.credit || "show" });
+  const [st, setSt] = useState({});
+  useEffect(() => {
+    setF({ style: b.report_style || "platform", credit: b.credit || "show" });
+  }, [b.report_style, b.credit]);
+  const changed = f.style !== (b.report_style || "platform") || f.credit !== (b.credit || "show");
+  const needsHeader = f.style === "letterhead" && !b.letterhead_url;
+  const save = async (e) => {
+    e.preventDefault();
+    const out = await act(setSt, () => settingsApi.setReportStyle(b.name, f.style, f.credit),
+      "Saved. Its PDFs and workbooks use this from the next one.");
+    if (out) onDone();
+  };
+  const credits = CREDITS.filter(([k]) => k !== "hide" || b.may_hide_credit || b.credit === "hide");
+  return (
+    <div className="dlg-sec">
+      <h4>Report Style</h4>
+      <p className="dlg-hint">
+        Its analyst answers, management reports, financial statements and report runs follow this, and so do the
+        heading rows of its Excel exports (letterhead images are not placed in Excel). The platform's own documents,
+        such as usage statements and incident reports, always carry the platform's brand.
+      </p>
+      <form onSubmit={save}>
+        <div className="st-choice st-styles" role="radiogroup" aria-label="Report Style">
+          {STYLES.map(([k, label, hint]) => (
+            <label key={k} className="st-check">
+              <input type="radio" name="mb-style" checked={f.style === k}
+                onChange={() => setF((x) => ({ ...x, style: k }))} />
+              <span>{label}<span className="st-sub">{hint}</span></span>
+            </label>
+          ))}
+        </div>
+        <label htmlFor="mb-credit">Vendor credit</label>
+        <select id="mb-credit" value={f.credit} onChange={(e) => setF((x) => ({ ...x, credit: e.target.value }))}>
+          {credits.map(([k, label, hint]) => (
+            <option key={k} value={k} disabled={k === "hide" && !b.may_hide_credit && b.credit !== "hide"}>
+              {label}: {hint}
+            </option>
+          ))}
+        </select>
+        <p className="dlg-hint">Page numbers are always printed.</p>
+        {needsHeader ? <Msg tone="note">Upload the letterhead's header image below, then save Client Letterhead.</Msg> : null}
+        <div className="dlg-acts" style={{ justifyContent: "flex-start" }}>
+          <button type="submit" className="ap-act" disabled={st.busy || !changed || needsHeader}>Save Report Style</button>
+        </div>
+        <Msg tone="ok">{st.ok}</Msg>
+        <Msg tone="bad">{st.bad}</Msg>
+      </form>
+      {f.style === "letterhead" || b.letterhead_url || b.letterfoot_url ? (
+        <div className="st-logos" style={{ marginTop: 14 }}>
+          <LogoSlot label="Letterhead header" wide types={PRINT_TYPES} maxKb={b.letter_max_kb || 2048}
+            hint="A wide strip as wide as the page, printed at the top of every page: PNG or JPEG, for example 2480 × 350 pixels (A4 at 300 dpi)."
+            url={b.letterhead_url}
+            onUpload={(dataUrl) => settingsApi.uploadLetterhead(b.name, "header", dataUrl)}
+            onRemove={() => settingsApi.removeLetterhead(b.name, "header")}
+            onSaved={onDone} />
+          <LogoSlot label="Letterhead footer (optional)" wide types={PRINT_TYPES} maxKb={b.letter_max_kb || 2048}
+            hint="A wide strip printed across the foot of every page, under the page number: PNG or JPEG."
+            url={b.letterfoot_url}
+            onUpload={(dataUrl) => settingsApi.uploadLetterhead(b.name, "footer", dataUrl)}
+            onRemove={() => settingsApi.removeLetterhead(b.name, "footer")}
+            onSaved={onDone} />
+        </div>
+      ) : null}
+      <div style={{ marginTop: 14 }}>
+        <ReportPreview label="Preview" run={() => settingsApi.previewReportStyle(b.name, f.style, f.credit)} />
       </div>
     </div>
   );

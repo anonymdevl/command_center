@@ -967,7 +967,8 @@ def incident_pdf(id=None):
     pdf = html_pdf(f"{d['ref']} {d['title']}", report_html(d), a["business_code"],
                    footer="Confidential. Prepared for the organisation's own records; not sent "
                           "to anyone by the platform.",
-                   kicker="Incident Report", business=a["business"], period=a["period"])
+                   kicker="Incident Report", business=a["business"], period=a["period"],
+                   own=True)
     frappe.local.response.filename = file_name(f"Incident Report {d['ref']}", "pdf")
     frappe.local.response.filecontent = pdf
     frappe.local.response.type = "pdf"
@@ -1007,7 +1008,7 @@ def incident_xlsx(id=None):
         ("Sign-In Record", ["When", "What", "Account", "Address", "Browser", "Route", "Locked",
                             "New Address", "New Browser", "By", "Note"], ev),
     ], a["business_code"], note="Confidential: for the organisation's own records.",
-        business=a["business"], period=a["period"])
+        business=a["business"], period=a["period"], own=True)
     frappe.local.response.filename = file_name(f"Incident {d['ref']} Events", "xlsx")
 
 
