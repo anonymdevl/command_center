@@ -11,11 +11,14 @@
  *                        and what is still open
  *
  * Built as DOM, never as HTML from the server, in the classes the designed cards use, so
- * the cards look like every other alert. The decisions -- approve, reject, accept, send
+ * the cards look like every other alert. The markup carries no sample request or task:
+ * until the queue is read the lists say so, and when it cannot be read as this person
+ * they show how to link their own ERPNext key, or that ERPNext is not answering. The decisions -- approve, reject, accept, send
  * back -- open the action dialog, which asks before anything changes.
  */
 
 import { count, exact, shortDate } from "../format.js";
+import { guideBox } from "./guide.js";
 import { hydrateTiles } from "./hydrate.js";
 
 export const WORK_VIEWS = new Set(["myday", "approvals", "delegation"]);
@@ -39,15 +42,49 @@ export const WORK_TILES = {
 
 export function renderWork(root, view, data, opts = {}) {
   if (!root || !data || !WORK_VIEWS.has(view)) return 0;
-  if (!data.available) {
-    banner(root, data.reason);
-    return 0;
-  }
+  if (!data.available) return unavailable(root, view, data, opts);
   root.querySelector(".work-banner")?.remove();
   const live = WORK_TILES[view] ? hydrateTiles(root, view, data.figures, opts, WORK_TILES[view]) : 0;
   if (view === "approvals") approvals(root, data);
   if (view === "myday") today(root, data);
   if (view === "delegation") delegation(root, data);
+  return live;
+}
+
+/** The queue cannot be read as this person: their own ERPNext key is not linked (a guide
+ *  to linking it), or the business's ERPNext is not answering. Never a sample request. */
+function unavailable(root, view, data, opts) {
+  const down = !!data.unreachable;
+  const figure = (key) => ({
+    key, value: null, unit: "count", note: down ? "can't reach ERPNext" : "your ERPNext key is not linked",
+    data_status: down ? { state: "unreachable", message: data.reason }
+      : { state: "needs_setup", message: data.reason, guide: data.guide },
+  });
+  const tiles = WORK_TILES[view] || {};
+  const figures = Object.fromEntries(Object.values(tiles).map((t) => [t.key, figure(t.key)]));
+  const live = Object.keys(tiles).length ? hydrateTiles(root, view, figures, opts, tiles) : 0;
+  const box = () => {
+    const wrap = el("div", "work-list");
+    wrap.dataset.unavailable = "1";
+    if (down || !data.guide) {
+      const e = el("div", "work-empty");
+      e.append(el("b", null, down ? "Can't reach ERPNext just now." : "Not available yet."),
+        el("span", null, data.reason || ""));
+      wrap.append(e);
+    } else {
+      wrap.append(guideBox(data.guide));
+    }
+    return wrap;
+  };
+  const anchor = view === "delegation" ? root.querySelector(".grid") : null;
+  root.querySelectorAll(".work-list, .work-table, .work-banner").forEach((n) => n.remove());
+  if (view === "myday") {
+    const sect = Array.from(root.querySelectorAll(".sect")).find((x) => /^awaiting you/i.test(x.textContent.trim()));
+    (sect || root.querySelector(".topbar")).after(box());
+  } else {
+    (anchor || root.querySelector(".topbar")).after(box());
+  }
+  setWhen(root, down ? "can't reach ERPNext just now" : "your ERPNext key is not linked yet");
   return live;
 }
 
@@ -241,13 +278,6 @@ function tasksTable(rows, { withPriority = false, empty: none } = {}) {
 }
 
 /* ------------------------------------------------------------------ helpers */
-function banner(root, reason) {
-  if (root.querySelector(".work-banner")) return;
-  const b = el("div", "warn work-banner");
-  b.append(el("b", null, "These requests and tasks are samples. "), document.createTextNode(reason || ""));
-  root.querySelector(".topbar")?.after(b);
-}
-
 function setWhen(root, text) {
   const w = root.querySelector(".topbar .when");
   if (w) w.textContent = text;

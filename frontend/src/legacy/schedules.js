@@ -34,6 +34,14 @@ export function renderSchedules(root, data) {
       window.dispatchEvent(new CustomEvent("cc-schedule", { detail: { code, title, current: s || null } }));
     };
     cell.append(says, edit);
+    // "Last run": when the schedule last sent it, or why it did not (api/reports.py).
+    const last = root.querySelector(`[data-last="${code}"]`);
+    if (last && s && (s.last_sent || s.last_status) && !last.dataset.ran) {
+      const failed = /^failed|not sent/i.test(s.last_status || "");
+      last.className = `tag ${failed ? "t-od" : "t-ok"}`;
+      last.textContent = failed ? "Failed" : `Sent ${String(s.last_sent || "").slice(0, 16).replace("T", " ")}`;
+      last.title = s.last_status || "";
+    }
     if (s?.next_run && s.enabled) {
       const next = document.createElement("small");
       next.className = "sch-next";

@@ -56,44 +56,25 @@ against today it would all fall into the oldest band, which would say nothing ab
 collect.</div>'''
 
 # ---------------- V: HEALTH ----------------
-fams=[("Can we deliver what we sold?",38,"high","491 products reserved but unavailable"),
- ("Are we getting paid?",22,"crit","GHS 9.18M owed, 74% over three months"),
- ("Is the paperwork finished?",71,"med","88 invoices written but never issued"),
- ("Were the right people asked?",31,"crit","Approvals completed by whoever raised them"),
- ("Are our records clean?",None,"na","Not yet reviewed"),
- ("Who can see what?",None,"na","Starts measuring at go-live")]
+# The six questions, each one stated ratio read when the screen opens (legacy/home.js
+# renderHealthTiles; kpi score_* and live_governance score_*).
+fams=["Can we deliver what we sold?","Are we getting paid?","Is the paperwork finished?",
+ "Were the right people asked?","Are our records clean?","Who can see what?"]
 fh=""
-for nm,sc,sev,note in fams:
-    if sc is None:
-        val='<span style="color:var(--dim)">\u2014</span>'
-        bar='<div class="bar"></div>'
-        flag='<span class="flag f-dim">Not scored</span>'
-    else:
-        col={"crit":"var(--crit)","high":"var(--high)","med":"var(--med)"}[sev]
-        val=f'<span style="color:{col}">{sc}</span><small>/100</small>'
-        bar=f'<div class="bar"><i style="width:{sc}%;background:{col}"></i></div>'
-        flag={"crit":'<span class="flag f-crit">Critical</span>',
-              "high":'<span class="flag f-high">High</span>',
-              "med":'<span class="flag f-med">Watch</span>'}[sev]
+for nm in fams:
     fh+=f'''<div class="bk q">
-<div class="khead"><div class="l">{nm}</div>{flag}</div>
-<div class="n">{val}</div>{bar}<div class="v">{note}</div></div>'''
+<div class="khead"><div class="l">{nm}</div><span class="flag f-dim">Reading</span></div>
+<div class="n"><span style="color:var(--dim)">—</span></div><div class="bar"></div><div class="v">&nbsp;</div></div>'''
 
 V_HEALTH=f'''<div class="topbar"><div><h3>Business Health</h3>
 <div class="when">Six questions, asked of the business every morning</div></div></div>
 <div class="hh-head" style="display:grid;grid-template-columns:190px 1fr;gap:16px;align-items:center;
-background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--crit);
+background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--line2);
 border-radius:var(--r);padding:18px 20px;margin-bottom:16px">
-<div style="text-align:center"><div id="hh-score" style="font-size:var(--fs-5xl);font-weight:var(--fw-bold);color:var(--crit);line-height:1">39</div>
+<div style="text-align:center"><div id="hh-score" style="font-size:var(--fs-5xl);font-weight:var(--fw-bold);color:var(--dim);line-height:1">—</div>
 <div style="font-size:var(--fs-2xs);color:var(--dim); font-weight:var(--fw-semibold);margin-top:2px">Control health</div>
-<div id="hh-trend" style="font-size:var(--fs-2xs);color:var(--crit);margin-top:5px">▼ 6 since last week</div></div>
-<div><div style="font-size:var(--fs-md);line-height:1.6">Three things are going badly.
-<b>We cannot reliably deliver what we have sold</b> — 491 products are promised to customers but not
-on the shelf, and a third of everything we own is not in any warehouse.
-<b>We are not being paid</b> — the full GHS 9.18M owed is more than three months late, with nothing at
-all in the earlier stages. <b>And approvals are being completed by whoever raised them</b> — the
-four-stage check on purchase orders exists, and the change history shows single accounts walking
-straight through it in seconds.</div>
+<div id="hh-trend" style="font-size:var(--fs-2xs);color:var(--mut);margin-top:5px">&nbsp;</div></div>
+<div><div id="hh-say" style="font-size:var(--fs-md);line-height:1.6">Working it out&hellip;</div>
 <div style="font-size:var(--fs-xs);color:var(--mut);margin-top:9px">This is not a score about the software.
 It measures whether the records the business runs on can be trusted this week.</div></div></div>
 <div class="sect">The six questions</div>
@@ -105,42 +86,5 @@ It measures whether the records the business runs on can be trusted this week.</
 <button type="button" class="lnk loads-more" id="loads-more" aria-expanded="false">Show the load history</button>
 <div id="loads-hist" hidden></div></div>
 <div class="sect" style="margin-top:20px"><span>What is going wrong, largest first</span></div>
-{alert("crit","We have promised customers stock we do not physically have, across 491 products",
- "Any of those orders can fail the moment the warehouse goes to pick it.",
- "Freeze new commitments on the worst lines until a count is done.",
- "491","products","Stock position","Central, Kumasi, Accra","Stock Manager","ongoing","openDrawer('stock')",
- ["Assign","Request evidence","Raise as a finding","Defer","Escalate","Dismiss"])}
-{alert("crit","We have committed 40,080 syringes to customers. There are 139 in the building.",
- "The same is true of 10ml syringes and infusion sets — everyday items we sell constantly.",
- "Stop quoting these lines until the count is confirmed.",
- "39,941","short","Stock position","Central Warehouse","Stock Manager","ongoing","openDrawer('stock')",
- ["Assign","Request evidence","Raise as a finding","Defer","Escalate","Dismiss"])}
-{alert("high","Almost a third of everything we own is not in any warehouse",
- "GHS 1.18M of real equipment sits in a stock-adjustment account. Nobody can sell it from there.",
- "Decide where this equipment physically is, then move it onto a sellable location.",
- "1,175,920","GHS","Stock adjustment account","207 product lines","Stock Manager","unknown","openDrawer('recon')",
- ["Assign","Request evidence","Raise as a finding","Defer","Escalate","Dismiss"])}
-{alert("crit","GHS 6.78M of the 9.18M owed is more than three months late",
- "Ten customers hold all of it. Nothing is sitting in the earlier stages.",
- "Pick the three largest and agree payment dates this week.",
- "6,777,143","GHS owed","Customer accounts","647 invoices","Finance","over 3 months","openDrawer('ar')",
- ["Assign","Request evidence","Raise as a finding","Defer","Escalate","Dismiss"])}
-{alert("high","UBUNTU has been waiting for three installations since February last year",
- "The same hospital owes us GHS 636,675. We have not delivered and they have not paid — one story, not two.",
- "Send an engineer and open the payment conversation in the same call.",
- "636,675","GHS at risk","Projects","PROJ-0028 / 0029 / 0030","Engineering","19 months","openDrawer('ubuntu')",
- ["Assign","Request evidence","Raise as a finding","Defer","Escalate","Dismiss"])}
-{alert("crit","Purchase orders are being approved by the person who raised them",
- "Gigmann already runs a four-stage check on purchases — operations manager, director, then chief executive. The change history shows single accounts completing all four stages in fourteen seconds.",
- "Decide who is genuinely separate from the requester, and set the approval routes to match.",
- "4","stages, one account","Purchase order","PUR-ORD-2025-00223","Nobody yet","19 Aug 2025","",
- ["Assign","Request evidence","Raise as a finding","Defer","Escalate","Dismiss"])}
-{alert("med","88 invoices were written but never issued",
- "That revenue is in nobody's figures, and nobody is chasing it.",
- "Ask Sales to issue or void them by Friday.",
- "88","invoices","Unissued invoices","Sales","Sales","varies","",
- ["Assign","Request evidence","Raise as a finding","Defer","Escalate","Dismiss"])}
-<div class="note"><h4>What you would be asked first</h4><ul>
-<li>We have promised 40,080 syringes and hold 139. How did that happen?</li>
-<li>Of the ten customers owing us GHS 9.18M, which has ever paid a bill that size?</li>
-<li>Why is GHS 1.18M of equipment sitting outside every warehouse?</li></ul></div>'''
+<div class="alert-live-list"><div class="work-empty"><b>Reading the alerts&hellip;</b></div></div>
+<div class="note" id="hh-ask" hidden><h4>What you would be asked first</h4><ul></ul></div>'''

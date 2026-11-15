@@ -1300,7 +1300,9 @@ check("<ActionDialog" in open(os.path.join(ROOT, "frontend", "src", "App.jsx")).
 _extra = re.search(r"export const EXTRA_KPIS = \{(.*?)\n\};",
                    open(os.path.join(ROOT, "frontend", "src", "legacy", "hydrate.js")).read(), re.S)
 for _key in re.findall(r'"([a-z][a-z0-9_]+)"', _extra.group(1) if _extra else ""):
-    check(_key in REGISTRY, f"hydrate.js EXTRA_KPIS names {_key!r}, which is not registered")
+    from command_center.kpi.live import LIVE as _LIVE_X
+    check(_key in REGISTRY or _key in _LIVE_X,
+          f"hydrate.js EXTRA_KPIS names {_key!r}, which is not registered or a live read")
 check(bool(_extra), "hydrate.js has no EXTRA_KPIS, so Home's gauge and counts have no figures")
 
 # Every function the generated markup calls from an inline onclick must be installed on

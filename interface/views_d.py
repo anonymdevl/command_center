@@ -73,72 +73,65 @@ which is worth holding next to the three installations that are nineteen months 
 </div>'''
 
 # ============ IT ============
-IT_OV=f'''{panel("Who can get into ERPNext today, and what they can do",
- '<table class="dt"><thead><tr><th>Person</th><th>Roles they hold</th><th style="text-align:right">How many</th>'
- '<th>Separation of duties</th><th>Last seen</th></tr></thead><tbody>'+user_rows()+'</tbody></table>'
- +thin("Read live from their ERPNext. <b>Three active accounts hold role combinations that let one person "
- "both start a transaction and approve it.</b> None of this is an accusation; it is what the permission "
- "records currently say."),
- "13 active Gigmann accounts","access")}
-<div class="warn"><b>Simon Nketiah Sieh holds five manager roles across HR, finance, stock and buying.</b>
-That single account can raise a purchase and approve its payment, adjust stock and post the accounting for
-it, and change pay and approve paying it. In a company of 24 active staff some overlap is unavoidable &mdash;
-but it should be a decision somebody took, not something nobody noticed.</div>'''
+# Every row and figure on this screen is read when it opens: the business's ERPNext
+# accounts (api/panels.py), this platform's own people and its sign-in (api/panels_core.py).
+# Nothing about any one business is written here.
+def _tbl(*cols):
+    th="".join(f'<th{" style=text-align:right" if c.startswith(">") else ""}>{c.lstrip(">")}</th>' for c in cols)
+    return f'<table class="dt"><thead><tr>{th}</tr></thead><tbody></tbody></table>'
 
-IT_DETAIL=f'''{panel("How the platform works out who you are",
- '<table class="dt"><thead><tr><th>Person</th><th>Where they work</th><th>Their ERPNext account</th>'
- '<th>What this platform gives them</th><th>Link</th></tr></thead><tbody>'+identity_rows()+'</tbody></table>'
- +thin("Nothing here is typed in by us. The platform reads the employee records for who does what and who "
- "reports to whom, then reads each linked account for what they are allowed to do, and works out access from "
- "the two. <b>Several people can hold the same access &mdash; it is not one person per role.</b>"),
- "Resolved live from ERPNext","identity")}
-{panel("The rule it applies",
- '<table class="dt"><thead><tr><th style="width:190px">Access here</th><th>Is given to anyone who&hellip;</th></tr></thead><tbody>'
- +derive_rows()+'</tbody></table>'
- +thin("The rules are configuration, not code. If Gigmann wants Sales Managers to see buying as well, "
- "that is a line changed by an administrator, and the change is recorded."),"","identity")}
-<div class="warn"><b>Only five of thirty-five employee records are linked to a login</b>, and the Chief
-Executive is one of the thirty that are not. The platform can still tell you Samuel Damptey Adjei is the
-Chief Executive &mdash; his record says so, and nobody sits above him in the reporting tree &mdash; but it
-cannot let him sign in until his employee record and his account are joined up. That is one field per person.</div>
+IT_OV=f'''{panel("Who can get into ERPNext today, and what they can do",
+ _tbl("Person","Roles they hold",">How many","Separation of duties","Last seen")
+ +thin("Read live from the business&#39;s ERPNext. A conflict is a pair of duties one account should "
+ "not hold together, such as raising a purchase and approving its payment. None of this is an "
+ "accusation; it is what the permission records currently say."),
+ "Reading the accounts&hellip;","access")}
+<div class="warn" hidden></div>'''
+
+IT_DETAIL=f'''{panel("Who can sign in to this platform",
+ _tbl("Person","Access here","Status","Last signed in")
+ +thin("This platform has its own sign-in, separate from ERPNext. Only the people listed here can open it, "
+ "and only an administrator can add or remove them, under Settings &rarr; People."),
+ "Reading the platform&#39;s people&hellip;","identity")}
+{panel("How signing in works",
+ '<table class="dt"><thead><tr><th style="width:190px">Rule</th><th>What it does</th></tr></thead><tbody>'
+ '<tr><td>Its own accounts</td><td>Each person signs in with their email and a password of at least ten characters. An ERPNext login does not open this platform.</td></tr>'
+ '<tr><td>Managers</td><td>See every screen for the businesses connected here, and act only in ERPNext under their own linked key.</td></tr>'
+ '<tr><td>Administrators</td><td>Also manage the people, the businesses, the keys and the alert rules.</td></tr>'
+ '<tr><td>Failed attempts</td><td>Five wrong passwords for one account from one address lock that pair out for fifteen minutes; twenty from one address, or for one account, lock those out too.</td></tr>'
+ '<tr><td>Sessions</td><td>A sign-in lasts twelve hours unless the platform is set otherwise; deactivating a person ends their sessions at once.</td></tr>'
+ '</tbody></table>',"","identity")}
 {panel("Accounts that are switched off",
- '<table class="dt"><thead><tr><th>Person</th><th>Roles still attached</th><th style="text-align:right">How many</th>'
- '<th>Status</th><th>Last seen</th></tr></thead><tbody>'+disabled_rows()+'</tbody></table>'
- +thin("<b>Offboarding is being done properly</b> &mdash; every departed person checked has had sign-in blocked. "
- "Worth knowing: the roles stay attached, so re-enabling an account restores everything it had. "
- "Sandra Oppong also appears twice under two addresses, which is a records problem rather than a security one."),
- "5 accounts","access")}
+ _tbl("Person","Roles still attached",">How many","Status","Last seen")
+ +thin("A switched-off ERPNext account cannot sign in, but its roles stay attached, so re-enabling it restores everything it had."),
+ "Reading the accounts&hellip;","access")}
 {panel("This platform&#39;s own access",
- '<table class="dt"><thead><tr><th>Role</th><th>People</th><th>What they can reach</th></tr></thead><tbody>'
- '<tr><td>Chief Executive</td><td>1</td><td>Everything</td></tr>'
- '<tr><td>Finance Director</td><td>1</td><td>Money, buying, stock, approvals</td></tr>'
- '<tr><td>Head of Sales</td><td>1</td><td>Sales, stock, engineering, complaints</td></tr>'
- '<tr><td>HR Director</td><td>1</td><td>People, including the restricted records</td></tr>'
- '<tr><td>Internal Audit</td><td>1</td><td>Read-only everywhere, plus the trail</td></tr>'
- '<tr><td>Platform administrator</td><td>2</td><td>Settings and thresholds &middot; approves nothing</td></tr>'
- '</tbody></table>'
- +thin("<b>Seven accounts, all management.</b> No general staff login exists. Outstanding Tasks reaches people "
- "in ERPNext, where they already are."),"","access")}'''
+ _tbl("Role",">People","What they can reach"),"","access")}'''
 
 IT_GAPS=f'''<div class="two">
-{panel("Is the data current", thin("<b>This copy is deliberately behind.</b> It was taken to 19 August 2025. In service the platform reads changes every few minutes and states on every screen how fresh the figures are."))}
-{panel("Backups and recovery", thin("<b>Starts at go-live.</b> Last successful backup, last restore actually tested, and how long it took. A backup that has never been restored is not a backup."))}
+{panel("Is the data current",
+ _tbl("Records","Covers up to","Last read","Status")
+ +thin("The platform reads what changed in ERPNext every fifteen minutes and everything again once a week."),"")}
+{panel("Backups and recovery",
+ _tbl("Backup","Taken","Size")
+ +thin("The platform&#39;s own database is backed up every night and the last fourteen days are kept. "
+ "Copy them off the server now and then: a backup kept on the same machine is lost with it."),"")}
 </div>'''
 
 V_IT=('<div class="topbar"><div><h3>Systems and Access</h3>'
- '<div class="when">Read live from ERPNext &middot; 13 Gigmann accounts &middot; 3 with role conflicts</div></div></div>'
+ '<div class="when">Read live from ERPNext and from this platform</div></div></div>'
  +f'''<div class="kpis six">
-{kpi("Staff accounts","13","","active in ERPNext","flat","","access")}
-{kpi("Role conflicts","3","","one person, both sides","dn","review","conflicts")}
-{kpi("5 manager roles","3","","of 13 accounts","dn","","roles5")}
-{kpi("Departments","8","","across 3 branches","flat","","depts")}
-{kpi("Disabled","4","","blocked correctly","up","","disabled")}
-{kpi("Last refreshed","06:58","","this morning","flat","","fresh")}
+{kpi("Staff accounts","—","","","flat","","access")}
+{kpi("Role conflicts","—","","","flat","","conflicts")}
+{kpi("5 manager roles","—","","","flat","","roles5")}
+{kpi("Departments","—","","","flat","","depts")}
+{kpi("Disabled","—","","","flat","","disabled")}
+{kpi("Last refreshed","—","","","flat","","fresh")}
 </div>'''
  +'<div class="tabbar" data-g="tit">'
  '<button class="tab on" onclick="tab(this,&#39;tit&#39;,0)">Who can get in</button>'
- '<button class="tab" onclick="tab(this,&#39;tit&#39;,1)">Detail</button>'
- '<button class="tab" onclick="tab(this,&#39;tit&#39;,2)">Not yet measured</button></div>'
+ '<button class="tab" onclick="tab(this,&#39;tit&#39;,1)">This platform</button>'
+ '<button class="tab" onclick="tab(this,&#39;tit&#39;,2)">Data and backups</button></div>'
  '<div class="tabpane on" data-g="tit" data-i="0">'+IT_OV+'</div>'
  '<div class="tabpane" data-g="tit" data-i="1">'+IT_DETAIL+'</div>'
  '<div class="tabpane" data-g="tit" data-i="2">'+IT_GAPS+'</div>')

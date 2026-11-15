@@ -112,12 +112,12 @@ color:var(--accent);font-weight:var(--fw-bold);margin-bottom:6px}
 
 NAVGROUPS=[
  ("Your day",[("command","Home","",["ceo","fin","sales","audit","hr"]),
-              ("brief","Executive Summary","5",["ceo","fin","sales","audit","hr"]),
+              ("brief","Executive Summary","",["ceo","fin","sales","audit","hr"]),
               ("myday","Today","",["ceo","fin","sales","audit","hr"])]),
  ("Run the business",[("ops","Business Overview","",["ceo","fin","sales","audit","hr"]),
-              ("health","Business Health","6",["ceo","fin","audit"]),
+              ("health","Business Health","",["ceo","fin","audit"]),
               ("risk","Risk and Compliance","",["ceo","fin","audit"])]),
- ("Decide and delegate",[("approvals","Approvals","3",["ceo","fin"]),
+ ("Decide and delegate",[("approvals","Approvals","",["ceo","fin"]),
               ("delegation","Outstanding Tasks","",["ceo","fin","sales","audit","hr"])]),
  ("Ask and find",[("ask","Ask AI","",["ceo","fin","sales","audit","hr"]),
               ("reports","Reports","",["ceo","fin","sales","audit","hr"])]),
@@ -182,12 +182,9 @@ DR={k:drawer_html(v) for k,v in DRAWERS.items()}
 def ex_html(k):
     t,sub,rows,foot=EX[k]
     r="".join(f"<dt>{a}</dt><dd>{b}</dd>" for a,b in rows)
-    rec=RECORDS.get(k,"")
-    if rec:
-        recblock='<div class="sect" style="margin-top:16px">The records behind it</div>'+rec
-    else:
-        recblock=('<div class="sect" style="margin-top:16px">The records behind it</div>'
-                  '<div class="thin">Nothing to list for this one in the demo extract.</div>')
+    # The records behind a figure open from the figure itself (the live records drawer);
+    # an explainer says only what the figure is and how it is worked out.
+    recblock=""
     return (f'<div class="dhead"><div><div class="dt">Where this comes from</div><h4>{t}</h4></div>'
             f'<button class="btn" onclick="closeDrawer()">Close &#10005;</button></div>'
             f'<p style="font-size:var(--fs-sm);color:var(--mut);margin-bottom:10px">{sub}</p>'

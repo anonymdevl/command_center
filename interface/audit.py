@@ -166,3 +166,8 @@ def drill_html(k):
             f'<div class="warn" style="margin-top:4px">{note}</div>'
             f'<div class="acts" style="margin-top:14px"><button class="btn pri">Open in ERPNext &#8599;</button>'
             f'<button class="btn">Raise as a finding</button></div>')
+
+
+# Business-specific samples are never shipped: every record opens in the live records
+# drawer, every answer comes from the analyst. (DRILL kept above only as history.)
+DRILL={}

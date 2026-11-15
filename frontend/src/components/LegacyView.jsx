@@ -15,7 +15,9 @@ import { renderSteps } from "../legacy/steps.js";
 import { runReport } from "../legacy/reports.js";
 import { wireActions } from "../legacy/actions.js";
 import { WORK_VIEWS, renderWork } from "../legacy/work.js";
-import { ALERT_VIEWS, renderAlerts } from "../legacy/alerts.js";
+import { ALERT_VIEWS, alertsFailed, renderAlerts } from "../legacy/alerts.js";
+import { CORE_PANEL_VIEWS, renderCore } from "../legacy/core.js";
+import ReachBanner from "./ReachBanner.jsx";
 import { renderHealthTiles, renderHome } from "../legacy/home.js";
 import { renderSchedules } from "../legacy/schedules.js";
 import { PANEL_VIEWS, renderPanels } from "../legacy/panels.js";
@@ -61,7 +63,8 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
   // Today, Approvals and Outstanding Tasks read the real queue (api/work.py), again
   // after any decision made on them.
   // The department screens' charts and tables (api/panels.py, legacy/panels.js).
-  const hasPanels = PANEL_VIEWS.has(viewKey);
+  // Business Overview's finding comes the same way (api/panels_core.py).
+  const hasPanels = PANEL_VIEWS.has(viewKey) || CORE_PANEL_VIEWS.has(viewKey);
   const panels = useApi(() => api.panels(viewKey, scope), [viewKey, scope], { skip: !hasPanels });
   const isWork = WORK_VIEWS.has(viewKey);
   const work = useApi(() => api.work(scope), [viewKey, scope], { skip: !isWork });
@@ -81,6 +84,14 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     window.addEventListener("cc-alerts-changed", again);
     return () => window.removeEventListener("cc-alerts-changed", again);
   }, [hasAlerts, alerts.reload]);
+
+  // Whether the selected business's ERPNext answers (components/ReachBanner.jsx).
+  const [reachDown, setReachDown] = useState(false);
+  useEffect(() => {
+    const on = (e) => setReachDown(e?.detail ? !e.detail.reachable : false);
+    window.addEventListener("cc-reach", on);
+    return () => window.removeEventListener("cc-reach", on);
+  }, []);
 
   // Business Health says how fresh the data is, and can refresh it.
   const isHealth = viewKey === "health";
@@ -438,18 +449,26 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     if (viewKey === "command") {
       renderHome(root, { figures: figures.data, alerts: alerts.data, scope, onOpen: opts.onOpen });
     }
-    if (viewKey === "health") renderHealthTiles(root, figures.data);
+    if (viewKey === "health") renderHealthTiles(root, figures.data, { openDrawer });
+    if (hasAlerts && alerts.error) alertsFailed(root, viewKey, alerts.error);
     if (hasPanels) {
       renderPanels(root, viewKey, panels.data, { onOpen: opts.onOpen, openDrawer,
                                                  failed: !!panels.error });
     }
+    // The management screens: nothing left designed, a dash and a reason where a figure
+    // could not be read (legacy/core.js).
+    renderCore(root, viewKey, {
+      figures: figures.data, figuresDone: keys.length === 0 || !!(figures.data || figures.error),
+      panels: panels.data, alerts: alerts.data, work: work.data, isWork,
+      workDone: !!(work.data || work.error), reachDown,
+    });
     // An alert drawn by the generator is a designed sample until something live replaces
     // it, and the screen's "still illustrative" line must keep saying so.
     root.querySelectorAll(".alert:not([data-live])").forEach((a) => {
       a.dataset.illustrative = "1";
     });
-  }, [viewKey, html, figures.data, work.data, isWork, alerts.data, hasAlerts, scope, openDrawer,
-      hasPanels, panels.data, panels.error]);
+  }, [viewKey, html, figures.data, figures.error, work.data, work.error, isWork, alerts.data,
+      alerts.error, hasAlerts, scope, openDrawer, hasPanels, panels.data, panels.error, reachDown]);
 
   // The designed action buttons (Assign, the "⋯" menu, Raise it...) had no handlers.
   useEffect(() => {
@@ -491,16 +510,22 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
 
   return (
     <>
+      <ReachBanner scope={scope} onBack={() => {
+        figures.reload();
+        if (hasPanels) panels.reload();
+        if (isWork) work.reload();
+        if (hasAlerts) alerts.reload();
+      }} />
       {figures.error ? (
         <div className="warn" style={{ margin: "0 0 14px" }}>
-          <b>The live figures could not be read.</b> {figures.error.message} The screen
-          below is showing its designed demonstration values.
+          <b>The live figures could not be read.</b> {figures.error.message} The cards
+          below show a dash until they can be.
         </div>
       ) : null}
       {work.error ? (
         <div className="warn" style={{ margin: "0 0 14px" }}>
-          <b>Your approvals and tasks could not be read.</b> {work.error.message} The
-          requests and tasks below are the designed samples, not yours.
+          <b>Your approvals and tasks could not be read.</b> {work.error.message} Open the
+          screen again to retry.
         </div>
       ) : null}
       <div key={viewKey} className="view on" ref={ref} dangerouslySetInnerHTML={{ __html: html }} />

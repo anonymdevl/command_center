@@ -2,35 +2,27 @@
 exec(_src('p4.py'))
 
 # ---------------- V: OPS ----------------
-doms=[("Sales & money owed","7,765","invoices","GHS 9.18M owed, 74% over 3 months","live","sales"),
- ("Buying & suppliers","299","orders","Supplier terms not yet reviewed","live","proc"),
- ("Stock & warehouses","3.77","GHS M","Reserved but unavailable \u00b7 a third off warehouse","live","inv"),
- ("Engineering & installs","30","projects","Three UBUNTU jobs 19 months late","live","eng"),
- ("Customer Service &amp; Issues","11","cases","Seeded for the demonstration","seed","cx"),
- ("Money in & out","14,816","postings","Reconciliation status not confirmed","live","fin"),
- ("People","35","employees","Payroll shown as status only, names hidden","live","hr"),
- ("Systems & access","\u2014","","Measured here \u2014 ERPNext holds no record","none","it"),
- ("Internal Audit","\u2014","","New capability, nothing to show yet","none","aud")]
+# Every figure is read when the screen opens (TILE_KPIS.ops in legacy/hydrate.js); the
+# footnotes say what each counts. Nothing about any one business is written here.
+doms=[("Sales & money owed","owed to us","sales"),
+ ("Buying & suppliers","owed to suppliers","proc"),
+ ("Stock & warehouses","value on hand","inv"),
+ ("Engineering & installs","open jobs","eng"),
+ ("Customer Service &amp; Issues","open complaints and service cases","cx"),
+ ("Money in & out","payments and journals","fin"),
+ ("People","everyone on the books","hr"),
+ ("Systems & access","active ERPNext accounts","it"),
+ ("Internal Audit","open alerts to review","aud")]
 dh=""
-for name,fig,unit,note,state,key in doms:
-    lab={"live":"Live data","seed":"Seeded","none":"Not yet"}[state]
-    fcls={"live":"f-ok","seed":"f-med","none":"f-dim"}[state]
-    if unit.startswith("GHS"):
-        mag=unit[3:].strip()
-        f_html=f'<span class="cx">GHS</span>{fig}' + (f'<span class="mag">{mag}</span>' if mag else "")
-    else:
-        f_html=f'{fig}' + (f' <small>{unit}</small>' if unit else "")
+for name,note,key in doms:
     dh+=f'''<div class="bk" onclick="go(&#39;{key}&#39;)">
-<div class="khead"><div class="l">{name}</div><span class="flag {fcls}">{lab}</span></div>
-<div class="n">{f_html}</div><div class="v">{note}</div></div>'''
+<div class="khead"><div class="l">{name}</div><span class="flag f-ok">Live data</span></div>
+<div class="n">—</div><div class="v">{note}</div></div>'''
 
 V_OPS=f'''<div class="topbar"><div><h3>Business Overview</h3>
 <div class="when">Nine areas · open any one of them</div></div></div>
 <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:10px">{dh}</div>
-<div class="warn"><b>Two areas are not really in ERPNext yet.</b> Customer Service &amp; Issues held no records at
-all until we seeded eleven for this demonstration, and internal audit has no home in ERPNext — it arrives
-with this platform. Engineering runs through Projects, but the installations there have no work
-breakdown, no owners and no dates. Worth raising before anything is signed.</div>'''
+<div class="warn" hidden></div>'''
 
 # ---------------- V: ENGINEERING ----------------
 V_ENG=f'''<div class="topbar"><div><h3>Engineering and installations</h3>

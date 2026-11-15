@@ -47,7 +47,8 @@ def _value(field: str, i: int, doctype: str):
         return 1
     if f in ("resolution_by", "response_by", "last_active", "last_login"):
         return (dt.datetime.now() - dt.timedelta(days=rnd.randint(-20, 200))).strftime("%Y-%m-%d %H:%M:%S")
-    if "date" in f or f in ("exp_end_date", "completed_on", "opening_date"):
+    if "date" in f or "deadline" in f or f in ("exp_end_date", "completed_on", "opening_date",
+                                                "completion_by"):
         return str(TODAY - dt.timedelta(days=rnd.randint(-30, 300)))
     if f.startswith(("is_", "has_")) or f in ("enabled", "disabled", "is_return"):
         return 0
@@ -114,7 +115,11 @@ class FakeERPNext:
         if m in ("frappe.client.get_list",):
             return _R(200, {"message": self.rows(p)})
         if m == "frappe.desk.form.load.getdoctype":
-            return _R(200, {"docs": [{"name": p.get("doctype"), "fields": []}]})
+            doc = {"name": p.get("doctype"), "fields": []}
+            if p.get("doctype") == "Version":
+                # ERPNext's own rules for the change log: System Manager reads, nobody deletes
+                doc["permissions"] = [{"role": "System Manager", "read": 1, "delete": 0}]
+            return _R(200, {"docs": [doc]})
         return _R(200, {"message": {}})
 
     def rows(self, p):
@@ -969,3 +974,190 @@ class SettingsDelegation(TransactionTestCase):
         self.assertTrue(sched.last_status.startswith("Sent to 1"), sched.last_status)
         n = self._ok("notifications")
         self.assertEqual((n["schedules_on"], n["failing"]), (1, []))
+
+
+# ---------------------------------------------------------------------------------------
+# The management screens: Home, Executive Summary, Today, Business Overview, Business
+# Health, Approvals, Outstanding Tasks, Risk and Compliance, Systems and Access, Internal
+# Audit, Reports, Ask AI and the access-denied page. Nothing on them may be a sample.
+# ---------------------------------------------------------------------------------------
+CORE_VIEWS = ("command", "brief", "myday", "ops", "health", "approvals", "delegation", "risk",
+              "it", "aud", "reports", "ask", "denied")
+# A business's own names, figures and dates never sit in the markup: they are read.
+NOT_IN_MARKUP = re.compile(
+    r"Gigmann|Biomed|Samuel|Simon|Moses|Nketiah|UBUNTU|Ubuntu|HAIRASH|Sunyani|Kumasi|Accra|"
+    r"SICHUAN|CYNSEL|Ejura|EJURA|A1 MEDICAL|PUR-ORD|ACC-PAY|SAL-ORD|PROJ-\d|"
+    r"[Dd]emo|[Ii]llustrative|[Ss]eeded|prototype|\bGHS\b|\b(19|20)\d{2}\b")
+
+
+def _js_map(src: str, name: str) -> dict:
+    """view -> its slice of one exported label map in a legacy/*.js file."""
+    body = re.search(r"export const %s = \{(.*?)\n\};" % name, src, re.S)
+    body = body.group(1) if body else ""
+    starts = [(m.group(1), m.end()) for m in re.finditer(r"^  (\w+): \{", body, re.M)]
+    out = {}
+    for i, (view, frm) in enumerate(starts):
+        to = starts[i + 1][1] - len(f"  {starts[i + 1][0]}: {{") if i + 1 < len(starts) else len(body)
+        out[view] = {html_unescape(l.strip()) for l in re.findall(
+            r'^\s*"?([^":\n/]+?)"?:\s*(?:"[a-z0-9_]+"|\{\s*key:)', body[frm:to], re.M)}
+    return out
+
+
+def html_unescape(s):
+    import html
+    return html.unescape(s)
+
+
+class ManagementScreens(TransactionTestCase):
+    databases = {"default", "aux"}
+
+    def _legacy(self, name):
+        from pathlib import Path
+        return (Path(__file__).resolve().parent.parent / "frontend" / "src" / "legacy" / name).read_text()
+
+    def test_markup_holds_no_sample(self):
+        views = json.loads(self._legacy("views.json"))
+        extras = json.loads(self._legacy("extras.json"))
+        nav = json.loads(self._legacy("nav.json"))
+        hyd, work, home = self._legacy("hydrate.js"), self._legacy("work.js"), self._legacy("home.js")
+        cards, tiles, work_tiles = _js_map(hyd, "CARD_KPIS"), _js_map(hyd, "TILE_KPIS"), _js_map(work, "WORK_TILES")
+        questions = set(re.findall(r'\["score_\w+", "[^"]+", "([^"]+)"\]', home))
+        self.assertEqual(len(questions), 6, "home.js names the six Business Health questions")
+        self.assertIn("score_approvals", home, "Were the right people asked? feeds Home's gauge")
+        for view in CORE_VIEWS:
+            page = views[view]
+            # every card and tile has a figure or a guide behind it
+            for label in re.findall(r'class="lab">(.*?)</div>', page):
+                self.assertIn(html_unescape(label), cards.get(view, set()),
+                              f"{view}: card {label!r} has no figure behind it")
+            for block in re.split(r'(?=<div class="bk)', page)[1:]:
+                label = re.search(r'class="l">(.*?)</div>', block, re.S)
+                self.assertTrue(label, f"{view}: a tile with no label")
+                label = html_unescape(label.group(1)).strip()
+                self.assertTrue(label in tiles.get(view, set()) or label in work_tiles.get(view, set())
+                                or (view == "health" and label in questions),
+                                f"{view}: tile {label!r} has no figure behind it")
+            # no designed alert, request or task, and no sample rows in a table
+            self.assertNotIn('class="alert ', page, f"{view} carries a designed alert")
+            if view not in ("reports", "it"):
+                self.assertNotRegex(page, r"<tbody>\s*<tr", f"{view} carries sample table rows")
+            # nothing about one business, no sample wording, no year, no currency
+            hit = NOT_IN_MARKUP.search(page)
+            self.assertIsNone(hit, f"{view} names {hit and hit.group(0)!r}: "
+                                   f"{hit and page[max(0, hit.start() - 80):hit.end() + 40]!r}")
+            for key in set(re.findall(r"explain\((?:'|&#39;)(\w+)", page)):
+                text = extras["explainers"].get(key, "")
+                hit = NOT_IN_MARKUP.search(text)
+                self.assertIsNone(hit, f"explainer {key!r} (on {view}) names "
+                                       f"{hit and hit.group(0)!r}")
+        # the static drills and canned answers are gone, and these screens open no drawer
+        self.assertEqual((extras["drill"], extras["brain"]), ({}, []))
+        for view in CORE_VIEWS:
+            self.assertNotRegex(views[view], r"openDrawer\((?:'|&#39;)\w", f"{view} opens a static drawer")
+        # nav badges are never typed in: a number in the sidebar must be counted
+        for group in nav["groups"]:
+            for item in group["items"]:
+                self.assertEqual(item["badge"], "", f"nav {item['key']} carries a typed badge")
+        # the check can fail: a typed name, a sample alert, an unmapped card
+        self.assertIsNotNone(NOT_IN_MARKUP.search('<b>UBUNTU</b> owes <span class="cx">GHS</span>'))
+        self.assertIsNone(NOT_IN_MARKUP.search(views["ops"]))
+        self.assertNotIn("Not a real label", cards.get("aud", set()))
+
+    def test_live_figures_guides_and_unreachable(self):
+        import requests
+
+        from command_center import install
+        from command_center.api import ingest
+        from insights.compat import run_as
+
+        Group.objects.get_or_create(name="Insights Dashboard Manager")
+        fake = FakeERPNext()
+        answer = fake.answer
+
+        def no_findings(m, p):
+            # Nothing recorded as a finding or an obligation on this ERPNext yet.
+            if m == "frappe.client.get_count" and p.get("doctype") in ("Non Conformance", "Contract"):
+                return _R(200, {"message": 0})
+            return answer(m, p)
+        fake.answer = no_findings
+        from django.conf import settings
+        from cryptography.fernet import Fernet
+        settings.CONFIG.setdefault("encryption_key", Fernet.generate_key().decode())
+        up = [mock.patch("requests.get", fake("GET")), mock.patch("requests.post", fake("POST")),
+              mock.patch("time.sleep", lambda s: None)]
+        for p in up:
+            p.start()
+        self.addCleanup(lambda: [p.stop() for p in up])
+        with run_as("Administrator"):
+            install.register_business("Test Medical Ltd", "https://erp.test", "key", "s3cret")
+            ingest.run_all(full=True)
+        U = get_user_model()
+        m = U.objects.create_user("boss@test.com", "boss@test.com", "a-long-test-pass-9")
+        m.groups.add(Group.objects.get(name="Insights Dashboard Manager"))
+        c = Client()
+        self.assertTrue(c.login(username="boss@test.com", password="a-long-test-pass-9"))
+
+        def post(method, **args):
+            r = c.post(f"/api/method/{method}", json.dumps(args), content_type="application/json")
+            self.assertEqual(r.status_code, 200, f"{method}: {r.content[:300]!r}")
+            return r.json()["message"]
+
+        from command_center.kpi.live_governance import LIVE as GOV
+        got = post("command_center.api.kpi.get", keys=sorted(GOV), business_code="test_medical_ltd")
+        for key, fig in got.items():
+            self.assertIn(fig["data_status"]["state"], ("live", "needs_setup", "stale"), f"{key}: {fig}")
+        # nothing recorded: a guide naming the ERPNext page, never a figure
+        for key, path in (("findings_open", "/app/non-conformance"), ("deadlines_overdue", "/app/contract")):
+            st = got[key]["data_status"]
+            self.assertEqual(st["state"], "needs_setup", key)
+            self.assertIsNone(got[key]["value"])
+            self.assertIn(path, st["guide"]["href"])
+            self.assertTrue(st["guide"]["steps"])
+        self.assertEqual(got["score_access"]["note"], "no active accounts")  # the fake has none
+        self.assertIsNotNone(got["control_score"]["value"])
+        self.assertEqual(got["versions_deletable"]["value"], 0)
+        # the risk table is a guide too, and the platform's own people are listed
+        risk = post("command_center.api.panels.get", view="risk", business_code="test_medical_ltd")
+        self.assertEqual(risk["panels"]["Obligations and deadlines"]["kind"], "guide")
+        it = post("command_center.api.panels.get", view="it", business_code="test_medical_ltd")
+        people = it["panels"]["Who can sign in to this platform"]["rows"]
+        self.assertIn("boss@test.com", [r["cells"][0]["sub"] for r in people])
+        # no personal key linked: the work screens get a guide, not someone else's queue
+        work = post("command_center.api.work.summary", business_code="test_medical_ltd")
+        self.assertFalse(work["available"])
+        self.assertIn("Personal ERPNext Keys", " ".join(work["guide"]["steps"]))
+        # alerts raised for the first time are emailed once; without mail it is recorded
+        alerts = post("command_center.api.alerts.open_alerts", business_code="test_medical_ltd")
+        loud = [a for a in alerts["alerts"] if a["severity"] in ("crit", "high")]
+        if loud:
+            self.assertTrue(all((a["emailed"] or "").startswith("Not emailed") for a in loud), loud)
+        self.assertTrue(post("command_center.api.reach.status",
+                             business_code="test_medical_ltd")["reachable"])
+
+        # the business's ERPNext stops answering
+        def down(*a, **k):
+            raise requests.ConnectionError("no route to host")
+        with mock.patch("requests.get", down), mock.patch("requests.post", down):
+            from django.core.cache import cache
+            cache.clear()
+            got = post("command_center.api.kpi.get", keys=["users_active", "users_disabled"],
+                       business_code="test_medical_ltd")
+            self.assertEqual(got["users_active"]["data_status"]["state"], "unreachable")
+            self.assertEqual(got["users_disabled"]["data_status"]["state"], "unreachable")
+            st = post("command_center.api.reach.status", business_code="test_medical_ltd")
+            self.assertFalse(st["reachable"])
+            self.assertEqual(st["name"], "Test Medical Ltd")
+            self.assertTrue(st["since"])
+            from command_center.api import work as work_api
+            from command_center.connectors.registry import connector_for
+            with mock.patch.object(work_api, "_source", lambda code: (
+                    work_api._Remote(connector_for("test_medical_ltd")), None)):
+                w = post("command_center.api.work.summary", business_code="test_medical_ltd")
+            self.assertTrue(w["unreachable"])
+            self.assertIn("Can't reach", w["reason"])
+            self.assertFalse(post("command_center.api.reach.retry",
+                                  business_code="test_medical_ltd")["reachable"])
+        # it answers again: Retry finds it, and the status recovers by itself
+        st = post("command_center.api.reach.retry", business_code="test_medical_ltd")
+        self.assertTrue(st["reachable"])
+        self.assertIsNone(st["since"])

@@ -146,3 +146,10 @@ DRAWERS={
   "chain":[("Order placed","2025",1),("Goods despatched","not yet",0)],
   "prov":[("Held in","ERPNext, as a sales order"),("Confirmed","Yes"),("Read by us","Today at 06:58")]},
 }
+
+
+# Business-specific samples are never shipped: every record opens in the live records
+# drawer. The management screens open none of these any more; the three below are still
+# opened by the department screens (Sales, Projects) until those are rebuilt on live
+# records, and go with them.
+DRAWERS={k:v for k,v in DRAWERS.items() if k in ("order","ubuntu","ejura")}
