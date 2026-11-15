@@ -150,6 +150,8 @@ function EditCredential({ row, onClose, onDone }) {
   const isNew = !row.name;
   const people = useApi(() => (isNew ? settingsApi.people() : Promise.resolve([])), []);
   const businesses = useApi(() => (isNew ? settingsApi.businesses() : Promise.resolve([])), []);
+  // Someone given Personal ERPNext Keys manages managers' keys, not administrators'.
+  const meAdmin = (people.data || []).some((p) => p.is_me && p.is_admin);
   const [f, setF] = useState({ user: row.user || "", business_code: row.business_code || "", api_key: "", api_secret: "" });
   const [st, setSt] = useState({});
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
@@ -173,7 +175,7 @@ function EditCredential({ row, onClose, onDone }) {
             <label htmlFor="ck-user">Person</label>
             <select id="ck-user" value={f.user} onChange={set("user")} required>
               <option value="">Choose…</option>
-              {(people.data || []).filter((p) => p.active).map((p) => (
+              {(people.data || []).filter((p) => p.active && (meAdmin || !p.is_admin)).map((p) => (
                 <option key={p.username} value={p.username}>{p.full_name} ({p.email})</option>
               ))}
             </select>

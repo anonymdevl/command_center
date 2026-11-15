@@ -7,8 +7,8 @@
   frappe.enqueue      a thread of this process, running as the person who asked.
   frappe.defaults     small stored values, per user or global (core.DefaultValue).
   frappe.log_error    core.ErrorLog.
-  frappe.sendmail     SMTP from the configuration (mail.host, ...); skipped and logged
-                      when no mail server is configured.
+  frappe.sendmail     SMTP from insights.json's "mail" (Settings -> Email); a message
+                      that cannot be sent is logged and raised, never dropped.
   get_pdf             wkhtmltopdf, the same renderer Frappe used.
 """
 
@@ -184,20 +184,165 @@ def log_error(title=None, message=None, reference_doctype=None, reference_name=N
 
 
 # --- mail ------------------------------------------------------------------------------
-def sendmail(recipients=None, subject="", message="", attachments=None, sender=None, **kw):
-    import smtplib
-    from email.message import EmailMessage
+# The "mail" key of insights.json, written by Settings -> Email:
+#   {"host": "smtp.example.com", "port": 587, "security": "starttls" | "ssl" | "none",
+#    "user": "...", "password": "...", "sender": "reports@example.com",
+#    "sender_name": "AI Business Intelligence"}
+# Older configurations with only "tls": true/false (STARTTLS or none) still work.
+MAIL_ATTEMPT_KEY = "cc:mail:last_attempt"
+MAIL_NOT_SENT = "Email not sent"  # the error log title of every message not sent
+
+
+class MailError(Exception):
+    """A message that was not sent; str(e) is the reason in plain words."""
+
+
+class MailNotConfigured(MailError):
+    pass
+
+
+def mail_config() -> dict:
+    """The mail settings, read from insights.json at each send: the web server and the
+    scheduler are separate processes, and a change saved in Settings by one must be
+    used by the other without a restart."""
+    import json
 
     from django.conf import settings
-    cfg = settings.CONFIG.get("mail") or {}
+    cfg = None
+    try:
+        with open(settings.CONFIG_PATH) as fh:
+            cfg = json.load(fh).get("mail")
+    except (OSError, ValueError, AttributeError):
+        cfg = None
+    if cfg is None:
+        cfg = settings.CONFIG.get("mail")
+    return dict(cfg) if isinstance(cfg, dict) else {}
+
+
+def mail_security(cfg: dict) -> str:
+    s = str(cfg.get("security") or "").strip().lower()
+    if s in ("starttls", "ssl", "none"):
+        return s
+    if cfg.get("ssl"):
+        return "ssl"
+    return "starttls" if cfg.get("tls", True) else "none"
+
+
+def mail_port(cfg: dict) -> int:
+    try:
+        port = int(cfg.get("port") or 0)
+    except (TypeError, ValueError):
+        port = 0
+    return port or {"ssl": 465, "starttls": 587, "none": 25}[mail_security(cfg)]
+
+
+def explain_mail_error(e: Exception, host: str, port: int, security: str) -> str:
+    """Why a message was not sent, in words the administrator can act on."""
+    import smtplib
+    import socket
+    import ssl
+    where = f"{host} on port {port}"
+    match = ("Check that the security setting matches the port: STARTTLS usually uses port "
+             "587, SSL uses port 465.")
+    if isinstance(e, smtplib.SMTPAuthenticationError):
+        return ("The mail server refused the username or password. Check them; some "
+                "providers (Gmail, Microsoft 365) need an app password here.")
+    if isinstance(e, smtplib.SMTPNotSupportedError):
+        if "auth" in str(e).lower():
+            return ("The mail server does not accept a username and password on this "
+                    "connection. Try STARTTLS or SSL, or leave the username blank if it "
+                    "needs none.")
+        return f"The mail server at {where} does not offer STARTTLS. {match}"
+    if isinstance(e, smtplib.SMTPSenderRefused):
+        return (f"The mail server would not send from {e.sender}. Use a From address the "
+                f"server allows, usually the username's own address.")
+    if isinstance(e, smtplib.SMTPRecipientsRefused):
+        return ("The mail server refused the address "
+                + ", ".join(str(r) for r in (e.recipients or {})) + ".")
+    if isinstance(e, ssl.SSLError):
+        return f"The secure connection to {where} failed. {match}"
+    if isinstance(e, socket.gaierror):
+        return f"The mail server {host} could not be found. Check its address."
+    if isinstance(e, (socket.timeout, TimeoutError)):
+        return (f"The mail server at {where} did not answer in time. Check the address and "
+                f"port. {match}")
+    if isinstance(e, (ConnectionRefusedError, smtplib.SMTPConnectError)):
+        return (f"Could not connect to the mail server at {where}: the connection was "
+                f"refused. Check the address and port.")
+    if isinstance(e, smtplib.SMTPServerDisconnected):
+        return f"The mail server at {where} closed the connection. {match}"
+    if isinstance(e, smtplib.SMTPResponseException):
+        said = e.smtp_error.decode(errors="replace") if isinstance(e.smtp_error, bytes) else str(e.smtp_error)
+        return f"The mail server refused the message: {e.smtp_code} {said[:200]}"
+    if isinstance(e, OSError):
+        return f"Could not connect to the mail server at {where} ({e.strerror or e})."
+    return f"The email could not be sent: {str(e)[:200] or type(e).__name__}"
+
+
+def _record_attempt(ok: bool, subject: str, to: list, error: str | None = None):
+    """The last send, kept for Settings -> Email (Notifications). Failures are also in
+    the error log, under MAIL_NOT_SENT."""
+    try:
+        from insights.compat.utils import now_datetime
+        cache().set_value(MAIL_ATTEMPT_KEY, {
+            "when": now_datetime().strftime("%Y-%m-%d %H:%M:%S"), "ok": bool(ok),
+            "subject": str(subject or "")[:200], "to": len(to), "error": error},
+            expires_in_sec=None)
+    except Exception:
+        import logging
+        logging.getLogger("insights").exception("could not record the email attempt")
+
+
+def last_mail_attempt() -> dict | None:
+    """The last send: what _record_attempt kept, or else the last failure in the log."""
+    try:
+        got = cache().get_value(MAIL_ATTEMPT_KEY)
+        if got:
+            return got
+        from insights.core.models import ErrorLog
+        e = ErrorLog.objects.filter(title__startswith=MAIL_NOT_SENT).order_by("-creation").first()
+    except Exception:
+        return None
+    if e is None:
+        return None
+    return {"when": e.creation.strftime("%Y-%m-%d %H:%M:%S"), "ok": False, "subject": "",
+            "to": 0, "error": (e.error or "").split("\n", 1)[0][:300]}
+
+
+def sendmail(recipients=None, subject="", message="", attachments=None, sender=None, **kw):
+    """Send now through the configured mail server, or raise MailError with the reason.
+
+    Never silent: a message that is not sent -- email not set up, server refused it --
+    is written to the error log (MAIL_NOT_SENT) and raised, so the caller records it
+    as failed (a report schedule's last status says why)."""
+    import smtplib
+    import ssl
+    from email.message import EmailMessage
+    from email.utils import formataddr
+
+    if isinstance(recipients, (list, tuple, set)):
+        to = [str(r).strip() for r in recipients if r and str(r).strip()]
+    else:
+        to = [r.strip() for r in str(recipients or "").split(",") if r.strip()]
+    cfg = mail_config()
     if not cfg.get("host"):
-        log_error("Command Center: mail not configured",
-                  f"Not sent (no mail server configured): {subject} to {recipients}")
-        return
+        why = ("Email is not set up, so nothing was sent. The platform's administrator can "
+               "set it up in Settings, under Email.")
+        log_error(f"{MAIL_NOT_SENT}: email is not set up",
+                  f"{why}\nSubject: {subject}\nTo: {', '.join(to)}")
+        _record_attempt(False, subject, to, why)
+        raise MailNotConfigured(why)
+    if not to:
+        raise MailError("There is no one to send it to.")
+
+    host, security = str(cfg["host"]).strip(), mail_security(cfg)
+    port = mail_port(cfg)
+    from_addr = sender or cfg.get("sender") or cfg.get("user")
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = sender or cfg.get("sender") or cfg.get("user")
-    msg["To"] = ", ".join(recipients if isinstance(recipients, (list, tuple)) else [recipients])
+    msg["From"] = (formataddr((str(cfg["sender_name"]), from_addr))
+                   if cfg.get("sender_name") and not sender else from_addr)
+    msg["To"] = ", ".join(to)
     msg.set_content("This message needs an HTML-capable mail reader.")
     msg.add_alternative(message, subtype="html")
     for a in attachments or []:
@@ -205,12 +350,24 @@ def sendmail(recipients=None, subject="", message="", attachments=None, sender=N
         msg.add_attachment(data if isinstance(data, bytes) else str(data).encode(),
                            maintype="application", subtype="octet-stream",
                            filename=a.get("fname") or "attachment")
-    with smtplib.SMTP(cfg["host"], int(cfg.get("port", 587)), timeout=30) as s:
-        if cfg.get("tls", True):
-            s.starttls()
-        if cfg.get("user"):
-            s.login(cfg["user"], cfg.get("password", ""))
-        s.send_message(msg)
+    try:
+        if security == "ssl":
+            s = smtplib.SMTP_SSL(host, port, timeout=30, context=ssl.create_default_context())
+        else:
+            s = smtplib.SMTP(host, port, timeout=30)
+        with s:
+            if security == "starttls":
+                s.starttls(context=ssl.create_default_context())
+            if cfg.get("user"):
+                s.login(str(cfg["user"]), str(cfg.get("password") or ""))
+            s.send_message(msg)
+    except Exception as e:
+        why = explain_mail_error(e, host, port, security)
+        log_error(f"{MAIL_NOT_SENT}: {str(subject)[:150]}",
+                  f"{why}\nTo: {', '.join(to)}\n\n{get_traceback()}")
+        _record_attempt(False, subject, to, why)
+        raise MailError(why) from e
+    _record_attempt(True, subject, to)
 
 
 # --- pdf ---------------------------------------------------------------------------

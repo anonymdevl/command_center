@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { boot } from "../api/boot.js";
 import Icon, { VIEW_ICON } from "./Icon.jsx";
-import { isAdministrator } from "./Settings.jsx";
+import { canOpenSettings, settingsSections } from "./Settings.jsx";
 
 /**
  * Brand, the nineteen screens, and the business being looked at.
@@ -34,9 +34,9 @@ export default function Sidebar({ nav, current, onGo, scope, onScope }) {
           </div>
         ))}
         {/* The platform administrator's own page, after the nineteen screens (which stay
-            exactly as settled in nav.json). Not shown to anyone else; the server refuses
-            them too. */}
-        {isAdministrator(boot) ? (
+            exactly as settled in nav.json). Shown to the administrator and to managers
+            given a section of it; the server refuses everyone else too. */}
+        {canOpenSettings(boot) ? (
           <div className="navgrp">
             <div className="navsec">Platform</div>
             <NavItem it={{ key: "settings", label: "Settings" }} icon="sliders" current={current} onGo={onGo} />
@@ -88,7 +88,7 @@ function Business({ scope, onScope }) {
   const canSwitch = options.length > 1;
   // With one business the switcher still opens: it says which business this is and how
   // another one is added, instead of a greyed-out button that reads as broken.
-  const canConnect = (boot.user?.roles || []).some((r) => /system manager/i.test(r));
+  const canConnect = settingsSections(boot).includes("businesses");
 
   useEffect(() => {
     if (!open) return;
