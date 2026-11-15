@@ -8,8 +8,12 @@ const UNIT = { amount: "", days: "days", percent: "%", count: "", points: "point
 
 /**
  * Administrator only: for each business, which recommendation rules run and at what
- * thresholds, the daily email digest, and the optional Daily Brief by Claude
- * (insights/core/platform_settings.py recommendations / set_recommendations).
+ * thresholds (Fixed, or Adaptive: learned from the business's own history), the
+ * unusual-movement findings, the daily email digest, the optional Daily Brief by Claude,
+ * the daily AI review, and what the platform has learned -- each figure's history and
+ * usual range, the rules' learned weights and the outcomes of advice marked done
+ * (insights/core/platform_settings.py recommendations / set_recommendations /
+ * run_review_now).
  */
 export default function SettingsRecommend() {
   const [code, setCode] = useState("");
@@ -17,6 +21,7 @@ export default function SettingsRecommend() {
   const [f, setF] = useState(null);
   const [st, setSt] = useState({});
   const [brief, setBrief] = useState({});
+  const [rev, setRev] = useState({});
 
   useEffect(() => {
     const d = view.data;
@@ -24,9 +29,12 @@ export default function SettingsRecommend() {
     setF({
       digest: d.digest,
       brief: d.brief,
+      anomalies: d.anomalies,
+      ai_review: d.ai_review,
       rules: Object.fromEntries(d.rules.map((r) => [r.rule_id, {
         enabled: r.enabled,
         params: Object.fromEntries(r.params.map((p) => [p.key, String(p.value)])),
+        ...(r.mode ? { mode: r.mode } : {}),
       }])),
     });
   }, [view.data]);
@@ -48,6 +56,7 @@ export default function SettingsRecommend() {
     e.preventDefault();
     const out = await act(setSt, () => settingsApi.setRecommend({
       business_code: d.business_code, rules: f.rules, digest: f.digest, brief: f.brief,
+      anomalies: f.anomalies, ai_review: f.ai_review,
     }), "Saved. The recommendations are worked out again with these settings.");
     if (out) view.reload();
   };
@@ -60,8 +69,18 @@ export default function SettingsRecommend() {
     }
   };
 
+  const reviewNow = async () => {
+    const out = await act(setRev, () => settingsApi.runReviewNow(d.business_code));
+    if (out) {
+      setRev({ [out.ok ? "ok" : "bad"]: out.says });
+      view.reload();
+    }
+  };
+
   const digest = d.digest_state;
   const last = d.brief_state;
+  const review = d.ai_review_state;
+  const learning = d.learning || {};
   return (
     <form className="st-stack" onSubmit={save}>
       <div className="panel">
@@ -108,6 +127,40 @@ export default function SettingsRecommend() {
               <Msg tone="bad">{brief.bad}</Msg>
             </div>
           ) : null}
+          <label className="st-check">
+            <input type="checkbox" checked={f.anomalies} onChange={(e) => setF((x) => ({ ...x, anomalies: e.target.checked }))} />
+            <span>
+              Unusual Movements
+              <span className="st-sub">
+                Recommend looking into a figure that has moved well outside this business&apos;s own usual range when no rule already speaks to it. Worked out from the business&apos;s history only; no Claude request.
+              </span>
+            </span>
+          </label>
+          <label className="st-check">
+            <input type="checkbox" checked={f.ai_review} onChange={(e) => setF((x) => ({ ...x, ai_review: e.target.checked }))} />
+            <span>
+              Daily AI Review
+              <span className="st-sub">
+                Claude reads the findings, the figures with their usual ranges, managers&apos; decisions and what came of them, and proposes what no single rule covers. Every figure it gives is checked against that evidence; anything that fails is not used. Shown as AI-found. {d.ai_review_cost}
+                {d.claude_configured ? "" : " No Claude key is set (Settings, Claude), so it cannot run yet."}
+                {review?.at ? ` Last: ${when(review.at)}, ${review.ok ? `${review.accepted || 0} accepted, ${(review.rejected || []).length} not used` : review.error || review.skipped || ""}.` : ""}
+              </span>
+            </span>
+          </label>
+          {d.ai_review ? (
+            <div>
+              <button type="button" className="btn" onClick={reviewNow} disabled={rev.busy}>
+                {rev.busy ? "Reviewing…" : "Run Today's Review Now"}
+              </button>
+              <Msg tone="ok">{rev.ok}</Msg>
+              <Msg tone="bad">{rev.bad}</Msg>
+              {(review?.rejected || []).length ? (
+                <ul className="st-rec-list">
+                  {review.rejected.map((x, i) => <li key={i}><b>Not used:</b> {x.title} — {x.why}</li>)}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -125,8 +178,8 @@ export default function SettingsRecommend() {
           <thead>
             <tr>
               <th>On</th>
-              <th>What it watches</th>
-              <th>When it recommends</th>
+              <th>What It Watches</th>
+              <th>When It Recommends</th>
             </tr>
           </thead>
           <tbody>
@@ -140,6 +193,7 @@ export default function SettingsRecommend() {
                   {r.title}
                   <span className="st-sub">{r.area_label}</span>
                   {r.suggestion ? <span className="tag t-wt">{r.suggestion}</span> : null}
+                  {r.weight_explain && r.weight !== 1 ? <span className="st-sub">{r.weight_explain}</span> : null}
                 </td>
                 <td>
                   <div className="st-rec-params">
@@ -150,12 +204,73 @@ export default function SettingsRecommend() {
                           onChange={setParam(r.rule_id, p.key)} disabled={!f.rules[r.rule_id].enabled} />
                       </label>
                     ))}
+                    {r.mode ? (
+                      <label>
+                        <span>Threshold</span>
+                        <select aria-label={`${r.title} threshold`} value={f.rules[r.rule_id].mode}
+                          disabled={!f.rules[r.rule_id].enabled}
+                          onChange={(e) => setRule(r.rule_id, { mode: e.target.value })}>
+                          <option value="adaptive">Adaptive</option>
+                          <option value="fixed">Fixed</option>
+                        </select>
+                      </label>
+                    ) : null}
                   </div>
+                  {r.threshold?.says ? <span className="st-sub">{r.threshold.says}</span> : null}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="panel">
+        <div className="ph">
+          <div>
+            <b>Learning</b>
+            <span>What the platform has learned about {d.business_name}: each figure&apos;s history and usual range, and what came of advice marked done. A figure with too little history says how much more it needs; no range is invented.</span>
+          </div>
+        </div>
+        {learning.what_worked?.says ? <p className="st-sub st-rec-worked">{learning.what_worked.says}</p> : null}
+        <table className="dt st-rec st-learn">
+          <thead>
+            <tr>
+              <th>Figure</th>
+              <th>History</th>
+              <th>Usual Range</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(learning.figures || []).map((x) => (
+              <tr key={x.key}>
+                <td>{x.label}<span className="st-sub">{x.grain}</span></td>
+                <td>{x.points ? `${x.points} ${x.grain === "Monthly" ? "month" : "day"}${x.points === 1 ? "" : "s"}` : "None yet"}</td>
+                <td>
+                  {x.says}
+                  {x.why_now ? <span className="st-sub st-rec-flag">{x.why_now}</span> : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {(learning.outcomes || []).length ? (
+          <>
+            <div className="st-rec-h">Outcomes of Advice Marked Done</div>
+            <ul className="st-rec-list">
+              {learning.outcomes.map((o, i) => (
+                <li key={i}><b>{o.outcome}:</b> {o.title}{o.note ? ` — ${o.note}` : ""}{o.checked_on ? ` (checked ${o.checked_on})` : ""}</li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+        {(review?.patterns || []).length ? (
+          <>
+            <div className="st-rec-h">Patterns the Last AI Review Noticed</div>
+            <ul className="st-rec-list">
+              {review.patterns.map((x, i) => <li key={i}><b>{x.title}.</b> {x.explanation}</li>)}
+            </ul>
+          </>
+        ) : null}
       </div>
     </form>
   );

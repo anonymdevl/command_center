@@ -202,9 +202,12 @@ def chat(messages: list, declarations: list, static: str, dynamic: str,
 
 
 def complete(static: str, text: str, kind: str = "analyst", timeout: float = 90,
-             max_tokens: int = 4000) -> tuple:
-    """One request with no tools, for a piece of writing (the Daily Brief): (text, error).
-    The same model, thinking, effort and fallbacks as a question (request() above)."""
+             max_tokens: int = 4000, schema: dict | None = None) -> tuple:
+    """One request with no tools, for a piece of writing (the Daily Brief) or, with a
+    JSON schema, a structured answer (the AI review: output_config.format, so the reply
+    is JSON that fits it): (text, error). The same model, thinking, effort and
+    fallbacks as a question (request() above); the fixed instructions (`static`) carry
+    the cache marker."""
     if not _key():
         return None, "no Anthropic key configured"
     try:
@@ -214,6 +217,9 @@ def complete(static: str, text: str, kind: str = "analyst", timeout: float = 90,
     body = request([{"role": "user", "content": text}], [], static, "", kind, timeout)
     body.pop("tools", None)
     body["max_tokens"] = max_tokens
+    if schema:
+        body["output_config"] = {**body["output_config"],
+                                 "format": {"type": "json_schema", "schema": schema}}
     try:
         msg = _client().with_options(timeout=max(5, timeout)).beta.messages.create(**body)
     except Exception as e:  # in words, as chat() does

@@ -40,14 +40,20 @@ def current(business_code: str | None = None):
         failed.update(run.get("failed") or {})
         unreachable = unreachable or bool(run.get("unreachable"))
     engine.rank(recs)
-    brief = None
+    brief = worked = None
     if len(codes) == 1:
         from command_center.recommend.daily import brief_for
+        from command_center.recommend.learning import what_worked
         brief = brief_for(codes[0])
+        try:
+            worked = what_worked(codes[0])
+        except Exception:
+            frappe.log_error(title="Command Center: What Worked not read",
+                             message=frappe.get_traceback())
     from command_center.recommend.rules import AREAS, BY_ID
     return {"recommendations": recs, "areas": AREAS,
             "failed": [{"rule": BY_ID[k].title, "why": v} for k, v in failed.items() if k in BY_ID],
-            "unreachable": unreachable, "brief": brief,
+            "unreachable": unreachable, "brief": brief, "what_worked": worked,
             "history": sorted(history, key=lambda r: r.get("resolved_on") or "", reverse=True)[:10],
             "checked_at": max((r.get("at") or "" for r in runs), default="") or None,
             "can_tune": "System Manager" in frappe.get_roles()}

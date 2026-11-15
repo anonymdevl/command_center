@@ -1055,18 +1055,54 @@ def _rec_business(business_code: str = ""):
     return b, rows
 
 
+def _learning_view(code, conf) -> dict:
+    """Settings -> Recommendations -> Learning: what each figure's history supports, each
+    rule's learned weight and threshold, and what the advice achieved."""
+    from command_center.api.businesses import currency_for
+    from command_center.recommend import adaptive, learning, metrics
+    cur = currency_for(code) or ""
+    hist = metrics.history(code)
+    assessed = metrics.assess(code, hist)
+    taught = learning.weights(code)
+    figures = [{"key": mt.key, "label": mt.label, "grain": "Monthly" if mt.grain == "month"
+                else "Daily", "points": len(hist.get(mt.key) or []),
+                "status": (assessed.get(mt.key) or {}).get("status", "learning"),
+                "method": (assessed.get(mt.key) or {}).get("method"),
+                "says": metrics.band_words(mt, assessed.get(mt.key), cur),
+                "why_now": metrics.why_now(mt, assessed.get(mt.key), cur)}
+               for mt in metrics.METRICS]
+    thresholds = {}
+    for rule_id in adaptive.ADAPTIVE:
+        mine = conf["rules"].get(rule_id)
+        if not mine:
+            continue
+        spec = adaptive.ADAPTIVE[rule_id]
+        sens = (taught.get(rule_id) or {}).get("sensitivity", 1.0)
+        thresholds[rule_id] = adaptive.threshold(rule_id, mine["params"][spec["param"]], hist, sens)
+    return {"figures": figures, "weights": taught, "thresholds": thresholds,
+            "outcomes": learning.recent_outcomes(code, limit=12),
+            "what_worked": learning.what_worked(code)}
+
+
 def _rec_view(b, rows) -> dict:
     from command_center.ask import claude
-    from command_center.recommend import daily, engine
+    from command_center.recommend import adaptive, daily, engine, review
     from command_center.recommend.rules import AREAS, RULES
     from insights.compat import runtime
     conf = engine.settings(b.business_code)
     told = engine.suggestions(b.business_code)
+    learn = _learning_view(b.business_code, conf)
     out = []
     for r in RULES:
         mine = conf["rules"][r.rule_id]
         n = told.get(r.rule_id, 0)
+        t = learn["thresholds"].get(r.rule_id)
+        w = learn["weights"].get(r.rule_id) or {}
         out.append({
+            "mode": mine.get("mode"), "adaptive_param": (adaptive.ADAPTIVE.get(r.rule_id) or {}).get("param"),
+            "threshold": ({k: t.get(k) for k in ("status", "value", "fixed", "learned", "says")}
+                          if t else None),
+            "weight": w.get("weight", 1.0), "weight_explain": w.get("explain"),
             "rule_id": r.rule_id, "title": r.title, "area": r.area, "area_label": AREAS[r.area],
             "severity": r.severity, "enabled": mine["enabled"], "not_relevant": n,
             "suggestion": (f"Marked not relevant {n} times: consider raising "
@@ -1074,9 +1110,17 @@ def _rec_view(b, rows) -> dict:
             "params": [{"key": p.key, "label": p.label, "unit": p.unit, "default": p.default,
                         "value": mine["params"][p.key]} for p in r.params]})
     brief = daily._get(daily.BRIEF_PARENT, b.business_code)
+    rev = review.state(b.business_code)
     return {"business_code": b.business_code, "business_name": b.business_name,
             "businesses": [{"code": x.business_code, "name": x.business_name} for x in rows],
             "rules": out, "digest": conf["digest"], "brief": conf["brief"],
+            "anomalies": conf["anomalies"], "ai_review": conf["ai_review"],
+            "ai_review_cost": review.COST_NOTE,
+            "ai_review_state": ({k: rev.get(k) for k in ("date", "at", "ok", "error", "model",
+                                                          "accepted", "rejected", "patterns",
+                                                          "closed", "skipped")}
+                                if rev else None),
+            "learning": {k: learn[k] for k in ("figures", "outcomes", "what_worked")},
             "digest_state": daily.digest_state(b.business_code) or None,
             "brief_state": ({k: brief.get(k) for k in ("date", "at", "text", "error", "model")}
                             if brief else None),
@@ -1105,16 +1149,19 @@ def _rec_list(value, what):
 
 
 @frappe.whitelist(methods=["POST"])
-def set_recommendations(business_code: str = "", rules=None, digest=None, brief=None):
-    """Save one business's rules ({rule_id: {"enabled", "params"}}), digest and brief."""
+def set_recommendations(business_code: str = "", rules=None, digest=None, brief=None,
+                        anomalies=None, ai_review=None):
+    """Save one business's rules ({rule_id: {"enabled", "params", "mode"}}), the digest,
+    the brief, the unusual-movement findings and the daily AI review."""
     _require_admin()
     from command_center.recommend import engine
     from command_center.recommend.rules import BY_ID
     b, rows = _rec_business(business_code)
     old = engine.settings(b.business_code)
-    new = {"rules": {k: {"enabled": v["enabled"], "params": dict(v["params"])}
+    new = {"rules": {k: {kk: (dict(vv) if kk == "params" else vv) for kk, vv in v.items()}
                      for k, v in old["rules"].items()},
-           "digest": old["digest"], "brief": old["brief"]}
+           "digest": old["digest"], "brief": old["brief"], "anomalies": old["anomalies"],
+           "ai_review": old["ai_review"], "ai_review_set": old["ai_review_set"]}
     changed = []
     for rule_id, mine in (_rec_list(rules, "rules") or {}).items():
         rule = BY_ID.get(rule_id)
@@ -1124,6 +1171,13 @@ def set_recommendations(business_code: str = "", rules=None, digest=None, brief=
         if "enabled" in mine and bool(mine["enabled"]) != cur["enabled"]:
             cur["enabled"] = bool(mine["enabled"])
             changed.append(f"{rule.title} {'on' if cur['enabled'] else 'off'}")
+        mode = mine.get("mode")
+        if mode not in (None, "") and "mode" in cur:
+            if mode not in ("fixed", "adaptive"):
+                _say(f"{rule.title}: choose Fixed or Adaptive.")
+            if mode != cur["mode"]:
+                cur["mode"] = mode
+                changed.append(f"{rule.title}: {mode}")
         for p in rule.params:
             v = (mine.get("params") or {}).get(p.key)
             if v in (None, ""):
@@ -1137,14 +1191,18 @@ def set_recommendations(business_code: str = "", rules=None, digest=None, brief=
             if v != cur["params"][p.key]:
                 cur["params"][p.key] = v
                 changed.append(f"{rule.title}: {p.label.lower()} {v:g}")
-    for flag, word in (("digest", "daily email digest"), ("brief", "Daily Brief by Claude")):
-        v = digest if flag == "digest" else brief
+    given = {"digest": digest, "brief": brief, "anomalies": anomalies, "ai_review": ai_review}
+    for flag, word in (("digest", "daily email digest"), ("brief", "Daily Brief by Claude"),
+                       ("anomalies", "unusual movements"), ("ai_review", "daily AI review")):
+        v = given[flag]
         if v is None or v == "":
             continue
         v = _truthy(v)
         if v != new[flag]:
             new[flag] = v
             changed.append(f"{word} {'on' if v else 'off'}")
+        if flag == "ai_review":
+            new["ai_review_set"] = True
     if not changed:
         _say("Nothing was changed.")
     engine.save_settings(b.business_code, new)
@@ -1165,6 +1223,23 @@ def write_brief_now(business_code: str = ""):
     _audit(f"wrote the Daily Brief for {b.business_name} now")
     return {"ok": bool(out.get("text")), "says": "Written." if out.get("text") else out.get("error"),
             **_rec_view(b, rows)}
+
+
+@frappe.whitelist(methods=["POST"])
+def run_review_now(business_code: str = ""):
+    """Run today's AI review for one business now (one Claude request; at most one
+    successful review a day)."""
+    _require_admin()
+    from command_center.recommend import engine, review
+    b, rows = _rec_business(business_code)
+    if not engine.settings(b.business_code)["ai_review"]:
+        _say("Switch the daily AI review on for this business first.")
+    out = review.review(b.business_code)
+    _audit(f"ran the daily AI review for {b.business_name} now")
+    says = (out.get("skipped") or out.get("error")
+            or f"Reviewed: {out.get('accepted', 0)} accepted, {len(out.get('rejected') or [])} "
+               f"not used.")
+    return {"ok": bool(out.get("ok")), "says": says, **_rec_view(b, rows)}
 
 
 # --- branding --------------------------------------------------------------------------
