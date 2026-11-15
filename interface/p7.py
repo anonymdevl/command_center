@@ -148,8 +148,7 @@ DRAWERS={
 }
 
 
-# Business-specific samples are never shipped: every record opens in the live records
-# drawer. The management screens open none of these any more; the three below are still
-# opened by the department screens (Sales, Projects) until those are rebuilt on live
-# records, and go with them.
-DRAWERS={k:v for k,v in DRAWERS.items() if k in ("order","ubuntu","ejura")}
+# The designed drawers were sample records from a 2025 extract. Nothing opens them any
+# more -- every row and card opens the live records drawer -- so none ship: a static
+# drawer would carry one business's names into every business's interface.
+DRAWERS={}

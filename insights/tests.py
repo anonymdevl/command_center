@@ -1310,3 +1310,44 @@ class ManagementScreens(TransactionTestCase):
         st = post("command_center.api.reach.retry", business_code="test_medical_ltd")
         self.assertTrue(st["reachable"])
         self.assertIsNone(st["since"])
+
+
+class RefusedIsNotUnreachable(TransactionTestCase):
+    """A business that answers but refuses one request (a field its version lacks,
+    HTTP 417) stays Active -- no "can't reach" banner -- while one that does not answer,
+    or keeps failing with 5xx, is marked Unreachable."""
+
+    databases = {"default", "aux"}
+
+    def test_refused_vs_down(self):
+        from cryptography.fernet import Fernet
+        from django.conf import settings
+        settings.CONFIG.setdefault("encryption_key", Fernet.generate_key().decode())
+        from command_center import install
+        from command_center.connectors.base import BusinessUnreachable, RequestRefused
+        from command_center.connectors.registry import connector_for
+        from insights.compat import run_as
+        from insights.core.models import ConnectedBusiness
+        fake = FakeERPNext()
+        with mock.patch("requests.get", fake("GET")), mock.patch("requests.post", fake("POST")), \
+                mock.patch("time.sleep", lambda s: None):
+            with run_as("Administrator"):
+                install.register_business("Test Medical Ltd", "https://erp.test", "key", "s3cret")
+        code = ConnectedBusiness.objects.get().business_code
+
+        def reply(status):
+            def call(*a, **k):
+                return _R(status, {"exc": "x"})
+            return call
+        for status, expect, kind in ((417, "Active", RequestRefused),
+                                     (503, "Unreachable", BusinessUnreachable)):
+            ConnectedBusiness.objects.update(status="Active")
+            with mock.patch("requests.get", reply(status)), mock.patch("requests.post", reply(status)), \
+                    mock.patch("time.sleep", lambda s: None):
+                with run_as("Administrator"):
+                    conn = connector_for(code)
+                    with self.assertRaises(kind) as caught:
+                        conn.get_list("Sales Invoice", fields=["name"], limit=1)
+                    if status == 503:
+                        self.assertNotIsInstance(caught.exception, RequestRefused)
+            self.assertEqual(ConnectedBusiness.objects.get().status, expect, f"after HTTP {status}")
