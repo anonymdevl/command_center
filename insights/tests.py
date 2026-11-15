@@ -240,3 +240,20 @@ class PlatformEndToEnd(TransactionTestCase):
         r = c2.get("/command-center")
         self.assertEqual(r.status_code, 302)
         self.assertIn("/management-only", r["Location"])
+
+
+class CommandLine(TransactionTestCase):
+    """The management commands as the install script runs them: through manage.py's
+    argument parsing (call_command skips that, which hid a clash with --args)."""
+
+    databases = {"default", "aux"}
+
+    def test_execute_from_the_command_line(self):
+        import io
+        from contextlib import redirect_stdout
+        from django.core.management import ManagementUtility
+        out = io.StringIO()
+        with redirect_stdout(out):
+            ManagementUtility(["manage.py", "execute", "command_center.api.kpi.verify",
+                               "--kwargs", "{}", "--args", "[]"]).execute()
+        self.assertIn('"all_ok"', out.getvalue())

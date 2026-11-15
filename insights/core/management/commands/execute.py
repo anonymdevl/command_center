@@ -19,12 +19,14 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("method")
         parser.add_argument("--kwargs", default="{}")
-        parser.add_argument("--args", default="[]")
+        # dest is not "args": Django takes an option of that name as the command's
+        # positional arguments, which made every call fail.
+        parser.add_argument("--args", dest="fn_args", default="[]")
         parser.add_argument("--user", default="Administrator")
 
-    def handle(self, method, kwargs, args, user, **opts):
+    def handle(self, *_, method, kwargs, fn_args, user, **opts):
         fn = get_attr(method)
         with run_as(user):
-            result = fn(*json.loads(args), **json.loads(kwargs))
+            result = fn(*json.loads(fn_args), **json.loads(kwargs))
         if result is not None:
             self.stdout.write(json.dumps(result, default=str))
