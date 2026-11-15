@@ -637,5 +637,119 @@ frappe.conf.pop("command_center_ai_provider", None)
 _r = REAL_CLAUDE_CHAT([], [], "S", "D")
 check(_r == (None, "no Anthropic key configured"), f"no key, no call: {_r}")
 
+# 19. Stop (15 Nov 2026). The flag is read between rounds and before each lookup; a
+# stopped question ends with no further model call, in a partial answer made only of
+# what was in hand -- the model's own words and the figures its lookups returned.
+frappe.conf["command_center_anthropic_key"] = "test"
+frappe.whitelist = lambda *a, **k: (lambda f: f)  # api/ modules are imported from here on
+_FIG = {"ar_total": {"label": "Owed to us", "value": 9177568.91, "unit": "currency",
+                     "currency": "GHS", "note": "806 unpaid invoices"}}
+tools.TOOLS["get_figures"] = (lambda keys=None, business_code=None: _FIG,
+                              tools.TOOLS["get_figures"][1])
+_flag = {"on": False}
+reset()
+sent = claude_script(("call", [("get_figures", {"keys": ["ar_total"]})]),
+                     ("call", [("find", {"text": "never run"})]), ("text", "never sent"))
+
+
+def _stop_after_first_lookup():
+    return _flag["on"]
+
+
+_orig_run = tools.run
+
+
+def _run_then_stop(name, args, business_code=None):
+    out = _orig_run(name, args, business_code)
+    _flag["on"] = True  # the person presses Stop while this lookup runs
+    return out
+
+
+tools.run = _run_then_stop
+said = []
+r = agent.answer("How much are we owed?", "GIGMANN", should_stop=_stop_after_first_lookup,
+                 on_step=said.append)
+tools.run = _orig_run
+check(len(sent) == 1, f"no model call after Stop: {len(sent)} calls")
+check(r and r["answered"] and r["stopped"] and r["answer"].startswith("**" + agent.STOPPED),
+      f"a stopped question answers with the stopped note: {r and r['answer'][:80]}")
+check("Owed to us: GHS 9,177,568.91 (806 unpaid invoices)" in r["answer"],
+      f"the partial answer keeps the figures already read, as the tool gave them: {r['answer']}")
+check(not r["cut_short"] and r["_resume"] is None, "a stopped question never starts a deeper look")
+check(seen.get("find") is None, "the lookups chosen after Stop are not run")
+check(said and said[0].kind == "get_figures" and said[0].group == "Reading the headline figures"
+      and said[0] == "Reading the headline figures",
+      f"each step carries its kind and group, and is still its words: {said}")
+
+# Stopped before the first round: nothing is sent at all. The flag set by api/ask.py is
+# read from frappe.local when no should_stop is passed.
+reset()
+sent = claude_script(("text", "never sent"))
+frappe.local.cc_should_stop = lambda: True
+r = agent.answer("Q", "GIGMANN")
+frappe.local.cc_should_stop = None
+check(not sent and r["stopped"] and "Nothing had been looked up yet" in r["answer"],
+      f"stopped before it began: no model call, and it says so: {len(sent)}, {r.get('answer')}")
+
+# Stopped while the model was choosing lookups: they are not run; its words are kept.
+reset()
+_calls = {"n": 0}
+
+
+def _chat_words(messages, decls, static, dynamic, kind="analyst", timeout=60, final=False):
+    _calls["n"] += 1
+    _flag["on"] = True
+    return [{"type": "text", "text": "Checking the ageing first."},
+            {"type": "tool_use", "id": "tu_0", "name": "find", "input": {"text": "x"}}], None
+
+
+claude.chat = _chat_words
+_flag["on"] = False
+r = agent.answer("Q", "GIGMANN", should_stop=lambda: _flag["on"])
+check(_calls["n"] == 1 and seen.get("find") is None and "Checking the ageing first." in r["answer"],
+      f"the lookups chosen as Stop arrived are not run, its words are kept: {r['answer']}")
+
+# A flag that cannot be read never stops an answer.
+reset()
+sent = claude_script(("text", "Answered."))
+r = agent.answer("Q", "GIGMANN", should_stop=lambda: 1 / 0)
+check(r["answer"] == "Answered." and not r.get("stopped"), "a broken stop flag is ignored")
+claude.chat = REAL_CLAUDE_CHAT
+frappe.conf.pop("command_center_anthropic_key", None)
+
+# 20. Live steps as the page reads them (api/ask._record): {text, kind, group}; a run of
+# one kind is kept whole (the page shows "×N"), a repeated message with no kind once.
+from command_center.api import ask as _ask_api  # noqa: E402
+
+_steps = []
+for _s in [tools.step("run_report", {"report": "General Ledger"}),
+           tools.step("run_report", {"report": "Trial Balance"}),
+           "Gemini 3.8 Flash did not reply; trying another", "Gemini 3.8 Flash did not reply; trying another",
+           tools.step("erpnext_list", {"doctype": "Quotation"}), tools.step("erpnext_count", {"doctype": "Lead"})]:
+    _ask_api._record(_steps, _s)
+check([x["kind"] for x in _steps] == ["run_report", "run_report", None, "erpnext", "erpnext"],
+      f"steps recorded with their kinds, repeats of a kindless message once: {_steps}")
+check(_steps[0] == {"text": "Running ERPNext's General Ledger", "kind": "run_report",
+                    "group": "Running an ERPNext report"}, f"a step's words: {_steps[0]}")
+check(tools.describe("compare_periods", {"fact": "fact_sales_invoice_line", "measure": "base_net_amount"})
+      == "Comparing base net amount in sales invoice lines with an earlier period",
+      tools.describe("compare_periods", {"fact": "fact_sales_invoice_line", "measure": "base_net_amount"}))
+check(set(tools.STEP_KINDS) >= set(tools.TOOLS) - {"writes_underneath", "boom"},
+      f"every tool has a step group: {set(tools.TOOLS) - set(tools.STEP_KINDS)}")
+check("compare_periods" in agent.SYSTEM and "compare_periods" in tools.TOOLS,
+      "the compare tool is offered and documented in the instructions")
+
+# 21. The page's grouping of those steps (frontend/src/legacy/steps.js), run in Node.
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+
+_node = shutil.which("node")
+if _node:
+    _t = subprocess.run([_node, os.path.join(ROOT, "scripts", "test_steps.mjs")],
+                        capture_output=True, text=True, timeout=60)
+    check(_t.returncode == 0, "scripts/test_steps.mjs failed:\n" + (_t.stdout + _t.stderr)[-800:])
+else:
+    print("note: node is not installed here, so the page's step grouping was not run")
+
 print(f"analyst: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)
