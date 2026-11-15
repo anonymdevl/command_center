@@ -23,12 +23,8 @@ def is_down(error) -> bool:
     The connector raises BusinessUnreachable for both a dead connection and any non-2xx
     reply (a field a v14 site does not have comes back as HTTP 417). Only the first is
     "can't reach": a refused read is one figure's problem, not the business's."""
-    from command_center.connectors.base import BusinessUnreachable
-    if not isinstance(error, BusinessUnreachable):
-        return False
-    text = str(error)
-    return ("did not answer" in text or any(f"HTTP {c}" in text
-                                            for c in (429, 500, 502, 503, 504)))
+    from command_center.connectors.base import BusinessUnreachable, RequestRefused
+    return isinstance(error, BusinessUnreachable) and not isinstance(error, RequestRefused)
 
 
 def unreachable_status(error) -> dict:

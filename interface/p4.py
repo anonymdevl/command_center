@@ -46,68 +46,22 @@ balance and the proposed amount, and it is waiting for the <b>Finance Manager</b
 
 # ---------------- V: APPROVALS ----------------
 V_APPROVALS=f'''<div class="topbar"><div><h3>Approvals</h3>
-<div class="when">3 waiting on you · 2 you have passed to someone else</div></div></div>
-<div class="alert high"><div class="arow"><div>
-<div class="awhat">Credit note — A1 MEDICALSUPPLIES</div>
-<div class="awhy">Raised on your behalf by the assistant · needs Finance Manager, then you</div>
-<div class="asw">→ Approve, reject, or ask for more before it goes further.</div></div>
-<div class="afig"><span class="cx">GHS</span>11,000</div></div>
-<div class="ameta"><span class="chip">Type <b>Refunds and credit</b></span>
-<span class="chip">Value band <b>10,001 – 100,000</b></span>
-<span class="chip">Route <b>Finance Manager → Chief Executive</b></span>
-<span class="chip">Raised <b>2 hours ago</b></span></div>
-<div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-xs);padding:12px 14px;margin-top:10px">
-<div style="font-size:var(--fs-2xs);color:var(--dim);font-weight:var(--fw-semibold);margin-bottom:8px">Everything you need to decide</div>
-<table class="dt"><tbody>
-<tr><td style="color:var(--mut);width:180px">Invoice</td><td><span class="lnk" onclick="openDrawer('a1')">20250819090603609383</span></td></tr>
-<tr><td style="color:var(--mut)">What they owe in total</td><td>GHS 11,000 — one invoice, due 19 Aug, nothing older</td></tr>
-<tr><td style="color:var(--mut)">The original order</td><td>SAL-ORD-2025-00905 · fully despatched</td></tr>
-<tr><td style="color:var(--mut)">Supporting documents</td><td style="color:var(--high)">None attached</td></tr>
-<tr><td style="color:var(--mut)">Credit notes before this</td><td>None for this customer</td></tr>
-</tbody></table></div>
-<div class="acts"><button class="btn pri">Approve</button><button class="btn dgr">Reject</button>
-<button class="btn">Ask for more</button><button class="btn">Pass to someone else</button></div></div>
-<div class="alert med"><div class="arow"><div>
-<div class="awhat">Purchase order — medical consumables restock</div>
-<div class="awhy">Department head has approved · Finance Manager still to look</div>
-<div class="asw">→ Nothing needed from you yet.</div></div>
-<div class="afig"><span class="cx">GHS</span>48,200</div></div>
-<div class="ameta"><span class="chip">Type <b>Purchases</b></span>
-<span class="chip">Route <b>Dept head ✓ → Finance Manager</b></span>
-<span class="chip">Raised <b>1 day ago</b></span></div></div>
+<div class="when">Reading what is waiting on you&hellip;</div></div></div>
+<div class="work-list"><div class="work-empty"><b>Reading your approvals&hellip;</b></div></div>
 <div class="note"><h4>Where the decision is actually enforced</h4><ul>
 <li>Approving here drives the approval inside ERPNext. The control lives in the system that holds the
 money, not in this dashboard.</li>
-<li>Every decision records who asked, who decided, when, what they decided, which records were attached
-and any comment — and that record cannot afterwards be edited.</li></ul></div>'''
+<li>Every decision is taken in ERPNext under your own account, so the document&#39;s own history records
+who decided, what they decided and when.</li></ul></div>'''
 
 # ---------------- V: DELEGATION ----------------
 V_DELEG=f'''<div class="topbar"><div><h3>Outstanding Tasks</h3>
-<div class="when">12 open · 3 late · 1 sent back more than once · 2 high risk</div></div></div>
+<div class="when">Reading the work you handed out&hellip;</div></div></div>
 <div class="grid" style="grid-template-columns:repeat(4,1fr)">
-<div class="bk"><div class="n">12</div><div class="l">Still open</div><div class="v">work you handed out</div></div>
-<div class="bk"><div class="n" style="color:var(--crit)">3</div><div class="l">Late</div><div class="v">past the date you set</div></div>
-<div class="bk"><div class="n" style="color:var(--high)">1</div><div class="l">Reopened twice+</div><div class="v">sent back more than once</div></div>
-<div class="bk"><div class="n" style="color:var(--high)">2</div><div class="l">High risk</div><div class="v">money or compliance</div></div></div>
-<div class="sect">Chasing payment from HAIRASH ENTERPRISE</div>
-<div class="alert high"><div class="arow"><div>
-<div class="awhat">Get a payment plan from HAIRASH ENTERPRISE</div>
-<div class="awhy">Came from the alert about money owed · GHS 737,544 outstanding, all over three months late</div>
-<div class="asw">→ K. Mensah says it is done. It is not closed until you accept the evidence.</div></div>
-<div class="afig"><span class="cx">GHS</span>737,544</div></div>
-<div class="ameta"><span class="chip">Came from <b>An alert</b></span>
-<span class="chip">Given to <b>K. Mensah</b></span><span class="chip">Department <b>Credit Control</b></span>
-<span class="chip">Due <b>26 Sep 2026</b></span></div>
-<div class="tstate"><div class="ts done">Handed out</div><div class="ts done">Accepted</div>
-<div class="ts done">Being worked on</div><div class="ts now">Waiting on you</div><div class="ts">Closed</div></div>
-<div style="background:var(--high-bg);border:1px solid var(--high-line);border-radius:var(--r-xs);padding:11px 13px">
-<div style="font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--high);margin-bottom:5px">Marking it done is not the same as finishing it</div>
-<div style="font-size:var(--fs-sm);color:var(--mut);line-height:1.55">You asked for
-<b style="color:var(--ink)">a signed payment plan with dates on it</b>. K. Mensah marked this complete on
-22 September and attached call notes. Call notes are not a signed plan, so it stays with you until you say otherwise.</div>
-<div class="ameta"><span class="chip">1 attachment · <b>call-notes.pdf</b></span></div>
-<div class="acts"><button class="btn pri">Accept it</button><button class="btn dgr">Send it back</button>
-<button class="btn">Ask for more</button></div></div></div>
+<div class="bk"><div class="n">—</div><div class="l">Still open</div><div class="v">work you handed out</div></div>
+<div class="bk"><div class="n">—</div><div class="l">Late</div><div class="v">past the date you set</div></div>
+<div class="bk"><div class="n">—</div><div class="l">Reopened twice+</div><div class="v">sent back more than once</div></div>
+<div class="bk"><div class="n">—</div><div class="l">High risk</div><div class="v">marked high priority</div></div></div>
 <div class="note"><h4>Where the work actually happens</h4><ul>
 <li>This platform is for management. <b>The people you hand work to do not need a login here.</b></li>
 <li>Each task is a To-Do in ERPNext, where they already work, and they mark it done there.

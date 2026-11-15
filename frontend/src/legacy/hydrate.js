@@ -144,10 +144,17 @@ export const CARD_KPIS = {
     // Purchase orders and payments whose every recorded approval step was taken by the
     // account that raised them, from the change log.
     "Self-approved": "self_approved",
-    // Open findings, Raise today, Overdue actions, Repeat findings and Control score stay
-    // illustrative: findings and corrective actions are kept nowhere in ERPNext, and the
-    // control score needs all six Business Health questions, three of which are not
-    // scored. "Can be deleted" is a statement about the log, not a figure.
+    // Findings and corrective actions are ERPNext's own Non Conformance and Quality
+    // Action (kpi/live_governance.py); until any are recorded each card is a guide.
+    "Open findings": "findings_open",
+    "Repeat findings": "findings_repeat",
+    "Overdue actions": "actions_overdue",
+    // What would be raised today: the open alerts, the same list Business Health shows.
+    "Raise today": "alerts_open",
+    // The average of the Business Health questions scored, as Home's gauge.
+    "Control score": "control_score",
+    // The roles ERPNext's own permission rules let delete a change-log entry.
+    "Can be deleted": "versions_deletable",
   },
 };
 
@@ -165,12 +172,10 @@ export const CARD_KPIS = {
  * and the unit word to print beside a count. A currency figure needs no unit word --
  * the currency is the unit -- so it has none.
  *
- * Only Business Overview can be served from facts today. The tiles on Today and
- * Outstanding Tasks measure work handed out and promises kept, which is the task and
- * approval engine and not a fact; Risk and Compliance measures deadlines this platform
- * does not yet hold; and Business Health's tiles are scores out of a hundred, which is a
- * composite and not any single KPI. Each of those is a mapping that would read as right
- * and be wrong, so each stays illustrative and says so on the tile.
+ * Today and Outstanding Tasks take their tiles from the manager's own queue
+ * (legacy/work.js WORK_TILES); Business Health's six questions are drawn by
+ * legacy/home.js; every other tile on the management screens is mapped here, and a
+ * tile whose figure cannot be read shows a dash and says why (legacy/core.js).
  */
 export const TILE_KPIS = {
   ops: {
@@ -183,8 +188,9 @@ export const TILE_KPIS = {
     // Payment entries plus journals, counted live: the facts hold neither, and
     // cash_applied is money in only, so it would be half of what the label says.
     "Money in & out": { key: "postings_count", unit: "postings" },
-    // "Systems & access" and "Internal Audit" say on themselves that ERPNext holds no
-    // record of either; both are flagged "Not yet" as designed.
+    // The active ERPNext accounts, and the open alerts Internal Audit would raise.
+    "Systems & access": { key: "users_active", unit: "accounts" },
+    "Internal Audit": { key: "alerts_open", unit: "open alerts" },
   },
   // Home's three hero tiles (the approved mockup's layout, 18 Oct 2026).
   command: {
@@ -192,9 +198,19 @@ export const TILE_KPIS = {
     "Buying & suppliers": { key: "ap_total" },
     "Stock & warehouses": { key: "stock_value" },
   },
+  // Today and Outstanding Tasks: legacy/work.js WORK_TILES, from the manager's own queue.
   myday: {},
   delegation: {},
-  risk: {},
+  // Deadlines are Contracts that require fulfilment (kpi/live_governance.py), counted by
+  // how soon they fall due; Findings are open Non Conformance records; Going wrong is
+  // the open alerts Business Health lists.
+  risk: {
+    Overdue: { key: "deadlines_overdue" },
+    "Within 1 month": { key: "deadlines_month" },
+    "Within 3 months": { key: "deadlines_quarter" },
+    Findings: { key: "findings_open" },
+    "Going wrong": { key: "alerts_open" },
+  },
   // Three of the six questions are now one stated ratio each (kpi score_*); legacy/
   // home.js draws their score, bar and flag. The other three still need a source.
   health: {},
@@ -245,8 +261,10 @@ export function hasLiveFigures(viewKey) {
 /** Figures a screen needs beyond its cards and tiles: Home's counts and health gauge,
  *  and Business Health's three scored questions (legacy/home.js draws both). */
 export const EXTRA_KPIS = {
-  command: ["cases_open", "tasks_overdue", "score_paid", "score_deliver", "score_paperwork"],
-  health: ["score_paid", "score_deliver", "score_paperwork"],
+  command: ["cases_open", "tasks_overdue", "score_paid", "score_deliver", "score_paperwork",
+            "score_approvals", "score_records", "score_access", "control_score"],
+  health: ["score_paid", "score_deliver", "score_paperwork", "score_approvals", "score_records",
+           "score_access", "control_score"],
 };
 
 export function keysFor(viewKey) {

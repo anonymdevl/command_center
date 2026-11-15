@@ -19,7 +19,7 @@
     {
      "key": "brief",
      "label": "Executive Summary",
-     "badge": "5",
+     "badge": "",
      "roles": [
       "ceo",
       "fin",
@@ -63,7 +63,7 @@
     {
      "key": "health",
      "label": "Business Health",
-     "badge": "6",
+     "badge": "",
      "roles": [
       "ceo",
       "fin",
@@ -90,7 +90,7 @@
     {
      "key": "approvals",
      "label": "Approvals",
-     "badge": "3",
+     "badge": "",
      "roles": [
       "ceo",
       "fin"

@@ -37,6 +37,16 @@ class BusinessUnreachable(ConnectorError):
     """The business exists in the registry but did not answer."""
 
 
+class RequestRefused(BusinessUnreachable):
+    """The business answered, but refused this one request -- a field its version does
+    not have, a filter it rejects (HTTP 4xx other than 401/403).
+
+    A kind of BusinessUnreachable so every caller that already handles a failed read
+    keeps working; but the business is NOT unreachable: it stays Active, the shell shows
+    no "can't reach" banner, and a screen's other reads carry on (is_down() and the
+    panels' guard tell the two apart)."""
+
+
 class CredentialRequired(ConnectorError):
     """The acting person has no account of their own on the target site.
 

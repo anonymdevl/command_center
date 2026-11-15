@@ -6,9 +6,10 @@
  *   Morning brief       the alert engine's top three (api/alerts.py)
  *   Largest amounts     api/home.debtors -- All, Overdue, Over 90 days
  *   Counts              cases_open, tasks_overdue
- *   Business health     the average of three stated ratios: score_paid, score_deliver,
- *                       score_paperwork. "How it is scored" lists each with its note,
- *                       so 47/100 is never a number nobody can explain.
+ *   Business health     control_score: the plain average of the six Business Health
+ *                       questions that can be scored (kpi score_* and live_governance
+ *                       score_*). "How it is scored" lists each with its note, so 47/100
+ *                       is never a number nobody can explain.
  *   Top customers       api/home.top_customers -- share of the last twelve full months
  *
  * Built as DOM, never HTML from the server. Each part fills its own slot and leaves the
@@ -17,12 +18,18 @@
 
 import { api } from "../api/client.js";
 import { count, exact, money, shortDate } from "../format.js";
+import { guideBox } from "./guide.js";
 
 const SCORES = [
-  ["score_paid", "Getting paid"],
-  ["score_deliver", "Delivering what we sold"],
-  ["score_paperwork", "Paperwork finished"],
+  ["score_deliver", "Delivering what we sold", "Can we deliver what we sold?"],
+  ["score_paid", "Getting paid", "Are we getting paid?"],
+  ["score_paperwork", "Paperwork finished", "Is the paperwork finished?"],
+  ["score_approvals", "The right people approving", "Were the right people asked?"],
+  ["score_records", "Clean records", "Are our records clean?"],
+  ["score_access", "Separate duties", "Who can see what?"],
 ];
+/** Business Health's question tile label -> its figure. */
+export const HEALTH_QUESTIONS = Object.fromEntries(SCORES.map(([k, , q]) => [q, k]));
 const WORDS = { crit: "Critical", high: "High", med: "Medium", info: "For information" };
 
 export function renderHome(root, { figures, alerts, scope, onOpen }) {
@@ -37,29 +44,50 @@ export function renderHome(root, { figures, alerts, scope, onOpen }) {
   customers(root, scope, onOpen);
 }
 
-/** Business Health's first three questions, from the same ratios as Home's gauge. */
-export function renderHealthTiles(root, figures) {
+/** Business Health's six questions, and its headline: the same figures as Home's gauge.
+ *  A question not scored yet says why on its tile -- a guide to set it up, "can't reach
+ *  ERPNext", or "could not be read" -- never a sample score. */
+export function renderHealthTiles(root, figures, { openDrawer } = {}) {
   if (!root || !figures) return 0;
   let live = 0;
-  // The headline is Home's gauge: the plain average of the questions scored so far.
-  const parts = SCORES.map(([k]) => figures[k]).filter((f) => f && f.value !== null && f.value !== undefined);
   const head = root.querySelector("#hh-score");
-  if (head && parts.length) {
-    const avg = Math.round(parts.reduce((s, f) => s + Number(f.value), 0) / parts.length);
+  const total = figures.control_score;
+  if (head && total && total.value !== null && total.value !== undefined) {
+    const avg = Math.round(Number(total.value));
     head.textContent = String(avg);
     head.style.color = `var(--${toneOf(avg).color})`;
     const trend = root.querySelector("#hh-trend");
     if (trend) {
-      trend.textContent = `average of the ${parts.length} questions scored`;
+      trend.textContent = total.note || "";
       trend.style.color = "var(--mut)";
     }
+  } else if (head) {
+    head.textContent = "—";
   }
   root.querySelectorAll(".bk.q").forEach((tile) => {
     const label = tile.querySelector(".l")?.textContent?.trim();
-    const key = { "Are we getting paid?": "score_paid", "Can we deliver what we sold?": "score_deliver",
-                  "Is the paperwork finished?": "score_paperwork" }[label];
+    const key = HEALTH_QUESTIONS[label];
     const f = key && figures[key];
-    if (!f || f.value === null || f.value === undefined) return;
+    tile.querySelector(":scope > .flag[data-prov]")?.remove();
+    delete tile.dataset.illustrative;
+    const flag = tile.querySelector(".khead .flag");
+    const foot = tile.querySelector(".v");
+    const state = f?.data_status?.state;
+    if (!f || f.value === null || f.value === undefined) {
+      if (flag) {
+        flag.className = "flag f-dim";
+        flag.textContent = state === "needs_setup" ? "Set up" : state === "unreachable"
+          ? "Can't reach" : state === "failed" ? "Not read" : "Not scored";
+      }
+      if (foot) foot.textContent = f?.note || (f ? "nothing to score yet" : "could not be read just now");
+      tile.removeAttribute("onclick");
+      if (state === "needs_setup" && f.data_status.guide && openDrawer) {
+        tile.classList.add("clickable");
+        tile.onclick = () => openDrawer({ node: guideDrawer(label, f.data_status.guide) });
+      }
+      tile.dataset.live = "1";
+      return;
+    }
     const score = Math.round(Number(f.value));
     const tone = toneOf(score);
     const n = tile.querySelector(".n");
@@ -74,20 +102,47 @@ export function renderHealthTiles(root, figures) {
       bar.style.width = `${Math.max(0, Math.min(100, score))}%`;
       bar.style.background = `var(--${tone.color})`;
     }
-    const flag = tile.querySelector(".khead .flag");
     if (flag) {
       flag.className = `flag ${tone.flag}`;
       flag.textContent = tone.word;
     }
-    const foot = tile.querySelector(".v");
     if (foot && f.note) foot.textContent = `${score}% ${f.note}`;
     tile.dataset.live = "1";
-    delete tile.dataset.illustrative;
-    tile.querySelector(":scope > .flag[data-prov]")?.remove();
+    tile.removeAttribute("onclick");
     tile.title = "One stated ratio: " + (f.note ? `${score}% ${f.note}.` : "");
     live += 1;
   });
+  say(root, figures);
   return live;
+}
+
+/** "Three things are going badly": the questions scoring under 60, worst first. */
+function say(root, figures) {
+  const box = root.querySelector("#hh-say");
+  if (!box) return;
+  const scored = SCORES.map(([k, , q]) => ({ q, f: figures[k] }))
+    .filter((p) => p.f && p.f.value !== null && p.f.value !== undefined);
+  box.textContent = "";
+  if (!scored.length) {
+    box.textContent = "Not enough is recorded yet to score any of the six questions.";
+    return;
+  }
+  const bad = scored.filter((p) => Number(p.f.value) < 60).sort((a, b) => a.f.value - b.f.value);
+  const words = ["Nothing is", "One thing is", "Two things are", "Three things are", "Four things are",
+    "Five things are", "Six things are"];
+  box.append(document.createTextNode(`${words[bad.length]} going badly`
+    + (bad.length ? ". " : ` among the ${scored.length} questions scored.`)));
+  bad.forEach((p, i) => {
+    box.append(el("b", null, p.q), document.createTextNode(
+      ` — ${Math.round(p.f.value)}% ${p.f.note || ""}${i < bad.length - 1 ? ". " : "."}`));
+  });
+}
+
+function guideDrawer(title, guide) {
+  const wrap = el("div", "guide-drawer");
+  wrap.append(el("h3", null, title));
+  wrap.append(guideBox(guide));
+  return wrap;
 }
 
 /* ------------------------------------------------------------------ morning brief */
@@ -249,12 +304,14 @@ function gauge(root, figures) {
   if (!box) return;
   const parts = SCORES.map(([k, label]) => ({ key: k, label, f: figures[k] }))
     .filter((p) => p.f && p.f.value !== null && p.f.value !== undefined);
+  const total = figures.control_score;
   box.textContent = "";
-  if (!parts.length) {
-    box.append(el("div", "home-wait", "Not enough data to score yet."));
+  if (!parts.length || !total || total.value === null || total.value === undefined) {
+    box.append(el("div", "home-wait", total?.data_status?.state === "unreachable"
+      ? "Can't reach ERPNext to score it just now." : "Not enough data to score yet."));
     return;
   }
-  const score = Math.round(parts.reduce((s, p) => s + Number(p.f.value), 0) / parts.length);
+  const score = Math.round(Number(total.value));
   const worst = parts.reduce((a, b) => (Number(a.f.value) <= Number(b.f.value) ? a : b));
   const tone = toneOf(score);
   box.append(dial(score, tone.color));
@@ -272,8 +329,9 @@ function gauge(root, figures) {
       li.append(el("b", null, `${Math.round(p.f.value)}`), el("span", null, `${p.label}: ${Math.round(p.f.value)}% ${p.f.note || ""}`));
       list.append(li);
     });
-    list.append(el("li", "gauge-note", `The plain average of these ${parts.length}. `
-      + "Approvals, record quality and access are not scored until their data exists."));
+    const missing = SCORES.length - parts.length;
+    list.append(el("li", "gauge-note", `The plain average of these ${parts.length}.`
+      + (missing ? ` ${missing} of the six questions cannot be scored yet; Business Health says why.` : "")));
   }
   if (how && !how.dataset.wired) {
     how.dataset.wired = "1";

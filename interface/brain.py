@@ -68,3 +68,8 @@ BRAIN=[
   "steps":["Finding the invoice","Checking the customer's balance","Checking what I am permitted to do"],
   "ans":"", "sug":"", "src":[]},
 ]
+
+
+# Business-specific samples are never shipped: every record opens in the live records
+# drawer, every answer comes from the analyst. (BRAIN kept above only as history.)
+BRAIN=[]

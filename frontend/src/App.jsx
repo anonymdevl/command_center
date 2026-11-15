@@ -10,6 +10,7 @@ import ActionDialog from "./components/ActionDialog.jsx";
 import ScheduleDialog from "./components/ScheduleDialog.jsx";
 import Settings, { isAdministrator } from "./components/Settings.jsx";
 import nav from "./legacy/nav.json";
+import { CORE_VIEWS } from "./legacy/core.js";
 import { restore } from "./askHistory.js";
 
 /**
@@ -78,7 +79,9 @@ export default function App() {
   // cards say which they are. The old all-or-nothing "this view is live" flag stopped
   // being true the moment figures were hydrated card by card, so it is gone rather
   // than left half-right.
-  const showBanner = !Ported && !settings;
+  // The management screens hold no sample at all (legacy/core.js), so the caveat would
+  // be false on them.
+  const showBanner = !Ported && !settings && !CORE_VIEWS.has(view);
 
   const ctx = useMemo(() => ({ scope, go, openDrawer: setDrawer }), [scope]);
 

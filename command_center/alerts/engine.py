@@ -14,6 +14,9 @@ each finding is written to its Command Center Alert --
 Run from the scheduler hourly and, because a site's workers are not always running,
 also on demand when the alerts are read and the last pass is more than fifteen
 minutes old. A pass is a handful of aggregate queries, so either is cheap.
+
+Newly raised alerts are emailed, one message per pass, to the platform's managers
+(alerts/notify.py); an alert already open is never emailed again.
 """
 
 from __future__ import annotations
@@ -58,7 +61,7 @@ def evaluate(business_code: str) -> dict:
     settings = rule_settings()
     keys = sorted({k for r in RULES for k in r.kpis})
     figures = evaluate_set(keys, business_code)
-    seen, raised = set(), 0
+    seen, raised, new = set(), 0, []
     for rule in RULES:
         p = settings[rule.rule_id]
         if not p.enabled:
@@ -68,10 +71,15 @@ def evaluate(business_code: str) -> dict:
             continue
         since = _since(rule, business_code)
         horizon = _horizon(figures, rule)
-        _upsert(rule, p, business_code, "all", finding, since, horizon)
+        doc, created = _upsert(rule, p, business_code, "all", finding, since, horizon)
+        if created:
+            new.append(doc)
         seen.add((rule.rule_id, "all"))
         raised += 1
     _clear(business_code, seen)
+    if new:
+        from command_center.alerts.notify import notify
+        notify(business_code, new)
     frappe.cache().set_value(f"cc:alerts:evaluated:{business_code}", str(now_datetime()),
                              expires_in_sec=FRESH_SECONDS)
     return {"business_code": business_code, "raised": raised}
@@ -129,12 +137,12 @@ def _upsert(rule, p, business_code, key, f, since, horizon):
         if doc.status == "Deferred" and doc.deferred_until and getdate(doc.deferred_until) <= getdate(today()):
             doc.status = "Raised"
         doc.save(ignore_permissions=True)
-        return doc
+        return doc, False
     doc = frappe.get_doc({"doctype": DOCTYPE, "rule": rule.rule_id,
                           "business_code": business_code, "dedupe_key": key,
                           "status": "Raised", "first_raised": now_datetime(), **values})
     doc.insert(ignore_permissions=True)
-    return doc
+    return doc, True
 
 
 def _clear(business_code, seen):

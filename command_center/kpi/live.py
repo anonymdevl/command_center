@@ -46,6 +46,15 @@ BUSINESS_DOCTYPES = ("Sales Invoice", "Purchase Invoice", "Sales Order", "Purcha
                      "Stock Entry", "Quotation")
 
 
+class NeedsSetup(Exception):
+    """Raised by a figure when the business's ERPNext records nothing behind it yet:
+    the card shows the guide (command_center/guides.needs_setup) instead of a figure."""
+
+    def __init__(self, status: dict):
+        super().__init__(status.get("message") or "needs setup")
+        self.status = status
+
+
 @dataclass(frozen=True)
 class Live:
     key: str
@@ -537,6 +546,12 @@ LIVE = {k.key: k for k in (
 )}
 
 
+# Figures defined in sibling modules, registered into the one map.
+from command_center.kpi import live_governance as _governance  # noqa: E402
+
+LIVE.update(_governance.LIVE)
+
+
 def evaluate(keys, business_code=None) -> dict:
     """The live figures asked for, in the engine's shape. Unknown keys are left out."""
     import frappe
@@ -556,21 +571,30 @@ def evaluate(keys, business_code=None) -> dict:
     except Exception:
         frappe.log_error(title="Command Center live figures", message=frappe.get_traceback())
     out = {}
+    from command_center.connectors.base import BusinessUnreachable
+    down = None
     for key in wanted:
         spec = LIVE[key]
         drill = None
         try:
             if reader is None:
                 raise RuntimeError("no business to read")
+            if down is not None and spec.source == "erp":
+                raise down
             got = spec.fn(reader)
             value, note = got[0], got[1]
             drill = got[2] if len(got) > 2 else None
             # A fourth element is the figure's own status: needs_setup (guides.py) when
             # nothing behind it is recorded in ERPNext yet.
             state = (got[3] if len(got) > 3 and got[3] else {"state": "live", "message": None})
+        except NeedsSetup as e:
+            value, note, state = None, e.status.get("message"), e.status
         except Exception as e:
             from command_center.kpi.live_departments import is_down, unreachable_status
             if is_down(e):
+                # The business's ERPNext did not answer: once is enough for this screen,
+                # and the card says so rather than "could not be read".
+                down = e
                 value, note, state = None, "Can't reach ERPNext", unreachable_status(e)
             else:
                 frappe.log_error(title=f"Command Center live figure {key}", message=frappe.get_traceback())

@@ -15,13 +15,14 @@ import { api } from "../api/client.js";
 import { money, exact } from "../format.js";
 import { menu } from "./actions.js";
 
-export const ALERT_VIEWS = new Set(["command", "brief", "health"]);
+export const ALERT_VIEWS = new Set(["command", "brief", "health", "risk"]);
 const WORDS = { crit: "Critical", high: "High", med: "Medium", info: "For information" };
 
 export function renderAlerts(root, view, data, { onOpen } = {}) {
   if (!root || !data || !ALERT_VIEWS.has(view)) return;
   const alerts = data.alerts || [];
   const list = el("div", "alert-live-list");
+  list.dataset.live = "1";
   if (!alerts.length) {
     const e = el("div", "work-empty");
     e.append(el("b", null, "Nothing needs your attention."),
@@ -44,10 +45,24 @@ export function renderAlerts(root, view, data, { onOpen } = {}) {
     existing.replaceWith(list);
     return;
   }
+  // The screens carry an empty .alert-live-list slot where the alerts go (replaced
+  // above); a designed sample alert, if any markup still had one, is removed, never shown.
   const designed = Array.from(root.querySelectorAll(".alert:not([data-live])"));
   if (!designed.length) return;
   designed[0].before(list);
   designed.forEach((d) => d.remove());
+}
+
+/** The alerts could not be read: the slot says so instead of waiting for ever. */
+export function alertsFailed(root, view, error) {
+  if (!root || !ALERT_VIEWS.has(view)) return;
+  const slot = root.querySelector(".alert-live-list");
+  if (!slot || slot.dataset.live === "1") return;
+  slot.textContent = "";
+  const e = el("div", "work-empty");
+  e.append(el("b", null, "The alerts could not be read just now."),
+    el("span", null, error?.message || "They are read again when the screen is opened."));
+  slot.append(e);
 }
 
 function card(a, onOpen) {
@@ -79,6 +94,11 @@ function card(a, onOpen) {
     meta.append(src);
   }
   meta.append(chip("Owner", a.owner_label), chip("Elapsed", a.elapsed));
+  if (a.emailed) {
+    const m = chip("Email", a.emailed.replace(/^Emailed to /, "sent to ").replace(/^Not emailed: /, "not sent: "));
+    m.title = a.emailed;
+    meta.append(m);
+  }
   if (a.todo) {
     const t = el("a", "chip", "");
     t.href = `/app/todo/${encodeURIComponent(a.todo)}`;

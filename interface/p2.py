@@ -83,12 +83,12 @@ def alert(sev, what, why, sowhat, fig, cur, srcdt, srcnm, owner, elapsed, drawer
 # legacy/home.js from api/home.py, api/alerts.py and the health KPIs.
 _HOME_TILES = "".join(
     f'<div class="bk hero" onclick="go(\'{go}\')"><div class="l">{label}</div>'
-    f'<div class="hd">{desc}</div><div class="v">{foot}</div>'
-    f'<div class="n"><span class="cx">GHS</span>{fig}<span class="mag">M</span></div></div>'
-    for label, desc, foot, fig, go in (
-        ("Sales &amp; money owed", "Still to be collected from customers.", "806 unpaid invoices", "9.18", "sales"),
-        ("Buying &amp; suppliers", "What we still owe our suppliers.", "122 bills to pay", "5.65", "proc"),
-        ("Stock &amp; warehouses", "Value of goods on our shelves.", "2,375 items in stock", "3.77", "inv")))
+    f'<div class="hd">{desc}</div><div class="v">&nbsp;</div>'
+    f'<div class="n">—</div></div>'
+    for label, desc, go in (
+        ("Sales &amp; money owed", "Still to be collected from customers.", "sales"),
+        ("Buying &amp; suppliers", "What we still owe our suppliers.", "proc"),
+        ("Stock &amp; warehouses", "Value of goods on our shelves.", "inv")))
 
 V_COMMAND=f'''<div class="topbar"><div><h3 class="hello" id="greet">Good morning</h3>
 <div class="when">Here is where the business stands this morning.</div></div></div>
@@ -107,64 +107,30 @@ V_COMMAND=f'''<div class="topbar"><div><h3 class="hello" id="greet">Good morning
 <div class="count dark" onclick="go('cx')"><span class="count-i" aria-hidden="true">●</span><b id="cnt-cases">—</b><span>customer issues open</span></div>
 <div class="count" onclick="go('eng')"><span class="count-i" aria-hidden="true">●</span><b id="cnt-late">—</b><span>jobs past their date</span></div></div>
 <div class="grid home-pair">
-<div class="panel gauge-p" id="gauge"><div class="gp-h"><div><h4>Business health</h4><p>Getting paid, delivering and paperwork, combined</p></div></div>
+<div class="panel gauge-p" id="gauge"><div class="gp-h"><div><h4>Business health</h4><p>The six questions of Business Health, combined</p></div></div>
 <div class="gauge" id="gauge-v"><div class="home-wait">Working it out…</div></div>
 <button type="button" class="lnk gauge-how" id="gauge-how" aria-expanded="false">How it is scored</button>
 <ul class="gauge-parts" id="gauge-parts" hidden></ul></div>
 <div class="panel topc" id="topc"><div class="gp-h"><div><h4>Top customers</h4><p id="topc-sub">Share of sales, last twelve months</p></div></div>
 <div class="topc-bar" id="topc-bar"></div><ul class="topc-l" id="topc-l"><li class="home-wait">Reading the sales…</li></ul></div></div>
-<div class="banner"><b>This is a prototype.</b> Every customer, order, invoice and figure is real data
-from Gigmann's own ERPNext. Nothing here changes a business record: Assign, Request evidence and
-Escalate put a To-Do on a colleague's ERPNext list, from you, and that is all they do.</div>
+<div class="banner">Every figure here is read from the business&#39;s own ERPNext. Nothing here changes a
+business record: Assign, Request evidence and Escalate put a To-Do on a colleague&#39;s ERPNext list, from you,
+and that is all they do.</div>
 <div class="sect"><span>The numbers this morning</span></div>
 <div class="kpis" style="grid-template-columns:repeat(6,1fr)">
-{kpi("Money in, month","0","GHS","no invoices raised in the period","flat","stale")}
-{kpi("Owed to us","9.18","M GHS","74% more than 3 months late","dn","review","go('sales')")}
-{kpi("Days to get paid","—","","no payments received in period","flat")}
-{kpi("Waiting","4","","GHS 84,950 not yet delivered","flat","","go('sales')")}
-{kpi("Past due","4","","GHS 13,537","dn","","go('sales')")}
-{kpi("Stock we hold","3.77","M GHS","a third is not in any warehouse","dn","review","go('health')")}
+{kpi("Money in, month","—","","","flat")}
+{kpi("Owed to us","—","","","flat","","go('sales')")}
+{kpi("Days to get paid","—","","","flat")}
+{kpi("Waiting","—","","","flat","","go('sales')")}
+{kpi("Past due","—","","","flat","","go('sales')")}
+{kpi("Stock we hold","—","","","flat","","go('health')")}
 </div>
-<div class="sect"><span>Needs your attention — 4 items</span><span class="lnk" onclick="go('brief')">Open the full brief →</span></div>
-{alert("crit","GHS 6.78M of the 9.18M owed is more than three months late",
- "Nothing is sitting in the earlier stages, so this did not creep up on us. Ten customers hold all of it.",
- "Pick the three largest and agree payment dates this week.",
- "6,777,143","GHS","Customer accounts","647 invoices","Finance","over 3 months","openDrawer('ar')")}
-{alert("crit","We have promised customers stock we do not physically have, across 491 products",
- "Any of those orders can fail the moment the warehouse goes to pick it. Sales has committed goods the shelves do not hold.",
- "Freeze new commitments on the worst lines until a count is done.",
- "491","products","Stock position","Central, Kumasi, Accra","Stock Manager","ongoing","openDrawer('stock')")}
-{alert("high","UBUNTU has been waiting for three installations since February last year",
- "The same hospital owes us GHS 636,675, all more than three months late. We have not delivered and they have not paid — it is one story, not two.",
- "Send an engineer and open the payment conversation in the same call.",
- "636,675","GHS at risk","Projects","PROJ-0028 / 0029 / 0030","Engineering","19 months","openDrawer('ubuntu')")}
-{alert("med","EJURA MUNICIPAL HOSPITAL is still waiting for a GHS 65,100 order",
- "Placed on 19 August. Nothing has left the warehouse and nothing has been invoiced, so we are neither serving them nor being paid.",
- "Confirm a despatch date today.",
- "65,100","GHS","Sales order","SAL-ORD-2025-00910","Sales","31 days","openDrawer('ejura')")}'''
+<div class="sect"><span>Needs your attention</span><span class="lnk" onclick="go('brief')">Open the full brief →</span></div>
+<div class="alert-live-list"><div class="work-empty"><b>Reading the alerts&hellip;</b></div></div>'''
 
 # ---------------- V: BRIEF ----------------
 V_BRIEF=f'''<div class="topbar"><div><h3>Executive Summary</h3>
-<div class="when">Generated 07:00 · reconciled to the customer account balances</div></div></div>
+<div class="when" id="brief-when">Reading the alerts&hellip;</div></div></div>
 <div class="banner">Each item states six things: <b>what happened · why it matters · the figure ·
 where it came from · who owns it · how long it has been true</b>. Every one links to the record behind it.</div>
-{alert("crit","GHS 6.78M of the 9.18M owed is more than three months late",
- "Nothing is sitting in the earlier stages. Ten customers hold all of it.",
- "Pick the three largest and agree payment dates this week.",
- "6,777,143","GHS","Customer accounts","647 invoices","Finance","over 3 months","openDrawer('ar')")}
-{alert("crit","We have committed 40,080 syringes to customers. There are 139 in the building.",
- "The same is true of 10ml syringes (16,021 promised, none held) and infusion sets (8,000 promised, none held). These are everyday items we sell constantly.",
- "Stop quoting these lines until the count is confirmed.",
- "39,941","short","Stock position","Central Warehouse","Stock Manager","ongoing","openDrawer('stock')")}
-{alert("high","Almost a third of everything we own is not in any warehouse",
- "GHS 1.18M of real equipment is recorded in a stock-adjustment account: two brand-new haematology analysers, an anaesthesia machine, 15 hospital beds, 946 crutches. Nobody can sell it from there.",
- "Decide where this equipment physically is, then move it onto a sellable location.",
- "1,175,920","GHS","Stock adjustment account","207 product lines","Stock Manager","unknown","openDrawer('recon')")}
-{alert("med","88 invoices were written but never issued",
- "That revenue is in nobody's figures. It is correctly left out of the totals — but no one is chasing it either.",
- "Ask Sales to issue or void them by Friday.",
- "88","invoices","Unissued invoices","Sales","Sales","varies")}
-{alert("info","Six customer complaints are past the time we promised to resolve them",
- "Two concern equipment that is down — an X-ray generator and an autoclave — so those customers cannot treat patients with them.",
- "Escalate the two equipment-down cases to Engineering today.",
- "6","cases","Customer cases","Seeded for demonstration","Customer Service","up to 3 weeks","go('cx')")}'''
+<div class="alert-live-list"><div class="work-empty"><b>Reading the alerts&hellip;</b></div></div>'''

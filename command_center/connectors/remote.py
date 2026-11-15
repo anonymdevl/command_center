@@ -31,6 +31,7 @@ import requests
 from command_center.connectors.base import (
     BusinessConnector,
     BusinessUnreachable,
+    RequestRefused,
     CredentialRequired,
     RemotePermissionDenied,
 )
@@ -161,9 +162,16 @@ class RemoteConnector(BusinessConnector):
                 + _server_message(r)
             )
         if not r.ok:
-            self._mark_unreachable(f"HTTP {r.status_code}")
-            raise BusinessUnreachable(f"{self.name} returned HTTP {r.status_code}"
-                                      + _server_message(r))
+            if r.status_code >= 500 or r.status_code == 429:
+                # Broken or overloaded even after the retries: the business is down.
+                self._mark_unreachable(f"HTTP {r.status_code}")
+                raise BusinessUnreachable(f"{self.name} returned HTTP {r.status_code}"
+                                          + _server_message(r))
+            # It answered and refused this one request (a field its version lacks, a
+            # filter it rejects): one figure's problem, not the business's.
+            self._mark_reachable()
+            raise RequestRefused(f"{self.name} returned HTTP {r.status_code}"
+                                 + _server_message(r))
 
         self._mark_reachable()
         body = r.json()
