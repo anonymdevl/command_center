@@ -8,6 +8,7 @@ import LegacyView from "./components/LegacyView.jsx";
 import ViewTools from "./components/ViewTools.jsx";
 import ActionDialog from "./components/ActionDialog.jsx";
 import ScheduleDialog from "./components/ScheduleDialog.jsx";
+import Settings, { isAdministrator } from "./components/Settings.jsx";
 import nav from "./legacy/nav.json";
 import { restore } from "./askHistory.js";
 
@@ -69,12 +70,15 @@ export default function App() {
     if (main) main.scrollTop = 0;
   };
 
+  // Settings is the platform administrator's own page, not a designed screen. Anyone
+  // else who opens #settings sees the designed "not available to your role" panel.
+  const settings = view === "settings";
   const Ported = PORTED[view];
   // Every designed screen still has at least one card with no fact behind it, and the
   // cards say which they are. The old all-or-nothing "this view is live" flag stopped
   // being true the moment figures were hydrated card by card, so it is gone rather
   // than left half-right.
-  const showBanner = !Ported;
+  const showBanner = !Ported && !settings;
 
   const ctx = useMemo(() => ({ scope, go, openDrawer: setDrawer }), [scope]);
 
@@ -85,9 +89,15 @@ export default function App() {
       <div className="col">
         <Topbar scope={scope} openDrawer={setDrawer} onGo={go} onMenu={() => setNavOpen((o) => !o)} />
         <main className="main" id="cc-main">
-          <ViewTools caption={captionOf(view)} scope={scope} />
+          {!settings ? <ViewTools caption={captionOf(view)} scope={scope} /> : null}
           {showBanner ? <IllustrativeNotice /> : null}
-          {Ported ? <Ported {...ctx} /> : <LegacyView viewKey={view} {...ctx} />}
+          {settings ? (
+            isAdministrator(boot) ? <Settings /> : <LegacyView viewKey="denied" {...ctx} />
+          ) : Ported ? (
+            <Ported {...ctx} />
+          ) : (
+            <LegacyView viewKey={view} {...ctx} />
+          )}
         </main>
       </div>
       <Drawer content={drawer} onClose={() => setDrawer(null)} />

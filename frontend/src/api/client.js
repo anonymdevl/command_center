@@ -234,3 +234,37 @@ export const api = {
   reconcile: (business_code) =>
     call("command_center.api.ingest.reconcile", { business_code }),
 };
+
+/* ---------------------------------------------------------------------------
+   Settings (insights/core/platform_settings.py): the platform administrator's
+   screen. Every call is refused by the server to anyone who is not one. Secrets
+   go in only; nothing here ever reads one back.
+   ------------------------------------------------------------------------- */
+const PS = "insights.core.platform_settings";
+export const settingsApi = {
+  people: () => call(`${PS}.people`),
+  addPerson: (args) => call(`${PS}.add_person`, args),
+  updatePerson: (username, full_name) => call(`${PS}.update_person`, { username, full_name }),
+  setManager: (username, on) => call(`${PS}.set_manager`, { username, on: on ? 1 : 0 }),
+  setAdmin: (username, on) => call(`${PS}.set_admin`, { username, on: on ? 1 : 0 }),
+  setActive: (username, on) => call(`${PS}.set_active`, { username, on: on ? 1 : 0 }),
+  resetPassword: (args) => call(`${PS}.reset_password`, args),
+
+  businesses: () => call(`${PS}.businesses`),
+  addBusiness: (args) => call(`${PS}.add_business`, args),
+  updateBusiness: (args) => call(`${PS}.update_business`, args),
+  testBusiness: (name) => call(`${PS}.test_business`, { name }),
+  setPaused: (name, paused) => call(`${PS}.set_paused`, { name, paused: paused ? 1 : 0 }),
+  reloadBusiness: (name) => call(`${PS}.reload_business`, { name }),
+
+  claude: () => call(`${PS}.claude`),
+  setClaudeKey: (key) => call(`${PS}.set_claude_key`, { key }),
+  checkClaude: () => call(`${PS}.check_claude`),
+
+  credentials: () => call(`${PS}.credentials`),
+  setCredential: (args) => call(`${PS}.set_credential`, args),
+  removeCredential: (name) => call(`${PS}.remove_credential`, { name }),
+  testCredential: (name) => call(`${PS}.test_credential`, { name }),
+
+  changes: () => call(`${PS}.changes`),
+};

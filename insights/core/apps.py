@@ -15,3 +15,5 @@ class CoreConfig(AppConfig):
         import command_center.api as api
         for m in pkgutil.iter_modules(api.__path__):
             importlib.import_module(f"command_center.api.{m.name}")
+        # The Settings screen's calls (platform administrators only).
+        importlib.import_module("insights.core.platform_settings")

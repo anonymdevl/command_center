@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { boot } from "../api/boot.js";
 import Icon, { VIEW_ICON } from "./Icon.jsx";
+import { isAdministrator } from "./Settings.jsx";
 
 /**
  * Brand, the nineteen screens, and the business being looked at.
@@ -28,35 +29,49 @@ export default function Sidebar({ nav, current, onGo, scope, onScope }) {
           <div className="navgrp" key={gi}>
             <div className="navsec">{g.label}</div>
             {g.items.map((it) => (
-              <div
-                key={it.key}
-                className={`navi${it.sub ? " sub" : ""}${current === it.key ? " on" : ""}`}
-                onClick={() => onGo(it.key)}
-                role="button"
-                tabIndex={0}
-                aria-current={current === it.key ? "page" : undefined}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onGo(it.key);
-                  }
-                }}
-              >
-                <Icon name={VIEW_ICON[it.key]} />
-                <span>{it.label}</span>
-                {/* No badge. A badge is a tally, and nothing here computes one yet: the
-                    designed numbers are demonstration values, and a number sitting in a
-                    sidebar reads as fact with no card around it to caveat. It comes back
-                    when the engine can count it -- "Today 5" has to mean five things,
-                    not five once upon a time. */}
-              </div>
+              <NavItem key={it.key} it={it} icon={VIEW_ICON[it.key]} current={current} onGo={onGo} />
             ))}
           </div>
         ))}
+        {/* The platform administrator's own page, after the nineteen screens (which stay
+            exactly as settled in nav.json). Not shown to anyone else; the server refuses
+            them too. */}
+        {isAdministrator(boot) ? (
+          <div className="navgrp">
+            <div className="navsec">Platform</div>
+            <NavItem it={{ key: "settings", label: "Settings" }} icon="sliders" current={current} onGo={onGo} />
+          </div>
+        ) : null}
       </nav>
 
       <Business scope={scope} onScope={onScope} />
     </aside>
+  );
+}
+
+function NavItem({ it, icon, current, onGo }) {
+  return (
+    <div
+      className={`navi${it.sub ? " sub" : ""}${current === it.key ? " on" : ""}`}
+      onClick={() => onGo(it.key)}
+      role="button"
+      tabIndex={0}
+      aria-current={current === it.key ? "page" : undefined}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onGo(it.key);
+        }
+      }}
+    >
+      <Icon name={icon} />
+      <span>{it.label}</span>
+      {/* No badge. A badge is a tally, and nothing here computes one yet: the
+          designed numbers are demonstration values, and a number sitting in a
+          sidebar reads as fact with no card around it to caveat. It comes back
+          when the engine can count it -- "Today 5" has to mean five things,
+          not five once upon a time. */}
+    </div>
   );
 }
 
@@ -147,7 +162,7 @@ function Business({ scope, onScope }) {
               Each Gigmann company on its own ERPNext site can be connected, and then
               chosen here, or seen together as All businesses.
               {canConnect ? (
-                <a href="/app/connected-business/new" target="_blank" rel="noreferrer">Connect a business ↗</a>
+                <a href="#settings">Connect a business</a>
               ) : null}
             </div>
           ) : null}
