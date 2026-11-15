@@ -1225,7 +1225,9 @@ _READ_PATH = [os.path.join(APP, "ask", f) for f in sorted(os.listdir(os.path.joi
               if f.endswith(".py")] + [os.path.join(APP, "kpi", "engine.py"),
                                        os.path.join(APP, "kpi", "live.py"),
                                        os.path.join(APP, "kpi", "registry.py"),
-                                       os.path.join(APP, "facts", "schema.py")]
+                                       os.path.join(APP, "facts", "schema.py"),
+                                       # the analyst's people and leave tools read through it
+                                       os.path.join(APP, "api", "people.py")]
 # One statement is allowed by name: agent.py's time limit on a lookup's queries
 # ("SET SESSION max_statement_time"), which changes how long a query may run on this
 # connection and nothing in the database. Nothing else that runs SQL is.

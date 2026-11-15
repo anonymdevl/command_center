@@ -2056,69 +2056,8 @@ def _employees(ctx, doctype, filters):
                                                 [("count", "name", "records")])}
 
 
-def hr_person(ctx):
-    people = [p for p in ctx.rows("fact_person", ["src_name", "is_active", "has_user",
-                                                  "date_of_joining"]) if p["is_active"]]
-    if not people:
-        return _guide(ctx, "No active employee is recorded in ERPNext.", PEOPLE_STEPS,
-                      "/app/employee/new")
-    ids = {p["src_name"] for p in people}
-    n = len(people)
-    parts = [("Linked to an ERPNext login", sum(1 for p in people if p["has_user"])),
-             ("Joining date recorded", sum(1 for p in people if p["date_of_joining"]))]
-    today = str(_today())
-    if _has(ctx, "Leave Allocation"):
-        parts.append(("Leave allocated for this year", len(ids & _employees(
-            ctx, "Leave Allocation", {"docstatus": 1, "to_date": [">=", today]}))))
-        parts.append(("Attendance marked, last 30 days", len(ids & _employees(
-            ctx, "Attendance", {"docstatus": 1, "attendance_date": [">=", _days_ago(30)]}))))
-        parts.append(("Appraised, last 12 months", len(ids & _employees(
-            ctx, "Appraisal", {"docstatus": 1, "end_date": [">=", _days_ago(365)]}))))
-    rows = [{"label": l, "value": v, "display": f"{v:,} of {n:,}",
-             "tone": "ok" if v == n else "high" if v < n / 2 else "med"} for l, v in parts]
-    out = _bars(rows)
-    weakest = min(parts, key=lambda kv: kv[1])
-    out["note"] = (f"Of {n:,} active employees, the thinnest part of the record is "
-                   f"“{weakest[0].lower()}”: {weakest[1]:,} of {n:,}.")
-    return out
-
-
 HRMS_STEPS = ["Ask your ERPNext administrator to install the HR and payroll app (HRMS).",
               "Set up Leave Types and a Holiday List, then allocate leave with Leave Allocation."]
-
-
-def hr_leave(ctx):
-    if not _has(ctx, "Leave Application"):
-        return _guide(ctx, "Leave and attendance are not set up in this ERPNext.", HRMS_STEPS, "/app")
-    if not _count(ctx, "Leave Application") and not _count(ctx, "Attendance"):
-        return _guide(ctx, "No leave application or attendance is recorded in ERPNext.",
-                      ["Allocate each person's leave for the year with Leave Allocation.",
-                       "Staff apply for leave with Leave Application; their leave approver "
-                       "approves and submits it.",
-                       "Mark attendance daily with Employee Attendance Tool (or from a "
-                       "biometric device's check-ins)."], "/app/leave-application/new")
-    today = str(_today())
-    week = str(frappe.utils.add_days(_today(), 7))
-    approved = {"docstatus": 1, "status": "Approved"}
-    rows = [
-        ("Off today", _count(ctx, "Leave Application", {**approved, "from_date": ["<=", today],
-                                                        "to_date": [">=", today]}), "accent",
-         "/app/leave-application?status=Approved"),
-        ("Off in the next seven days", _count(ctx, "Leave Application", {
-            **approved, "from_date": ["<=", week], "to_date": [">=", today]}), "accent",
-         "/app/leave-application?status=Approved"),
-        ("Leave waiting for approval", _count(ctx, "Leave Application", {"docstatus": 0,
-                                                                         "status": "Open"}), "high",
-         "/app/leave-application?status=Open"),
-        ("Absences marked, last 30 days", _count(ctx, "Attendance", {
-            "docstatus": 1, "status": "Absent", "attendance_date": [">=", _days_ago(30)]}), "crit",
-         "/app/attendance?status=Absent"),
-    ]
-    site = ctx.site()
-    out = _bars([{"label": l, "value": v, "display": f"{v:,}", "tone": t,
-                  "drill": {"href": site + h}} for l, v, t, h in rows])
-    out["note"] = ""
-    return out
 
 
 def hr_appraisals(ctx):
@@ -2433,8 +2372,6 @@ SCREENS = {
         "Where people work": hr_departments,
         "Where people are": hr_where,
         "Departments are recorded inconsistently": hr_dupe_depts,
-        "One person, everything about them": hr_person,
-        "Leave and attendance": hr_leave,
         "Appraisals and training": hr_appraisals,
     },
     "aud": {
