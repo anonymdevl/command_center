@@ -41,8 +41,8 @@ VALUE_FIELDS = ("base_grand_total", "grand_total", "base_total", "total", "amoun
 def _source(business_code):
     """Where the work is read: this site, or the business's own site as this manager.
 
-    Returns (source, reason): a _Local or _Remote, or None with the sentence the screen
-    shows when it cannot be read."""
+    Returns (source, guide): a _Local or _Remote, or None with the guide the screen
+    shows when it cannot be read (guides.guide)."""
     from command_center.api.businesses import default_business_code
     code = business_code if business_code and business_code != "__all__" else default_business_code()
     if not code or frappe.db.get_value("Connected Business", {"business_code": code}, "is_local"):
@@ -51,19 +51,50 @@ def _source(business_code):
     if not credential_for(code):
         name = frappe.db.get_value("Connected Business", {"business_code": code},
                                    "business_name") or code
-        return None, (f"Approvals and tasks are read from {name}'s ERPNext under your own "
-                      f"account there, so that what is waiting on you is yours. Link your "
-                      f"ERPNext API key for {name} once, and they appear here.")
+        return None, _key_guide(code, name)
     from command_center.connectors.registry import connector_for
     return _Remote(connector_for(code)), None
+
+
+def _key_guide(code, name) -> dict:
+    """What a manager does when their own ERPNext key is not linked yet: the screens show
+    this in place of any request or task, never someone else's queue or a sample."""
+    from command_center.guides import guide
+    return guide(code,
+                 f"Approvals and tasks are read from {name}'s ERPNext under your own account "
+                 f"there, so that what is waiting on you is yours. Your ERPNext key is not "
+                 f"linked yet.",
+                 ["In ERPNext, open your own user (your picture, top right, then My Settings) "
+                  "and under API Access press Generate Keys. Copy the API Key and the API "
+                  "Secret shown; the secret is shown only once.",
+                  "Give both to a platform administrator, who adds them for you under "
+                  "Settings → Personal ERPNext Keys.",
+                  "Open this screen again: what is waiting on you appears here."],
+                 "/app/user", label="Open your user in ERPNext")
+
+
+def _unreachable(code, e) -> dict:
+    name = frappe.db.get_value("Connected Business", {"business_code": code},
+                               "business_name") if code else None
+    return {"available": False, "unreachable": True,
+            "reason": f"Can't reach {name or 'the business'}'s ERPNext just now, so what is "
+                      f"waiting on you cannot be read. It is read again when it answers."}
 
 
 @frappe.whitelist()
 def summary(business_code: str | None = None):
     require_manager()
-    src, reason = _source(business_code)
+    src, guide_ = _source(business_code)
     if not src:
-        return {"available": False, "reason": reason}
+        return {"available": False, "reason": guide_["text"], "guide": guide_}
+    from command_center.connectors.base import BusinessUnreachable
+    try:
+        return _summary(src, business_code)
+    except BusinessUnreachable as e:
+        return _unreachable(getattr(getattr(src, "conn", None), "code", None) or business_code, e)
+
+
+def _summary(src, business_code):
     user = src.me()
     approvals = _approvals(user, src)
     handed = _handed_out(user, src)
@@ -106,9 +137,10 @@ def summary(business_code: str | None = None):
                               f"{site}/app/todo?status=Open&assigned_by={user}"),
     }
     if reopened is None:
-        # The comments could not be read: the tile stays as designed, marked
-        # illustrative, rather than saying nothing was ever sent back.
-        figures.pop("work_reopened")
+        # The comments could not be read: the tile says so, rather than saying nothing
+        # was ever sent back.
+        figures["work_reopened"].update(value=None, note="could not be read", data_status={
+            "state": "failed", "message": "The comments on these To-Dos could not be read."})
     return {"available": True, "user": user, "today": str(now), "currency": currency,
             "approvals": approvals, "open": open_, "late": late, "check": check,
             "mine": mine, "figures": figures}
@@ -130,9 +162,9 @@ def review(todo: str, verdict: str, note: str = "", business_code: str | None = 
         frappe.throw("The verdict is accept or return.")
     if verdict == "return" and not (note or "").strip():
         frappe.throw("Say what is still needed, so they know what to do.")
-    src, reason = _source(business_code)
+    src, guide_ = _source(business_code)
     if not src:
-        frappe.throw(reason)
+        frappe.throw(guide_["text"])
     if isinstance(src, _Remote):
         return _review_remote(src, todo, verdict, note)
     doc = frappe.get_doc("ToDo", todo)

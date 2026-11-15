@@ -50,6 +50,10 @@ def open_alerts(business_code: str | None = None):
             "first_raised": str(r.first_raised)[:16] if r.first_raised else None,
             "url": f"/app/command-center-alert/{r.name}",
         })
+    from command_center.alerts.notify import recorded
+    mailed = recorded([a["name"] for a in out])
+    for a in out:
+        a["emailed"] = mailed.get(a["name"])
     out.sort(key=lambda a: (SEVERITY_RANK.get(a["severity"], 9), -(a["figure"] or 0)))
     return {"alerts": out, "new": sum(1 for a in out if a["status"] == "Raised"),
             "can_tune": "System Manager" in frappe.get_roles()}
@@ -87,7 +91,10 @@ def act(name: str, action: str, reason: str = "", until: str | None = None,
     if action != "acknowledge":
         label = {"actioned": "Assigned", "defer": f"Deferred to {until}",
                  "dismiss": "Dismissed", "false_positive": "Marked not a real problem"}[action]
-        doc.add_comment("Comment", f"{label} by {who}." + (f" {reason}" if reason else ""))
+        # The record itself keeps who acted and why (acted_by, reason); a comment as well
+        # where the runtime keeps comments.
+        if callable(getattr(doc, "add_comment", None)):
+            doc.add_comment("Comment", f"{label} by {who}." + (f" {reason}" if reason else ""))
     return {"name": doc.name, "status": doc.status, "at": str(now_datetime())[:16]}
 
 
