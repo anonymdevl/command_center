@@ -339,6 +339,13 @@ def current_recommendations(business_code=None):
     return _clean(out)
 
 
+def ai_allowance(business_code=None):
+    """This month's AI allowance on the business's plan, and how much of it is used:
+    counts only, from the platform's usage meters. Reads only."""
+    from command_center import metering
+    return _clean(metering.allowance(business_code))
+
+
 def find(text: str, business_code=None):
     """Customers, suppliers, items and warehouses whose names match the text."""
     from command_center.ask import resolve
@@ -971,6 +978,13 @@ TOOLS = {
         ["report"])),
 }
 
+TOOLS["ai_allowance"] = (ai_allowance, _decl(
+    "ai_allowance",
+    "The platform's own plan for this business: this month's AI allowance (analyst "
+    "questions, AI reports, scheduled reports, Daily Briefs), seats and businesses, how much "
+    "of each is used, when the meters reset, and the licence's renewal. Counts only. Use for "
+    "\"how much of our AI allowance have we used\" and questions about the plan or licence."))
+
 for _name, _phrasing, _desc in [
     ("who_owes_most", "Who owes us the most?",
      "The customers who owe the most, how old the debt is, and how concentrated it is."),
@@ -1055,6 +1069,8 @@ def describe(name: str, args: dict) -> str:
         return "Checking what data is loaded"
     if name == "current_recommendations":
         return "Reading the current recommendations"
+    if name == "ai_allowance":
+        return "Reading this month's AI allowance"
     if name == "run_report":
         return f"Running ERPNext's {a.get('report', 'report')}"
     if name == "report_filters":
@@ -1093,6 +1109,7 @@ STEP_KINDS = {
     "get_figures": "Reading the headline figures", "find": "Looking up a name",
     "describe_data": "Checking what data is loaded", "run_report": "Running an ERPNext report",
     "current_recommendations": "Reading the current recommendations",
+    "ai_allowance": "Reading this month's AI allowance",
     "report_filters": "Checking how a report is filtered",
     "erpnext_list": "Reading ERPNext records", "erpnext_count": "Reading ERPNext records",
     "erpnext_fields": "Reading ERPNext records", "erpnext_document": "Opening an ERPNext document",

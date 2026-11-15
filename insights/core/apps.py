@@ -17,6 +17,8 @@ class CoreConfig(AppConfig):
             importlib.import_module(f"command_center.api.{m.name}")
         # The Settings screen's calls (platform administrators only).
         importlib.import_module("insights.core.platform_settings")
+        # Plans, licences and usage: Plan & Usage, View Plans, Settings -> Customers.
+        importlib.import_module("insights.core.plans")
         # Every figure definition, once, before any request: loaded lazily, several
         # requests at once could find the catalogue half-filled.
         from command_center.kpi.registry import load_all

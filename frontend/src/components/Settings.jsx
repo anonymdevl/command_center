@@ -5,6 +5,7 @@ import SettingsBusinesses from "./SettingsBusinesses.jsx";
 import SettingsEmail from "./SettingsEmail.jsx";
 import SettingsRecommend from "./SettingsRecommend.jsx";
 import SettingsBranding from "./SettingsBranding.jsx";
+import SettingsCustomers from "./SettingsCustomers.jsx";
 import { SettingsChanges, SettingsClaude, SettingsCredentials } from "./SettingsKeys.jsx";
 import "../styles/settings.css";
 
@@ -23,6 +24,7 @@ import "../styles/settings.css";
 const TABS = [
   ["people", "People", SettingsPeople],
   ["businesses", "Businesses", SettingsBusinesses],
+  ["customers", "Customers", SettingsCustomers],
   ["claude", "Claude", SettingsClaude],
   ["email", "Email", SettingsEmail],
   ["branding", "Branding", SettingsBranding],

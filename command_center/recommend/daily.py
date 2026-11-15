@@ -146,10 +146,17 @@ def write_brief(code) -> dict:
     base = (stored.get("base") if stored.get("date") == today() else stored.get("snapshot")) or {}
     out = {"date": today(), "at": str(now_datetime())[:16], "snapshot": snap, "base": base,
            "text": None, "error": None, "model": None}
+    from command_center import metering
+    blocked = metering.gate("daily_briefs", code)
     if llm.provider() != "claude" or not claude.configured():
         out["error"] = "The Daily Brief needs the Claude key (Settings, Claude)."
+    elif blocked:
+        out["error"] = blocked
     else:
-        got, err = claude.complete(SYSTEM, text, kind="analyst")
+        # One Daily Brief on the usage ledger, counted when Claude wrote one.
+        with metering.event("daily_briefs", code) as ev:
+            got, err = claude.complete(SYSTEM, text, kind="analyst")
+            ev["ok"] = bool(got and not err)
         out["model"] = claude.model_for("analyst")
         if err:
             out["error"] = f"Claude could not write it: {err}"

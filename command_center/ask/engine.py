@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import frappe
 
+from command_center import metering
 from command_center.ask import agent, gemini, intents, planner_llm, resolve
 
 # What a manager can ask today, in their words. Shown when nothing matches, and it is
@@ -152,11 +153,22 @@ def answer(question: str, business_code: str | None = None, history=None, on_ste
 
     analyst_error = None
     if analyst_enabled():
-        try:
-            result = agent.answer(question, business_code, history, on_step=on_step)
-        except Exception:
-            frappe.log_error(title="Command Center analyst", message=frappe.get_traceback())
-            result = {"answered": False, "analyst_error": "the analyst raised an error (see Error Log)"}
+        # The plan (command_center/metering.py): a lapsed licence, or an allowance used
+        # with no overage allowed, stops the AI here and says so; the figures and every
+        # screen keep working. Each question is one row in the usage ledger, counted when
+        # it is answered, its tokens kept either way.
+        blocked = metering.gate("ai_questions", business_code)
+        if blocked:
+            return _allowance_answer(question, blocked)
+        with metering.event("ai_questions", business_code) as ev:
+            try:
+                result = agent.answer(question, business_code, history, on_step=on_step)
+            except Exception:
+                frappe.log_error(title="Command Center analyst", message=frappe.get_traceback())
+                result = {"answered": False,
+                          "analyst_error": "the analyst raised an error (see Error Log)"}
+            ev["ok"] = bool(result and result.get("answered"))
+            ev["model"] = ev.get("model") or (result or {}).get("model") or ""
         if result and result.get("answered"):
             return result
         analyst_error = (result or {}).get("analyst_error") or "the analyst returned nothing"
@@ -186,6 +198,13 @@ def answer(question: str, business_code: str | None = None, history=None, on_ste
                 "checked": ["the analyst stopped before it could answer"],
             })
     return fallback
+
+
+def _allowance_answer(question: str, why: str) -> dict:
+    """The AI is paused for this business's plan: said politely, with nothing guessed."""
+    return {"answered": False, "allowance": True, "question": question, "planner": "plan",
+            "answer": why, "checked": ["this month's AI allowance and the licence"],
+            "figures": [], "records": None, "entities": [], "suggestions": []}
 
 
 def _model_name() -> str:

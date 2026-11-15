@@ -74,6 +74,11 @@ class Command(BaseCommand):
         sched.add_job(_job("insights.core.maintenance.daily"), CronTrigger(hour=1, minute=45),
                       id="daily:insights.core.maintenance.daily")
         n += 1
+        # Plans: the day's seats and businesses per customer, licence reminders, and on
+        # the 1st the administrator's "usage statements are ready" (plans.py).
+        sched.add_job(_job("insights.core.plans.daily"), CronTrigger(hour=0, minute=30),
+                      id="daily:insights.core.plans.daily")
+        n += 1
         self.stdout.write(f"scheduler: {n} jobs")
         for job in sched.get_jobs():
             self.stdout.write(f"  {job.id}")

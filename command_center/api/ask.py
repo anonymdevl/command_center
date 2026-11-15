@@ -86,10 +86,14 @@ def _deep(ask_id: str, question: str, business_code, user: str):
         if not resume:
             raise RuntimeError("the conversation to continue had expired")
         # The deeper look runs on the deeper model (Claude Opus), carrying on from the
-        # everyday model's conversation exactly where it stopped.
-        result = agent.answer(question, business_code, resume=resume, max_steps=DEEP_STEPS,
-                              deadline=DEEP_DEADLINE, on_step=step, deep=True,
-                              should_stop=lambda: bool(frappe.cache().get_value(base + "::stop")))
+        # everyday model's conversation exactly where it stopped. Its tokens are on the
+        # usage ledger; it is the same question, so it is not counted as another.
+        from command_center import metering
+        with metering.event("ai_questions", business_code, note="Deeper look", count=False) as ev:
+            result = agent.answer(question, business_code, resume=resume, max_steps=DEEP_STEPS,
+                                  deadline=DEEP_DEADLINE, on_step=step, deep=True,
+                                  should_stop=lambda: bool(frappe.cache().get_value(base + "::stop")))
+            ev["ok"] = bool(result and result.get("answered"))
         if result and result.get("stopped"):
             # Stopped by the person: the first answer stands, and a partial deeper look
             # never replaces it.

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { settingsApi } from "../api/client.js";
+import { plansApi, settingsApi } from "../api/client.js";
 import { useApi } from "../useApi.js";
 import { Failed, Loading } from "./States.jsx";
 import { Dialog, Msg, act, when } from "./SettingsParts.jsx";
@@ -65,7 +65,7 @@ export default function SettingsPeople() {
               <td>
                 {p.full_name}
                 {p.is_me ? <span className="st-dim"> (you)</span> : null}
-                <span className="st-sub">{p.email}</span>
+                <span className="st-sub">{p.email}{p.customers?.length ? ` · ${p.customers.join(", ")}` : ""}</span>
               </td>
               <td>{p.is_manager ? <span className="tag t-ok">Yes</span> : <span className="st-dim">No</span>}</td>
               <td>{p.is_admin ? <span className="tag t-ok">Yes</span> : <span className="st-dim">No</span>}</td>
@@ -100,9 +100,12 @@ export default function SettingsPeople() {
 
 function AddPerson({ meAdmin, onClose, onDone }) {
   const [f, setF] = useState({ email: "", full_name: "", password: "", password2: "", later: false,
-    manager: true, admin: false });
+    manager: true, admin: false, client_id: "", override: false });
   const [st, setSt] = useState({});
   const [made, setMade] = useState(null);
+  // The customers whose seat the new person may take (insights/core/plans.py): every one
+  // for the administrator, the delegate's own for a delegate.
+  const { data: customers } = useApi(() => plansApi.clientChoices(), []);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
 
   const save = async (e) => {
@@ -111,6 +114,7 @@ function AddPerson({ meAdmin, onClose, onDone }) {
       email: f.email, full_name: f.full_name, password: f.later ? "" : f.password,
       password2: f.later ? "" : f.password2, set_later: f.later ? 1 : 0,
       manager: f.manager ? 1 : 0, admin: meAdmin && f.admin ? 1 : 0,
+      client_id: f.client_id || undefined, override_seats: meAdmin && f.override ? 1 : 0,
     }));
     if (out) {
       setMade(out);
@@ -173,6 +177,33 @@ function AddPerson({ meAdmin, onClose, onDone }) {
             <input type="checkbox" checked={f.admin} onChange={set("admin")} />
             <span>Administrator: can also open all of Settings</span>
           </label>
+        ) : null}
+
+        {customers?.length && !(meAdmin && f.admin) ? (
+          meAdmin ? (
+            <>
+              <label htmlFor="sp-cust">Customer</label>
+              <select id="sp-cust" value={f.client_id} onChange={set("client_id")}>
+                <option value="">None: takes no customer&apos;s seat</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.seats_used} of {c.seats ?? "unlimited"} seats in use)
+                  </option>
+                ))}
+              </select>
+              {f.client_id ? (
+                <label className="st-check">
+                  <input type="checkbox" checked={f.override} onChange={set("override")} />
+                  <span>Allow beyond the customer&apos;s seat limit</span>
+                </label>
+              ) : null}
+            </>
+          ) : (
+            <p className="dlg-hint">
+              They take one of {customers[0].name}&apos;s seats ({customers[0].seats_used} of{" "}
+              {customers[0].seats ?? "unlimited"} in use).
+            </p>
+          )
         ) : null}
 
         {st.bad ? <div className="dlg-err" role="alert">{st.bad}</div> : null}

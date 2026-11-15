@@ -4,7 +4,9 @@ value one request puts in the cache is seen by the next at once."""
 
 from django.conf import settings
 
-AUX_MODELS = {("core", "errorlog"), ("django_cache", "cacheentry")}
+AUX_MODELS = {("core", "errorlog"), ("django_cache", "cacheentry"),
+              # the usage ledger and its notices (plans.py): billing outlives a rollback
+              ("core", "usageevent"), ("core", "plannotice")}
 
 
 class AuxRouter:
