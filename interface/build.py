@@ -19,6 +19,7 @@ exec(_src('records.py'))
 exec(_src('tidy.py'))
 exec(_src('blocks.py'))
 exec(_src('lookup.py'))
+exec(_src('cover.py'))
 exec(_src('auth.py'))
 exec(_src('shell.py'))
 
@@ -685,7 +686,7 @@ _i = BODY.index("<script>")
 _j = BODY.rindex("</script>")
 PARTS = {
     # The shell goes last: it is the one owner of its rules, so nothing may follow it.
-    "css": CSS + EXTRA_CSS + BOOT_CSS + BLOCKS_CSS + LOOKUP_CSS + AUTH_CSS + SHELL_CSS,
+    "css": CSS + EXTRA_CSS + BOOT_CSS + BLOCKS_CSS + LOOKUP_CSS + COVER_CSS + AUTH_CSS + SHELL_CSS,
     "body": BODY[:_i],
     "js": BODY[_i + len("<script>"):_j] + BOOT_JS,
 }

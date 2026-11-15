@@ -2406,6 +2406,15 @@ class Recommendations(TransactionTestCase):
         p = mock.patch.object(engine, "_context", ctx)
         p.start()
         self.patches.append(p)
+        # "Promised to customers, not ordered" reads the order coverage (coverage.py),
+        # here from crafted rows: one order line nothing covers.
+        from command_center import coverage
+        self.cover = cover_rows(minimal=True)
+        cover_reader = _RecReader(self.cover)
+        p = mock.patch.object(coverage, "get",
+                              lambda code=None, reader=None: coverage.compute(code, cover_reader))
+        p.start()
+        self.patches.append(p)
         self._rich()
 
     # ------------------------------------------------------------------ the crafted data
@@ -2540,6 +2549,7 @@ class Recommendations(TransactionTestCase):
             if name.startswith("CommandCenterFact"):
                 model.objects.filter(business_code=REC_CODE).delete()
         self.live.clear()
+        self.cover.clear()
         cache.clear()
 
     def _compute(self):
@@ -4217,3 +4227,302 @@ class Security(TransactionTestCase):
             self.assertNotIn("insights.core.security", text, py.name)
             self.assertNotIn("insights_security", text, py.name)
             self.assertNotIn("SecurityEvent", text, py.name)
+
+
+# ---------------------------------------------------------------------------------------
+# Promised orders and what covers them (command_center/coverage.py, api/coverage.py): the
+# linked chain MR -> PO -> receipt -> invoice, likely purchase orders shared out without
+# double counting, every state, the late flags, the guide where nothing links, a business
+# that does not answer, managers only, and the analyst's tool.
+# ---------------------------------------------------------------------------------------
+def cover_rows(minimal=False) -> dict:
+    """A business's ERPNext for the coverage, as rows per doctype. Dates against today.
+
+    SO-1  (Ama Clinic, late)   L1  60 of A: 20 free in W1, 10 received on PO-1 (raised from
+                                   MR-1, which names the line), 30 still on PO-1  -> On Order, linked
+                               L2  5 of B: nothing, an old PO for B far outside the window
+                                                                                 -> Not Ordered
+    SO-2  (Kofi Stores)        L3  30 of C: PO-2 (50 of C, no order named, raised 2 days
+                                   after, past its date)                -> On Order, likely
+    SO-3  (Esi Pharmacy)       L4  40 of C: the 20 left on PO-2         -> Partly Covered
+    SO-4  (Esi Pharmacy)       L5  3 of E: 3 held in W2                  -> In Stock (elsewhere)
+                               L6  1 of SVC, a service                  -> Not a Stock Item
+    PO-4 has 100 of C for another order (SO-OLD): never likely for these.
+    """
+    d = lambda n: str(TODAY + dt.timedelta(days=n))  # noqa: E731
+    so = lambda name, cust, made, due: {"name": name, "customer": cust, "customer_name": cust,  # noqa: E731
+                                        "transaction_date": d(made), "delivery_date": d(due),
+                                        "status": "To Deliver and Bill", "base_grand_total": 0,
+                                        "base_net_total": 0, "per_delivered": 0, "docstatus": 1}
+    line = lambda parent, name, idx, item, q, rate, wh="W1", due=None: {  # noqa: E731
+        "parent": parent, "name": name, "idx": idx, "item_code": item, "item_name": f"Item {item}",
+        "warehouse": wh, "qty": q, "delivered_qty": 0, "conversion_factor": 1, "stock_uom": "Pcs",
+        "base_net_rate": rate, "delivery_date": due, "delivered_by_supplier": 0, "docstatus": 1}
+    if minimal:
+        return {"Sales Order": [so("SO-9", "Yaw Clinic", -30, -10)],
+                "Sales Order Item": [line("SO-9", "L9", 1, "CVR-NONE", 4, 2500)]}
+    po = lambda name, sup, made, due, status="To Receive and Bill": {  # noqa: E731
+        "name": name, "supplier": sup, "transaction_date": d(made), "schedule_date": d(due),
+        "status": status, "per_received": 10, "docstatus": 1}
+    pol = lambda parent, name, item, q, recd, due, so_=None, soi=None, mr=None, mri=None: {  # noqa: E731
+        "parent": parent, "name": name, "item_code": item, "warehouse": "W1", "qty": q,
+        "received_qty": recd, "conversion_factor": 1, "schedule_date": d(due),
+        "expected_delivery_date": None, "sales_order": so_, "sales_order_item": soi,
+        "material_request": mr, "material_request_item": mri, "docstatus": 1}
+    return {
+        "Sales Order": [so("SO-1", "Ama Clinic", -20, -5), so("SO-2", "Kofi Stores", -10, 10),
+                        so("SO-3", "Esi Pharmacy", -9, 20), so("SO-4", "Esi Pharmacy", -3, 30)],
+        "Sales Order Item": [line("SO-1", "L1", 1, "A", 60, 10), line("SO-1", "L2", 2, "B", 5, 100),
+                             line("SO-2", "L3", 1, "C", 30, 20), line("SO-3", "L4", 1, "C", 40, 20),
+                             line("SO-4", "L5", 1, "E", 3, 50), line("SO-4", "L6", 2, "SVC", 1, 300)],
+        "Item": [{"name": "SVC", "is_stock_item": 0}],
+        "Warehouse": [{"name": "W1", "warehouse_type": None, "disabled": 0, "is_group": 0},
+                      {"name": "W2", "warehouse_type": None, "disabled": 0, "is_group": 0}],
+        "Material Request": [{"name": "MR-1", "transaction_date": d(-19), "schedule_date": d(5),
+                              "status": "Ordered", "material_request_type": "Purchase",
+                              "docstatus": 1}],
+        "Material Request Item": [{"parent": "MR-1", "name": "M1", "item_code": "A", "warehouse": "W1",
+                                   "stock_qty": 40, "ordered_qty": 40, "schedule_date": d(5),
+                                   "sales_order": "SO-1", "sales_order_item": "L1", "docstatus": 1}],
+        "Purchase Order": [po("PO-1", "Acme Medical", -18, 7), po("PO-2", "Beta Supplies", -8, -1),
+                           po("PO-3", "Gamma Ltd", -400, -390), po("PO-4", "Delta Ltd", -60, 30)],
+        "Purchase Order Item": [pol("PO-1", "P1", "A", 40, 10, 7, mr="MR-1", mri="M1"),
+                                pol("PO-2", "P2", "C", 50, 0, -1),
+                                pol("PO-3", "P3", "B", 5, 0, -390),
+                                pol("PO-4", "P4", "C", 100, 0, 30, so_="SO-OLD", soi="LX")],
+        "Purchase Receipt Item": [{"parent": "PR-1", "name": "R1", "purchase_order": "PO-1",
+                                   "purchase_order_item": "P1", "stock_qty": 10, "docstatus": 1}],
+        "Purchase Receipt": [{"name": "PR-1", "posting_date": d(-4), "docstatus": 1}],
+        "Purchase Invoice Item": [{"parent": "PI-1", "name": "I1", "purchase_order": "PO-1",
+                                   "po_detail": "P1", "stock_qty": 10, "docstatus": 1}],
+        "Purchase Invoice": [{"name": "PI-1", "posting_date": d(-3), "update_stock": 0,
+                              "docstatus": 1}],
+    }
+
+
+class CoverERPNext(FakeERPNext):
+    """The fake ERPNext, answering the coverage's doctypes from cover_rows() -- filtered
+    and paged as ERPNext would -- and everything else as before."""
+
+    def __init__(self, rows):
+        super().__init__()
+        self.cover = rows
+        self.down = False
+
+    def answer(self, m, p):
+        import requests
+        if self.down:
+            raise requests.ConnectionError("no route to host")
+        if m == "frappe.client.get_list" and p.get("doctype") in self.cover:
+            filters = p.get("filters") or {}
+            filters = json.loads(filters) if isinstance(filters, str) else filters
+            rows = [r for r in self.cover[p["doctype"]] if _hr_match(r, filters)]
+            fields = p.get("fields") or ["name"]
+            fields = json.loads(fields) if isinstance(fields, str) else fields
+            start = int(p.get("limit_start") or 0)
+            n = int(p.get("limit_page_length") or 20)
+            cols = [re.split(r"\s+as\s+", str(f))[-1].strip() for f in fields]
+            return _R(200, {"message": [{c: r.get(c) for c in cols} for r in rows[start:start + n]]})
+        if m == "frappe.client.get_count" and p.get("doctype") in self.cover:
+            return _R(200, {"message": len(self.cover[p["doctype"]])})
+        return super().answer(m, p)
+
+
+class OrderCover(TransactionTestCase):
+    databases = {"default", "aux"}
+    CODE = "test_medical_ltd"
+
+    def setUp(self):
+        from django.conf import settings
+        from django.core.cache import cache
+        from cryptography.fernet import Fernet
+        from command_center import install
+        from insights.compat import run_as
+        settings.CONFIG.setdefault("encryption_key", Fernet.generate_key().decode())
+        Group.objects.get_or_create(name="Insights Dashboard Manager")
+        cache.clear()
+        self.fake = CoverERPNext(cover_rows())
+        up = [mock.patch("requests.get", self.fake("GET")),
+              mock.patch("requests.post", self.fake("POST")),
+              mock.patch("time.sleep", lambda s: None)]
+        for p in up:
+            p.start()
+        self.addCleanup(lambda: [p.stop() for p in up])
+        self.addCleanup(cache.clear)
+        with run_as("Administrator"):
+            install.register_business("Test Medical Ltd", "https://erp.test", "key", "s3cret")
+        from insights.core import models as M
+        for item, wh, q in (("A", "W1", 30), ("E", "W2", 3), ("E", "Stock In Transit", 9)):
+            key = f"{item}-{wh}"
+            M.CommandCenterFactStockBalance.objects.create(
+                name=key, fact_key=key, business_code=self.CODE, item_code=item, warehouse=wh,
+                actual_qty=q, src_name=key)
+        U = get_user_model()
+        m = U.objects.create_user("boss@test.com", "boss@test.com", "a-long-test-pass-9")
+        m.groups.add(Group.objects.get(name="Insights Dashboard Manager"))
+        self.c = Client()
+        self.assertTrue(self.c.login(username="boss@test.com", password="a-long-test-pass-9"))
+
+    def post(self, fn, client=None, **args):
+        return (client or self.c).post(f"/api/method/{fn}",
+                                       json.dumps({"business_code": self.CODE, **args}),
+                                       content_type="application/json")
+
+    def ok(self, fn, **args):
+        r = self.post(fn, **args)
+        self.assertEqual(r.status_code, 200, f"{fn}: {r.content[:400]!r}")
+        return r.json()["message"]
+
+    def lines(self):
+        from command_center import coverage
+        from django.core.cache import cache
+        from insights.compat import run_as
+        cache.clear()
+        with run_as("boss@test.com"):
+            got = coverage.compute(self.CODE)
+        return got, {l["id"]: l for l in got["lines"]}
+
+    def test_linked_chain_mr_po_receipt_invoice(self):
+        got, by = self.lines()
+        l1 = by["L1"]
+        self.assertEqual((l1["state"], l1["basis"]), ("on_order", "linked"))
+        self.assertEqual((l1["received"], l1["from_stock"], l1["on_order"], l1["missing"]),
+                         (10, 20, 30, 0))
+        c = l1["covers"][0]
+        self.assertEqual((c["po"], c["request"], c["kind"], c["received"], c["on_order"]),
+                         ("PO-1", "MR-1", "linked", 10, 30))
+        self.assertEqual([x["name"] for x in c["receipts"]], ["PR-1"])
+        self.assertEqual([x["name"] for x in c["invoices"]], ["PI-1"])
+        self.assertEqual(c["po_href"], "https://erp.test/app/purchase-order/PO-1")
+        self.assertEqual(c["receipts"][0]["href"], "https://erp.test/app/purchase-receipt/PR-1")
+        self.assertEqual(c["invoices"][0]["href"], "https://erp.test/app/purchase-invoice/PI-1")
+        self.assertEqual(l1["order_href"], "https://erp.test/app/sales-order/SO-1")
+        self.assertFalse(c["late"])
+        self.assertIn("10 received against PO-1 from Acme Medical on PR-1", l1["narrative"])
+        self.assertIn("20 can go from stock in W1", l1["narrative"])
+        self.assertIn("30 on order from Acme Medical on PO-1", l1["narrative"])
+
+    def test_likely_cover_is_counted_once(self):
+        _, by = self.lines()
+        l3, l4 = by["L3"], by["L4"]
+        self.assertEqual((l3["state"], l3["basis"], l3["on_order"], l3["missing"]),
+                         ("on_order", "likely", 30, 0))
+        self.assertEqual((l4["state"], l4["on_order"], l4["missing"]), ("partly", 20, 20))
+        self.assertEqual({c["po"] for c in l3["covers"] + l4["covers"]}, {"PO-2"},
+                         "the purchase order for another sales order is never likely")
+        self.assertEqual(sum(c["on_order"] for c in l3["covers"] + l4["covers"]), 50)
+        self.assertIn("raised 2 days after the order, 50 Pcs on order", l3["covers"][0]["reason"])
+        self.assertIn("30 of them counted for earlier orders", l4["covers"][0]["reason"])
+        self.assertTrue(l3["supplier_late"], "PO-2 is past its date and not received")
+        self.assertIn("Likely, not linked", l3["narrative"])
+
+    def test_states_late_flags_and_totals(self):
+        got, by = self.lines()
+        self.assertEqual({k: l["state"] for k, l in by.items()},
+                         {"L1": "on_order", "L2": "not_ordered", "L3": "on_order",
+                          "L4": "partly", "L5": "in_stock", "L6": "non_stock"})
+        self.assertTrue(by["L2"]["late_to_customer"] and by["L1"]["late_to_customer"])
+        self.assertEqual(by["L2"]["days_late"], 5)
+        self.assertFalse(by["L3"]["late_to_customer"])
+        self.assertEqual(by["L2"]["covers"], [], "PO-3 for B was raised far outside the window")
+        self.assertEqual(by["L5"]["elsewhere"], [{"warehouse": "W2", "qty": 3.0}],
+                         "stock in transit is not stock to sell from")
+        s = got["summary"]
+        self.assertEqual(s["lines"], 6)
+        self.assertAlmostEqual(sum(p["value"] for p in s["parts"]), s["value"], places=2)
+        states = {x["key"]: x for x in s["states"]}
+        self.assertEqual(states["not_ordered"]["value"], 500)
+        self.assertEqual(s["needs_action"], {"count": 2, "value": 1300.0})
+        self.assertEqual(s["linked_lines"], 1)
+        self.assertEqual(s["likely_lines"], 2)
+
+    def test_window_is_the_rule_setting(self):
+        from command_center.recommend import engine
+        conf = engine.settings(self.CODE)
+        conf["rules"]["promised_not_ordered"]["params"]["after"] = 1
+        engine.save_settings(self.CODE, conf)
+        _, by = self.lines()
+        self.assertEqual(by["L3"]["state"], "not_ordered", "PO-2 came 2 days after SO-2")
+        self.assertEqual((by["L4"]["state"], by["L4"]["on_order"]), ("on_order", 40))
+
+    def test_screens_figure_and_more_rows(self):
+        for view in ("sales", "inv", "proc"):
+            got = self.ok("command_center.api.panels.get", view=view)
+            p = got["panels"]["Promised Orders — Cover"]
+            self.assertEqual(p["kind"], "cover", view)
+            self.assertEqual(p["summary"]["lines"], 6)
+            self.assertEqual(len(p["rows"]), 6)
+            self.assertEqual(p["rows"][0]["state"], "not_ordered", "most in need first")
+            self.assertNotIn("guide", p, "one line is linked: nothing to teach")
+            self.assertIn("is not ordered", p["note"])
+        self.assertEqual(got["panels"]["Promised Orders — Cover"]["default"], "needs")
+        fig = self.ok("command_center.api.kpi.get", keys=["order_book", "order_book_late"])
+        self.assertEqual(fig["order_book"]["explained_by"], "order_cover")
+        self.assertEqual(fig["order_book_late"]["explained_by"], "order_cover_late")
+        split = self.ok("command_center.api.coverage.summary")
+        self.assertEqual(split["kind"], "cover")
+        parts = {x["key"]: x["value"] for x in split["summary"]["parts"]}
+        self.assertEqual(parts["missing"], 900)        # 5 of B at 100, 20 of C at 20
+        self.assertEqual(parts["non_stock"], 300)
+        late = self.ok("command_center.api.coverage.summary", late_only=1)
+        self.assertEqual(late["summary"]["lines"], 2)   # SO-1's two lines
+        more = self.ok("command_center.api.coverage.lines", state="needs", start=0, limit=1)
+        self.assertEqual((more["total"], [r["id"] for r in more["rows"]]), (2, ["L2"]))
+        more = self.ok("command_center.api.coverage.lines", state="needs", start=1, limit=1)
+        self.assertEqual([r["id"] for r in more["rows"]], ["L4"])
+        self.assertEqual(self.post("command_center.api.coverage.lines", state="bogus").status_code, 417)
+
+    def test_guide_where_nothing_links(self):
+        rows = cover_rows()
+        rows["Material Request Item"][0].update(sales_order=None, sales_order_item=None)
+        self.fake.cover = rows
+        from django.core.cache import cache
+        cache.clear()
+        p = self.ok("command_center.api.panels.get", view="sales")["panels"]["Promised Orders — Cover"]
+        self.assertIn("guide", p)
+        self.assertIn("Create, then Purchase Order", " ".join(p["guide"]["steps"]))
+        self.assertTrue(p["guide"]["href"].startswith("https://erp.test/app/sales-order"))
+        self.assertEqual(p["summary"]["linked_lines"], 0)
+        self.assertIn("inferred from the items and dates", p["note"])
+
+    def test_unreachable(self):
+        from django.core.cache import cache
+        from command_center.ask import tools
+        from insights.compat import run_as
+        cache.clear()
+        self.fake.down = True
+        got = self.ok("command_center.api.panels.get", view="inv")
+        self.assertEqual(got["panels"]["Promised Orders — Cover"], {"kind": "unreachable"})
+        self.assertTrue(got.get("unreachable"))
+        self.assertEqual(self.ok("command_center.api.coverage.summary"), {"kind": "unreachable"})
+        self.assertEqual(self.ok("command_center.api.coverage.lines"), {"kind": "unreachable"})
+        with run_as("boss@test.com"), self.assertRaises(tools.ToolError):
+            tools.run("order_cover", {}, self.CODE)
+
+    def test_managers_only(self):
+        U = get_user_model()
+        U.objects.create_user("clerk@test.com", "clerk@test.com", "a-long-test-pass-8")
+        c2 = Client()
+        self.assertTrue(c2.login(username="clerk@test.com", password="a-long-test-pass-8"))
+        for fn in ("summary", "lines"):
+            r = self.post(f"command_center.api.coverage.{fn}", client=c2)
+            self.assertNotEqual(r.status_code, 200, fn)
+            self.assertNotIn("SO-1", r.content.decode(), fn)
+
+    def test_analyst_tool(self):
+        from command_center.ask import tools
+        from insights.compat import run_as
+        with run_as("boss@test.com"):
+            one = tools.run("order_cover", {"order": "so-1"}, self.CODE)
+            self.assertEqual(sorted(r["item_name"] for r in one["rows"]), ["Item A", "Item B"])
+            self.assertEqual(one["lines"], 2)
+            chain = [r for r in one["rows"] if r["item_name"] == "Item A"][0]["covers"][0]
+            self.assertEqual((chain["purchase_order"], chain["goods_receipts"],
+                              chain["supplier_invoices"]), ("PO-1", ["PR-1"], ["PI-1"]))
+            needs = tools.run("order_cover", {"state": "needs"}, self.CODE)
+            self.assertEqual({r["order"] for r in needs["rows"]}, {"SO-1", "SO-3"})
+            with self.assertRaises(tools.ToolError):
+                tools.run("order_cover", {"state": "lost"}, self.CODE)
+        self.assertIn("order_cover", [d["name"] for d in tools.declarations()])
+        from command_center.ask.agent import SYSTEM
+        self.assertIn("order_cover", SYSTEM)

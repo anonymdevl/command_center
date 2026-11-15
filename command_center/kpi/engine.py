@@ -62,6 +62,7 @@ def _evaluate_one(kpi: Kpi, business_code, resolved: dict) -> dict:
         "data_status": _status(state),
         "period": period,
         "group": group,
+        "explained_by": kpi.explained_by,
     }
 
 

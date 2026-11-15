@@ -33,6 +33,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Callable
 
+from command_center.coverage import AFTER_DAYS, WINDOW_DAYS
+
 AREAS = {
     "cash": "Cash and credit",
     "sales": "Sales",
@@ -941,6 +943,56 @@ def reserved_over_available(ctx, p):
         money=money, count=len(gaps), unit="products")]
 
 
+def promised_not_ordered(ctx, p):
+    """Lines promised to customers that nothing covers -- not stock, not a purchase order,
+    linked or likely, not a request (command_center/coverage.py). Only Not Ordered and
+    Partly Covered: what is on its way is not a finding."""
+    from command_center import coverage
+    got = coverage.get(ctx.code)
+    if got.get("kind") != "cover":
+        raise RuntimeError("the business's ERPNext did not answer")
+    lines = [l for l in got["lines"] if l["state"] in coverage.NEEDS_ACTION]
+    money = sum(l["parts"]["missing"] for l in lines)
+    if not lines or money <= p["amount"]:
+        return []
+    by = defaultdict(float)
+    for l in lines:
+        by[l["order"]] += l["parts"]["missing"]
+    orders = sorted(by, key=lambda o: -by[o])
+    customers = defaultdict(float)
+    for l in lines:
+        customers[l["customer"]] += l["parts"]["missing"]
+    stale = [l for l in lines if l["days_late"] > coverage.STALE_DAYS]
+    stale_money = sum(l["parts"]["missing"] for l in stale)
+    recent = [l for l in lines if l["days_late"] <= coverage.STALE_DAYS]
+    top = max(lines, key=lambda l: l["parts"]["missing"])
+    why = (f"{plural(len(lines), 'order line')} on {plural(len(by), 'open order')} "
+           f"{'is' if len(lines) == 1 else 'are'} promised to customers with {m(ctx, money)} "
+           f"of goods not in stock and not on any purchase order or request. Largest: "
+           f"{top['order']} for {top['customer']}, {coverage.qty(top['missing'])} "
+           f"{top['uom'] or ''} of {top['item_name']}.".replace("  ", " "))
+    if stale_money >= 0.5:
+        why += (f" {m(ctx, stale_money)} of it, on {plural(len({l['order'] for l in stale}), 'order')}, "
+                f"was due more than a year ago and may no longer stand.")
+    todo = [f"Order or source what the recent ones need first: "
+            f"{plural(len({l['order'] for l in recent}), 'order')} due within the last year.",
+            "Raise the purchase from each Sales Order (Create, Purchase Order or Material "
+            "Request) so it is linked to the order.",
+            "Tell the customers whose goods cannot come on time."]
+    if stale:
+        todo.insert(1, "Confirm the older orders with the customers; close those that no "
+                       "longer stand (Sales Order, Status, Close).")
+    return [_rec(
+        title=f"Order or source {ms(ctx, money)} of goods promised to customers that nothing "
+              f"covers.",
+        why=why, what_to_do=todo[:4],
+        how=how(ctx, "To buy for an order so the link is exact:", coverage.LINK_STEPS,
+                "/app/sales-order?status=To%20Deliver%20and%20Bill", "Open the Sales Orders"),
+        ask="Which promised orders have nothing in stock or on order to cover them?",
+        drill={"fact": "fact_sales_order", "filters": {"src_name": ["in", orders[:200]]}},
+        money=money, count=len(lines), unit="order lines")]
+
+
 def near_expiry(ctx, p):
     import frappe
 
@@ -1511,6 +1563,12 @@ RULES = (
     Rule("reserved_over_available", "stock", "Reserved beyond what is on hand", "high",
          "Stock Manager", reserved_over_available, (Param("count", "More than (products)", 0, C),),
          twin_alert="Stock promised but not there"),
+    Rule("promised_not_ordered", "stock", "Promised to customers, not ordered", "high",
+         "Purchasing", promised_not_ordered,
+         (Param("amount", "Recommend when more than", 0, A),
+          Param("window", "Likely cover: purchase orders raised up to (days before the order)",
+                WINDOW_DAYS, D),
+          Param("after", "Likely cover: and up to (days after the order)", AFTER_DAYS, D))),
     Rule("near_expiry", "stock", "Stock near expiry", "high", "Stock Manager", near_expiry,
          (Param("days", "Expiring within", 90, D),)),
     Rule("po_for_slow_items", "stock", "Purchase orders for products not selling", "med",

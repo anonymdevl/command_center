@@ -794,6 +794,77 @@ def leave(person: str | None = None, year: str | None = None, business_code=None
     return _clean(out)
 
 
+# Promised orders and what covers them (command_center/coverage.py): the same lines as the
+# "Promised Orders — Cover" panel, read live from the business's ERPNext.
+COVER_STATES = ("not_ordered", "partly", "requested", "on_order", "received", "in_stock",
+                "non_stock", "needs")
+
+
+def order_cover(order: str | None = None, customer: str | None = None,
+                item: str | None = None, state: str | None = None, business_code=None):
+    """For sales-order lines promised and not delivered: what covers each -- stock, goods
+    received for it, purchase orders linked to it or likely to be for it, requests --
+    with the chain and dates, and the totals by state. Reads only."""
+    from command_center import coverage
+    if state and state not in COVER_STATES:
+        raise ToolError(f"state must be one of {', '.join(COVER_STATES)}")
+    got = _far(lambda: coverage.get(business_code))
+    if got.get("kind") != "cover":
+        raise ToolError("The business's ERPNext did not answer.")
+    lines = got["lines"]
+    if order:
+        lines = [l for l in lines if l["order"].lower() == order.strip().lower()]
+    if customer:
+        c = customer.strip().lower()
+        lines = [l for l in lines if c in (l["customer"] or "").lower()
+                 or c in (l["customer_id"] or "").lower()]
+    if item:
+        t = item.strip().lower()
+        lines = [l for l in lines if t in (l["item_code"] or "").lower()
+                 or t in (l["item_name"] or "").lower()]
+    if state == "needs":
+        lines = [l for l in lines if l["state"] in coverage.NEEDS_ACTION]
+    elif state:
+        lines = [l for l in lines if l["state"] == state]
+    ranked = sorted(lines, key=lambda l: (coverage.STATE[l["state"]]["rank"], -l["value"]))
+    keep = ("order", "customer", "item_name", "warehouse", "uom", "ordered_on", "deliver_by",
+            "pending", "value", "state_label", "basis", "days_late", "supplier_late",
+            "from_stock", "received", "on_order", "requested", "missing", "narrative")
+    rows = []
+    for l in ranked[:MAX_ROWS]:
+        row = {k: l.get(k) for k in keep}
+        row["covers"] = [{"purchase_order": c["po"], "supplier": c["supplier"],
+                          "linked_or_likely": c["kind"], "raised": c["raised"],
+                          "expected": c["expected"], "supplier_late": c["late"],
+                          "received_for_this_line": c["received"],
+                          "on_order_for_this_line": c["on_order"], "why_likely": c["reason"],
+                          "goods_receipts": [x["name"] for x in c["receipts"]],
+                          "supplier_invoices": [x["name"] for x in c["invoices"]]}
+                         for c in l["covers"]]
+        row["requests"] = [{"material_request": q["request"], "raised": q["raised"],
+                            "qty": q["qty"], "linked_or_likely": q["kind"]}
+                           for q in l["requests"]]
+        rows.append(row)
+    s = coverage.summarise(lines)
+    return _clean({
+        "currency": got.get("currency"), "read_at": got.get("read_at"),
+        "totals_by_state": [{k: x[k] for k in ("label", "count", "orders", "value")}
+                            for x in s["states"] if x["count"]],
+        "value_by_cover": [p for p in s["parts"] if abs(p["value"]) >= 0.5],
+        "lines": s["lines"], "orders": s["orders"], "value": s["value"],
+        "linked_lines": s["linked_lines"], "likely_lines": s["likely_lines"],
+        "needs_action": s["needs_action"], "due_over_a_year_ago": s["stale"],
+        "rows": rows, "rows_shown": len(rows),
+        "how": ("Line by line, in stock units: goods received against the line's own purchase "
+                "order, then stock in its warehouse and any other warehouse it is sold from "
+                "(oldest promise first), then purchase orders and material requests that name "
+                "the sales order (linked), then open purchase orders for the same item raised "
+                f"{got.get('window')} days before to {got.get('after')} days after the order "
+                "and linked to no other (likely, each counted once). Value includes tax as the "
+                "order does."),
+    })
+
+
 # The six deep analyses that existed before the analyst. They stay: each is a careful,
 # tested piece of reasoning, and the model calling one is better than re-deriving it.
 def _intent(name: str, phrasing: str):
@@ -983,6 +1054,20 @@ TOOLS = {
         ["report"])),
 }
 
+TOOLS["order_cover"] = (order_cover, _decl(
+    "order_cover",
+    "Sales orders promised to customers and not yet delivered, line by line, and what "
+    "covers each: stock (which warehouse), goods received for it, purchase orders linked to "
+    "it or likely to be for it (supplier, raised, expected, late), material requests -- with "
+    "the receipts and supplier invoices behind them -- and the totals by state (In Stock, "
+    "On Order, Not Ordered ...). First choice for 'promised but not delivered', 'can we "
+    "deliver', 'what is holding this order', 'what have we not ordered'. Filter by order, "
+    "customer, item or state (needs = Not Ordered and Partly Covered). Read live.",
+    {"order": {"type": "string", "description": "a sales order name"},
+     "customer": {"type": "string", "description": "a customer, or part of the name"},
+     "item": {"type": "string", "description": "an item code or name, or part of one"},
+     "state": {"type": "string", "enum": list(COVER_STATES)}}))
+
 TOOLS["ai_allowance"] = (ai_allowance, _decl(
     "ai_allowance",
     "The platform's own plan for this business: this month's AI allowance (analyst "
@@ -1076,6 +1161,9 @@ def describe(name: str, args: dict) -> str:
         return "Reading the current recommendations"
     if name == "ai_allowance":
         return "Reading this month's AI allowance"
+    if name == "order_cover":
+        return (f"Reading what covers {a['order']}" if a.get("order") else
+                "Reading what covers the promised orders")
     if name == "run_report":
         return f"Running ERPNext's {a.get('report', 'report')}"
     if name == "report_filters":
@@ -1115,6 +1203,7 @@ STEP_KINDS = {
     "describe_data": "Checking what data is loaded", "run_report": "Running an ERPNext report",
     "current_recommendations": "Reading the current recommendations",
     "ai_allowance": "Reading this month's AI allowance",
+    "order_cover": "Reading what covers the promised orders",
     "report_filters": "Checking how a report is filtered",
     "erpnext_list": "Reading ERPNext records", "erpnext_count": "Reading ERPNext records",
     "erpnext_fields": "Reading ERPNext records", "erpnext_document": "Opening an ERPNext document",

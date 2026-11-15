@@ -106,6 +106,11 @@ class Kpi:
     # percentage the first time a non-receivable KPI wanted one.
     share_of: str | None = None
 
+    # What explains the figure beyond its records, for its drawer: "order_cover" splits a
+    # promise by what covers it (command_center/coverage.py; "order_cover_late" the part
+    # past its date). The drawer asks api/coverage.summary.
+    explained_by: str | None = None
+
     def validate(self) -> list[str]:
         problems = []
         if self.unit not in UNITS:

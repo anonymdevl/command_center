@@ -33,6 +33,7 @@ register(
         drill_filters=OPEN_ORDER,
         as_of_basis="data_horizon",
         components=("order_book_late", "order_book_on_time"),
+        explained_by="order_cover",
     ),
     Kpi(
         key="order_book_count",
@@ -61,6 +62,7 @@ register(
         as_of_basis="data_horizon",
         subset_of="everything promised and not delivered",
         share_of="order_book",
+        explained_by="order_cover_late",
     ),
     Kpi(
         key="order_book_on_time",

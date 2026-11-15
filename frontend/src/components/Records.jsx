@@ -24,7 +24,7 @@ import { exact, count, shortDate } from "../format.js";
  *   The records.   Largest first, in business columns, each opening the actual
  *                  document in ERPNext.
  */
-export default function Records({ scope, title, fact, filters, subset, openDrawer }) {
+export default function Records({ scope, title, fact, filters, subset, explainedBy, openDrawer }) {
   const { data, error, loading, reload } = useApi(
     () => api.records({ fact, filters, business_code: scope, limit: 100 }),
     [scope, fact, JSON.stringify(filters)]
@@ -58,6 +58,9 @@ export default function Records({ scope, title, fact, filters, subset, openDrawe
       {data && data.summary.count > 0 ? (
         <>
           <Headline data={data} />
+          {explainedBy && explainedBy.startsWith("order_cover") ? (
+            <CoverSplit scope={scope} lateOnly={explainedBy === "order_cover_late"} />
+          ) : null}
           <Concentration data={data} scope={scope} filters={filters} openDrawer={openDrawer} />
           <Table data={data} />
         </>
@@ -136,6 +139,56 @@ function Concentration({ data, scope, filters, openDrawer }) {
             : undefined
         }
       />
+    </div>
+  );
+}
+
+/**
+ * What covers the promise (api/coverage.summary): how much can go from stock, is on
+ * order, requested, or not ordered at all -- read line by line from ERPNext now, so the
+ * total can differ a little from the figure, which comes from each order's delivered
+ * percentage as last loaded. Promised Orders — Cover on Sales, Stock and Buying has the
+ * lines.
+ */
+function CoverSplit({ scope, lateOnly }) {
+  const { data, error, loading } = useApi(
+    () => api.coverSummary({ business_code: scope, late_only: lateOnly }),
+    [scope, lateOnly]
+  );
+  if (loading && !data) return <Loading what="Reading what covers it" />;
+  if (error || !data || data.kind !== "cover") {
+    return (
+      <div className="dsum cv-split">
+        <div className="dsum-t">
+          {data && data.kind === "unreachable"
+            ? "What covers it cannot be read just now: the business's ERPNext is not answering."
+            : "What covers it could not be read just now."}
+        </div>
+      </div>
+    );
+  }
+  const s = data.summary;
+  const cur = data.currency || "";
+  const parts = (s.parts || []).filter((p) => Math.abs(p.value) >= 0.5);
+  const total = parts.reduce((a, p) => a + p.value, 0) || 1;
+  return (
+    <div className="panel cv-split" style={{ margin: "0 0 14px" }}>
+      <div className="ph">
+        <div>
+          <b>What Covers It</b>
+          <span>{count(s.lines)} lines on {count(s.orders)} orders, read from ERPNext now</span>
+        </div>
+      </div>
+      <DataTable
+        columns={[
+          { key: "label", label: "Covered By" },
+          { key: "value", label: cur || "Amount", align: "right", render: (r) => exact(r.value) },
+          { key: "share", label: "Share", align: "right",
+            render: (r) => `${Math.round((100 * r.value) / total)}%` },
+        ]}
+        rows={parts.map((p) => ({ __key: p.key, ...p }))}
+      />
+      <div className="drfoot">{data.note}</div>
     </div>
   );
 }

@@ -607,6 +607,11 @@ supplier_concentration, owes_and_waiting, party_brief.
 5a. current_recommendations: the platform's own recommendations for the business, ranked \
 by money at stake, each with its evidence and steps -- the list the screens show as Top \
 actions.
+5b. order_cover: sales-order lines promised and not delivered, and what covers each -- \
+stock (and in which warehouse), goods received for it, purchase orders linked to it or \
+likely to be for it, requests -- with the receipts and supplier invoices, and the totals \
+by state, read live. "Likely" is inferred from the item and dates, not linked in ERPNext: \
+say so whenever you rely on it.
 6. ERPNext's own standard reports, through report_filters / run_report: profit and loss, \
 balance sheet, cash flow, trial balance, general ledger, receivables and payables, gross \
 profit, sales and purchase analytics, purchase order analysis, stock balance, ledger and \
@@ -643,6 +648,10 @@ order_by and a small limit.
 only the fields you need and a limit; erpnext_document for one document.
 7. Ledger, profit and loss, balance sheet, cash flow, stock movements: run_report. It is \
 slow; use it only for these.
+7a. Orders promised and not delivered -- can we deliver, what is on order for them, what \
+nobody has ordered, what is holding an order: order_cover (with the order, customer or item \
+when the question names one). Undelivered value is not a stock shortage until order_cover \
+says nothing covers it.
 8. Who is on leave, who is away this week, leave waiting for approval, or how many days \
 someone has left: leave (with the person's name or ID for one person). Who someone is, \
 who they report to, who is in a department: people. Do not rebuild a leave balance from \

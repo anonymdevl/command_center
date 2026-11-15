@@ -31,7 +31,8 @@ V_PROC=f'''<div class="topbar"><div><h3>Buying and Suppliers</h3>
 {panel("Supplier performance", thin("<b>Delivered on time, and goods turned away, per supplier.</b> Each goods receipt is compared with the date its purchase order asked for, so a supplier that is always late shows up before the next order is placed."))}
 {panel("Money paid to suppliers in advance", thin("<b>Payments to suppliers not yet matched to an invoice.</b> Advances paid before the goods arrive are a normal exposure for an importer; this is how much is out there, and with whom."))}
 </div>
-{warn0()}'''
+{warn0()}
+{cover0()}'''
 
 # ============ INVENTORY ============
 V_INV=f'''<div class="topbar"><div><h3>Stock &amp; Warehouses</h3>
@@ -51,6 +52,7 @@ V_INV=f'''<div class="topbar"><div><h3>Stock &amp; Warehouses</h3>
  dtable(["Product","Where",("Reserved",True),("Available",True),("Short by",True)]),"Where the promise exceeds the stock","over")}
 </div>
 {warn0()}
+{cover0()}
 <div class="two">
 {panel("Stock that is not moving", thin("<b>Products holding stock that have not moved in ninety days.</b> Every product is aged by its last stock movement, with the value still sitting on the shelf."))}
 {panel("Expiry", thin("<b>Batches that expire soon, or already have.</b> Batch expiry dates drive near-expiry warnings and first-expiry-first-out picking. For a medical supplier this is the panel that matters most."))}

@@ -500,6 +500,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
                 filters={figure.drill.filters}
                 title={figure.label}
                 subset={figure.subset_of}
+                explainedBy={figure.explained_by}
                 openDrawer={openDrawer}
               />
             )
@@ -519,7 +520,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     if (hasRecs) renderRecs(root, viewKey, recs.data, opts);
     if (hasRecs && recs.error) recsFailed(root, viewKey, recs.error);
     if (hasPanels) {
-      renderPanels(root, viewKey, panels.data, { onOpen: opts.onOpen, openDrawer,
+      renderPanels(root, viewKey, panels.data, { onOpen: opts.onOpen, openDrawer, scope,
                                                  failed: !!panels.error });
     }
     // The management screens: nothing left designed, a dash and a reason where a figure
