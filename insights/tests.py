@@ -696,3 +696,276 @@ class KpiCatalogueThreads(TransactionTestCase):
             registry.REGISTRY.clear()
             registry.REGISTRY.update(saved)
             registry._LOADED = True
+
+
+class SettingsDelegation(TransactionTestCase):
+    """Settings sections the administrator gives a manager (Businesses, People, Personal
+    ERPNext Keys): a delegate can do exactly their sections, never anything that makes
+    or changes an administrator or gives Settings access; the boot payload says which
+    sections to show; every grant is audited. And Email: the password is never
+    returned, and the test email and scheduled reports use the saved settings."""
+
+    databases = {"default", "aux"}
+    MOD = SettingsPage.MOD
+    MAIL_PW = "mail-pass-xyz-77"
+    setUp = SettingsPage.setUp
+    tearDown = SettingsPage.tearDown
+    _call = SettingsPage._call
+    _ok = SettingsPage._ok
+
+    def _as(self, client, fn, status=200, **args):
+        r = self._call(client, fn, **args)
+        self.assertEqual(r.status_code, status, f"{fn}: {r.content[:400]!r}")
+        return r.json().get("message") if status == 200 else r.json()
+
+    def _boot(self, client) -> dict:
+        page = client.get("/command-center").content.decode()
+        return json.loads(re.search(r"window\.CC_BOOT = (.*?);\s*$", page, re.M).group(1))
+
+    def _grant(self, *sections, who="manager@test.com"):
+        return self._ok("set_settings_access", username=who, sections=list(sections))
+
+    def test_boot_and_a_plain_manager(self):
+        self.assertEqual(self._boot(self.admin)["settings_sections"],
+                         ["people", "businesses", "claude", "email", "keys", "changes"])
+        self.assertEqual(self._boot(self.manager)["settings_sections"], [])
+        for fn in ("people", "businesses", "credentials", "email", "notifications",
+                   "set_email", "test_email", "set_settings_access", "changes"):
+            self._as(self.manager, fn, 403, username="manager@test.com", sections=["people"])
+        self._grant("businesses", "keys")
+        self.assertEqual(self._boot(self.manager)["settings_sections"], ["businesses", "keys"])
+        # no longer a manager: no Settings, and the grants are gone for good
+        self._ok("set_manager", username="manager@test.com", on=0)
+        self.assertEqual(self._boot(self.admin)["settings_sections"][0], "people")
+        self._ok("set_manager", username="manager@test.com", on=1)
+        self.assertEqual(self._boot(self.manager)["settings_sections"], [])
+
+    def test_a_businesses_delegate(self):
+        self._grant("businesses")
+        out = self._as(self.manager, "add_business", business_name="Test Medical Ltd",
+                       site_url="https://erp.test", api_key="key-abcd1234",
+                       api_secret="biz-secret-value-71x")
+        self.assertEqual(out["access"]["reads_as"], "reader@test.com")
+        self.assertTrue(self._as(self.manager, "test_business", name="Test Medical Ltd")["ok"])
+        self.assertEqual(self._as(self.manager, "set_paused", name="Test Medical Ltd",
+                                  paused=1)["status"], "Paused")
+        self._as(self.manager, "set_paused", name="Test Medical Ltd", paused=0)
+        self._as(self.manager, "reload_business", name="Test Medical Ltd")
+        self.assertEqual(len(self._as(self.manager, "businesses")), 1)
+        refused = [("people", {}), ("add_person", {"email": "x@test.com", "set_later": 1}),
+                   ("claude", {}), ("set_claude_key", {"key": "sk-ant-" + "x" * 30}),
+                   ("email", {}), ("set_email", {"host": "smtp.test.com", "sender": "a@test.com"}),
+                   ("test_email", {"to": "a@test.com"}), ("notifications", {}),
+                   ("set_settings_access", {"username": "manager@test.com",
+                                            "sections": ["people"]}),
+                   ("credentials", {}), ("changes", {})]
+        for fn, args in refused:
+            body = self._as(self.manager, fn, 403, **args)
+            self.assertNotIn("Traceback", json.dumps(body))
+        self.assertNotIn("command_center_anthropic_key", json.load(open(self.cfg)))
+        self.assertNotIn("mail", json.load(open(self.cfg)))
+        whats = " | ".join(c["what"] for c in self._ok("changes"))
+        self.assertIn("connected Test Medical Ltd", whats)
+
+    def test_a_people_delegate(self):
+        U = get_user_model()
+        self._grant("people")
+        # adds managers, but never an administrator
+        self._as(self.manager, "add_person", 403, email="boss2@test.com", full_name="B Two",
+                 set_later=1, admin=1)
+        self.assertFalse(U.objects.filter(username="boss2@test.com").exists())
+        p = self._as(self.manager, "add_person", email="ama@test.com", full_name="Ama Mensah",
+                     password="a-long-test-pass-3", password2="a-long-test-pass-3", manager=1)
+        self.assertTrue(p["is_manager"] and not p["is_admin"])
+        # changes managers: deactivate, reactivate, reset the password, rename
+        self.assertFalse(self._as(self.manager, "set_active", username="ama@test.com", on=0)["active"])
+        self.assertTrue(self._as(self.manager, "set_active", username="ama@test.com", on=1)["active"])
+        self._as(self.manager, "reset_password", username="ama@test.com",
+                 password="another-long-pass-4", password2="another-long-pass-4")
+        self.assertTrue(Client().login(username="ama@test.com", password="another-long-pass-4"))
+        # never: make an administrator, give Settings access, touch an administrator
+        self._as(self.manager, "set_admin", 403, username="ama@test.com", on=1)
+        self._as(self.manager, "set_settings_access", 403, username="ama@test.com",
+                 sections=["people"])
+        for fn, args in (("set_active", {"on": 0}), ("set_manager", {"on": 0}),
+                         ("reset_password", {"password": "hijack-long-pass-9",
+                                             "password2": "hijack-long-pass-9"}),
+                         ("reset_password", {"set_later": 1}),
+                         ("update_person", {"full_name": "Someone Else"})):
+            self._as(self.manager, fn, 403, username="boss@test.com", **args)
+        boss = U.objects.get(username="boss@test.com")
+        self.assertTrue(boss.is_superuser and boss.is_active and boss.check_password("a-long-test-pass-5"))
+        self.assertEqual(boss.first_name, "")
+        self.assertFalse(U.objects.get(username="ama@test.com").is_superuser)
+        # nor anyone else with Settings access (that would reach past what was given)
+        self._grant("businesses", who="ama@test.com")
+        self._as(self.manager, "set_active", 403, username="ama@test.com", on=0)
+        self._as(self.manager, "reset_password", 403, username="ama@test.com",
+                 password="hijack-long-pass-9", password2="hijack-long-pass-9")
+        self.assertTrue(U.objects.get(username="ama@test.com").is_active)
+        # nor their own access; their own password, yes
+        self._as(self.manager, "set_manager", 403, username="manager@test.com", on=0)
+        self._as(self.manager, "reset_password", username="manager@test.com",
+                 password="my-own-long-pass-8", password2="my-own-long-pass-8")
+        listed = {x["username"]: x for x in self._as(self.manager, "people")}
+        self.assertTrue(listed["boss@test.com"]["protected"])
+        self.assertEqual(listed["ama@test.com"]["settings_access"], ["businesses"])
+        self._as(self.manager, "businesses", 403)
+        self._as(self.manager, "claude", 403)
+        self._as(self.manager, "email", 403)
+        for body in self.bodies:
+            self.assertNotIn("pbkdf2", body)
+
+    def test_a_keys_delegate(self):
+        self._ok("add_business", business_name="Test Medical Ltd", site_url="https://erp.test",
+                 api_key="key-abcd1234", api_secret="biz-secret-value-71x")
+        boss_key = self._ok("set_credential", user="boss@test.com", business_code="test_medical_ltd",
+                            api_key="bkey-1111", api_secret="boss-secret-1")
+        self._grant("keys")
+        mine = self._as(self.manager, "set_credential", user="manager@test.com",
+                        business_code="test_medical_ltd", api_key="pkey-5678",
+                        api_secret="personal-secret-2")
+        self.assertEqual([c["user"] for c in self._as(self.manager, "credentials")],
+                         ["manager@test.com"])
+        self.assertEqual(len(self._ok("credentials")), 2)
+        self._as(self.manager, "set_credential", 403, user="boss@test.com",
+                 business_code="test_medical_ltd", api_key="evil", api_secret="evil")
+        self._as(self.manager, "remove_credential", 403, name=boss_key["name"])
+        self._as(self.manager, "test_credential", 403, name=boss_key["name"])
+        self.assertTrue(self._as(self.manager, "test_credential", name=mine["name"])["ok"])
+        self._as(self.manager, "add_business", 403, business_name="Other Ltd",
+                 site_url="https://erp.other", api_key="k", api_secret="s")
+        self._as(self.manager, "add_person", 403, email="x@test.com", set_later=1)
+
+    def test_grants_by_the_administrator_are_audited(self):
+        p = self._grant("businesses", "keys")
+        self.assertEqual(p["settings_access"], ["businesses", "keys"])
+        p = self._grant("businesses")
+        self.assertEqual(p["settings_access"], ["businesses"])
+        self.assertIn("Nothing was changed", self._call(
+            self.admin, "set_settings_access", username="manager@test.com",
+            sections=["businesses"]).content.decode())
+        self.assertIn("Only Businesses", self._call(
+            self.admin, "set_settings_access", username="manager@test.com",
+            sections=["claude"]).content.decode())
+        self.assertIn("administrator", self._call(
+            self.admin, "set_settings_access", username="boss@test.com",
+            sections=["people"]).content.decode())
+        self._ok("add_person", email="plain@test.com", full_name="Not Manager", set_later=1, manager=0)
+        self.assertIn("not a manager", self._call(
+            self.admin, "set_settings_access", username="plain@test.com",
+            sections=["people"]).content.decode())
+        self.assertEqual(self._grant(who="manager@test.com")["settings_access"], [])
+        whats = " | ".join(c["what"] for c in self._ok("changes"))
+        for phrase in ("gave manager@test.com access to Settings: Businesses",
+                       "gave manager@test.com access to Settings: Personal ERPNext Keys",
+                       "took away manager@test.com's access to Settings: Personal ERPNext Keys",
+                       "took away manager@test.com's access to Settings: Businesses"):
+            self.assertIn(phrase, whats)
+        from django.contrib.admin.models import LogEntry
+        e = LogEntry.objects.filter(change_message__contains="gave manager@test.com").first()
+        self.assertEqual(e.user.username, "boss@test.com")
+
+    def test_email_settings_and_test_email(self):
+        import smtplib
+        from insights.core.models import ErrorLog
+        n = self._ok("notifications")
+        self.assertFalse(n["email_configured"])
+        self.assertIsNone(n["last_attempt"])
+        self.assertFalse(self._ok("test_email", to="boss@test.com")["ok"])
+        self.assertIn("Type the password", self._call(
+            self.admin, "set_email", host="smtp.test.com", port=587, security="starttls",
+            user="reports@test.com").content.decode())
+        self.assertIn("mail server", self._call(
+            self.admin, "set_email", host="smtp test", sender="a@test.com").content.decode())
+        shown = self._ok("set_email", host="smtp.test.com", port="587", security="starttls",
+                         user="reports@test.com", password=self.MAIL_PW,
+                         sender="reports@test.com", sender_name="Reports")
+        self.assertTrue(shown["configured"] and shown["has_password"])
+        self.assertNotIn("password", shown)
+        stored = json.load(open(self.cfg))["mail"]
+        self.assertEqual((stored["host"], stored["port"], stored["user"], stored["password"],
+                          stored["tls"]), ("smtp.test.com", 587, "reports@test.com",
+                                           self.MAIL_PW, True))
+        # a blank password keeps the stored one
+        self._ok("set_email", host="smtp.test.com", port=587, security="starttls",
+                 user="reports@test.com", sender="reports@test.com", sender_name="Board Reports")
+        self.assertEqual(json.load(open(self.cfg))["mail"]["password"], self.MAIL_PW)
+        self._ok("email")
+        for body in self.bodies:
+            self.assertNotIn(self.MAIL_PW, body)
+        whats = " | ".join(c["what"] for c in self._ok("changes"))
+        self.assertIn("set up email: server smtp.test.com on port 587 (STARTTLS)", whats)
+        self.assertNotIn(self.MAIL_PW, whats)
+
+        # the test email goes out with exactly the stored settings
+        with mock.patch("smtplib.SMTP") as smtp:
+            out = self._ok("test_email", to="boss@test.com")
+        self.assertTrue(out["ok"], out)
+        smtp.assert_called_once_with("smtp.test.com", 587, timeout=30)
+        s = smtp.return_value
+        s.starttls.assert_called_once()
+        s.login.assert_called_once_with("reports@test.com", self.MAIL_PW)
+        sent = s.send_message.call_args[0][0]
+        self.assertEqual((sent["To"], sent["From"]), ("boss@test.com",
+                                                      "Board Reports <reports@test.com>"))
+        self.assertTrue(self._ok("notifications")["last_attempt"]["ok"])
+        # SSL on 465
+        self._ok("set_email", host="smtp.test.com", port=465, security="ssl",
+                 user="reports@test.com", sender="reports@test.com", sender_name="Board Reports")
+        with mock.patch("smtplib.SMTP_SSL") as ssl_smtp, mock.patch("smtplib.SMTP") as plain:
+            self.assertTrue(self._ok("test_email", to="boss@test.com")["ok"])
+        self.assertEqual(ssl_smtp.call_args[0], ("smtp.test.com", 465))
+        plain.assert_not_called()
+        # failures in plain words, in the error log, and as the last attempt
+        with mock.patch("smtplib.SMTP_SSL") as ssl_smtp:
+            ssl_smtp.return_value.login.side_effect = smtplib.SMTPAuthenticationError(535, b"no")
+            out = self._ok("test_email", to="boss@test.com")
+        self.assertFalse(out["ok"])
+        self.assertIn("refused the username or password", out["says"])
+        with mock.patch("smtplib.SMTP_SSL", side_effect=ConnectionRefusedError(61, "refused")):
+            out = self._ok("test_email", to="boss@test.com")
+        self.assertIn("Could not connect to the mail server at smtp.test.com on port 465", out["says"])
+        self.assertTrue(ErrorLog.objects.filter(title__startswith="Email not sent").exists())
+        last = self._ok("notifications")["last_attempt"]
+        self.assertFalse(last["ok"])
+        self.assertIn("Could not connect", last["error"])
+
+    def test_scheduled_reports_use_the_email_settings(self):
+        import frappe
+        from insights.compat import run_as
+        from insights.compat.runtime import MailNotConfigured
+        from insights.core.models import CommandCenterReportSchedule, ErrorLog
+        # not set up: never silently dropped -- raised, logged, and the schedule says so
+        with run_as("boss@test.com"), self.assertRaises(MailNotConfigured):
+            frappe.sendmail(recipients=["a@test.com"], subject="Weekly", message="<p>x</p>")
+        self.assertTrue(ErrorLog.objects.filter(title="Email not sent: email is not set up").exists())
+        sched = CommandCenterReportSchedule.objects.create(
+            name="rs-1", report="rp01", business_code="test_medical_ltd", enabled=1,
+            recipients="a@test.com", run_as="boss@test.com")
+        stub = {"answer": "All is well.\n\nMore.", "checked": [], "model": "m"}
+        with mock.patch("command_center.ask.engine.analyst_enabled", lambda: True), \
+                mock.patch("command_center.ask.agent.answer", lambda *a, **k: stub), \
+                mock.patch("command_center.api.export.pdf_bytes", lambda *a, **k: b"%PDF"), \
+                mock.patch("command_center.api.export._business", lambda c: "Test Medical Ltd"), \
+                mock.patch("command_center.api.export._as_of", lambda: "15 Nov 2026"):
+            from command_center.api import reports
+            with run_as("boss@test.com"):
+                reports.send_scheduled("rs-1")
+            sched.refresh_from_db()
+            self.assertTrue(sched.last_status.startswith("Failed"), sched.last_status)
+            self.assertIn("Email is not set up", sched.last_status)
+            failing = self._ok("notifications")["failing"]
+            self.assertEqual(failing[0]["report"], "Executive Summary")
+            # set up: the same schedule goes out through the stored server
+            self._ok("set_email", host="smtp.test.com", port=587, security="starttls",
+                     user="reports@test.com", password=self.MAIL_PW, sender="reports@test.com")
+            with mock.patch("smtplib.SMTP") as smtp, run_as("boss@test.com"):
+                reports.send_scheduled("rs-1")
+        smtp.assert_called_once_with("smtp.test.com", 587, timeout=30)
+        smtp.return_value.login.assert_called_once_with("reports@test.com", self.MAIL_PW)
+        self.assertEqual(smtp.return_value.send_message.call_args[0][0]["To"], "a@test.com")
+        sched.refresh_from_db()
+        self.assertTrue(sched.last_status.startswith("Sent to 1"), sched.last_status)
+        n = self._ok("notifications")
+        self.assertEqual((n["schedules_on"], n["failing"]), (1, []))

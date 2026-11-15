@@ -13,6 +13,7 @@ export const boot = raw || {
   businesses: [],
   scopes: [],
   as_of: null,
+  settings_sections: [],
 };
 
 export const hasSession = Boolean(raw);

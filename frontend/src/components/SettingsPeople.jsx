@@ -7,6 +7,19 @@ import { Dialog, Msg, act, when } from "./SettingsParts.jsx";
 const RULES =
   "At least 10 characters. Not a common password, not only numbers, and not too like their name or email.";
 
+/** The Settings sections an administrator can give a manager (platform_settings.GRANTS). */
+const GRANTS = [
+  ["businesses", "Businesses", "add, edit, test, pause and reload businesses"],
+  ["people", "People", "add managers, deactivate and reactivate them, reset their passwords"],
+  ["keys", "Personal ERPNext Keys", "add, replace and remove managers' personal keys"],
+];
+const GRANT_LABEL = Object.fromEntries(GRANTS.map(([k, label]) => [k, label]));
+
+function accessWords(p) {
+  if (p.is_admin) return "All";
+  return (p.settings_access || []).map((k) => GRANT_LABEL[k] || k).join(", ");
+}
+
 /** Everyone who can sign in: who manages, who administers, who is switched off. */
 export default function SettingsPeople() {
   const { data, error, loading, reload } = useApi(() => settingsApi.people(), []);
@@ -17,6 +30,8 @@ export default function SettingsPeople() {
   if (error) return <Failed error={error} onRetry={reload} what="the people" />;
   const rows = data || [];
   const managers = rows.filter((p) => p.active && p.is_manager).length;
+  // The administrator sees everything here; someone given People sees managers only.
+  const meAdmin = rows.some((p) => p.is_me && p.is_admin);
   const admins = rows.filter((p) => p.active && p.is_admin).length;
 
   return (
@@ -38,6 +53,7 @@ export default function SettingsPeople() {
             <th>Person</th>
             <th>Manager</th>
             <th>Administrator</th>
+            <th>Settings</th>
             <th>Status</th>
             <th>Last sign-in</th>
             <th aria-label="Actions" />
@@ -53,6 +69,7 @@ export default function SettingsPeople() {
               </td>
               <td>{p.is_manager ? <span className="tag t-ok">Yes</span> : <span className="st-dim">No</span>}</td>
               <td>{p.is_admin ? <span className="tag t-ok">Yes</span> : <span className="st-dim">No</span>}</td>
+              <td>{accessWords(p) ? accessWords(p) : <span className="st-dim">No</span>}</td>
               <td>
                 {p.active ? <span className="tag t-ok">Active</span> : <span className="tag t-dr">Deactivated</span>}
                 {!p.has_password ? <span className="st-sub">No password yet</span> : null}
@@ -68,9 +85,10 @@ export default function SettingsPeople() {
         </tbody>
       </table>
 
-      {adding ? <AddPerson onClose={() => setAdding(false)} onDone={reload} /> : null}
+      {adding ? <AddPerson meAdmin={meAdmin} onClose={() => setAdding(false)} onDone={reload} /> : null}
       {open ? (
         <ManagePerson
+          meAdmin={meAdmin}
           person={rows.find((p) => p.username === open)}
           onClose={() => setOpen(null)}
           onDone={reload}
@@ -80,7 +98,7 @@ export default function SettingsPeople() {
   );
 }
 
-function AddPerson({ onClose, onDone }) {
+function AddPerson({ meAdmin, onClose, onDone }) {
   const [f, setF] = useState({ email: "", full_name: "", password: "", password2: "", later: false,
     manager: true, admin: false });
   const [st, setSt] = useState({});
@@ -92,7 +110,7 @@ function AddPerson({ onClose, onDone }) {
     const out = await act(setSt, () => settingsApi.addPerson({
       email: f.email, full_name: f.full_name, password: f.later ? "" : f.password,
       password2: f.later ? "" : f.password2, set_later: f.later ? 1 : 0,
-      manager: f.manager ? 1 : 0, admin: f.admin ? 1 : 0,
+      manager: f.manager ? 1 : 0, admin: meAdmin && f.admin ? 1 : 0,
     }));
     if (out) {
       setMade(out);
@@ -150,10 +168,12 @@ function AddPerson({ onClose, onDone }) {
           <input type="checkbox" checked={f.manager} onChange={set("manager")} />
           <span>Manager: can use the platform</span>
         </label>
-        <label className="st-check">
-          <input type="checkbox" checked={f.admin} onChange={set("admin")} />
-          <span>Administrator: can also open Settings</span>
-        </label>
+        {meAdmin ? (
+          <label className="st-check">
+            <input type="checkbox" checked={f.admin} onChange={set("admin")} />
+            <span>Administrator: can also open all of Settings</span>
+          </label>
+        ) : null}
 
         {st.bad ? <div className="dlg-err" role="alert">{st.bad}</div> : null}
         <div className="dlg-acts">
@@ -165,13 +185,17 @@ function AddPerson({ onClose, onDone }) {
   );
 }
 
-function ManagePerson({ person, onClose, onDone }) {
+function ManagePerson({ meAdmin, person, onClose, onDone }) {
   const [p, setP] = useState(person);
   const [name, setName] = useState(person?.full_name || "");
   const [st, setSt] = useState({});
   const [pw, setPw] = useState({ password: "", password2: "", later: false });
   const [pwSt, setPwSt] = useState({});
   if (!p) return null;
+  // Someone given People can change managers only: not an administrator, not anyone
+  // with Settings access, and of themselves only their password (the server says so too).
+  const locked = !meAdmin && p.protected && !p.is_me;
+  const ownOnly = !meAdmin && p.is_me;
 
   const run = async (fn, okText) => {
     const out = await act(setSt, fn, okText);
@@ -201,23 +225,36 @@ function ManagePerson({ person, onClose, onDone }) {
       <dl className="st-facts" style={{ marginTop: 14 }}>
         <dt>Status</dt><dd>{p.active ? "Active" : "Deactivated: cannot sign in"}</dd>
         <dt>Manager</dt><dd>{p.is_manager ? "Yes: can use the platform" : "No"}</dd>
-        <dt>Administrator</dt><dd>{p.is_admin ? "Yes: can open Settings" : "No"}</dd>
+        <dt>Administrator</dt><dd>{p.is_admin ? "Yes: can open all of Settings" : "No"}</dd>
+        <dt>Settings</dt><dd>{accessWords(p) || "No access"}</dd>
         <dt>Password</dt><dd>{p.has_password ? "Set" : "Not set"}</dd>
         <dt>Last sign-in</dt><dd>{when(p.last_login)}</dd>
       </dl>
 
+      {locked ? (
+        <Msg tone="note">
+          Only the platform's administrator can change {p.is_admin ? "an administrator" : "someone who has access to Settings"}.
+        </Msg>
+      ) : null}
+      {ownOnly ? (
+        <Msg tone="note">You can change your own password here. Anything else about you is changed by the platform's administrator.</Msg>
+      ) : null}
+
+      {!locked && !ownOnly ? (
       <div className="dlg-acts" style={{ justifyContent: "flex-start" }}>
         <button type="button" className="ap-act" disabled={st.busy}
           onClick={() => run(() => settingsApi.setManager(p.username, !p.is_manager),
             p.is_manager ? "No longer a manager." : "Now a manager.")}>
           {p.is_manager ? "Remove Manager" : "Make Manager"}
         </button>
-        <button type="button" className="ap-act" disabled={st.busy || (p.is_me && p.is_admin)}
-          title={p.is_me && p.is_admin ? "Another administrator has to do this" : undefined}
-          onClick={() => run(() => settingsApi.setAdmin(p.username, !p.is_admin),
-            p.is_admin ? "No longer an administrator." : "Now an administrator.")}>
-          {p.is_admin ? "Remove Administrator" : "Make Administrator"}
-        </button>
+        {meAdmin ? (
+          <button type="button" className="ap-act" disabled={st.busy || (p.is_me && p.is_admin)}
+            title={p.is_me && p.is_admin ? "Another administrator has to do this" : undefined}
+            onClick={() => run(() => settingsApi.setAdmin(p.username, !p.is_admin),
+              p.is_admin ? "No longer an administrator." : "Now an administrator.")}>
+            {p.is_admin ? "Remove Administrator" : "Make Administrator"}
+          </button>
+        ) : null}
         <button type="button" className={`ap-act${p.active ? " failed" : ""}`} disabled={st.busy || p.is_me}
           title={p.is_me ? "Another administrator has to do this" : undefined}
           onClick={() => run(() => settingsApi.setActive(p.username, !p.active),
@@ -225,9 +262,15 @@ function ManagePerson({ person, onClose, onDone }) {
           {p.active ? "Deactivate" : "Reactivate"}
         </button>
       </div>
+      ) : null}
       <Msg tone="ok">{st.ok}</Msg>
       <Msg tone="bad">{st.bad}</Msg>
 
+      {meAdmin && !p.is_admin ? (
+        <SettingsAccess person={p} onSaved={(out) => { setP(out); onDone(); }} />
+      ) : null}
+
+      {!locked && !ownOnly ? (
       <div className="dlg-sec">
         <h4>Name</h4>
         <form onSubmit={(e) => { e.preventDefault(); run(() => settingsApi.updatePerson(p.username, name), "Name saved."); }}>
@@ -238,7 +281,9 @@ function ManagePerson({ person, onClose, onDone }) {
           </div>
         </form>
       </div>
+      ) : null}
 
+      {!locked ? (
       <div className="dlg-sec">
         <h4>Reset Password</h4>
         <form onSubmit={savePw}>
@@ -274,10 +319,57 @@ function ManagePerson({ person, onClose, onDone }) {
           </div>
         </form>
       </div>
+      ) : null}
 
       <div className="dlg-acts">
         <button type="button" className="ap-act pri" onClick={onClose}>Done</button>
       </div>
     </Dialog>
+  );
+}
+
+/** Administrator only: which Settings sections this manager may open. */
+function SettingsAccess({ person, onSaved }) {
+  const [on, setOn] = useState(person.settings_access || []);
+  const [st, setSt] = useState({});
+  const same = [...on].sort().join() === [...(person.settings_access || [])].sort().join();
+  const canHave = person.is_manager && person.active;
+
+  const save = async (e) => {
+    e.preventDefault();
+    const out = await act(setSt, () => settingsApi.setSettingsAccess(person.username, on),
+      on.length
+        ? "Access saved. They see Settings in their sidebar the next time they open or reload the platform."
+        : "Access taken away. Settings is no longer open to them.");
+    if (out) onSaved(out);
+  };
+
+  return (
+    <div className="dlg-sec">
+      <h4>Settings Access</h4>
+      <p className="dlg-hint">
+        {canHave
+          ? "Let them use parts of Settings. They can never make anyone an administrator, give Settings access, or change an administrator. The Claude key and email stay with you."
+          : person.active
+            ? "Make them a manager first; only managers can be given parts of Settings."
+            : "Reactivate them first; only active managers can be given parts of Settings."}
+      </p>
+      <form onSubmit={save}>
+        {GRANTS.map(([key, label, does]) => (
+          <label className="st-check" key={key}>
+            <input type="checkbox" checked={on.includes(key)} disabled={!canHave && !on.includes(key)}
+              onChange={(e) => setOn((x) => (e.target.checked ? [...x, key] : x.filter((k) => k !== key)))} />
+            <span>{label}: {does}</span>
+          </label>
+        ))}
+        <Msg tone="ok">{st.ok}</Msg>
+        <Msg tone="bad">{st.bad}</Msg>
+        <div className="dlg-acts">
+          <button type="submit" className="ap-act" disabled={st.busy || same}>
+            {st.busy ? "Saving…" : "Save Access"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

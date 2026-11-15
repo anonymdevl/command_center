@@ -274,3 +274,15 @@ export const settingsApi = {
 
   changes: () => call(`${PS}.changes`),
 };
+
+/* Settings access for delegates, Email and the Notifications status. Delegated calls
+   are refused by the server unless the administrator gave that section. */
+Object.assign(settingsApi, {
+  setSettingsAccess: (username, sections) =>
+    call(`${PS}.set_settings_access`, { username, sections: JSON.stringify(sections) }),
+
+  email: () => call(`${PS}.email`),
+  setEmail: (args) => call(`${PS}.set_email`, args),
+  testEmail: (to) => call(`${PS}.test_email`, { to }),
+  notifications: () => call(`${PS}.notifications`),
+});

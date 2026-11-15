@@ -74,6 +74,8 @@ in their own database, and read the businesses' ERPNext a page at a time.
 | Is everything healthy? | `./deploy/health.sh`: the server (load, memory, disk, updates, certificates, shared services) and the platform (services, errors, loads, backups). Reads only. `--backup` also tests the backup now. |
 | Backups | Every night at 01:45 into `~/insights-backups` (the database and `insights.json`), 14 days kept. Copy them off the server now and then. |
 | Change the Claude key | Settings → Claude → Replace Key, then Check. No restart needed. |
+| Let a manager help with Settings | Settings → People → Manage → Settings Access (administrator only): tick Businesses (add, edit, test, pause, reload businesses), People (add managers, deactivate/reactivate them, reset their passwords) and/or Personal ERPNext Keys (managers' keys). They see Settings in their sidebar, with only those sections, after they reload the platform. They can never make an administrator, give Settings access, or change an administrator or anyone else with Settings access. The Claude key, Email, Changes and Settings Access stay with the administrator. Each grant is a Django group ("Settings: Businesses", "Settings: People", "Settings: Personal Keys"); removing someone as a manager takes their access away too. Every grant and removal is under Changes. |
+| Email (scheduled reports) | Settings → Email (administrator only): mail server, port, security (STARTTLS, SSL or none), username, password (never shown again; blank keeps it), From address and name, then Send Test Email. Saved to `insights.json` "mail" and used from the next email by both the web server and the scheduler, no restart. The Notifications panel above it says whether email is set up, how many report schedules and alert rules are on, the last email sent or not, and which schedules failed. A message that cannot be sent (email not set up, server refused it) is never dropped: it is in Admin → Error log as "Email not sent", and the report schedule's last status says why. Alerts are shown in the bell; they are not emailed. |
 | A manager's own ERPNext key (approvals) | Settings → Personal ERPNext Keys → Add Key. |
 | Who changed what | Settings → Changes (also Admin → Recent actions). Secrets are never recorded. |
 | Update | `./deploy/platform.sh` (pull, install, migrate, restart). |
@@ -91,7 +93,7 @@ It also checks that the generated models match the doctype JSON and that migrati
 
 ## Not done yet
 
-- **The Settings page** is built (people, businesses, the Claude key, personal ERPNext keys, changes), for administrators only. Not there yet: removing a business, editing its overdue days or approval threshold, and its ERPNext sign-in (OAuth client); those stay in Admin → Connected businesses.
+- **The Settings page** is built (people, businesses, the Claude key, email, personal ERPNext keys, changes), for the administrator, who can give managers the Businesses, People and Personal ERPNext Keys sections. Not there yet: removing a business, editing its overdue days or approval threshold, and its ERPNext sign-in (OAuth client); those stay in Admin → Connected businesses.
 - **Approvals and delegation from the platform:** these work with each manager's own ERPNext key, linked in Settings → Personal ERPNext Keys.
 - **Agent mode** (Claude proposing actions you confirm).
 - **Sign-in wording:** the sign-in page still mentions ERPNext in its error messages.

@@ -140,7 +140,23 @@ def _boot(user: str) -> dict:
         "as_of": _as_of(),
         # Which AI model answers, so the question bar names the right one while it waits.
         "ai": _ai(),
+        # The Settings sections this person may open ([] = no Settings in the sidebar):
+        # all for the administrator, the given ones for a delegate.
+        "settings_sections": _settings_sections(user),
     }
+
+
+def _settings_sections(user: str) -> list:
+    try:
+        from insights.core.platform_settings import sections_for
+    except ImportError:  # not on the standalone platform: no Settings screen
+        return []
+    try:
+        return sections_for(user)
+    except Exception:
+        frappe.log_error(title="Command Center boot: Settings sections",
+                         message=frappe.get_traceback())
+        return []
 
 
 def _ai() -> dict:

@@ -33,6 +33,7 @@
 .st-facts{display:grid;grid-template-columns:max-content 1fr;gap:6px var(--sp-4);font-size:var(--fs-sm);margin:0}
 .st-facts dt{color:var(--mut)}
 .st-facts dd{margin:0;word-break:break-word}
+.st-stack>.panel+.panel{margin-top:var(--sp-4)}
 @media (max-width:700px){
  .st-acts{justify-content:flex-start}
 }
