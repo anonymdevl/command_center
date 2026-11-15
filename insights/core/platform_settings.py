@@ -17,8 +17,9 @@ Who may use it:
                                                 managers -- not of administrators
   everyone else       refused (403), whatever the screen shows.
 
-The Claude key, Email (and its Notifications status), Branding, Recommendations, the
-Changes list and giving Settings access stay with the administrator. A business's own
+The Claude key, Email (and its Notifications status), Branding, Customers (plans,
+licences, usage and rates: insights/core/plans.py), Recommendations, the Changes list
+and giving Settings access stay with the administrator. A business's own
 co-brand (the name and logo its documents are prepared for) is part of Businesses.
 Every call starts with _require(section)
 or _require_admin(); the boot payload's settings_sections (sections_for) tells the
@@ -55,8 +56,8 @@ GRANTS = {"businesses": "Settings: Businesses", "people": "Settings: People",
           "keys": "Settings: Personal Keys"}
 GRANT_WORDS = {"businesses": "Businesses", "people": "People", "keys": "Personal ERPNext Keys"}
 # What the administrator sees, in the screen's order.
-ALL_SECTIONS = ["people", "businesses", "claude", "email", "branding", "keys", "recommend",
-                "changes"]
+ALL_SECTIONS = ["people", "businesses", "customers", "claude", "email", "branding", "keys",
+                "recommend", "changes"]
 
 
 def _grants(u) -> list:
@@ -171,7 +172,16 @@ def _person(u, me) -> dict:
             "is_admin": bool(u.is_superuser), "active": bool(u.is_active),
             "has_password": u.has_usable_password(), "last_login": u.last_login,
             "joined": u.date_joined, "is_me": u.pk == me.pk,
-            "settings_access": _grants(u), "protected": _protected(u)}
+            "settings_access": _grants(u), "protected": _protected(u),
+            "customers": _customers_of(u)}
+
+
+def _customers_of(u) -> list:
+    """The customers (insights/core/plans.py) whose seat this person takes."""
+    if u.is_superuser:
+        return []
+    from insights.core import plans
+    return [c.name for c, _ in plans.clients_for_user(u.username)]
 
 
 def _get_person(username: str):
@@ -216,14 +226,19 @@ def people():
 
 @frappe.whitelist(methods=["POST"])
 def add_person(email: str = "", full_name: str = "", password: str = "", password2: str = "",
-               set_later=0, manager=1, admin=0):
+               set_later=0, manager=1, admin=0, client_id=None, override_seats=0):
     """A new person. They sign in with their email and the password typed here, or -- if
     it is to be set later -- with their business's ERPNext, until a password is set.
-    Only the administrator can add an administrator."""
+    Only the administrator can add an administrator.
+
+    client_id: the customer (insights/core/plans.py) whose seat they take. A delegate's
+    new people always go on the delegate's own customer. Beyond the customer's seats
+    they are refused, unless the administrator overrides (override_seats)."""
     me = _require("people")
     if _truthy(admin) and not me.is_superuser:
         raise PermissionError("Only the platform's administrator can make someone an "
                               "administrator.")
+    seat = _seat_customer(me, client_id, _truthy(admin))
     from django.core.exceptions import ValidationError as DjangoValidationError
     from django.core.validators import validate_email
     email = str(email or "").strip().lower()
@@ -241,14 +256,37 @@ def add_person(email: str = "", full_name: str = "", password: str = "", passwor
     else:
         u.set_password(_check_password(password, password2, u))
     u.is_superuser = u.is_staff = _truthy(admin)
+    if seat is not None:
+        from insights.core import plans
+        plans.check_seat(seat, None, _truthy(override_seats), me)
     u.save()
     if _truthy(manager):
         from django.contrib.auth.models import Group
         u.groups.add(Group.objects.get_or_create(name=MANAGER)[0])
+    if seat is not None:
+        plans.add_member(seat, u.username, "user")
+        _audit(f"named {email} on the customer {seat.name}", u)
     roles = [r for r, on in (("manager", _truthy(manager)), ("administrator", _truthy(admin))) if on]
     _audit(f"added {email}" + (f" as {' and '.join(roles)}" if roles else "")
            + ("; password to be set later" if _truthy(set_later) else "; password set"), u, flag=1)
     return _person(u, me)
+
+
+def _seat_customer(me, client_id, admin: bool):
+    """The customer a new person's seat is on: the one the administrator chose, or the
+    delegate's own (their only customer). None: no customer, no seat to count."""
+    from insights.core import plans
+    if admin:
+        return None
+    if me.is_superuser:
+        return plans._client(client_id) if client_id not in (None, "", 0, "0") else None
+    mine = plans.clients_for_user(me.username)
+    if client_id not in (None, "", 0, "0"):
+        for c, _ in mine:
+            if str(c.pk) == str(client_id):
+                return c
+        raise PermissionError("You can add people only to your own organisation.")
+    return mine[0][0] if mine else None
 
 
 @frappe.whitelist(methods=["POST"])
@@ -305,12 +343,18 @@ def set_admin(username: str = "", on=1):
 
 
 @frappe.whitelist(methods=["POST"])
-def set_active(username: str = "", on=1):
-    """Deactivate (their sign-ins end at once and they cannot sign in again) or reactivate."""
+def set_active(username: str = "", on=1, override_seats=0):
+    """Deactivate (their sign-ins end at once and they cannot sign in again) or reactivate
+    -- which takes a seat again on their customer, refused beyond its seats unless the
+    administrator overrides."""
     me = _require("people")
     u = _get_person(username)
     _may_change(me, u)
     if _truthy(on):
+        if not u.is_active and not u.is_superuser:
+            from insights.core import plans
+            for c in plans.seat_clients_of(u.username):
+                plans.check_seat(c, None, _truthy(override_seats), me)
         u.is_active = True
         u.save(update_fields=["is_active"])
     else:

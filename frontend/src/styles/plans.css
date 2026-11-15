@@ -1,0 +1,67 @@
+/* ===========================================================================
+   Plans (components/PlanBadge.jsx, PlanUsage.jsx, SettingsCustomers.jsx): the plan
+   badge under the logo, the licence banner, Plan & Usage and Settings -> Customers.
+   Tokens only (interface/p1.py), so both themes and every accent apply; panels,
+   tables, tags, buttons and dialogs are the screens' own classes.
+   =========================================================================== */
+.pl-badge{display:block;width:calc(100% - 12px);box-sizing:border-box;margin:6px 6px 2px;padding:9px 10px;
+ border-radius:var(--r-sm);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line2);text-align:left;
+ font:inherit;color:var(--ink)}
+.pl-badge-btn{cursor:pointer}
+.pl-badge-btn:hover{background:var(--hover)}
+.pl-badge-btn.on{box-shadow:inset 0 0 0 1px var(--accent)}
+.pl-badge-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pl-badge-h{display:flex;align-items:center;gap:var(--sp-2);justify-content:space-between}
+.pl-badge-h b{font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--accent-ink)}
+.pl-badge-t{display:block;margin-top:2px;font-size:var(--fs-2xs);color:var(--mut);line-height:1.4;overflow-wrap:anywhere}
+.pl-state{font-size:var(--fs-3xs);font-weight:var(--fw-semibold);padding:2px 7px;border-radius:var(--r-pill);white-space:nowrap;
+ color:var(--on-solid);background:var(--high-solid)}
+.pl-state.lapsed{background:var(--crit-solid)}
+.pl-banner{margin:0 0 var(--sp-4);padding:10px 14px;border-radius:var(--r-sm);font-size:var(--fs-sm);line-height:1.5;
+ color:var(--high);background:var(--high-bg)}
+.pl-banner.lapsed{color:var(--crit);background:var(--crit-bg)}
+.pl-page .topbar{gap:var(--sp-4);flex-wrap:wrap}
+.pl-pick{font:inherit;font-size:var(--fs-sm);color:var(--ink);background:var(--bg);border:1px solid var(--line2);
+ border-radius:var(--r-sm);padding:8px 10px}
+.pl-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:var(--sp-5);align-items:start}
+.pl-label{font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--mut);margin-bottom:6px}
+.pl-feats{margin:0;padding-left:18px;font-size:var(--fs-sm);line-height:1.55}
+.pl-feats li{margin:2px 0}
+.pl-feats.sm{font-size:var(--fs-xs);padding-left:16px}
+.pl-meters{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--sp-3)}
+.pl-meter{padding:12px 14px;border-radius:var(--r-sm);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.pl-meter-h{display:flex;justify-content:space-between;align-items:baseline;gap:var(--sp-2)}
+.pl-meter-h b{font-size:var(--fs-sm);font-weight:var(--fw-semibold)}
+.pl-meter-h span{font-size:var(--fs-sm);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pl-bar{height:6px;border-radius:var(--r-pill);background:var(--line);margin:9px 0 6px;overflow:hidden}
+.pl-bar i{display:block;height:100%;border-radius:inherit;background:var(--accent)}
+.pl-meter.pl-warn .pl-bar i{background:var(--high-solid)}
+.pl-meter.pl-full .pl-bar i{background:var(--crit-solid)}
+.pl-meter.pl-warn .pl-meter-h span{color:var(--high)}
+.pl-meter.pl-full .pl-meter-h span{color:var(--crit)}
+.pl-foot{margin-top:var(--sp-3)}
+.pl-compare-w{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.pl-compare{min-width:640px}
+.pl-compare th.on{color:var(--accent-ink)}
+.pl-compare td{vertical-align:top}
+.pl-compare td:first-child{min-width:170px}
+.pl-text,.pl-in{width:100%;box-sizing:border-box;font:inherit;font-size:var(--fs-sm);color:var(--ink);background:var(--bg);
+ border:1px solid var(--line2);border-radius:var(--r-sm);padding:10px 12px}
+.pl-in.sm{padding:6px 8px;min-width:0}
+.pl-text:focus,.pl-in:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg2)}
+.pl-table-w{overflow-x:auto}
+.pl-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pl-limits{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--sp-2) var(--sp-3)}
+.pl-limits label{margin:0 0 4px}
+.pl-checks{display:flex;flex-wrap:wrap;gap:var(--sp-2) var(--sp-4)}
+.pl-checks label.st-check{margin:0}
+.pl-members{width:100%}
+.pl-row{display:flex;gap:var(--sp-2);flex-wrap:wrap;align-items:end}
+.pl-row>*{flex:1 1 160px;min-width:0}
+.pl-row>.btn,.pl-row>.ap-act{flex:0 0 auto}
+.pl-total td{font-weight:var(--fw-semibold)}
+@media (max-width:700px){
+ .pl-grid{grid-template-columns:1fr}
+}
+.pl-page .ph{flex-wrap:wrap}
+.pl-table-w td:first-child{min-width:190px}

@@ -256,7 +256,9 @@ def _time_left(seconds: float) -> bool:
 
 def _remember_usage(msg, model):
     """Kept on the request, so the answer can say what it cost in tokens and whether
-    the cache was read (the caching proof), and the monthly invoice can be checked."""
+    the cache was read (the caching proof), and recorded in the usage ledger, which the
+    monthly usage statement is built from. Called after every reply (chat, complete,
+    limits)."""
     u = getattr(msg, "usage", None)
     if not u:
         return
@@ -270,6 +272,16 @@ def _remember_usage(msg, model):
     tally["cache_write"] += int(getattr(u, "cache_creation_input_tokens", 0) or 0)
     tally["requests"] += 1
     tally["model"] = getattr(msg, "model", None) or model
+    # The usage ledger (command_center/metering.py): every reply, here, the one place a
+    # reply comes back -- so no call escapes it, a refused or failed question's tokens
+    # included. It never stops an answer.
+    from command_center import metering
+    metering.tokens(tally["model"],
+                    input=int(getattr(u, "input_tokens", 0) or 0),
+                    output=int(getattr(u, "output_tokens", 0) or 0),
+                    cache_read=int(getattr(u, "cache_read_input_tokens", 0) or 0),
+                    cache_write=int(getattr(u, "cache_creation_input_tokens", 0) or 0),
+                    requests=1)
 
 
 def usage() -> dict | None:
@@ -287,6 +299,7 @@ def limits() -> dict:
         output_config={"effort": "low"})
     h = raw.headers
     msg = raw.parse()
+    _remember_usage(msg, model_for("analyst"))
     text = "".join(getattr(b, "text", "") for b in msg.content if getattr(b, "type", "") == "text")
 
     def num(name):

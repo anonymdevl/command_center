@@ -110,13 +110,16 @@ def _logo(name: str | None, cls: str) -> str:
 
 
 def brand_header(title: str, business_code: str | None = None, kicker: str = "",
-                 subtitle: str = "") -> str:
+                 subtitle: str = "", business: str | None = None,
+                 period: str | None = None) -> str:
     """The top of every PDF the platform makes: the product's logo (or name) and the
     business's co-brand, then the title block -- the kind of document, its title, the
     business, the period it covers, who it was prepared for and when. `title` and
-    `subtitle` are plain text; they are escaped here."""
+    `subtitle` are plain text; they are escaped here. `business` names whom it is for
+    when that is not one business (a customer's usage statement covers several), and
+    `period` replaces "Figures as at ..." when the document covers a stated period."""
     b = brand.branding(business_code)
-    business = _business(business_code)
+    business = business or _business(business_code)
     client = brand.for_business_name(b, business)
     mark = _logo(b["logo_light"], "hd-logo") or f'<div class="brand">{escape_html(b["product"])}</div>'
     tag = f'<div class="hd-tag">{escape_html(b["tagline"])}</div>' if b["tagline"] else ""
@@ -134,7 +137,7 @@ def brand_header(title: str, business_code: str | None = None, kicker: str = "",
         + (f'<div class="tb-sub">{escape_html(subtitle)}</div>' if subtitle else "")
         + '<table class="tb-facts"><tr>'
         f'<td><span>Business</span>{escape_html(business)}</td>'
-        f'<td><span>Period</span>Figures as at {escape_html(_pretty_date(_as_of()))}</td>'
+        f'<td><span>Period</span>{escape_html(period or "Figures as at " + _pretty_date(_as_of()))}</td>'
         f'<td><span>Requested by</span>{escape_html(who)}</td>'
         f'<td><span>Generated</span>{escape_html(when)}</td>'
         '</tr></table></div>')
@@ -192,7 +195,8 @@ def _document_html(question, answer, business_code, model, sanitize, md_to_html,
 
 
 def html_pdf(title: str, body_html: str, business_code: str | None = None,
-             footer: str | None = None, kicker: str = "Financial Report") -> bytes:
+             footer: str | None = None, kicker: str = "Financial Report",
+             business: str | None = None, period: str | None = None) -> bytes:
     """A document the platform built itself (the financial statements, api/statements.py)
     as a PDF, in the answer's own branded layout: header and title block, body, footer
     and the vendor's line on every page. `body_html` is the caller's, built from escaped
@@ -202,7 +206,8 @@ def html_pdf(title: str, body_html: str, business_code: str | None = None,
     _ensure_fonts()
     html = PDF_TEMPLATE.format(
         fonts=_font_css(), css=pdf_blocks.CSS, page_css=PAGE_CSS,
-        header=brand_header(title or "", business_code, kicker=kicker),
+        header=brand_header(title or "", business_code, kicker=kicker, business=business,
+                            period=period),
         body=body_html,
         footer=brand_footer(business_code, escape_html(footer or "")),
         doc_class="report")
@@ -452,14 +457,16 @@ def _cell(v):
     return s
 
 
-def brand_rows_head(title: str, business_code, note: str | None = None) -> list:
+def brand_rows_head(title: str, business_code, note: str | None = None,
+                    business: str | None = None, period: str | None = None) -> list:
     """The rows above a sheet's table: its title, then "<product> · <business> · figures
     as at ... · exported by ... on ...", then a blank row (the table's headings are row 4).
     For any other workbook the platform makes, so every sheet starts the same way."""
     b = brand.branding(business_code)
-    business = _business(business_code)
+    business = business or _business(business_code)
     return [[title],
-            [f"{b['product']} · {brand.for_business_name(b, business)} · figures as at {_as_of()} · "
+            [f"{b['product']} · {brand.for_business_name(b, business)} · "
+             f"{period or 'figures as at ' + _as_of()} · "
              f"exported by {frappe.utils.get_fullname(frappe.session.user)} on "
              f"{frappe.utils.format_datetime(frappe.utils.now_datetime(), 'd MMM yyyy, HH:mm')}"
              + (f" · {note}" if note else "")],
@@ -472,7 +479,8 @@ def brand_rows_foot(business_code) -> list:
     return [[], [brand.branding(business_code)["prepared"]]]
 
 
-def _send_xlsx(title: str, sheets: list, business_code, note: str | None = None):
+def _send_xlsx(title: str, sheets: list, business_code, note: str | None = None,
+               business: str | None = None, period: str | None = None):
     from openpyxl import Workbook
     from openpyxl.styles import Font
     from openpyxl.utils import get_column_letter
@@ -489,7 +497,7 @@ def _send_xlsx(title: str, sheets: list, business_code, note: str | None = None)
             k += 1
         used.add(sheet)
         ws = wb.create_sheet(sheet)
-        for row in brand_rows_head(title, business_code, note):
+        for row in brand_rows_head(title, business_code, note, business, period):
             ws.append(row)
         ws["A1"].font = Font(bold=True, size=13)
         ws["A2"].font = Font(size=9, color="646973")
@@ -504,7 +512,7 @@ def _send_xlsx(title: str, sheets: list, business_code, note: str | None = None)
         ws.freeze_panes = "A5"
         # The same lines when the sheet is printed.
         ws.oddHeader.left.text = brand.branding(business_code)["product"]
-        ws.oddHeader.right.text = _business(business_code)
+        ws.oddHeader.right.text = business or _business(business_code)
         ws.oddFooter.left.text = brand.branding(business_code)["prepared"][:250]
         ws.oddFooter.right.text = "Page &P of &N"
         for i, col in enumerate(cols, start=1):

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { api } from "../api/client.js";
+import { api, plansApi } from "../api/client.js";
 import Icon from "./Icon.jsx";
 
 /**
@@ -19,6 +19,9 @@ const WORDS = { crit: "Critical", high: "High", med: "Medium", info: "For inform
 export default function Bell({ scope, onGo }) {
   const [data, setData] = useState(null);
   const [recs, setRecs] = useState([]);
+  // Plan and licence notices (insights/core/plans.py): an allowance at 80% or used, a
+  // renewal coming, the month's statements ready. One person's own, until dismissed.
+  const [notes, setNotes] = useState([]);
   const [open, setOpen] = useState(false);
   const wrap = useRef(null);
 
@@ -27,6 +30,7 @@ export default function Bell({ scope, onGo }) {
     const load = () => {
       api.alerts(scope).then((d) => alive && setData(d)).catch(() => {});
       api.recCritical(scope).then((d) => alive && setRecs(d?.recommendations || [])).catch(() => {});
+      plansApi.notices().then((d) => alive && setNotes(Array.isArray(d) ? d : [])).catch(() => {});
     };
     load();
     const t = setInterval(load, 60000);
@@ -54,7 +58,7 @@ export default function Bell({ scope, onGo }) {
 
   const alerts = data?.alerts || [];
   const fresh = data?.new || 0;
-  const total = alerts.length + recs.length;
+  const total = alerts.length + recs.length + notes.length;
   const label = total
     ? `${alerts.length} open alert${alerts.length === 1 ? "" : "s"}`
       + (recs.length ? `, ${recs.length} critical recommendation${recs.length === 1 ? "" : "s"}` : "")
@@ -90,7 +94,7 @@ export default function Bell({ scope, onGo }) {
       <button className={`ib bell${open ? " on" : ""}`} title={label} aria-label={label}
         aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <Icon name="bell" />
-        {total ? <span className={`bell-n${fresh || recs.length ? " fresh" : ""}`}>{total > 99 ? "99+" : total}</span> : null}
+        {total ? <span className={`bell-n${fresh || recs.length || notes.length ? " fresh" : ""}`}>{total > 99 ? "99+" : total}</span> : null}
       </button>
       {open ? (
         <div className="bellpop" role="dialog" aria-label="Alerts">
@@ -131,6 +135,33 @@ export default function Bell({ scope, onGo }) {
                         <span>{r.area_label} · {r.owner_role}</span>
                       </span>
                     </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          {notes.length ? (
+            <>
+              <div className="bellpop-h">
+                <b>Plan and licence</b>
+                <span>{notes.length}</span>
+              </div>
+              <ul className="bellpop-l">
+                {notes.slice(0, 6).map((x) => (
+                  <li key={x.id}>
+                    <button type="button" title={x.body} onClick={() => {
+                      setOpen(false);
+                      onGo?.(x.link === "settings" ? "settings" : "plan");
+                    }}>
+                      <span className={`bell-dot ${x.kind === "allowance_full" || x.kind === "lapsed" ? "crit" : "high"}`} aria-hidden="true" />
+                      <span className="bell-t">
+                        <b>{x.title}</b>
+                        <span>{x.body}</span>
+                      </span>
+                    </button>
+                    <button type="button" className="lnk" onClick={() => {
+                      plansApi.dismiss(x.id).then(() => setNotes((n) => n.filter((y) => y.id !== x.id))).catch(() => {});
+                    }}>Dismiss</button>
                   </li>
                 ))}
               </ul>

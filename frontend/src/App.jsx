@@ -9,6 +9,8 @@ import ViewTools from "./components/ViewTools.jsx";
 import ActionDialog from "./components/ActionDialog.jsx";
 import ScheduleDialog from "./components/ScheduleDialog.jsx";
 import Settings, { isAdministrator } from "./components/Settings.jsx";
+import PlanUsage from "./components/PlanUsage.jsx";
+import { LicenceBanner } from "./components/PlanBadge.jsx";
 import nav from "./legacy/nav.json";
 import { CORE_VIEWS } from "./legacy/core.js";
 import { restore } from "./askHistory.js";
@@ -82,6 +84,9 @@ export default function App() {
   // Settings is the platform administrator's own page, not a designed screen. Anyone
   // else who opens #settings sees the designed "not available to your role" panel.
   const settings = view === "settings";
+  // Plan & Usage: a customer's Account Managers only (insights/core/plans.py); the server
+  // refuses everyone else too.
+  const plan = view === "plan";
   const Ported = PORTED[view];
   // Every designed screen still has at least one card with no fact behind it, and the
   // cards say which they are. The old all-or-nothing "this view is live" flag stopped
@@ -89,7 +94,7 @@ export default function App() {
   // than left half-right.
   // The management screens hold no sample at all (legacy/core.js), so the caveat would
   // be false on them.
-  const showBanner = !Ported && !settings && !CORE_VIEWS.has(view);
+  const showBanner = !Ported && !settings && !plan && !CORE_VIEWS.has(view);
 
   const ctx = useMemo(() => ({ scope, go, openDrawer: setDrawer }), [scope, setDrawer]);
 
@@ -100,10 +105,13 @@ export default function App() {
       <div className="col">
         <Topbar scope={scope} openDrawer={setDrawer} onGo={go} onMenu={() => setNavOpen((o) => !o)} />
         <main className="main" id="cc-main">
-          {!settings ? <ViewTools caption={captionOf(view)} scope={scope} /> : null}
+          {!settings && !plan ? <ViewTools caption={captionOf(view)} scope={scope} /> : null}
+          <LicenceBanner />
           {showBanner ? <IllustrativeNotice /> : null}
           {settings ? (
             isAdministrator(boot) ? <Settings /> : <LegacyView viewKey="denied" {...ctx} />
+          ) : plan ? (
+            boot.plan?.can_view ? <PlanUsage /> : <LegacyView viewKey="denied" {...ctx} />
           ) : Ported ? (
             <Ported {...ctx} />
           ) : (

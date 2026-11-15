@@ -336,3 +336,48 @@ export function readImage(file, maxKb = 1024) {
     r.readAsDataURL(file);
   });
 }
+
+/* ---------------------------------------------------------------------------
+   Plans, licences and usage (insights/core/plans.py). A customer's Account
+   Managers read their own plan and counts; everything with money in it is the
+   administrator's, and the server refuses it to anyone else.
+   ------------------------------------------------------------------------- */
+const PL = "insights.core.plans";
+export const plansApi = {
+  mine: (client_id) => call(`${PL}.my_plan`, { client_id }),
+  tiers: () => call(`${PL}.plans`),
+  requestQuote: (args) => call(`${PL}.request_quote`, args),
+  statementPdf: (client_id, period) =>
+    download(`${PL}.usage_statement`, { client_id, period, format: "pdf" }, "usage-statement.pdf"),
+  statementXlsx: (client_id, period) =>
+    download(`${PL}.usage_statement`, { client_id, period, format: "xlsx" }, "usage-statement.xlsx"),
+  notices: () => call(`${PL}.notices`),
+  dismiss: (id) => call(`${PL}.dismiss_notice`, { id }),
+
+  customers: () => call(`${PL}.customers`),
+  saveCustomer: (args) =>
+    call(`${PL}.save_customer`, {
+      ...args,
+      limits: JSON.stringify(args.limits || {}),
+      rates: JSON.stringify(args.rates || {}),
+      businesses: JSON.stringify(args.businesses || []),
+    }),
+  extend: (id, days) => call(`${PL}.extend_licence`, { id, days }),
+  remove: (id) => call(`${PL}.remove_customer`, { id }),
+  setMember: (args) => call(`${PL}.set_member`, args),
+  correction: (args) => call(`${PL}.record_correction`, args),
+  billing: (id, period) => call(`${PL}.billing_statement`, { id, period }),
+  billingPdf: (id, period) =>
+    download(`${PL}.billing_statement`, { id, period, format: "pdf" }, "usage-statement.pdf"),
+  billingXlsx: (id, period) =>
+    download(`${PL}.billing_statement`, { id, period, format: "xlsx" }, "usage-statement.xlsx"),
+  planSettings: () => call(`${PL}.plan_settings`),
+  savePlan: (args) =>
+    call(`${PL}.save_plan`, {
+      ...args,
+      limits: JSON.stringify(args.limits || {}),
+      overage: JSON.stringify(args.overage || {}),
+    }),
+  savePrices: (prices) => call(`${PL}.save_prices`, { prices: JSON.stringify(prices || {}) }),
+  clientChoices: () => call(`${PL}.client_choices`),
+};

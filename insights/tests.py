@@ -13,6 +13,7 @@ checked on the server against Gigmann's live site.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import json
 import random
@@ -1388,8 +1389,8 @@ class SettingsDelegation(TransactionTestCase):
 
     def test_boot_and_a_plain_manager(self):
         self.assertEqual(self._boot(self.admin)["settings_sections"],
-                         ["people", "businesses", "claude", "email", "branding", "keys",
-                          "recommend", "changes"])
+                         ["people", "businesses", "customers", "claude", "email", "branding",
+                          "keys", "recommend", "changes"])
         self.assertEqual(self._boot(self.manager)["settings_sections"], [])
         for fn in ("people", "businesses", "credentials", "email", "notifications",
                    "set_email", "test_email", "set_settings_access", "changes"):
@@ -3245,3 +3246,501 @@ class Branding(TransactionTestCase):
         self._ok("set_business_brand", name=b["name"], display_name="")
         self._ok("remove_business_logo", name=b["name"])
         self.assertNotIn(b["business_code"], self._boot(self.manager)["clients"])
+
+
+# ------------------------------------------------------------------------------------------
+# Plans, licences and usage (insights/core/plans.py)
+# ------------------------------------------------------------------------------------------
+class _Usage:
+    def __init__(self, i, o, r, w):
+        self.input_tokens, self.output_tokens = i, o
+        self.cache_read_input_tokens, self.cache_creation_input_tokens = r, w
+
+
+class _Text:
+    type = "text"
+
+    def __init__(self, text):
+        self.text = text
+
+    def to_dict(self, mode="json"):
+        return {"type": "text", "text": self.text}
+
+
+class _Reply:
+    def __init__(self, text="Sales rose.", stop="end_turn", model="claude-sonnet-5-5",
+                 usage=(1000, 200, 5000, 300)):
+        self.model, self.stop_reason, self.stop_details = model, stop, None
+        self.usage = _Usage(*usage)
+        self.content = [_Text(text)]
+
+
+class _FakeAnthropic:
+    """The SDK client claude.py makes: with_options(...).beta.messages.create(**body)."""
+
+    def __init__(self, replies):
+        self.replies, self.sent = list(replies), []
+
+    def with_options(self, **kw):
+        return self
+
+    @property
+    def beta(self):
+        return self
+
+    @property
+    def messages(self):
+        return self
+
+    def create(self, **body):
+        self.sent.append(body)
+        return self.replies.pop(0)
+
+
+class PlansAndUsage(TransactionTestCase):
+    """The product a client bought: the plan badge and Plan & Usage for a customer's
+    Account Managers (counts only), Settings -> Customers for the administrator (rates,
+    costs, statements), the usage ledger written where Claude replies, the monthly reset,
+    the statement's arithmetic, the 80% / 100% behaviour, seats, the licence and its grace,
+    and the rule that a business on no plan keeps working exactly as before."""
+
+    databases = {"default", "aux"}
+    MOD = "insights.core.plans"
+
+    def setUp(self):
+        import frappe
+        SettingsPage.setUp(self)
+        from insights.core.models import ConnectedBusiness
+        for code, name in (("biz_a", "Alpha Medical Ltd"), ("biz_b", "Beta Trading Ltd"),
+                           ("biz_c", "Gamma Supplies Ltd")):
+            ConnectedBusiness.objects.create(name=name, business_name=name, business_code=code,
+                                             status="Active", is_local=0, currency="GHS",
+                                             site_url=f"https://{code}.test")
+        frappe.conf["command_center_anthropic_key"] = "test-key-not-real"
+        U = get_user_model()
+        mgr = Group.objects.get(name="Insights Dashboard Manager")
+        self.users = {}
+        for who in ("ama@a.test", "kofi@a.test", "bea@b.test"):
+            u = U.objects.create_user(who, who, "a-long-test-pass-7")
+            u.groups.add(mgr)
+            c = Client()
+            self.assertTrue(c.login(username=who, password="a-long-test-pass-7"))
+            self.users[who] = c
+
+    def tearDown(self):
+        SettingsPage.tearDown(self)
+
+    # helpers
+    def _call(self, client, fn, **args):
+        r = client.post(f"/api/method/{self.MOD}.{fn}", json.dumps(args),
+                        content_type="application/json")
+        return r
+
+    def _ok(self, fn, client=None, **args):
+        r = self._call(client or self.admin, fn, **args)
+        self.assertEqual(r.status_code, 200, f"{fn}: {r.content[:500]!r}")
+        return r.json()["message"]
+
+    def _refused(self, fn, client=None, **args) -> str:
+        r = self._call(client or self.admin, fn, **args)
+        self.assertEqual(r.status_code, 417, f"{fn} was not refused: {r.content[:300]!r}")
+        return " ".join(json.loads(m)["message"] for m in json.loads(r.json()["_server_messages"]))
+
+    def _customer(self, name="Alpha Group", plan="essentials", businesses=("biz_a",), **kw):
+        args = {"name": name, "licensed_to": kw.pop("licensed_to", name + " Ltd"), "plan": plan,
+                "businesses": list(businesses), **kw}
+        for k in ("limits", "rates"):
+            if isinstance(args.get(k), dict):
+                args[k] = json.dumps(args[k])
+        return self._ok("save_customer", **args)
+
+    def _member(self, cid, who, role="manager", **kw):
+        return self._ok("set_member", id=cid, username=who, role=role, **kw)
+
+    def _boot(self, client) -> dict:
+        page = client.get("/command-center").content.decode()
+        return json.loads(re.search(r"window\.CC_BOOT = (.*?);\s*$", page, re.M).group(1))
+
+    def _ask(self, client, question="How are sales going?", code="biz_a"):
+        r = client.post("/api/method/command_center.api.ask.answer",
+                        json.dumps({"question": question, "business_code": code}),
+                        content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content[:400])
+        return r.json()["message"]
+
+    def _events(self, **f):
+        from insights.core.models import UsageEvent
+        return list(UsageEvent.objects.filter(**f).order_by("id"))
+
+    def _fake_analyst(self, fake):
+        """agent.answer replaced by one round through the real claude.chat, whose SDK
+        client is the fake: what is under test is the metering where Claude replies."""
+        from command_center.ask import claude
+
+        def answer(question, business_code=None, history=None, **kw):
+            content, err = claude.chat([{"role": "user", "content": question}], [], "S", "D")
+            if err:
+                return {"answered": False, "analyst_error": err}
+            return {"answered": True, "answer": "Sales rose.", "model": "claude-sonnet-5-5",
+                    "checked": ["x"]}
+        return [mock.patch("command_center.ask.claude._client", lambda: fake),
+                mock.patch("command_center.ask.agent.answer", answer),
+                mock.patch("command_center.ask.quick.answer", lambda *a, **k: None)]
+
+    # --- metering --------------------------------------------------------------------
+    def test_metering_at_the_claude_call_site(self):
+        from insights.core.models import UsageEvent
+        c = self._customer()
+        self._member(c["id"], "ama@a.test")
+        fake = _FakeAnthropic([_Reply(), _Reply(stop="refusal", usage=(400, 0, 0, 0)),
+                               _Reply(usage=(10, 5, 0, 0))])
+        with contextlib.ExitStack() as stack:
+            for p in self._fake_analyst(fake):
+                stack.enter_context(p)
+            ok = self._ask(self.users["ama@a.test"])
+            self.assertTrue(ok["answered"])
+            refused = self._ask(self.users["ama@a.test"])
+            self.assertFalse(refused.get("allowance"))
+            # Claude called outside any question (a connection check): still on record
+            from command_center.ask import claude
+            from insights.compat import run_as
+            with run_as("boss@test.com"):
+                claude.chat([{"role": "user", "content": "OK?"}], [], "S", "")
+        self.assertEqual(len(fake.sent), 3, "every request went through the one client")
+        q = self._events(meter="ai_questions")
+        self.assertEqual([(e.quantity, e.outcome) for e in q], [(1, "ok"), (0, "failed")],
+                         "a refused question keeps its tokens and is not counted")
+        first = q[0]
+        self.assertEqual((first.client_id, first.business_code, first.user, first.model),
+                         (c["id"], "biz_a", "ama@a.test", "claude-sonnet-5-5"))
+        self.assertEqual((first.input_tokens, first.output_tokens, first.cache_read_tokens,
+                          first.cache_write_tokens, first.requests), (1000, 200, 5000, 300, 1))
+        # cost by the (editable) default price table: 1000x2 + 200x10 + 5000x0.10 + 300x4 per M
+        self.assertEqual(str(first.est_cost), "0.005700")
+        self.assertEqual(q[1].input_tokens, 400)
+        loose = self._events(meter="ai_tokens")
+        self.assertEqual([(e.quantity, e.input_tokens, e.client_id) for e in loose], [(0, 10, None)])
+        # the ledger is never edited or deleted from
+        with self.assertRaises(PermissionError):
+            first.quantity = 5
+            first.save()
+        with self.assertRaises(PermissionError):
+            UsageEvent.objects.filter(pk=first.pk).update(quantity=9)
+        with self.assertRaises(PermissionError):
+            UsageEvent.objects.all().delete()
+        with self.assertRaises(PermissionError):
+            first.delete()
+        # a price change applies from now on; the past keeps its cost
+        self._ok("save_prices", prices=json.dumps({"claude-sonnet-5-5": {
+            "input": 100, "output": 100, "cache_read": 100, "cache_write": 100}}))
+        self.assertEqual(str(UsageEvent.objects.get(pk=first.pk).est_cost), "0.005700")
+        # the boot payload's badge, for this Account Manager
+        badge = self._boot(self.users["ama@a.test"])["plan"]
+        self.assertEqual((badge["plan"], badge["licensed_to"], badge["no_expiry"], badge["can_view"]),
+                         ("Essentials", "Alpha Group Ltd", True, True))
+
+    def test_monthly_reset(self):
+        from insights.core import plans
+        c = self._customer(limits={"ai_questions": 10})
+        cust = plans._client(c["id"])
+        from insights.compat import run_as
+        with run_as("boss@test.com"):
+            with mock.patch.object(plans, "now", lambda: dt.datetime(2026, 10, 31, 23, 59, 30)):
+                for _ in range(4):
+                    plans.record("ai_questions", 1, "biz_a")
+                self.assertEqual(plans.used(cust)["ai_questions"], 4)
+                self.assertEqual(plans.resets_on(), "1 November 2026")
+            with mock.patch.object(plans, "now", lambda: dt.datetime(2026, 11, 1, 0, 0, 5)):
+                plans.record("ai_questions", 1, "biz_a")
+                self.assertEqual(plans.used(cust)["ai_questions"], 1, "a new month starts at 0")
+                self.assertEqual(plans.used(cust, "2026-10")["ai_questions"], 4)
+                self.assertEqual(plans.resets_on(), "1 December 2026")
+
+    def test_statement_maths(self):
+        from insights.core import plans
+        from insights.compat import run_as
+        c = self._customer(limits={"ai_questions": 10, "seats": 1, "ai_reports": None},
+                           rates={"currency": "GHS", "base_fee": "100",
+                                  "overage": {"ai_questions": "2.5", "seats": "20", "ai_reports": "50"}})
+        self._member(c["id"], "ama@a.test")
+        self._member(c["id"], "kofi@a.test", role="user", override_seats=1)
+        with run_as("ama@a.test"):
+            for _ in range(13):
+                plans.record("ai_questions", 1, "biz_a")
+            for _ in range(7):
+                plans.record("ai_reports", 1, "biz_a")
+        st = self._ok("billing_statement", id=c["id"], period=plans.period_of())
+        lines = {ln["key"]: ln for ln in st["lines"]}
+        self.assertEqual((lines["ai_questions"]["used"], lines["ai_questions"]["over"],
+                          lines["ai_questions"]["amount"]), (13, 3, 7.5))
+        self.assertEqual((lines["seats"]["used"], lines["seats"]["over"], lines["seats"]["amount"]),
+                         (2, 1, 20.0))
+        self.assertEqual((lines["ai_reports"]["included"], lines["ai_reports"]["over"],
+                          lines["ai_reports"]["amount"]), (None, 0, 0.0), "unlimited: nothing over")
+        self.assertEqual((st["currency"], st["base_fee"], st["total"]), ("GHS", 100.0, 127.5))
+        # a correction is a new row, and the statement follows it
+        st = self._ok("record_correction", id=c["id"], period=plans.period_of(),
+                      meter="ai_questions", quantity=-2, note="Two test questions on go-live day")
+        self.assertEqual(st["total"], 122.5)
+        self.assertIn("Say why", self._refused("record_correction", id=c["id"], meter="ai_questions",
+                                               quantity=1, note=""))
+        # the plan's default rates apply where the customer has none
+        self._ok("save_plan", code="essentials", name="Essentials", features="One\nTwo",
+                 limits=json.dumps({"ai_questions": 200}), currency="USD", base_fee="10",
+                 overage=json.dumps({"ai_reports": "1"}))
+        d = self._customer(name="Delta Group", businesses=("biz_c",), limits={"ai_reports": 5})
+        with run_as("boss@test.com"):
+            for _ in range(6):
+                plans.record("ai_reports", 1, "biz_c")
+        st = self._ok("billing_statement", id=d["id"])
+        self.assertEqual((st["currency"], st["base_fee"], st["total"]), ("USD", 10.0, 11.0))
+
+    def test_allowance_at_80_and_100(self):
+        from insights.core import plans
+        from insights.core.models import PlanNotice
+        from insights.compat import run_as
+        c = self._customer(limits={"ai_questions": 5}, allow_overage=0)
+        self._member(c["id"], "ama@a.test")
+        self._member(c["id"], "kofi@a.test", role="user")
+        with run_as("ama@a.test"):
+            for _ in range(3):
+                plans.record("ai_questions", 1, "biz_a")
+            self.assertFalse(PlanNotice.objects.exists(), "nothing at 60%")
+            plans.record("ai_questions", 1, "biz_a")
+        n = list(PlanNotice.objects.all())
+        self.assertEqual([(x.recipient, x.kind) for x in n], [("ama@a.test", "allowance_80")],
+                         "80%: the customer's Account Managers, not its Users")
+        page = self._ok("my_plan", client=self.users["ama@a.test"])
+        q = next(m for m in page["meters"] if m["key"] == "ai_questions")
+        self.assertEqual((q["used"], q["included"], q["pct"], q["warn"], q["full"]), (4, 5, 80.0, True, False))
+        self.assertEqual(page["resets_on"], plans.resets_on())
+        with run_as("ama@a.test"):
+            plans.record("ai_questions", 1, "biz_a")
+            self.assertEqual(plans.gate("ai_questions", "biz_a"), plans.ALLOWANCE_USED)
+        kinds = sorted(PlanNotice.objects.values_list("recipient", "kind"))
+        self.assertIn(("ama@a.test", "allowance_full"), kinds)
+        self.assertIn(("boss@test.com", "allowance_full"), kinds)
+        # the analyst says so politely, and calls no model; the rest keeps working
+        fake = _FakeAnthropic([])
+        with contextlib.ExitStack() as stack:
+            for p in self._fake_analyst(fake):
+                stack.enter_context(p)
+            out = self._ask(self.users["ama@a.test"])
+        self.assertTrue(out["allowance"])
+        self.assertEqual(out["answer"], "This month's AI allowance is used up — your administrator can extend it.")
+        self.assertEqual(fake.sent, [])
+        r = self.users["ama@a.test"].post("/api/method/command_center.api.businesses.get_visible_businesses",
+                                          "{}", content_type="application/json")
+        self.assertEqual(r.status_code, 200)
+        r = self.users["ama@a.test"].post("/api/method/command_center.api.reports.generate",
+                                          json.dumps({"code": "rp01", "business_code": "biz_a"}),
+                                          content_type="application/json")
+        self.assertEqual(r.status_code, 200, "reports have their own allowance")
+        # overage allowed (the default): it keeps working, billed as overage
+        self._customer(id=c["id"], limits={"ai_questions": 5}, allow_overage=1)
+        with run_as("ama@a.test"):
+            self.assertIsNone(plans.gate("ai_questions", "biz_a"))
+        # the analyst's own read-only tool answers from the meters
+        from command_center.ask import tools
+        with run_as("ama@a.test"):
+            got = tools.run("ai_allowance", {}, "biz_a")
+        q = next(m for m in got["meters"] if m["label"] == "AI Analyst Questions")
+        self.assertEqual((got["plan"], q["used"], q["included"]), ("Essentials", 5, 5))
+        self.assertNotIn("rate", json.dumps(got))
+
+    def test_seats(self):
+        c = self._customer(limits={"seats": 1})
+        r = self.admin.post("/api/method/insights.core.platform_settings.add_person", json.dumps(
+            {"email": "new1@a.test", "full_name": "New One", "set_later": 1, "client_id": c["id"]}),
+            content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        r = self.admin.post("/api/method/insights.core.platform_settings.add_person", json.dumps(
+            {"email": "new2@a.test", "full_name": "New Two", "set_later": 1, "client_id": c["id"]}),
+            content_type="application/json")
+        self.assertEqual(r.status_code, 417)
+        self.assertIn("has used all 1 of its user seats on the Essentials plan", r.content.decode())
+        self.assertFalse(get_user_model().objects.filter(username="new2@a.test").exists())
+        # the administrator can override
+        r = self.admin.post("/api/method/insights.core.platform_settings.add_person", json.dumps(
+            {"email": "new2@a.test", "full_name": "New Two", "set_later": 1, "client_id": c["id"],
+             "override_seats": 1}), content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        row = next(x for x in self._ok("customers")["customers"] if x["id"] == c["id"])
+        self.assertEqual(row["seats_used"], 2)
+        # reactivating someone takes their seat again: refused while full
+        U = get_user_model()
+        U.objects.filter(username="new1@a.test").update(is_active=False)
+        self._ok("save_customer", id=c["id"], name="Alpha Group", plan="essentials",
+                 businesses=["biz_a"], limits=json.dumps({"seats": 1}))
+        r = self.admin.post("/api/method/insights.core.platform_settings.set_active",
+                            json.dumps({"username": "new1@a.test", "on": 1}),
+                            content_type="application/json")
+        self.assertEqual(r.status_code, 417)
+        self.assertIn("user seats", r.content.decode())
+        # naming someone from Customers is held to the seats too
+        self.assertIn("user seats", self._refused("set_member", id=c["id"], username="ama@a.test"))
+
+    def test_licence_states(self):
+        from insights.core import plans
+        from insights.compat import run_as
+        today = dt.date.today()
+        # a business on no customer: no plan, no gate, no badge -- exactly as before
+        with run_as("bea@b.test"):
+            self.assertIsNone(plans.gate("ai_questions", "biz_b"))
+        self.assertIsNone(self._boot(self.users["bea@b.test"])["plan"])
+        # a customer with no renewal date: no expiry
+        c = self._customer()
+        self._member(c["id"], "ama@a.test")
+        self.assertEqual(self._boot(self.users["ama@a.test"])["plan"]["state"], "active")
+        cases = [(today + dt.timedelta(days=90), "active", None),
+                 (today + dt.timedelta(days=10), "due", None),
+                 (today - dt.timedelta(days=5), "grace", "grace period"),
+                 (today - dt.timedelta(days=31), "lapsed", "paused")]
+        for end, state, words in cases:
+            self._customer(id=c["id"], renewal_date=end.isoformat(), grace_days=30)
+            badge = self._boot(self.users["ama@a.test"])["plan"]
+            self.assertEqual(badge["state"], state, end)
+            if words:
+                self.assertIn(words, badge["banner"])
+            else:
+                self.assertIsNone(badge["banner"])
+        # lapsed: the AI, the reports and the scheduled sends pause; the screens do not
+        with run_as("ama@a.test"):
+            why = plans.gate("ai_questions", "biz_a")
+            self.assertIn("Your screens and data remain available", why)
+            self.assertEqual(why, plans.gate("scheduled_reports", "biz_a"))
+            self.assertEqual(why, plans.gate("daily_briefs", "biz_a"))
+        r = self.users["ama@a.test"].post("/api/method/command_center.api.reports.generate",
+                                          json.dumps({"code": "rp01", "business_code": "biz_a"}),
+                                          content_type="application/json")
+        self.assertEqual(r.status_code, 417)
+        self.assertIn("paused", r.content.decode())
+        r = self.users["ama@a.test"].post("/api/method/command_center.api.businesses.get_visible_businesses",
+                                          "{}", content_type="application/json")
+        self.assertEqual(r.status_code, 200, "the screens stay readable")
+        self.assertTrue(self._ok("my_plan", client=self.users["ama@a.test"])["licence"]["paused"])
+        # extended at once by the administrator
+        row = self._ok("extend_licence", id=c["id"], days=365)
+        self.assertEqual(row["licence"]["state"], "active")
+        with run_as("ama@a.test"):
+            self.assertIsNone(plans.gate("ai_questions", "biz_a"))
+        # reminders at 60/30/7 days, to the administrator and the Account Managers, once
+        self._customer(id=c["id"], renewal_date=(today + dt.timedelta(days=30)).isoformat())
+        from insights.core.models import PlanNotice, UsageEvent
+        with run_as("Administrator"):
+            plans.daily()
+            plans.daily()
+        got = sorted(PlanNotice.objects.filter(kind="renewal").values_list("recipient", flat=True))
+        self.assertEqual(got, ["ama@a.test", "boss@test.com"])
+        self.assertEqual(UsageEvent.objects.filter(meter="seats", outcome="snapshot").count(), 1,
+                         "one snapshot a day")
+        bell = self._ok("notices", client=self.users["ama@a.test"])
+        self.assertIn("renews in 30 days", bell[0]["title"])
+        self._ok("dismiss_notice", client=self.users["ama@a.test"], id=bell[0]["id"])
+        self.assertEqual(self._ok("notices", client=self.users["ama@a.test"]), [])
+        # month end: the administrator is told the statements are ready, nothing is sent
+        with mock.patch.object(plans, "now", lambda: dt.datetime(2026, 12, 1, 0, 30)), \
+                run_as("Administrator"):
+            plans.daily()
+        ready = PlanNotice.objects.get(kind="statements", dedupe="statements:2026-11")
+        self.assertEqual(ready.recipient, "boss@test.com")
+        self.assertIn("November 2026", ready.title)
+
+    def test_access_control(self):
+        a = self._customer(rates={"currency": "GHS", "base_fee": "999"})
+        b = self._customer(name="Beta Group", businesses=("biz_b",))
+        self._member(a["id"], "ama@a.test")
+        self._member(a["id"], "kofi@a.test", role="user")
+        self._member(b["id"], "bea@b.test")
+        ama, kofi, bea = (self.users[k] for k in ("ama@a.test", "kofi@a.test", "bea@b.test"))
+        mine = self._ok("my_plan", client=ama)
+        self.assertEqual(mine["client"], "Alpha Group")
+        text = json.dumps(mine)
+        for word in ("base_fee", "999", "rate", "est_cost", "overage\": {"):
+            self.assertNotIn(word, text, "no money on a customer's own page")
+        self.assertEqual(self._call(ama, "my_plan", client_id=b["id"]).status_code, 403,
+                         "a manager of A never sees B")
+        self.assertEqual(self._call(ama, "usage_statement", client_id=b["id"]).status_code, 403)
+        self.assertEqual(self._call(kofi, "my_plan").status_code, 403, "a User sees the badge only")
+        badge = self._boot(kofi)["plan"]
+        self.assertEqual((badge["plan"], badge["can_view"]), ("Essentials", False))
+        self.assertEqual(self._call(self.manager, "my_plan").status_code, 403, "no customer")
+        self.assertIsNone(self._boot(self.manager)["plan"])
+        self.assertEqual(self._ok("my_plan", client=bea)["client"], "Beta Group")
+        # the administrator's calls, refused to every manager, delegates included
+        self.admin.post("/api/method/insights.core.platform_settings.set_settings_access",
+                        json.dumps({"username": "ama@a.test", "sections": ["people", "businesses"]}),
+                        content_type="application/json")
+        for fn in ("customers", "save_customer", "extend_licence", "remove_customer", "set_member",
+                   "record_correction", "billing_statement", "plan_settings", "save_plan",
+                   "save_prices"):
+            self.assertEqual(self._call(ama, fn, id=a["id"]).status_code, 403, fn)
+            self.assertEqual(self._call(Client(), fn).status_code, 401, fn)
+        self.assertNotIn("customers", self._boot(ama)["settings_sections"])
+        self.assertIn("customers", self._boot(self.admin)["settings_sections"])
+        # View Plans: every tier by features and limits, never a price
+        tiers = self._ok("plans", client=kofi)
+        self.assertEqual([p["name"] for p in tiers["plans"]],
+                         ["Essentials", "Professional", "Enterprise", "Custom"])
+        self.assertNotIn("base_fee", json.dumps(tiers))
+        # Request a Quotation, with no email set up: the vendor's contact instead
+        self._ok_settings("set_brand", product_name="Acme Insight", company="Acme Systems",
+                          email="sales@acme.test")
+        out = self._ok("request_quote", client=ama, plan="professional", message="We are growing.")
+        self.assertFalse(out["sent"])
+        self.assertEqual(out["contact"]["email"], "sales@acme.test")
+        self.assertEqual(self._call(kofi, "request_quote", plan="professional").status_code, 403)
+
+    def _ok_settings(self, fn, **args):
+        r = self.admin.post(f"/api/method/insights.core.platform_settings.{fn}", json.dumps(args),
+                            content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        return r.json()["message"]
+
+    def test_statements_carry_the_brand(self):
+        import io
+        import sys
+
+        from openpyxl import load_workbook
+        from insights.core import plans
+        from insights.compat import run_as
+        self._ok_settings("set_brand", product_name="Acme Insight", company="Acme Systems",
+                          email="hello@acme.test")
+        c = self._customer(rates={"currency": "GHS", "base_fee": "100"}, limits={"ai_questions": 1},
+                           licensed_to="Alpha Holdings Ltd")
+        self._member(c["id"], "ama@a.test")
+        with run_as("ama@a.test"):
+            plans.record("ai_questions", 1, "biz_a")
+            plans.record("ai_questions", 1, "biz_a")
+        seen = []
+        pdfmod = sys.modules["frappe.utils.pdf"]
+        with mock.patch.object(pdfmod, "get_pdf", lambda html, options=None: (seen.append((html, options)), b"%PDF")[1]), \
+                mock.patch("command_center.api.export._ensure_fonts", lambda: None):
+            r = self._call(self.users["ama@a.test"], "usage_statement", format="pdf")
+            self.assertEqual(r.status_code, 200, r.content[:300])
+            self.assertEqual(r.content, b"%PDF")
+            r = self._call(self.admin, "billing_statement", id=c["id"], format="pdf")
+            self.assertEqual(r.status_code, 200, r.content[:300])
+        label = plans.period_label(plans.period_of())
+        for (html, options), money in zip(seen, (False, True)):
+            self.assertIn("Usage Statement", html)
+            self.assertIn("Prepared for <b>Alpha Holdings Ltd</b>", html)
+            self.assertIn(label, html)
+            self.assertNotIn("Figures as at", html)
+            self.assertIn("Acme Insight · built by Acme Systems · hello@acme.test", html)
+            self.assertEqual(options["footer-left"], "Acme Insight · built by Acme Systems · hello@acme.test")
+            self.assertEqual("Total for the month" in html, money)
+            self.assertEqual("GHS" in html, money, "money only on the administrator's")
+        self.assertIn("not an invoice and has not been sent", seen[1][0])
+        r = self._call(self.users["ama@a.test"], "usage_statement", format="xlsx")
+        wb = load_workbook(io.BytesIO(r.content))
+        ws = wb["Usage"]
+        self.assertTrue(ws["A2"].value.startswith(f"Acme Insight · Alpha Holdings Ltd · {label}"))
+        self.assertEqual(ws.cell(row=ws.max_row, column=1).value,
+                         "Prepared with Acme Insight by Acme Systems · hello@acme.test")
+        self.assertEqual(wb.sheetnames, ["Usage"], "no ledger, no money for the customer")
+        r = self._call(self.admin, "billing_statement", id=c["id"], format="xlsx")
+        wb = load_workbook(io.BytesIO(r.content))
+        self.assertEqual(wb.sheetnames, ["Usage", "Ledger"])
+        rows = [[c.value for c in row] for row in wb["Usage"].iter_rows()]
+        self.assertIn(["Total for the month", None, None, None, None, None, 100], rows)

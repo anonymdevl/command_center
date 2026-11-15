@@ -161,7 +161,22 @@ def _boot(user: str) -> dict:
         # each business's co-brand for "Prepared for" on what is printed or exported.
         "brand": _brand(),
         "clients": _clients(),
+        # The plan badge under the logo and the licence banner (insights/core/plans.py):
+        # None for anyone who is not on a customer -- nothing shown, as before plans.
+        "plan": _plan(user),
     }
+
+
+def _plan(user: str):
+    try:
+        from insights.core import plans
+    except ImportError:  # not on the standalone platform: no plans
+        return None
+    try:
+        return plans.boot(user)
+    except Exception:
+        frappe.log_error(title="Command Center boot: plan", message=frappe.get_traceback())
+        return None
 
 
 def _clients() -> dict:

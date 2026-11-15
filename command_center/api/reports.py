@@ -122,6 +122,11 @@ def generate(code: str, business_code: str | None = None):
     if not engine.analyst_enabled():
         frappe.throw("Reports are written by the analyst, which needs an AI key on this "
                      "site (bench --site <site> set-config command_center_anthropic_key ...).")
+    # The plan: a lapsed licence, or the month's AI reports used with no overage allowed.
+    from command_center import metering
+    blocked = metering.gate("ai_reports", business_code)
+    if blocked:
+        frappe.throw(blocked)
     job_id = uuid.uuid4().hex[:12]
     frappe.cache().set_value(_key(job_id), {"state": "running", "code": code},
                              expires_in_sec=KEEP_SECONDS)
@@ -150,9 +155,13 @@ def _run(report_id: str, code: str, business_code: str | None, user: str):
     try:
         brief = BRIEF.format(title=title, business=_business(business_code),
                              sections=sections, as_of=_as_of())
-        # A job, not a web request: room for a report's sixteen rounds.
-        result = agent.answer(brief, business_code, max_steps=REPORT_STEPS, deadline=1200,
-                              deep=True)
+        # A job, not a web request: room for a report's sixteen rounds. One AI report on
+        # the usage ledger, counted when it is written.
+        from command_center import metering
+        with metering.event("ai_reports", business_code, ref=code) as ev:
+            result = agent.answer(brief, business_code, max_steps=REPORT_STEPS, deadline=1200,
+                                  deep=True)
+            ev["ok"] = bool(result and result.get("answered"))
         if not result:
             raise RuntimeError("the analyst could not be reached or returned nothing")
         result["answer"] = _tidy(result.get("answer"), title, business_code)
@@ -288,43 +297,24 @@ def send_due():
 def send_scheduled(schedule: str):
     from frappe.utils import now_datetime
 
-    from command_center.ask import agent, engine
-    from command_center.api.export import _as_of, _business, pdf_bytes
+    from command_center import metering
+    from command_center.ask import engine
 
     doc = frappe.get_doc(SCHEDULE, schedule)
-    title, sections = REPORTS[doc.report]
-    heading = _title(title)
     frappe.set_user(doc.run_as or "Administrator")
     try:
         if not engine.analyst_enabled():
             raise RuntimeError("the analyst needs an AI key on this site")
-        brief = BRIEF.format(title=title, business=_business(doc.business_code),
-                             sections=sections, as_of=_as_of())
-        result = agent.answer(brief, doc.business_code, max_steps=REPORT_STEPS, deadline=1200,
-                              deep=True)
-        if not result or not result.get("answer"):
-            raise RuntimeError("the analyst returned nothing")
-        answer = _tidy(result["answer"], title, doc.business_code)
-        pdf = pdf_bytes(heading, answer, result.get("checked"), doc.business_code,
-                        result.get("model"), kind="report")
-        business = _business(doc.business_code)
-        when = frappe.utils.format_date(frappe.utils.today(), "d MMM yyyy")
-        lead = (answer.split("\n\n", 1)[0] or "")[:1200]
-        esc = frappe.utils.escape_html
-        frappe.sendmail(
-            recipients=_recipients(doc.recipients),
-            subject=f"{heading} · {business} · {when}",
-            message=branding.email_html(
-                f"<p><b>{esc(heading)}</b> · {esc(business)}</p>"
-                f"<p>{esc(lead)}</p>"
-                f"<p>The full report is attached. It was written from the records as at "
-                f"{esc(_as_of())}, with the permissions of "
-                f"{esc(frappe.utils.get_fullname(doc.run_as))}.</p>"
-                f"<p style='color:#777'>Sent by {esc(branding.branding()['product'])} on its "
-                f"{esc(describe(doc))} schedule.</p>", doc.business_code),
-            attachments=[{"fname": f"{heading} {frappe.utils.today()}.pdf", "fcontent": pdf}],
-            now=True,
-        )
+        # The plan: paused after the licence's grace, or the month's scheduled reports used
+        # with no overage allowed -- the last status says so.
+        blocked = metering.gate("scheduled_reports", doc.business_code)
+        if blocked:
+            raise RuntimeError(blocked)
+        # One scheduled report on the usage ledger, counted once it has been sent; a send
+        # that fails keeps the tokens it spent and is not counted.
+        with metering.event("scheduled_reports", doc.business_code, ref=doc.report) as ev:
+            _write_and_send(doc)
+            ev["ok"] = True
         doc.db_set({"last_sent": now_datetime(),
                     "last_status": f"Sent to {len(_recipients(doc.recipients))} at "
                                    f"{now_datetime():%d %b %H:%M}"}, update_modified=False)
@@ -334,6 +324,41 @@ def send_scheduled(schedule: str):
         doc.db_set("last_status", f"Failed {now_datetime():%d %b %H:%M}: {str(e)[:200]}",
                    update_modified=False)
     frappe.db.commit()
+
+
+def _write_and_send(doc):
+    from command_center.ask import agent
+    from command_center.api.export import _as_of, _business, pdf_bytes
+
+    title, sections = REPORTS[doc.report]
+    heading = _title(title)
+    brief = BRIEF.format(title=title, business=_business(doc.business_code),
+                         sections=sections, as_of=_as_of())
+    result = agent.answer(brief, doc.business_code, max_steps=REPORT_STEPS, deadline=1200,
+                          deep=True)
+    if not result or not result.get("answer"):
+        raise RuntimeError("the analyst returned nothing")
+    answer = _tidy(result["answer"], title, doc.business_code)
+    pdf = pdf_bytes(heading, answer, result.get("checked"), doc.business_code,
+                    result.get("model"), kind="report")
+    business = _business(doc.business_code)
+    when = frappe.utils.format_date(frappe.utils.today(), "d MMM yyyy")
+    lead = (answer.split("\n\n", 1)[0] or "")[:1200]
+    esc = frappe.utils.escape_html
+    frappe.sendmail(
+        recipients=_recipients(doc.recipients),
+        subject=f"{heading} · {business} · {when}",
+        message=branding.email_html(
+            f"<p><b>{esc(heading)}</b> · {esc(business)}</p>"
+            f"<p>{esc(lead)}</p>"
+            f"<p>The full report is attached. It was written from the records as at "
+            f"{esc(_as_of())}, with the permissions of "
+            f"{esc(frappe.utils.get_fullname(doc.run_as))}.</p>"
+            f"<p style='color:#777'>Sent by {esc(branding.branding()['product'])} on its "
+            f"{esc(describe(doc))} schedule.</p>", doc.business_code),
+        attachments=[{"fname": f"{heading} {frappe.utils.today()}.pdf", "fcontent": pdf}],
+        now=True,
+    )
 
 
 def _recipients(text) -> list:
