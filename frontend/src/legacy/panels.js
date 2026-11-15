@@ -1,50 +1,71 @@
 /**
- * The designed screens' charts and tables, redrawn from the business's own records.
+ * The designed screens' charts and tables, drawn from the business's own records.
  *
- * The department screens were generated with charts and tables from a 2025 extract.
  * api/panels.py answers, per screen, the data behind each panel by the panel's own
- * heading; this file redraws the same marks -- the trend line, the bars, the stacked
- * bar, the table rows -- inside the same markup, so the design and the wording stay
- * and only the figures, names and dates change.
+ * heading; this file draws the marks -- the trend line, the bars, the stacked bar, the
+ * table rows, the bullet list -- inside the designed markup, so the design and the
+ * wording stay and the figures, names and dates are the business's. The generated
+ * markup carries no sample: its marks are empty until the answer arrives.
  *
- * Anything still showing the 2025 sample says so: a chart or table panel with no live
- * data, and every designed finding (.warn), carries the "illustrative" flag the cards
- * already use. Nothing from the API is written as HTML; every node is built here.
+ * A panel the server could not answer says so under its heading -- "can't reach the
+ * business's ERPNext", or "could not be read" -- and never shows anything it did not
+ * read. Nothing from the API is written as HTML; every node is built here.
  */
 
 import { guideBox } from "./guide.js";
 
 export const PANEL_VIEWS = new Set(["sales", "proc", "inv", "eng", "cx", "fin", "hr", "it", "aud", "risk"]);
 
-const SAMPLE = ".chartwrap, .bars, .stack, table.dt, .funnel";
+// The designed marks a panel draws its answer into.
+const MARKS = ".chartwrap, .bars, .stack, .stackkey, table.dt, .funnel, ul.bul";
 
 export function renderPanels(root, viewKey, data, { onOpen, openDrawer, failed = false } = {}) {
   if (!root || !PANEL_VIEWS.has(viewKey)) return 0;
-  // Until the answer is in, the designed panels are left alone: marking them and then
-  // clearing the mark a moment later would flash.
+  // The previous screen's answer, still in hand while this one's is on its way.
+  if (data?.view && data.view !== viewKey) return 0;
   if (!data && !failed) return 0;
   const panels = data?.panels || {};
   let live = 0;
 
+  // The line under the screen's heading, and the currency in the designed headings.
+  const when = root.querySelector(".topbar .when");
+  if (when && data?.when) when.textContent = data.when;
+  if (data?.currency) {
+    root.querySelectorAll("[data-cur]").forEach((n) => { n.textContent = data.currency; });
+  }
+
   root.querySelectorAll(".panel").forEach((panel) => {
     const title = panel.querySelector(".ph b")?.textContent?.trim();
+    // A panel of tiles is filled by the figures (hydrate.js), not by this answer.
+    if (panel.querySelector(".bk")) return;
+    reset(panel);
     const spec = title ? panels[title] : null;
     if (!spec) {
-      if (panel.dataset.live !== "1" && panel.querySelector(SAMPLE)) flag(panel);
+      // Nothing answered for it: its marks are hidden and the panel says why, never
+      // leaving anything on show that was not read from the business.
+      if (panel.querySelector(MARKS) || failed) {
+        notice(panel, failed ? "Not available just now. It will be read again shortly."
+          : "Nothing is measured here yet.");
+      }
+      return;
+    }
+    if (spec.kind === "unreachable") {
+      notice(panel, unreachable(data));
+      return;
+    }
+    if (spec.kind === "failed") {
+      notice(panel, "This could not be read from ERPNext just now. It will be tried again shortly.");
       return;
     }
     try {
-      if (draw(panel, spec, onOpen)) {
+      if (draw(panel, { ...spec, _cur: data?.currency || "" }, onOpen)) {
         panel.dataset.live = "1";
-        delete panel.dataset.illustrative;
-        unflag(panel);
         live += 1;
       } else {
-        flag(panel);
+        notice(panel, "This could not be drawn.");
       }
     } catch {
-      // A panel whose markup is not what was expected stays as designed, flagged.
-      flag(panel);
+      notice(panel, "This could not be drawn.");
     }
   });
 
@@ -52,41 +73,124 @@ export function renderPanels(root, viewKey, data, { onOpen, openDrawer, failed =
   return live;
 }
 
+function unreachable(data) {
+  const who = data?.business ? `${data.business}'s` : "the business's";
+  let when = "";
+  if (data?.last_loaded) {
+    const d = new Date(String(data.last_loaded).replace(" ", "T"));
+    if (!Number.isNaN(d.getTime())) {
+      when = ` Last loaded ${d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.`;
+    }
+  }
+  return `Can't reach ${who} ERPNext right now — showing nothing new until it's back.${when}`;
+}
+
+/** Undo what a previous answer did to the panel, so a new answer starts from the design. */
+function reset(panel) {
+  panel.querySelectorAll("[data-prov]").forEach((n) => {
+    if (!n.classList.contains("flag")) n.remove();
+  });
+  panel.querySelectorAll("[data-hid]").forEach((n) => {
+    n.style.display = "";
+    delete n.dataset.hid;
+  });
+  panel.querySelectorAll(":scope > .thin[data-designed]").forEach((n) => {
+    n.textContent = n.dataset.designed;
+    delete n.dataset.designed;
+  });
+  delete panel.dataset.built;
+}
+
+// Hidden by style, not the hidden attribute: the designed marks set their own display
+// (.funnel is a flex box), which the attribute does not override.
+function hide(node) {
+  if (!node || node.dataset.hid || node.style.display === "none") return;
+  node.style.display = "none";
+  node.dataset.hid = "1";
+}
+
+/** A calm line under the heading in place of the panel's marks. */
+function notice(panel, text) {
+  panel.querySelectorAll(`:scope > :not(.ph)`).forEach(hide);
+  const n = el("div", "thin", text);
+  n.dataset.prov = "1";
+  panel.querySelector(".ph")?.after(n);
+}
+
 function draw(panel, spec, onOpen) {
   if (spec.subtitle) {
     const sub = panel.querySelector(".ph b + span");
     if (sub) sub.textContent = spec.subtitle;
   }
-  if (spec.note !== undefined) {
-    const thin = panel.querySelector(":scope > .thin");
-    if (thin) {
-      if (spec.note) {
-        thin.textContent = spec.note;
-        thin.hidden = false;
-      } else {
-        thin.hidden = true;
-      }
-    }
-  }
+  let ok;
   switch (spec.kind) {
     case "trend":
-      return drawTrend(panel, spec);
+      ok = drawTrend(panel, spec);
+      break;
     case "bars": {
-      const ok = drawBars(panel, spec, onOpen);
+      ok = drawBars(panel, spec, onOpen);
       if (ok && spec.stack) drawStack(panel, { parts: spec.stack });
-      return ok;
+      break;
     }
     case "stack":
-      return drawStack(panel, spec);
+      ok = drawStack(panel, spec);
+      break;
     case "table":
-      return drawTable(panel, spec, onOpen);
+      ok = drawTable(panel, spec, onOpen);
+      break;
+    case "list":
+      ok = drawList(panel, spec);
+      break;
     case "guide":
       return drawGuide(panel, spec);
     case "funnel":
-      return drawFunnel(panel, spec, onOpen);
+      ok = drawFunnel(panel, spec, onOpen);
+      break;
     default:
       return false;
   }
+  if (ok) writeNote(panel, spec);
+  return ok;
+}
+
+/**
+ * The short reading under the marks. A panel designed with its own marks has a note
+ * written about them, which the answer's note replaces ("" hides it). A panel designed
+ * as a description only (the "Not yet measured" tab) keeps its description, and the
+ * reading goes under the marks drawn for it.
+ */
+function writeNote(panel, spec) {
+  if (spec.note === undefined) return;
+  if (panel.dataset.built === "1") {
+    if (spec.note) {
+      const n = el("div", "thin", spec.note);
+      n.dataset.prov = "1";
+      panel.append(n);
+    }
+    return;
+  }
+  const thin = panel.querySelector(":scope > .thin");
+  if (!thin) return;
+  if (spec.note) {
+    if (!thin.dataset.designed) thin.dataset.designed = thin.textContent;
+    thin.textContent = spec.note;
+  } else {
+    hide(thin);
+  }
+}
+
+/**
+ * A mark the design did not draw for this panel -- its "Not yet measured" description
+ * stood alone -- is built here, under the description, and taken away again by reset().
+ */
+function ensure(panel, selector, make) {
+  let node = panel.querySelector(selector);
+  if (node) return node;
+  node = make();
+  node.dataset.prov = "1";
+  panel.dataset.built = "1";
+  panel.append(node);
+  return node;
 }
 
 /* ------------------------------------------------------------------ trend */
@@ -127,8 +231,7 @@ function drawTrend(panel, spec) {
 
 /* ------------------------------------------------------------------ bars */
 function drawBars(panel, spec, onOpen) {
-  const box = panel.querySelector(".bars");
-  if (!box) return false;
+  const box = ensure(panel, ".bars", () => el("div", "bars"));
   const rows = spec.rows || [];
   box.textContent = "";
   if (!rows.length) {
@@ -201,7 +304,20 @@ function drawFunnel(panel, spec, onOpen) {
 
 /* ------------------------------------------------------------------ table */
 function drawTable(panel, spec, onOpen) {
-  const table = panel.querySelector("table.dt");
+  const table = ensure(panel, "table.dt", () => {
+    const t = el("table", "dt");
+    const tr = el("tr");
+    (spec.columns || []).forEach((c) => {
+      const th = el("th", null, c.text || "");
+      if (c.cur && spec._cur) th.append(document.createTextNode(` ${spec._cur}`));
+      if (c.num) th.style.textAlign = "right";
+      tr.append(th);
+    });
+    const thead = el("thead");
+    thead.append(tr);
+    t.append(thead, el("tbody"));
+    return t;
+  });
   const body = table?.querySelector("tbody");
   if (!body) return false;
   const cols = table.querySelectorAll("thead th").length || 1;
@@ -267,12 +383,18 @@ function drawTable(panel, spec, onOpen) {
 // (what to record there, and where) takes their place, under the designed heading.
 function drawGuide(panel, spec) {
   if (!spec.guide) return false;
-  panel.querySelectorAll(":scope > :not(.ph)").forEach((n) => { n.hidden = true; });
-  let box = panel.querySelector(":scope > .guide[data-prov]");
-  if (box) box.remove();
-  box = guideBox(spec.guide);
+  panel.querySelectorAll(":scope > :not(.ph)").forEach(hide);
+  const box = guideBox(spec.guide);
   box.dataset.prov = "1";
   panel.append(box);
+  return true;
+}
+
+/* ------------------------------------------------------------------ list */
+function drawList(panel, spec) {
+  const ul = ensure(panel, "ul.bul", () => el("ul", "bul"));
+  ul.textContent = "";
+  (spec.items || []).forEach((it) => ul.append(el("li", null, it.text || "")));
   return true;
 }
 
@@ -297,7 +419,6 @@ function renderFindings(root, findings, failed) {
     }
     w.hidden = false;
     w.dataset.live = "1";
-    delete w.dataset.illustrative;
     w.textContent = "";
     if (f.guide) {
       w.append(guideBox(f.guide, { compact: true }));
@@ -314,24 +435,6 @@ function renderFindings(root, findings, failed) {
       w.append(acts);
     }
   });
-}
-
-/* ------------------------------------------------------------------ flags */
-function flag(node, text = "illustrative") {
-  node.dataset.illustrative = "1";
-  const where = node.classList.contains("warn") ? node : node.querySelector(".ph > div") || node;
-  let pill = where.querySelector(":scope > .flag[data-prov]");
-  if (!pill) {
-    pill = el("span", "flag f-dim", text);
-    pill.dataset.prov = "1";
-    pill.style.marginLeft = "8px";
-    if (node.classList.contains("warn")) where.prepend(pill);
-    else where.append(pill);
-  }
-}
-
-function unflag(node) {
-  node.querySelectorAll(".ph .flag[data-prov]").forEach((p) => p.remove());
 }
 
 function clickable(node, fn) {

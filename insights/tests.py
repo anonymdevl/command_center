@@ -25,6 +25,8 @@ from django.test import Client, TransactionTestCase
 
 TODAY = dt.date.today()
 N = 60
+# The department screens: every figure, panel and finding on them is the business's own.
+DEPARTMENT_VIEWS = ("sales", "proc", "inv", "eng", "cx", "fin", "hr")
 
 
 class _R:
@@ -49,6 +51,14 @@ def _value(field: str, i: int, doctype: str):
         return (dt.datetime.now() - dt.timedelta(days=rnd.randint(-20, 200))).strftime("%Y-%m-%d %H:%M:%S")
     if "date" in f or f in ("exp_end_date", "completed_on", "opening_date"):
         return str(TODAY - dt.timedelta(days=rnd.randint(-30, 300)))
+    if f in ("is_stock_item",):
+        return 1
+    if f.endswith("exchange_rate") or f == "conversion_factor":
+        return 1.0
+    if f in ("sales_order", "against_sales_order"):
+        return f"SO-{rnd.randint(0, N - 1):05d}"
+    if f == "purchase_order":
+        return f"PO-{rnd.randint(0, N - 1):05d}"
     if f.startswith(("is_", "has_")) or f in ("enabled", "disabled", "is_return"):
         return 0
     if f.startswith("per_"):
@@ -259,6 +269,10 @@ class PlatformEndToEnd(TransactionTestCase):
             self.assertEqual(r.status_code, 200, f"panels {view}: {r.content[:300]!r}")
             got = r.json()["message"]["panels"]
             self.assertEqual(sorted(got), sorted(builders), f"panels {view} answered {sorted(got)}")
+            bad = {t: p for t, p in got.items() if p.get("kind") in ("failed", "unreachable")}
+            self.assertFalse(bad, f"panels {view} could not be read: {bad}")
+            if view in DEPARTMENT_VIEWS:
+                self.assertTrue(r.json()["message"].get("when"), f"{view}: no line under the heading")
 
         # the administration, with a loaded business in it: every list and the first
         # record of each opens for the platform's administrator
@@ -276,6 +290,41 @@ class PlatformEndToEnd(TransactionTestCase):
                 page = f"{base}{first.pk}/change/"
                 self.assertEqual(ca.get(page).status_code, 200, page)
         boss.delete()
+
+        # the business's ERPNext stops answering: the panels that read it live say so,
+        # the ones drawn from the loaded facts still show them, and a live figure reads
+        # "can't reach" -- never a guide, never "could not be read"
+        import requests as _rq
+        from django.core.cache import cache
+
+        def down(*a, **k):
+            raise _rq.ConnectionError("connection refused")
+        cache.clear()
+        with mock.patch("requests.get", down), mock.patch("requests.post", down):
+            for view in DEPARTMENT_VIEWS:
+                msg = c.post("/api/method/command_center.api.panels.get",
+                             json.dumps({"view": view, "business_code": "test_medical_ltd"}),
+                             content_type="application/json").json()["message"]
+                kinds = {t: p.get("kind") for t, p in msg["panels"].items()}
+                self.assertEqual(sorted(kinds), sorted(panels_api.SCREENS[view]), view)
+                self.assertNotIn("failed", kinds.values(), f"{view}: {kinds}")
+                if "unreachable" in kinds.values():
+                    self.assertTrue(msg.get("unreachable"), view)
+                    self.assertEqual(msg.get("business"), "Test Medical Ltd")
+            sales = c.post("/api/method/command_center.api.panels.get",
+                           json.dumps({"view": "sales", "business_code": "test_medical_ltd"}),
+                           content_type="application/json").json()["message"]
+            self.assertEqual(sales["panels"]["Largest balances owed"]["kind"], "bars")
+            self.assertEqual(sales["panels"]["From enquiry to order"]["kind"], "unreachable")
+            self.assertTrue(sales["unreachable"])
+            live = c.post("/api/method/command_center.api.kpi.get",
+                          json.dumps({"keys": ["po_count", "order_awaiting_stock"],
+                                      "business_code": "test_medical_ltd"}),
+                          content_type="application/json").json()["message"]
+            for key, fig in live.items():
+                self.assertEqual(fig["data_status"]["state"], "unreachable", f"{key}: {fig}")
+                self.assertIsNone(fig["value"])
+        cache.clear()
 
         # someone without the role is turned away from the interface
         U.objects.create_user("clerk@test.com", "clerk@test.com", "a-long-test-pass-8")
@@ -696,3 +745,79 @@ class KpiCatalogueThreads(TransactionTestCase):
             registry.REGISTRY.clear()
             registry.REGISTRY.update(saved)
             registry._LOADED = True
+
+
+class NothingIllustrative(TransactionTestCase):
+    """The department screens carry nothing that is not the business's own: every card
+    and tile names a figure, every panel has a builder, every finding box is filled by
+    the screen's findings, and the markup and explainers name no customer, supplier,
+    person, place, year or currency of any one business."""
+
+    NAMES = ("UBUNTU", "HAIRASH", "SICHUAN", "CYNSEL", "EJURA", "SUNYANI", "KUMASI", "ACCRA",
+             "SAMUEL", "SIMON", "GIGMANN", "SAMKWARTH", "AGAHF", "QINGDAO", "ROSSY", "LILIAN",
+             "VINEYARD", "KING JO", "ILEE", "ST JOHN", "KORLE", "GMSL", "HITECH", "OSEIKOJOKROM")
+
+    def _load(self):
+        import html as _html
+        from pathlib import Path
+        from django.conf import settings
+        base = Path(settings.BASE_DIR, "frontend/src/legacy")
+        views = json.loads((base / "views.json").read_text())
+        extras = json.loads((base / "extras.json").read_text())
+        hydrate = (base / "hydrate.js").read_text()
+        return views, extras, hydrate, _html
+
+    @staticmethod
+    def _js_map(src, name, tiles=False):
+        body = src[src.index(f"export const {name} = {{"):]
+        body = body[:body.index("\n};")]
+        out = {}
+        for m in re.finditer(r"^  (\w+): \{$(.*?)^  \},?$", body, re.S | re.M):
+            pat = (r'(?:"([^"]+)"|(\w+)):\s*\{\s*key:\s*"(\w+)"' if tiles
+                   else r'(?:"([^"]+)"|(\w+)):\s*"(\w+)"')
+            out[m.group(1)] = {(a or b): k for a, b, k in re.findall(pat, m.group(2))}
+        for m in re.finditer(r"^  (\w+): \{\},?$", body, re.M):
+            out[m.group(1)] = {}
+        return out
+
+    def test_every_card_tile_and_panel_is_answered(self):
+        from command_center.api.panels import FINDINGS, SCREENS
+        from command_center.kpi.live import LIVE
+        from command_center.kpi.registry import load_all
+        views, _, hydrate, _html = self._load()
+        cards = self._js_map(hydrate, "CARD_KPIS")
+        tiles = self._js_map(hydrate, "TILE_KPIS", tiles=True)
+        known = set(load_all()) | set(LIVE)
+        for view in DEPARTMENT_VIEWS:
+            markup = _html.unescape(views[view])
+            for label in re.findall(r'<div class="lab">([^<]+)</div>', markup):
+                key = cards.get(view, {}).get(label.strip())
+                self.assertTrue(key, f"{view}: card {label!r} has no figure")
+                self.assertIn(key, known, f"{view}: card {label!r} names unknown figure {key}")
+            for label in re.findall(r'<div class="l">([^<]+)</div>', markup):
+                key = tiles.get(view, {}).get(label.strip())
+                self.assertTrue(key, f"{view}: tile {label!r} has no figure")
+                self.assertIn(key, known, f"{view}: tile {label!r} names unknown figure {key}")
+            for block in markup.split('<div class="panel">')[1:]:
+                title = re.search(r"<b>([^<]+)</b>", block).group(1).strip()
+                if 'class="bk' in block:
+                    continue   # a panel of tiles: the tiles are its figures
+                self.assertIn(title, SCREENS.get(view, {}), f"{view}: panel {title!r} has no builder")
+            if 'class="warn"' in markup:
+                self.assertIn(view, FINDINGS, f"{view} has finding boxes and no findings")
+
+    def test_no_business_of_its_own_in_the_markup(self):
+        views, extras, _, _html = self._load()
+        bad = re.compile(r"demo|illustrative|sample|seeded|extract|this copy|\b(?:19|20)\d\d\b|GHS|"
+                         + "|".join(map(re.escape, self.NAMES)), re.I)
+        for view in DEPARTMENT_VIEWS:
+            markup = _html.unescape(views[view])
+            hit = bad.search(markup)
+            self.assertIsNone(hit, f"{view} markup says {hit and markup[max(0, hit.start() - 60):hit.end() + 20]!r}")
+            self.assertNotIn("openDrawer(", markup, f"{view} opens a static drawer")
+            for key in set(re.findall(r"explain\('([a-z0-9_]+)'\)", markup)):
+                text = _html.unescape(extras["explainers"].get(key, ""))
+                self.assertTrue(text, f"{view}: explainer {key} is missing")
+                hit = bad.search(text)
+                self.assertIsNone(hit, f"{view}: explainer {key} says "
+                                       f"{hit and text[max(0, hit.start() - 60):hit.end() + 20]!r}")

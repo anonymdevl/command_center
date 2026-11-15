@@ -2,74 +2,64 @@
 exec(_src('views_c.py'))
 
 # ============ FINANCE ============
-EXP=[90040]+[0]*3
 V_FIN=f'''<div class="topbar"><div><h3>Finances</h3>
-<div class="when">Full ledger · GHS · to 19 August 2025</div></div></div>
+<div class="when">Full ledger</div></div></div>
 <div class="kpis six">
-{kpi("Owed to us","9.18","M GHS","74% over 3 months late","dn","","ar")}
-{kpi("Unpaid invoices","806","","GHS 9.18M between them","dn","","ar")}
-{kpi("Last full month","1.55","M GHS","July 2025","up","","rev")}
-{kpi("Best month","3.19","M GHS","June 2025","up","","rev")}
-{kpi("Never issued","88","","not in any total","flat","","drafts")}
-{kpi("Bank checks","—","","status not confirmed","flat","review","bank")}
+{kpi("Owed to us","—","","","flat","","ar")}
+{kpi("Unpaid invoices","—","","","flat","","ar")}
+{kpi("Last full month","—","","","flat","","rev")}
+{kpi("Best month","—","","","flat","","rev")}
+{kpi("Never issued","—","","","flat","","drafts")}
+{kpi("Bank checks","—","","","flat","","bank")}
 </div>
 <div class="two">
-{panel("Money coming in", line_chart(REV_LABELS,[{"data":REV}],h=155,fmt=lambda v:'GHS '+g(v)),
- "Monthly, eleven months to August 2025","rev")}
+{panel("Money coming in", trend0(155),
+ "Monthly","rev")}
 {panel("Working capital tied up",
- bar_chart([("Owed to us, over 3 months",4592482,"var(--crit)"),
-            ("Stock outside any warehouse",1175920,"var(--crit)"),
-            ("Stock in warehouses",2594050,"var(--accent)"),
-            ("Orders taken, not despatched",84950,"var(--high)")],fmt=lambda v:g(v))
- +thin("<b>GHS 5.77M is money the business cannot presently use</b> — debts over three months old plus equipment parked outside every warehouse. Against a stock holding of GHS 3.77M, that is the number worth moving."),
- "GHS","workingcap")}
+ bars0()+thin("Money the business cannot presently use: debts over three months old, stock on the shelves and orders not yet despatched."),
+ "","workingcap")}
 </div>
 <div class="two">
-{panel("What we owe suppliers", thin("<b>Not summarised in this demo extract.</b> The finished screen shows what is due in the next 7, 30 and 60 days against the cash expected in, so a payment run can be planned rather than guessed."))}
-{panel("Cash and bank position", thin("<b>Present in the ledger, not yet confirmed.</b> Balances exist, but whether the bank accounts have recently been checked against them is unknown — and every cash figure on this platform depends on that answer. It is the first thing to establish."))}
+{panel("What we owe suppliers", thin("<b>Unpaid supplier invoices by when they fall due.</b> What is overdue and what falls due in the next 7, 30 and 60 days, against the cash customers are due to pay, so a payment run can be planned rather than guessed."))}
+{panel("Cash and bank position", thin("<b>The balance on every bank and cash account in the ledger.</b> Each balance is only as good as the last time the account was checked against the bank statement, so that date is shown beside it."))}
 </div>
 <div class="two">
-{panel("Budget against actual", thin("<b>No budgets recorded in this demo extract.</b> Once budgets are set by department the finished screen shows variance with the entries behind it, and flags a breach before the spend happens rather than after."))}
-{panel("Tax and statutory deadlines", thin("<b>Not tracked anywhere in the system today.</b> VAT, import duty and filing dates live in people's heads. The finished screen carries them with owners and reminders."))}
+{panel("Budget against actual", thin("<b>Spending against the budgets set in ERPNext.</b> Each budget line is compared with what has been posted to it this year, so a breach shows before the money is spent rather than after."))}
+{panel("Tax and statutory deadlines", thin("<b>What the ledger says is owed on each tax account.</b> The amount due on the next VAT, withholding or PAYE filing is the balance on its account; the filing dates themselves are not kept in ERPNext."))}
 </div>
-{panel("Profit on what we sell", thin("<b>Cannot be calculated from this demo extract.</b> Margin needs the cost of each item against its selling price. Costs are held, but no engineering job carries a cost at all, so service margin is invisible — that is the gap worth closing first, because installations are where margin usually leaks."))}'''
+{panel("Profit on what we sell", thin("<b>What each product group earns over its cost, over the last twelve months.</b> Margin needs the cost of each item against its selling price; lines sold with no recorded cost are counted separately rather than as pure profit."))}'''
 
 # ============ HR ============
 V_HR=f'''<div class="topbar"><div><h3>HR &amp; Payroll</h3>
-<div class="when">35 on the books · 24 active · names and pay hidden unless you hold HR</div></div></div>
-<div class="banner"><b>You are seeing this as Chief Executive.</b> Individual names, salaries and conduct
-records are hidden from every role except HR. The assistant cannot read them on your behalf either —
-it is not told to decline, the information never reaches it.</div>
+<div class="when">Everyone on the books · pay is never read here</div></div></div>
+<div class="banner"><b>Pay is never read by this screen.</b> It shows people by department, branch and
+standing, and when payroll was last run &mdash; never what anyone is paid. Salary records stay in ERPNext,
+under its own permissions.</div>
 <div class="kpis six">
-{kpi("On the books","35","","all employment records","flat","","head")}
-{kpi("Active","24","","of 35 on the books","flat","","head")}
-{kpi("Left","8","","7 months average stay","dn","review","turnover")}
-{kpi("Departments","10","","some duplicated","flat","review","depts")}
-{kpi("Engineers","3","","for the whole country","dn","","capacity")}
-{kpi("Payroll","—","","status only, never calculated here","flat","","payroll")}
+{kpi("On the books","—","","","flat","","head")}
+{kpi("Active","—","","","flat","","head")}
+{kpi("Left","—","","","flat","","turnover")}
+{kpi("Departments","—","","","flat","","depts")}
+{kpi("Engineers","—","","","flat","","capacity")}
+{kpi("Payroll","—","","","flat","","payroll")}
 </div>
 <div class="two">
-{panel("Where people work", bar_chart([(d,n,"var(--accent)") for d,n in DEPTS],fmt=lambda v:g(v)),
+{panel("Where people work", bars0(),
  "By department","depts")}
-{panel("Where people are", bar_chart([(b,n,"var(--accent)") for b,n in BRANCH],fmt=lambda v:g(v))
- +'<div style="margin-top:12px">'+stacked(STAFF)+'</div>',"By branch, and standing","head")}
+{panel("Where people are", bars0()
+ +'<div style="margin-top:12px">'+stacked([("Active",0,"var(--ok)"),("Inactive",0,"var(--med)"),("Left",0,"var(--crit)")])+'</div>',"By branch, and standing","head")}
 </div>
-<div class="warn"><b>Eight of thirty-five have left — close to a quarter of the payroll.</b> Customer
-Service has lost the most. The company also employs only three engineers, all titled sales engineers,
-which is worth holding next to the three installations that are nineteen months late.</div>
+{warn0()}
 <div class="two">
 {panel("Departments are recorded inconsistently",
- '<ul class="bul"><li>"Operations Dept" and "Operations  - GMSL" are the same department, typed twice.</li>'
- '<li>"Procurement &amp; Inventory - GMSL" and "Procurement Inventory &amp; Logistics Department - GMSL" likewise.</li>'
- '<li>"Medical Engineering Dept" and "PROJECT AND ENGINEERING DEPT - GMSL" appear to overlap.</li></ul>'
- +thin("Headcount by department cannot be counted reliably until these are merged. It is an hour of tidying that makes every HR figure trustworthy."),"","depts")}
+ '<ul class="bul"></ul>'
+ +thin("Departments whose names suggest the same department typed twice. Headcount by department cannot be counted reliably until they are merged."),"","depts")}
 {panel("One person, everything about them",
- thin("<b>The finished screen gives a single view per employee</b> — role, branch, start date, leave taken and left, attendance exceptions, appraisal history, training and certificates with expiry, equipment issued, system access, and the documents on file. "
- "It opens only for HR and the CEO, and logs who looked. This demo extract holds employment records and exit paperwork but no leave, attendance or appraisal entries, so there is nothing to populate it with here."))}
+ thin("<b>How much of each person's record ERPNext holds.</b> A single view of an employee is only as complete as what is recorded against them: a login, leave, attendance and appraisals."))}
 </div>
 <div class="two">
-{panel("Leave and attendance", thin("<b>No leave or attendance records in this demo extract.</b> The finished screen shows who is off this week, unapproved absence, overtime outside policy, and leave balances that will be lost at year end."))}
-{panel("Appraisals and training", thin("<b>No appraisal records in this demo extract.</b> The finished screen tracks review completion by department, flags overdue reviews, and warns before a professional certificate expires — which for engineers working on medical equipment is a compliance matter, not an HR nicety."))}
+{panel("Leave and attendance", thin("<b>Who is off, what is waiting for approval, and absence marked.</b> From the leave applications and attendance recorded in ERPNext."))}
+{panel("Appraisals and training", thin("<b>Reviews completed and training held, over the last twelve months.</b> For engineers working on medical equipment, a lapsed review or certificate is a compliance matter, not an HR nicety."))}
 </div>'''
 
 # ============ IT ============
