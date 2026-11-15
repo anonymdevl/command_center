@@ -288,3 +288,42 @@ class Upkeep(TransactionTestCase):
         titles = set(ErrorLog.objects.using("aux").values_list("title", flat=True))
         self.assertIn("recent", titles)
         self.assertNotIn("old", titles)
+
+
+class SignInLimits(TransactionTestCase):
+    """Wrong passwords are limited -- on the platform's sign-in and the administration's
+    -- and a made-up X-Forwarded-For does not get round the limit."""
+
+    databases = {"default", "aux"}
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        get_user_model().objects.create_superuser("boss@test.com", "boss@test.com",
+                                                  "a-long-test-pass-1")
+
+    def _api(self, c, pwd, fake_ip):
+        return c.post("/api/method/login", json.dumps({"usr": "boss@test.com", "pwd": pwd}),
+                      content_type="application/json", REMOTE_ADDR="127.0.0.1",
+                      HTTP_X_FORWARDED_FOR=f"{fake_ip}, 41.66.1.1")
+
+    def test_spoofed_forwarded_for_is_not_a_fresh_address(self):
+        c = Client()
+        codes = [self._api(c, "wrong-password-x", f"10.0.0.{i}").status_code for i in range(7)]
+        self.assertEqual(codes[:5], [401] * 5)
+        self.assertEqual(codes[5:], [429, 429])
+        # the right password is refused too while locked
+        self.assertEqual(self._api(c, "a-long-test-pass-1", "10.9.9.9").status_code, 429)
+
+    def test_admin_sign_in_is_limited(self):
+        c = Client()
+        codes = [c.post("/admin/login/?next=/admin/", {"username": "boss@test.com",
+                                                       "password": "wrong-password-x"}).status_code
+                 for _ in range(6)]
+        self.assertEqual(codes[:5], [200] * 5)   # the form again, with its error
+        self.assertEqual(codes[5], 429)
+
+    def test_admin_sign_in_works(self):
+        r = Client().post("/admin/login/?next=/admin/", {"username": "boss@test.com",
+                                                         "password": "a-long-test-pass-1"})
+        self.assertEqual(r.status_code, 302)

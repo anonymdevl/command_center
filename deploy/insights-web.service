@@ -9,10 +9,12 @@ User=__USER__
 WorkingDirectory=__DIR__
 Environment=INSIGHTS_CONFIG=__DIR__/insights.json
 Environment=DJANGO_SETTINGS_MODULE=insights.settings
-# Two processes, eight threads each: a question can hold a thread for up to 150 s while
-# Claude answers; reports run in background threads. Timeout above the longest call.
+# One process, eight threads: a question can hold a thread for up to 150 s while Claude
+# answers, and a request mostly waits (on the database or Claude), so threads, not
+# processes, carry the load -- each extra process would cost ~140 MB on a shared
+# server. Raise --workers when many more people use it. Timeout above the longest call.
 ExecStart=__DIR__/.venv-platform/bin/gunicorn insights.wsgi:application \
-    --bind 127.0.0.1:__PORT__ --workers 2 --threads 8 --timeout 240 --graceful-timeout 30 \
+    --bind 127.0.0.1:__PORT__ --workers 1 --threads 8 --timeout 240 --graceful-timeout 30 \
     --access-logfile - --error-logfile -
 # Shares the server with ERPNext sites, which always come first: lower CPU and disk
 # priority, and a memory ceiling (if it is reached, only this service is restarted).

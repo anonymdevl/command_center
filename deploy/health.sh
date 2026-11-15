@@ -95,6 +95,26 @@ UFW="$(sudo ufw status 2>/dev/null | head -1)"
 info "firewall: ${UFW:-ufw not installed}"
 info "listening to the outside: $(sudo ss -Hltn 2>/dev/null | awk '{print $4}' | grep -vE '^(127\.|\[::1\])' | sed -E 's/.*://' | sort -un | tr '\n' ' ')"
 
+step "every site this server serves"
+# Names from nginx's own configuration (Frappe writes them one per line up to the ";"),
+# each asked of this server directly, over https.
+SITES="$(sudo nginx -T 2>/dev/null | awk '
+  { sub(/#.*/, "")
+    for (i = 1; i <= NF; i++) {
+      n = $i
+      if (!on) { if (n == "server_name") on = 1; continue }
+      e = (n ~ /;/); sub(/;.*/, "", n); if (n != "") print n; if (e) on = 0 } }' \
+  | grep -vE '^(_|localhost|~.*|.*\*.*|[0-9.]+)$' | sort -u)"
+for n in $SITES; do
+  r="$(curl -sk -o /dev/null -m 15 -w '%{http_code} %{time_total}' --resolve "$n:443:127.0.0.1" "https://$n/" || true)"
+  code="${r%% *}"; secs="${r##* }"
+  case "$code" in
+    2??|3??|401|403|404) ok "$n answers ($code, ${secs%.*}.$(echo "${secs#*.}" | cut -c1-1) s)" ;;
+    *) bad "$n does not answer properly (${code:-no answer})" ;;
+  esac
+done
+[ -n "$SITES" ] || info "(no named sites in nginx)"
+
 step "certificates"
 if sudo test -d /etc/letsencrypt/live; then
   for c in $(sudo find /etc/letsencrypt/live -mindepth 2 -name cert.pem 2>/dev/null); do

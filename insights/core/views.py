@@ -93,8 +93,15 @@ def _user(request) -> str:
 
 
 def _ip(request) -> str:
+    """The visitor's address. Behind this server's nginx (the request comes from the
+    loopback) it is the LAST X-Forwarded-For entry -- the one nginx appended. Earlier
+    entries are whatever the visitor sent and prove nothing; trusting the first would
+    let anyone pick a fresh address for every guess at a password."""
+    remote = request.META.get("REMOTE_ADDR") or ""
     fwd = request.META.get("HTTP_X_FORWARDED_FOR")
-    return (fwd.split(",")[0].strip() if fwd else request.META.get("REMOTE_ADDR")) or ""
+    if fwd and remote in ("127.0.0.1", "::1"):
+        return fwd.split(",")[-1].strip()
+    return remote
 
 
 def _args(request) -> dict:
@@ -188,6 +195,48 @@ def _render_result(result, resp):
 
 # --- sign-in -------------------------------------------------------------------------------
 LOCK_AFTER, LOCK_MINUTES = 5, 15
+# Wider limits as well, so neither one address trying many accounts nor many addresses
+# trying one account get far.
+LOCK_AFTER_IP, LOCK_AFTER_ACCOUNT = 20, 20
+
+
+def _fail_keys(request, usr: str) -> tuple:
+    ip = _ip(request)
+    return (f"login-fail:{usr}:{ip}", f"login-fail-ip:{ip}", f"login-fail-acct:{usr}")
+
+
+def login_locked(request, usr: str) -> bool:
+    from django.core.cache import cache
+    pair, ip, acct = (cache.get(k) or 0 for k in _fail_keys(request, usr))
+    return pair >= LOCK_AFTER or ip >= LOCK_AFTER_IP or acct >= LOCK_AFTER_ACCOUNT
+
+
+def login_failed(request, usr: str) -> None:
+    from django.core.cache import cache
+    for k in _fail_keys(request, usr):
+        cache.set(k, (cache.get(k) or 0) + 1, timeout=LOCK_MINUTES * 60)
+
+
+def login_succeeded(request, usr: str) -> None:
+    from django.core.cache import cache
+    cache.delete(_fail_keys(request, usr)[0])
+
+
+def admin_login(request, extra_context=None):
+    """The administration's own sign-in page, under the same limits as the platform's."""
+    from django.contrib import admin
+    if request.method == "POST":
+        usr = str(request.POST.get("username") or "").strip().lower()
+        if login_locked(request, usr):
+            return HttpResponse(f"Too many failed attempts. Try again in {LOCK_MINUTES} minutes.",
+                                status=429, content_type="text/plain")
+        resp = admin.AdminSite.login(admin.site, request, extra_context)
+        if resp.status_code in (301, 302) and request.user.is_authenticated:
+            login_succeeded(request, usr)
+        else:
+            login_failed(request, usr)
+        return resp
+    return admin.AdminSite.login(admin.site, request, extra_context)
 
 
 def api_login(request):
@@ -196,9 +245,7 @@ def api_login(request):
     args = _args(request)
     usr = str(args.get("usr") or "").strip().lower()
     pwd = str(args.get("pwd") or "")
-    key = f"login-fail:{usr}:{_ip(request)}"
-    from django.core.cache import cache
-    if (cache.get(key) or 0) >= LOCK_AFTER:
+    if login_locked(request, usr):
         return _json({"message": f"Too many failed attempts. Try again in {LOCK_MINUTES} "
                                  f"minutes."}, 429)
     user = authenticate(request, username=usr, password=pwd)
@@ -208,9 +255,9 @@ def api_login(request):
         if alt is not None:
             user = authenticate(request, username=alt.username, password=pwd)
     if user is None or not user.is_active:
-        cache.set(key, (cache.get(key) or 0) + 1, timeout=LOCK_MINUTES * 60)
+        login_failed(request, usr)
         return _json({"message": "That email or password is not right."}, 401)
-    cache.delete(key)
+    login_succeeded(request, usr)
     login(request, user)
     return _json({"message": "Logged In", "home_page": "/command-center",
                   "full_name": user.get_full_name() or user.username})

@@ -48,8 +48,15 @@ fi
 # Every other site nginx serves here, by name, and how each answers (http and https,
 # asked of this server directly). Taken before the change and compared after it.
 other_sites() {
-  sudo nginx -T 2>/dev/null | awk '$1=="server_name"{for(i=2;i<=NF;i++)print $i}' \
-    | tr -d ';' | grep -vE '^(_|localhost|~.*|.*\*.*|'"${DOMAIN//./\\.}"')$' | sort -u || true
+  # A server_name's names may run over several lines up to its ";" (Frappe writes them
+  # one per line), so names are collected until the semicolon.
+  sudo nginx -T 2>/dev/null | awk '
+    { sub(/#.*/, "")
+      for (i = 1; i <= NF; i++) {
+        n = $i
+        if (!on) { if (n == "server_name") on = 1; continue }
+        e = (n ~ /;/); sub(/;.*/, "", n); if (n != "") print n; if (e) on = 0 } }' \
+    | grep -vE '^(_|localhost|~.*|.*\*.*|[0-9.]+|'"${DOMAIN//./\\.}"')$' | sort -u || true
 }
 answers() {
   local n h s

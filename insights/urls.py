@@ -6,6 +6,8 @@ from insights.core import views
 admin.site.site_header = "Platform administration"
 admin.site.site_title = "Platform administration"
 admin.site.index_title = "Businesses, people and settings"
+# Before admin.site.urls is read: its sign-in page gets the platform's attempt limits.
+admin.site.login = views.admin_login
 
 urlpatterns = [
     path("", views.home),
