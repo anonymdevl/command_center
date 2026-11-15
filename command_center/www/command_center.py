@@ -92,10 +92,22 @@ def _payload(value) -> str:
     `| safe` in the template is only safe because of the substitution below: a
     business named with a closing script tag would otherwise end the block early.
     """
-    return (json.dumps(value)
+    return (json.dumps(value, default=_json_value)
             .replace("<", "\\u003c")
             .replace(">", "\\u003e")
             .replace("&", "\\u0026"))
+
+
+def _json_value(v):
+    """Values json cannot write by itself: dates and times as ISO text (a business's
+    last_sync is a datetime), decimals as numbers, anything else as its text."""
+    import datetime
+    import decimal
+    if isinstance(v, (datetime.datetime, datetime.date, datetime.time)):
+        return v.isoformat(sep=" ") if isinstance(v, datetime.datetime) else v.isoformat()
+    if isinstance(v, decimal.Decimal):
+        return float(v)
+    return str(v)
 
 
 def _boot(user: str) -> dict:

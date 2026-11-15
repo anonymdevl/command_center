@@ -120,7 +120,7 @@ def _upsert(rule, p, business_code, key, f, since, horizon):
         "next_step": f["next"], "figure": f["figure"], "figure_unit": f["unit"],
         "currency": f["currency"], "owner_label": f["owner"], "source_label": f["source"],
         "drill_fact": (f["drill"] or {}).get("fact"),
-        "drill_filters": json.dumps((f["drill"] or {}).get("filters") or {}),
+        "drill_filters": json.dumps((f["drill"] or {}).get("filters") or {}, default=str),
         "elapsed_from": since or horizon, "measured_to": horizon, "last_seen": now_datetime(),
     }
     if existing:

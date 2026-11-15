@@ -215,6 +215,9 @@ class PlatformEndToEnd(TransactionTestCase):
         m.groups.add(Group.objects.get(name="Insights Dashboard Manager"))
         c = Client()
         self.assertTrue(c.login(username="manager@test.com", password="a-long-test-pass-9"))
+        # the 15-minute refresh stamps last_sync (a datetime) -- the page must still build
+        from insights.core.models import ConnectedBusiness
+        ConnectedBusiness.objects.update(last_sync=dt.datetime.now())
         page = c.get("/command-center").content.decode()
         self.assertIn("Test Medical Ltd", page)
         for method, args in [

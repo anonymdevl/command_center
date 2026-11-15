@@ -97,7 +97,7 @@ def answer(question: str, business_code: str | None = None) -> dict | None:
     follow = FOLLOWUPS.get(keys[0], [])
     text = "\n\n".join([
         f"**{head}**" + (f" As at {as_of}, the last date the data covers." if as_of else ""),
-        "```figures\n" + json.dumps(cards) + "\n```",
+        "```figures\n" + json.dumps(cards, default=str) + "\n```",
         "These are the same figures as the cards on your screens, read straight from the "
         "records -- the AI was not needed for this one.",
     ] + (["```followups\n" + json.dumps(follow) + "\n```"] if follow else []))
