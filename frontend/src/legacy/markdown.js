@@ -1,4 +1,4 @@
-import { renderBlock } from "./charts.js";
+import { renderBlock, chartModel } from "./charts.js";
 
 /**
  * The analyst's answer, as formatted text -- built from DOM nodes, never from HTML.
@@ -185,7 +185,237 @@ function table(head, rows, align) {
   });
   t.append(tbody);
   wrap.append(t);
+  const pager = enhanceTable(t);
+  if (pager) wrap.append(pager);
   return wrap;
+}
+
+/* ------------------------------------------------------- sorting and pages */
+export const PAGE_ROWS = 10;
+
+/**
+ * Makes a rendered table sortable by its headings and, past ten rows, shown a page at
+ * a time. Returns the pager to put under the table, or null when it fits on one page.
+ *
+ * Rows on other pages are hidden, never removed: the Excel export (exportTables.js)
+ * reads every row of the table, in the order it is sorted, so the sheet always has all
+ * of them -- not just the page that happened to be showing.
+ */
+export function enhanceTable(table, pageRows = PAGE_ROWS) {
+  const tbody = table.tBodies[0];
+  const headRow = table.tHead && table.tHead.rows[0];
+  if (!tbody || !headRow) return null;
+  const original = Array.from(tbody.rows);
+  if (original.length < 2) return null;
+  let order = original.slice();
+  let page = 0;
+  let all = false;
+  let pager = null;
+  let info = null;
+  let prev = null;
+  let next = null;
+  let toggle = null;
+
+  const ths = Array.from(headRow.cells);
+  ths.forEach((th, j) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "md-sort";
+    b.title = "Sort by this column";
+    while (th.firstChild) b.append(th.firstChild);
+    th.append(b);
+    th.setAttribute("aria-sort", "none");
+    b.onclick = () => {
+      const was = th.getAttribute("aria-sort");
+      const kind = columnKind(original, j);
+      // Figures and dates open largest / latest first, words A to Z.
+      const first = kind === "text" ? "ascending" : "descending";
+      const dir = was === "none" ? first : was === "ascending" ? "descending" : "ascending";
+      ths.forEach((h) => h.setAttribute("aria-sort", "none"));
+      th.setAttribute("aria-sort", dir);
+      order = sortRows(original, j, kind, dir);
+      page = 0;
+      paint();
+    };
+  });
+
+  if (original.length > pageRows) {
+    pager = document.createElement("div");
+    pager.className = "md-pager";
+    info = document.createElement("span");
+    info.className = "md-pager-i";
+    prev = pagerButton("Previous", () => { page -= 1; paint(); });
+    next = pagerButton("Next", () => { page += 1; paint(); });
+    toggle = pagerButton("Show all", () => { all = !all; page = 0; paint(); });
+    pager.append(info, prev, next, toggle);
+  }
+
+  function paint() {
+    const pages = Math.ceil(order.length / pageRows);
+    page = Math.max(0, Math.min(page, pages - 1));
+    order.forEach((tr, i) => {
+      tr.hidden = !!pager && !all && (i < page * pageRows || i >= (page + 1) * pageRows);
+      tbody.append(tr);
+    });
+    if (!pager) return;
+    const from = page * pageRows + 1;
+    const to = Math.min(order.length, (page + 1) * pageRows);
+    info.textContent = all ? `All ${order.length} rows` : `${from}–${to} of ${order.length}`;
+    prev.hidden = all;
+    next.hidden = all;
+    prev.disabled = page === 0;
+    next.disabled = page >= pages - 1;
+    toggle.textContent = all ? `Show ${pageRows} at a time` : "Show all";
+  }
+  paint();
+  return pager;
+}
+
+function pagerButton(label, run) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "md-dl";
+  b.textContent = label;
+  b.onclick = run;
+  return b;
+}
+
+function sortRows(rows, j, kind, dir) {
+  const keyed = rows.map((tr, i) => ({ tr, i, k: sortKey(cellText(tr, j), kind) }));
+  const sign = dir === "ascending" ? 1 : -1;
+  keyed.sort((a, b) => {
+    // Blanks ("—") go last whichever way the column is sorted.
+    if (a.k === null || b.k === null) return a.k === null && b.k === null ? a.i - b.i : a.k === null ? 1 : -1;
+    const c = kind === "text"
+      ? a.k.localeCompare(b.k, "en-GB", { numeric: true, sensitivity: "base" })
+      : a.k - b.k;
+    return c ? c * sign : a.i - b.i;
+  });
+  return keyed.map((x) => x.tr);
+}
+
+function cellText(tr, j) {
+  return (tr.cells[j]?.textContent || "").replace(/\s+/g, " ").replace(/\s*↗$/, "").trim();
+}
+
+/** "number" if every filled cell reads as a figure, "date" if as a date, else "text". */
+export function columnKind(rows, j) {
+  const vals = rows.map((tr) => cellText(tr, j)).filter((v) => !isBlank(v));
+  if (!vals.length) return "text";
+  if (vals.every((v) => Number.isFinite(sortNumber(v)))) return "number";
+  if (vals.every((v) => Number.isFinite(sortDate(v)))) return "date";
+  return "text";
+}
+
+function sortKey(text, kind) {
+  if (isBlank(text)) return null;
+  if (kind === "number") return sortNumber(text);
+  if (kind === "date") return sortDate(text);
+  return text;
+}
+
+function isBlank(v) {
+  return !v || /^[—–-]+$/.test(v.trim());
+}
+
+/**
+ * A cell as a number for sorting: "GHS 1,234.50" -> 1234.5, "12%" -> 12,
+ * "(5,000)" -> -5000, "1.2M" -> 1200000, "118 days" -> 118. NaN if it is not a figure.
+ */
+export function sortNumber(text) {
+  let t = String(text).replace(/\s+/g, " ").trim();
+  if (isBlank(t)) return NaN;
+  let sign = 1;
+  if (/^\(.+\)$/.test(t)) {
+    sign = -1;
+    t = t.slice(1, -1).trim();
+  }
+  t = t.replace(/[−–]/g, "-").replace(/\b[A-Z]{3}\b/g, "").replace(/[$€£₵¢]/g, "").trim();
+  const m = /^([-+])?\s*(\d{1,3}(?:,\d{3})+|\d+)?(\.\d+)?([kKmMbB]n?)?(?![a-zA-Z])\s*(%|[a-zA-Z][a-zA-Z .]*)?$/.exec(t);
+  if (!m || (!m[2] && !m[3])) return NaN;
+  const base = parseFloat(`${(m[2] || "0").replace(/,/g, "")}${m[3] || ""}`);
+  const mult = { k: 1e3, m: 1e6, b: 1e9 }[(m[4] || "").charAt(0).toLowerCase()] || 1;
+  return sign * (m[1] === "-" ? -1 : 1) * base * mult;
+}
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/** "2026-10-18", "18 Oct 2026", "Oct 2026" or "18 Oct" as a time for sorting; else NaN. */
+export function sortDate(text) {
+  const t = String(text).trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  m = /^(?:(\d{1,2})\s+)?([A-Za-z]{3})[a-z]*\.?,?\s*(\d{4})?$/.exec(t);
+  if (m && (m[1] || m[3])) {
+    const mon = MONTHS.indexOf(m[2].toLowerCase());
+    if (mon >= 0) return Date.UTC(m[3] ? +m[3] : 2000, mon, m[1] ? +m[1] : 1);
+  }
+  return NaN;
+}
+
+/* ----------------------------------------------------------- copying an answer */
+/**
+ * The answer as text to paste into an email or a document: the markdown as written,
+ * with the figure cards and charts said in words (their JSON would mean nothing to the
+ * reader) and the suggested next questions left out.
+ */
+export function answerAsText(src) {
+  const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const fence = /^\s*```\s*([\w-]*)\s*$/.exec(lines[i]);
+    if (!fence) {
+      out.push(lines[i]);
+      continue;
+    }
+    const lang = fence[1].toLowerCase();
+    const body = [];
+    i++;
+    while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) body.push(lines[i++]);
+    if (lang === "followups") continue;
+    if (lang === "figures" || lang === "chart") {
+      const said = lang === "figures" ? figuresText(body.join("\n")) : chartText(body.join("\n"));
+      if (said) out.push(said);
+      continue;
+    }
+    out.push("```" + lang, ...body, "```");
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function figuresText(source) {
+  let list;
+  try {
+    list = JSON.parse(source);
+  } catch {
+    return "";
+  }
+  if (!Array.isArray(list)) return "";
+  return list.slice(0, 4).filter((f) => f && typeof f === "object" && f.value !== undefined)
+    .map((f) => `- ${f.label ? `${f.label}: ` : ""}${f.value}${f.note ? ` (${f.note})` : ""}`).join("\n");
+}
+
+function chartText(source) {
+  let spec;
+  try {
+    spec = JSON.parse(source);
+  } catch {
+    return "";
+  }
+  const m = chartModel(spec);
+  if (!m) return "";
+  const n = (v, unit) => {
+    const s = Number(v).toLocaleString("en-GB", { maximumFractionDigits: 2 });
+    return unit === "%" ? `${s}%` : unit ? `${unit} ${s}` : s;
+  };
+  const unitOf = (si) => (si === 1 && (m.type === "combo" || m.type === "scatter") ? m.unit2 || m.unit : m.unit);
+  const series = m.type === "bar" || m.type === "donut" || m.type === "hbar" ? m.series.slice(0, 1) : m.series;
+  const rows = m.labels.map((l, i) => {
+    const vals = series.filter((s) => i < s.values.length);
+    if (vals.length === 1) return `- ${l}: ${n(vals[0].values[i], unitOf(0))}`;
+    return `- ${l}: ${vals.map((s) => `${s.name} ${n(s.values[i], unitOf(series.indexOf(s)))}`).join(", ")}`;
+  });
+  return [m.title ? `${m.title}:` : "", ...rows].filter(Boolean).join("\n");
 }
 
 function looksNumeric(rows, j) {

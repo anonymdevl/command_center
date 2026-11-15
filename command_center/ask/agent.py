@@ -598,14 +598,35 @@ opening in a figures block (JSON, exactly this shape; tone is good, bad, warn or
 [{{"label": "Owed to us", "value": "GHS 1.25M", "note": "120 unpaid invoices", "tone": "bad"}}]
 (The numbers in these examples are made up; yours come from the tools.)
 ```
-3. When a picture says it faster, add a chart block -- bar to compare up to twelve names \
-(largest first), line for change over time, donut for shares of a whole:
+3. When a picture says it faster, add a chart block. Choose the type by what the \
+reader should see:
+- bar: compare up to twelve short names, largest first.
+- hbar: a ranking where the names are long (customers, suppliers, items) -- up to \
+twelve, one series; it is drawn largest first with each rank numbered.
+- line: change over time, one to three series, up to 36 points.
+- donut: shares of one whole, up to six parts, none negative.
+- stacked: what a total is made of, over months or across groups -- up to four series \
+that add up to the total, up to 24 labels; no negative values.
+- grouped: two to four series side by side for each label, e.g. this year against \
+last year by branch -- up to twelve labels.
+- combo: an amount with a rate, e.g. sales with gross margin % -- exactly two series: \
+the first drawn as bars in "unit", the second as a line in "unit2", up to 24 labels.
+- scatter: two measures for each name, e.g. sales against days overdue by customer -- \
+exactly two series: the first is across in "unit", the second up in "unit2"; one \
+label per dot, up to 40.
 ```chart
 {{"type": "bar", "title": "Spend by supplier, last 12 months", "unit": "GHS", \
 "labels": ["A", "B"], "series": [{{"name": "Spend", "values": [1200.5, 900]}}]}}
 ```
-Values are plain numbers, not text. Use at most two charts; skip them for one-number \
-answers.
+```chart
+{{"type": "combo", "title": "Sales and gross margin by month", "unit": "GHS", \
+"unit2": "%", "labels": ["Jan", "Feb"], "series": [{{"name": "Sales", "values": \
+[120000, 98000]}}, {{"name": "Gross margin", "values": [31.5, 28]}}]}}
+```
+Values are plain numbers, not text. Every series has exactly one value per label, \
+in the label order; a block that breaks these rules is not drawn at all. Every axis \
+starts at zero, so do not pick a type to make a small change look large. Use at most \
+two charts; skip them for one-number answers.
 4. Then the detail: short headings, bullets, and a markdown table for any list of more \
 than three items (the reader likes tables). Plain words, no jargon, no field names.
 5. Close with Recommendations when there is something worth doing, each on its own \

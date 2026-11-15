@@ -127,6 +127,60 @@ check('<li class="rec">' in _pol and _pol.count('class="lead"') == 1,
 check("<script" not in export.pdf_blocks.figures([{"label": "<script>x</script>", "value": "1"}]),
       "a card's text is escaped")
 
+# The newer chart types are drawn on paper too, checked as strictly as on the screen.
+_pb = export.pdf_blocks
+_two = [{"name": "A", "values": [1, 2]}, {"name": "B", "values": [3, 4]}]
+_ok = {
+    "stacked": {"type": "stacked", "title": "Mix", "unit": "GHS", "labels": ["Jan", "Feb"], "series": _two},
+    "grouped": {"type": "grouped", "labels": ["Accra", "Kumasi"], "series": _two},
+    "combo": {"type": "combo", "unit": "GHS", "unit2": "%", "labels": ["Jan", "Feb"], "series": _two},
+    "hbar": {"type": "hbar", "unit": "GHS", "labels": ["Small Ltd", "UBUNTU Medical Supplies Company"],
+             "series": [{"name": "Owed", "values": [10, 636675]}]},
+    "scatter": {"type": "scatter", "unit": "GHS", "unit2": "days", "labels": ["A", "B"], "series": _two},
+}
+for _k, _spec in _ok.items():
+    _out = _pb.chart(_spec)
+    check(_out.startswith('<div class="ch">') and ("<svg" in _out or 'class="bars hb"' in _out),
+          f"{_k}: a valid block is drawn in the PDF")
+    for _what, _mut in (("a value missing", lambda s: s["series"][0]["values"].pop()),
+                        ("text for a number", lambda s: s["series"][0]["values"].__setitem__(0, "1")),
+                        ("a null", lambda s: s["series"][0]["values"].__setitem__(0, None)),
+                        ("true for a number", lambda s: s["series"][0]["values"].__setitem__(0, True)),
+                        ("too many series", lambda s: s["series"].extend([{"values": [1, 2]}] * 4)),
+                        ("no labels", lambda s: s.__setitem__("labels", []))):
+        _bad = __import__("json").loads(__import__("json").dumps(_spec))
+        _mut(_bad)
+        check(_pb.chart(_bad) == "", f"{_k}: {_what} -- not drawn")
+check(_pb.chart({"type": "stacked", "labels": ["A"], "series": [{"values": [-1]}]}) == "",
+      "stacked refuses a negative part on paper too")
+check(_pb.chart({"type": "combo", "labels": ["A"], "series": [{"values": [1]}]}) == "", "combo needs two series")
+_hb = _pb.chart(_ok["hbar"])
+check(_hb.index("UBUNTU") < _hb.index("Small Ltd") and '<td class="hb-r">1</td>' in _hb,
+      "hbar is ranked largest first, numbered")
+_st = _pb.chart({"type": "stacked", "labels": ["A", "B"], "series": [{"values": [5, 0]}, {"values": [0, 3]}]})
+check(_st.count("<rect") == 2, "a zero part draws nothing on paper either")
+_cap = _pb.chart({"type": "stacked", "labels": [f"M{i}" for i in range(30)], "series": [{"values": [1] * 30}]})
+check(_cap.count("<rect") == 24 and "Showing the first 24 of 30." in _cap, "capped at 24 columns, and said")
+check(_pb.scale(0, 9177568)["lo"] == 0 and _pb.scale(0, 9177568)["hi"] >= 9177568
+      and 0 in _pb.scale(-40, 100)["ticks"], "PDF axes include zero")
+check("<script" not in _pb.chart({"type": "hbar", "labels": ["<script>x</script>"], "series": [{"values": [1]}]}),
+      "a label is escaped")
+# A drawing that fails says its figures as a table; nothing raised reaches the PDF.
+_orig = _pb._columns
+_pb._columns = lambda m: 1 / 0
+_fb = _pb.chart(_ok["grouped"])
+_pb._columns = _orig
+check("<table>" in _fb and "Accra" in _fb and "<svg" not in _fb, "a chart that cannot be drawn becomes a table")
+_orig_chart = _pb.chart
+_pb.chart = lambda spec: 1 / 0
+check(_pb.render("chart", '{"type": "bar"}') == "", "a block that raises is left out of the PDF, never fatal")
+_pb.chart = _orig_chart
+_md2 = "Lead.\n\n" + "\n\n".join(f"```chart\n{__import__('json').dumps(v)}\n```" for v in _ok.values())
+export.answer_pdf("Report", _md2, [], "GIGMANN", "m")
+_doc2 = frappe.local.response.filecontent.decode()
+check(_doc2.count('<div class="ch">') == 5 and "```" not in _doc2 and "CCBLOCK" not in _doc2,
+      "every new chart type reaches the answer PDF")
+
 # the engine's settings: a fine layout grid, and no letter-spacing it would overdo
 check(int(export.PDF_OPTIONS["dpi"]) >= 1200, "PDFs lay text out at 1200 dpi or finer")
 check("letter-spacing" not in export.PDF_TEMPLATE and "letter-spacing" not in export.pdf_blocks.CSS,

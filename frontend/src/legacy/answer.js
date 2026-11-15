@@ -15,7 +15,7 @@
  */
 
 import { exact, count, shortDate } from "../format.js";
-import { renderMarkdown } from "./markdown.js";
+import { renderMarkdown, enhanceTable, answerAsText } from "./markdown.js";
 
 export function renderAnswer(container, payload, { onOpen, onPdf, onFollowup, inThread } = {}) {
   container.textContent = "";
@@ -123,6 +123,9 @@ function block(p, onOpen, onPdf, onFollowup, inThread) {
     };
     acts.append(b);
   }
+  // Beside the PDF, where the answer's own actions are. Under the bar (AskBar.jsx) the
+  // answer has a Copy of its own and no onPdf, so it is not offered twice there.
+  if (p.answer && onPdf) acts.append(copyButton(p));
   if (acts.childNodes.length) wrap.append(acts);
 
   return wrap;
@@ -188,7 +191,52 @@ function table(spec) {
     tbody.append(tr);
   });
   t.append(tbody);
-  return t;
+  // Sortable by its headings, ten rows a page; every row stays in the table for Excel.
+  const pager = enhanceTable(t);
+  if (!pager) return t;
+  const box = div("");
+  box.append(t, pager);
+  return box;
+}
+
+/**
+ * Copies the answer for pasting into an email or a document: the question, then the
+ * answer as text, its figure cards and charts said in words.
+ */
+function copyButton(p) {
+  const b = document.createElement("button");
+  b.className = "btn";
+  b.type = "button";
+  b.textContent = "Copy answer";
+  b.title = "Copy this answer as text";
+  b.onclick = async () => {
+    const body = p.format === "markdown" ? answerAsText(p.answer) : String(p.answer || "");
+    const said = p.question ? `${p.question}\n\n${body}` : body;
+    const ok = await copyText(said);
+    b.textContent = ok ? "Copied" : "Copy failed";
+    setTimeout(() => { b.textContent = "Copy answer"; }, 1800);
+  };
+  return b;
+}
+
+async function copyText(s) {
+  try {
+    await navigator.clipboard.writeText(s);
+    return true;
+  } catch {
+    // An older browser, or a page the clipboard is not allowed on: the old way.
+    const ta = document.createElement("textarea");
+    ta.value = s;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.append(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { ok = false; }
+    ta.remove();
+    return ok;
+  }
 }
 
 function cell(key, value) {
