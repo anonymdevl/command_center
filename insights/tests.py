@@ -1207,7 +1207,8 @@ class SettingsDelegation(TransactionTestCase):
 
     def test_boot_and_a_plain_manager(self):
         self.assertEqual(self._boot(self.admin)["settings_sections"],
-                         ["people", "businesses", "claude", "email", "keys", "changes"])
+                         ["people", "businesses", "claude", "email", "keys", "recommend",
+                          "changes"])
         self.assertEqual(self._boot(self.manager)["settings_sections"], [])
         for fn in ("people", "businesses", "credentials", "email", "notifications",
                    "set_email", "test_email", "set_settings_access", "changes"):
@@ -2140,3 +2141,509 @@ def defaultdict_list(reads):
     for doctype, fields in reads:
         out.setdefault(doctype, []).append(set(fields))
     return out
+
+# ---------------------------------------------------------------------------------------
+# Recommendations (command_center/recommend/): every rule on crafted data, the ranking,
+# the lifecycle, the bell, Settings, the Daily Brief and the digest.
+# ---------------------------------------------------------------------------------------
+REC_CODE = "test_medical_ltd"
+
+
+class _RecReader:
+    """The business's ERPNext as the recommendation rules read it, answering from a table
+    of rows per doctype (each row cut to the fields asked for)."""
+
+    local = False
+
+    def __init__(self, live, fail=()):
+        self.live, self.fail, self.code = live, set(fail), REC_CODE
+        self.conn = self
+
+    base_url = "https://erp.test"
+
+    def get_list(self, doctype, filters=None, fields=None, group_by=None, limit=None,
+                 parent_doctype=None, order_by=None, **kw):
+        if doctype in self.fail:
+            raise RuntimeError(f"{doctype} refused")
+        rows = self.live.get(doctype) or []
+        rows = rows(filters or {}) if callable(rows) else rows
+        cols = [re.split(r"\s+as\s+", str(f))[-1].strip() for f in (fields or ["name"])]
+        return [{c: r.get(c) for c in cols} for r in rows]
+
+    def all(self, doctype, filters=None, fields=None, limit=100000, parent=None, order_by=None):
+        return self.get_list(doctype, filters, fields)
+
+    def count(self, doctype, filters=None):
+        return len(self.get_list(doctype, filters))
+
+    def get_count(self, doctype, filters=None):
+        return self.count(doctype, filters)
+
+    def has(self, doctype):
+        return True
+
+
+class Recommendations(TransactionTestCase):
+    databases = {"default", "aux"}
+    MOD = "command_center.api.recommend"
+    setUp_settings = SettingsPage.setUp
+    tearDown = SettingsPage.tearDown
+    _call = SettingsPage._call
+    _ok = SettingsPage._ok
+    _refused = SettingsPage._refused
+
+    def setUp(self):
+        self.setUp_settings()
+        from command_center import install
+        from insights.compat import run_as
+        with run_as("Administrator"):
+            install.register_business("Test Medical Ltd", "https://erp.test", "key", "s3cret")
+        self.live = self._live()
+        self.reader = _RecReader(self.live)
+        from command_center.recommend import engine
+        real = engine._context
+
+        def ctx(code):
+            c = real(code)
+            c._reader = self.reader
+            return c
+        p = mock.patch.object(engine, "_context", ctx)
+        p.start()
+        self.patches.append(p)
+        self._rich()
+
+    # ------------------------------------------------------------------ the crafted data
+    def _fact(self, model, **kw):
+        import uuid
+        key = uuid.uuid4().hex
+        kw.setdefault("src_docstatus", 1)
+        if hasattr(model, "as_of_date"):
+            kw.setdefault("as_of_date", TODAY)
+        return model.objects.create(name=key, fact_key=key, business_code=REC_CODE, **kw)
+
+    def _rich(self):
+        from insights.core import models as M
+        d = lambda n: TODAY - dt.timedelta(days=n)  # noqa: E731
+        PB = M.CommandCenterFactPartyBalance
+        self._fact(PB, party_type="Customer", party="Alpha Clinic", ledger_balance=150000,
+                   owed=150000, open_invoices=160000, unmatched_payments=10000,
+                   unmatched_payment_count=2, overdue=130000, d90_plus=120000, not_due=20000,
+                   oldest_due_after_matching=d(200))
+        self._fact(PB, party_type="Customer", party="Beta Hospital", ledger_balance=-5000,
+                   in_credit=5000)
+        self._fact(PB, party_type="Supplier", party="Sup One", ledger_balance=200000,
+                   owed=200000, open_invoices=208000, unmatched_payments=8000,
+                   unmatched_payment_count=1, overdue=150000, d90_plus=50000, not_due=50000)
+        self._fact(PB, party_type="Supplier", party="Sup Two", ledger_balance=-1000, in_credit=1000)
+        SI, SL = M.CommandCenterFactSalesInvoice, M.CommandCenterFactSalesInvoiceLine
+        self._fact(SI, src_name="SI-NEW", customer="Alpha Clinic", posting_date=d(5),
+                   base_grand_total=2000, outstanding_amount=2000)
+        for i, n in enumerate((450, 400, 330, 250, 120)):
+            self._fact(SI, src_name=f"SI-G{i}", customer="Gamma Labs", posting_date=d(n),
+                       base_grand_total=8000)
+        for i in range(2):
+            self._fact(SI, src_name=f"SI-D{i}", customer="Delta", posting_date=d(30),
+                       base_grand_total=1500, src_docstatus=0)
+        last_month_end = TODAY.replace(day=1) - dt.timedelta(days=1)
+        last_month = last_month_end.replace(day=10)
+        ly = last_month.replace(year=last_month.year - 1)
+        line = lambda **kw: self._fact(SL, src_name=kw.pop("inv", "SI-L"), **kw)  # noqa: E731
+        line(posting_date=last_month, item_group="Monitors", item_code="MON-1", customer="C1",
+             base_net_amount=5000, base_margin_amount=1000, has_cost=1)
+        line(posting_date=ly, item_group="Monitors", item_code="MON-1", customer="C1",
+             base_net_amount=50000, base_margin_amount=10000, has_cost=1)
+        for i, c in enumerate(("C1", "C2", "C3", "C4", "C5", "C6")):
+            line(posting_date=d(40), item_group="Consumables", item_code="CON-1", customer=c,
+                 base_net_amount=1000 * (i + 1), base_margin_amount=200, has_cost=1)
+        line(posting_date=last_month, item_group="Beds", item_code="BED-1", customer="C2",
+             base_net_amount=30000, base_margin_amount=3000, has_cost=1)
+        line(posting_date=last_month.replace(year=last_month.year - 1) - dt.timedelta(days=40),
+             item_group="Beds", item_code="BED-1", customer="C2", base_net_amount=30000,
+             base_margin_amount=9000, has_cost=1)
+        line(posting_date=d(20), item_group="Beds", item_code="BED-2", customer="C3",
+             base_net_amount=1000, base_margin_amount=-2000, has_cost=1)
+        line(posting_date=d(60), item_group="Services", item_code="SRV-1", customer="C4",
+             base_net_amount=20000, base_margin_amount=0, has_cost=0)
+        PA = M.CommandCenterFactPaymentAllocation
+        for i in range(20):
+            self._fact(PA, payment_type="Receive", against_doctype="Sales Invoice",
+                       posting_date=d(10 + i), days_to_pay=40, allocated_amount=100)
+            self._fact(PA, payment_type="Receive", against_doctype="Sales Invoice",
+                       posting_date=d(100 + i), days_to_pay=10, allocated_amount=100)
+        SO = M.CommandCenterFactSalesOrder
+        self._fact(SO, src_name="SO-LATE", customer="Alpha Clinic", is_open=1, days_late=10,
+                   lateness_bucket="0-30", undelivered_value=7000, base_grand_total=7000)
+        self._fact(SO, src_name="SO-DONE", customer="C2", is_open=1, per_delivered=100,
+                   unbilled_value=4000, base_grand_total=4000, lateness_bucket="Not due")
+        SB = M.CommandCenterFactStockBalance
+        self._fact(SB, item_code="ITEM-SLOW", warehouse="Stores", actual_qty=10,
+                   stock_value=20000, has_valuation=1)
+        self._fact(SB, item_code="ITEM-FAST", warehouse="Stores", actual_qty=5,
+                   stock_value=500, has_valuation=1)
+        self._fact(SB, item_code="ITEM-RES", warehouse="Stores", actual_qty=2, reserved_qty=10,
+                   stock_value=200, has_valuation=1)
+        self._fact(SB, item_code="ITEM-NOVAL", warehouse="Stores", actual_qty=3,
+                   stock_value=0, has_valuation=0)
+        self._fact(M.CommandCenterFactTask, src_name="T-1", is_open=1, days_late=12,
+                   assigned_to="eng@test.com", exp_end_date=d(12))
+        for i in range(3):
+            self._fact(M.CommandCenterFactPerson, src_name=f"E-{i}", status="Left",
+                       department="Sales", relieving_date=d(20 + i), is_active=0)
+        self._fact(M.CommandCenterFactPerson, src_name="E-9", status="Active",
+                   department="Sales Dept", is_active=1)
+        self._fact(M.CommandCenterFactPurchaseInvoice, src_name="PINV-1", supplier="Sup One",
+                   outstanding_amount=5000, base_grand_total=5000, posting_date=d(30))
+        PL = M.CommandCenterFactPurchaseInvoiceLine
+        for s, v in (("Sup One", 80000), ("Sup Two", 10000), ("Sup Three", 5000)):
+            self._fact(PL, src_name="PINV-L", supplier=s, posting_date=d(50), base_net_amount=v)
+
+    def _live(self):
+        d = lambda n: str(TODAY - dt.timedelta(days=n))  # noqa: E731
+        now = dt.datetime.now()
+
+        def pos(f):
+            if f.get("docstatus") == 0:
+                return [{"name": f"PO-W{i}", "workflow_state": "Pending DIR Approval",
+                         "creation": (now - dt.timedelta(days=70)).strftime("%Y-%m-%d %H:%M:%S"),
+                         "base_grand_total": 30000} for i in range(3)]
+            if "name" in f:
+                return [{"name": "PO-1", "owner": "a@test.com"}]
+            return [{"name": "PO-1", "supplier": "Sup One", "base_grand_total": 9000,
+                     "transaction_date": d(60), "schedule_date": d(30), "per_received": 0,
+                     "per_billed": 0, "status": "To Receive and Bill"}]
+        return {
+            "Stock Ledger Entry": [{"item_code": "ITEM-FAST", "out_qty": -90, "moves": 9}],
+            "Account": [{"name": "Bank - T"}],
+            "GL Entry": [{"account": "Bank - T", "debit_total": 30000, "credit_total": 10000}],
+            "Sales Invoice Item": [{"parent": "SI-X", "item_code": "CON-1", "qty": 200,
+                                    "price_list_rate": 100, "rate": 50, "pricing_rules": ""}],
+            "Batch": [{"name": "B1", "item": "ITEM-FAST", "expiry_date": str(TODAY + dt.timedelta(days=10)),
+                       "batch_qty": 5}],
+            "Purchase Order": pos,
+            "Purchase Order Item": [{"parent": "PO-1", "item_code": "ITEM-SLOW", "qty": 10,
+                                     "received_qty": 0, "base_net_amount": 9000}],
+            "Purchase Invoice Item": [{"parent": "PINV-1", "purchase_order": None,
+                                       "purchase_receipt": None}],
+            "Purchase Invoice": [{"name": "PINV-1", "update_stock": 0}],
+            "Workflow": [{"name": "PO WF", "document_type": "Purchase Order",
+                          "workflow_state_field": "workflow_state"}],
+            "Workflow Document State": [
+                {"parent": "PO WF", "idx": 1, "state": "Draft", "doc_status": "0"},
+                {"parent": "PO WF", "idx": 2, "state": "Pending DIR Approval", "doc_status": "0"},
+                {"parent": "PO WF", "idx": 3, "state": "Approved", "doc_status": "1"},
+                {"parent": "PO WF", "idx": 4, "state": "Rejected by DIR", "doc_status": "0"}],
+            "Version": [{"ref_doctype": "Purchase Order", "docname": "PO-1", "owner": "a@test.com"}],
+            "Department": [{"name": "Sales Dept"}, {"name": "Sales"}],
+        }
+
+    def _quiet(self):
+        from django.core.cache import cache
+        from insights.core import models as M
+        for name in dir(M):
+            model = getattr(M, name)
+            if name.startswith("CommandCenterFact"):
+                model.objects.filter(business_code=REC_CODE).delete()
+        self.live.clear()
+        cache.clear()
+
+    def _compute(self):
+        from command_center.recommend import engine
+        from insights.compat import run_as
+        with run_as("Administrator"):
+            return engine.compute(REC_CODE)
+
+    # ------------------------------------------------------------------ the tests
+    def test_every_rule_fires_and_stays_silent(self):
+        from command_center.recommend.rules import RULES
+        out = self._compute()
+        self.assertEqual(out["failed"], {}, out["failed"])
+        fired = {r["rule"] for r in out["recs"]}
+        missing = [r.rule_id for r in RULES if r.rule_id not in fired]
+        self.assertEqual(missing, [], f"rules that did not fire on crafted data: {missing}")
+        for r in out["recs"]:
+            for k in ("id", "rule", "area", "severity", "title", "why", "what_to_do",
+                      "how_in_erpnext", "ask", "drill", "owner_role", "money_at_stake"):
+                self.assertIn(k, r, f"{r['rule']} has no {k}")
+            self.assertIsInstance(r["money_at_stake"], float)
+            self.assertTrue(2 <= len(r["what_to_do"]) <= 4, r["rule"])
+            self.assertTrue(r["how_in_erpnext"].get("steps"), r["rule"])
+            self.assertTrue(r["title"].endswith("."), r["title"])
+            self.assertEqual(r["currency"], "GHS")
+            self.assertNotRegex(r["why"] + r["title"], r"\bnan\b|None|\{", r["rule"])
+        by = {}
+        for r in out["recs"]:
+            by.setdefault(r["rule"], r)        # ranked: the largest of each rule first
+        self.assertTrue(by["unmatched_receipts"]["how_in_erpnext"]["href"].endswith(
+            "/app/payment-reconciliation"))
+        self.assertEqual(by["unmatched_receipts"]["money_at_stake"], 10000)
+        self.assertEqual(by["customers_in_credit"]["money_at_stake"], 5000)
+        self.assertEqual(by["overdue_customers"]["severity"], "crit")
+        self.assertEqual(by["supplier_payments_due"]["severity"], "crit")   # due > bank 20,000
+        self.assertIn("GHS 20,000", by["supplier_payments_due"]["why"])
+        self.assertEqual(by["approvals_bottleneck"]["money_at_stake"], 90000)
+        self.assertIn("Pending DIR Approval", by["approvals_bottleneck"]["title"])
+        self.assertEqual(by["discounts_outside_price_list"]["money_at_stake"], 10000)
+        self.assertEqual(by["sales_falling"]["money_at_stake"], 45000)
+        # what is owed is the ledger: the unmatched customer's rec says both figures
+        self.assertIn("GHS 160,000", by["unmatched_receipts"]["why"])
+        self.assertIn("GHS 150,000", by["unmatched_receipts"]["why"])
+
+        self._quiet()
+        out = self._compute()
+        self.assertEqual((out["recs"], out["failed"]), ([], {}))
+
+    def test_thresholds_and_switches(self):
+        from command_center.recommend import engine
+        conf = engine.settings(REC_CODE)
+        conf["rules"]["unmatched_receipts"]["params"]["amount"] = 10000   # not more than
+        conf["rules"]["customers_in_credit"]["enabled"] = False
+        engine.save_settings(REC_CODE, conf)
+        fired = {r["rule"] for r in self._compute()["recs"]}
+        self.assertNotIn("unmatched_receipts", fired)
+        self.assertNotIn("customers_in_credit", fired)
+        self.assertIn("overdue_customers", fired)
+
+    def test_ranking(self):
+        from command_center.recommend.engine import rank
+        recs = rank([{"id": "a", "score": 100, "severity": "med"},
+                     {"id": "b", "score": 700, "severity": "high"},
+                     {"id": "c", "score": 0, "severity": "crit", "count": 4},
+                     {"id": "d", "score": 0, "severity": "info", "count": 9}])
+        self.assertEqual([r["id"] for r in recs], ["b", "a", "c", "d"])
+        out = self._compute()["recs"]
+        scores = [r["score"] for r in out]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+        top = out[0]
+        self.assertEqual(top["rule"], "supplier_payments_due")   # 200k at stake, critical
+
+    def test_lifecycle(self):
+        from command_center.api import recommend as api
+        from command_center.recommend import engine
+        from insights.compat import run_as
+        from insights.core.models import CommandCenterRecommendation as R
+
+        with run_as("boss@test.com"):
+            engine.refresh(REC_CODE)
+            shown = {r["id"]: r for r in engine.visible(REC_CODE)}
+            self.assertIn("unmatched_receipts", shown)
+            n = R.objects.count()
+            engine.refresh(REC_CODE)                          # the same condition: no new rows
+            self.assertEqual(R.objects.count(), n)
+            api.act(shown["unmatched_receipts"]["name"], "done")
+            api.act(shown["customers_in_credit"]["name"], "snooze", days=7)
+            api.act(shown["credit_hold"]["name"], "not_relevant", reason="cash customers")
+            with self.assertRaises(Exception):
+                api.act(shown["late_orders"]["name"], "snooze", days=3)
+            ids = {r["id"] for r in engine.visible(REC_CODE)}
+            self.assertFalse({"unmatched_receipts", "customers_in_credit", "credit_hold"} & ids)
+            # a snooze whose date has come is open again; Done still there after a week is too
+            R.objects.filter(rec_key="customers_in_credit").update(snoozed_until=TODAY - dt.timedelta(days=1))
+            R.objects.filter(rec_key="unmatched_receipts").update(
+                acted_on=dt.datetime.now() - dt.timedelta(days=8))
+            engine.refresh(REC_CODE)
+            again = {r["id"]: r for r in engine.visible(REC_CODE)}
+            self.assertIn("customers_in_credit", again)
+            self.assertEqual(again["unmatched_receipts"]["reopened_after_done"],
+                             str((dt.datetime.now() - dt.timedelta(days=8)).date()))
+            # a rule that cannot be read resolves nothing
+            self.reader.fail.add("Workflow")
+            engine.refresh(REC_CODE)
+            self.assertTrue(R.objects.filter(rule="approvals_bottleneck", resolved_on__isnull=True).exists())
+            self.reader.fail.clear()
+            # the condition clears: Resolved, kept as history; Not Relevant keeps its word
+            from insights.core.models import CommandCenterFactPartyBalance as PB
+            PB.objects.filter(party="Alpha Clinic").update(unmatched_payments=0,
+                                                           unmatched_payment_count=0, d90_plus=0)
+            engine.refresh(REC_CODE)
+            gone = R.objects.get(rec_key="unmatched_receipts")
+            self.assertEqual(gone.status, "Resolved")
+            self.assertIsNotNone(gone.resolved_on)
+            self.assertEqual(R.objects.get(rec_key="credit_hold").status, "Not Relevant")
+            self.assertIn("unmatched_receipts", {r["id"] for r in engine.history(REC_CODE)})
+            # it comes back: a new row, Open
+            PB.objects.filter(party="Alpha Clinic").update(unmatched_payments=10000,
+                                                           unmatched_payment_count=2)
+            engine.refresh(REC_CODE)
+            self.assertEqual(R.objects.filter(rec_key="unmatched_receipts").count(), 2)
+            # Not Relevant twice for one rule: the administrator is told to raise it
+            self.assertEqual(engine.suggestions(REC_CODE), {})
+            api.act(R.objects.get(rec_key="unmatched_receipts", resolved_on__isnull=True).name,
+                    "not_relevant")
+            api.act(R.objects.get(rec_key="unmatched_supplier_payments").name, "not_relevant")
+            R.objects.filter(rec_key="unmatched_supplier_payments").update(rule="unmatched_receipts")
+            self.assertEqual(engine.suggestions(REC_CODE), {"unmatched_receipts": 2})
+        view = self._ok_settings("recommendations")
+        rule = next(r for r in view["rules"] if r["rule_id"] == "unmatched_receipts")
+        self.assertIn("consider raising", rule["suggestion"])
+
+    def test_screens_and_bell(self):
+        from command_center.alerts.engine import DOCTYPE
+        import frappe
+        from insights.compat import run_as
+        r = self._call(self.manager, "current", business_code=REC_CODE)
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        got = r.json()["message"]
+        self.assertTrue(got["recommendations"])
+        self.assertIsNone(got["brief"])                     # off by default
+        crit = {x["rule"] for x in self._call(self.manager, "critical",
+                                              business_code=REC_CODE).json()["message"]["recommendations"]}
+        self.assertIn("overdue_customers", crit)
+        self.assertIn("supplier_payments_due", crit)
+        # an open alert on the same issue: the bell shows the alert, not this too
+        with run_as("Administrator"):
+            frappe.get_doc({"doctype": DOCTYPE, "rule": "Overdue receivables",
+                            "business_code": REC_CODE, "dedupe_key": "all", "status": "Raised",
+                            "severity": "crit", "title": "x"}).insert(ignore_permissions=True)
+        crit = {x["rule"] for x in self._call(self.manager, "critical",
+                                              business_code=REC_CODE).json()["message"]["recommendations"]}
+        self.assertNotIn("overdue_customers", crit)
+        self.assertIn("supplier_payments_due", crit)
+        # the finding boxes: the area's largest first, the screen's own where it has none
+        from command_center.api.panels import FINDINGS, _Ctx
+        with run_as("manager@test.com"):
+            proc = FINDINGS["proc"](_Ctx(REC_CODE))
+            self.assertEqual(len(proc), 2)
+            self.assertTrue(all(f["title"] and f["text"] and f["ask"] for f in proc))
+            names = [f["title"] for f in proc]
+            self.assertTrue(all("buying" in t or "bill" in t or "suppliers" in t
+                                or "purchase order" in t for t in names), names)
+            self.assertFalse(hasattr(FINDINGS["cx"], "fallback"))
+        # an area with nothing open: the screen's own findings, as before
+        from command_center.recommend import engine
+        from command_center.recommend.rules import RULES
+        conf = engine.settings(REC_CODE)
+        for rule in RULES:
+            if rule.area == "buying":
+                conf["rules"][rule.rule_id]["enabled"] = False
+        engine.save_settings(REC_CODE, conf)
+        with run_as("manager@test.com"):
+            proc = FINDINGS["proc"](_Ctx(REC_CODE))
+            self.assertEqual(proc, [f for f in FINDINGS["proc"].fallback(_Ctx(REC_CODE)) if f][:2])
+        # someone without the role is refused
+        self.assertEqual(self._call(Client(), "current").status_code, 401)
+
+    def _ok_settings(self, fn, **args):
+        r = self.admin.post(f"/api/method/insights.core.platform_settings.{fn}", json.dumps(args),
+                            content_type="application/json")
+        self.assertEqual(r.status_code, 200, f"{fn}: {r.content[:400]!r}")
+        return r.json()["message"]
+
+    def test_settings(self):
+        view = self._ok_settings("recommendations")
+        self.assertEqual(view["business_code"], REC_CODE)
+        self.assertTrue(view["digest"])
+        self.assertFalse(view["brief"])
+        self.assertIn("one Claude request per business per day", view["brief_cost"])
+        for fn in ("recommendations", "set_recommendations", "write_brief_now"):
+            r = self.manager.post(f"/api/method/insights.core.platform_settings.{fn}", "{}",
+                                  content_type="application/json")
+            self.assertEqual(r.status_code, 403, fn)
+        r = self.admin.post("/api/method/insights.core.platform_settings.set_recommendations",
+                            json.dumps({"business_code": REC_CODE, "rules": json.dumps(
+                                {"unmatched_receipts": {"params": {"amount": "lots"}}})}),
+                            content_type="application/json")
+        self.assertEqual(r.status_code, 417)
+        view = self._ok_settings("set_recommendations", business_code=REC_CODE, brief=1,
+                                 rules=json.dumps({"unmatched_receipts": {"params": {"amount": 50000}},
+                                                   "leavers_trend": {"enabled": False}}))
+        rule = {r["rule_id"]: r for r in view["rules"]}
+        self.assertEqual(rule["unmatched_receipts"]["params"][0]["value"], 50000)
+        self.assertFalse(rule["leavers_trend"]["enabled"])
+        self.assertTrue(view["brief"])
+        fired = {r["rule"] for r in self._compute()["recs"]}
+        self.assertNotIn("unmatched_receipts", fired)
+        self.assertNotIn("leavers_trend", fired)
+        whats = " | ".join(c["what"] for c in self._ok_settings("changes"))
+        self.assertIn("Daily Brief by Claude on", whats)
+
+    def test_daily_brief_uses_only_engine_numbers(self):
+        from command_center.recommend import daily, engine
+        from insights.compat import run_as
+        conf = engine.settings(REC_CODE)
+        conf["brief"] = True
+        engine.save_settings(REC_CODE, conf)
+        seen = {}
+
+        def fake(static, text, kind="analyst", **kw):
+            seen.update(static=static, text=text, kind=kind)
+            return seen.get("reply"), None
+        with run_as("Administrator"):
+            engine.refresh(REC_CODE)
+            recs = engine.visible(REC_CODE)
+            with mock.patch("command_center.ask.claude.configured", lambda: True), \
+                    mock.patch("command_center.ask.llm.provider", lambda: "claude"), \
+                    mock.patch("command_center.ask.claude.complete", fake):
+                seen["reply"] = "Little changed.\n1. Pay GHS 999,999 to the bank."
+                bad = daily.write_brief(REC_CODE)
+                self.assertIsNone(bad["text"])
+                self.assertIn("999999", bad["error"])
+                first = recs[0]
+                money = f"GHS {first['money_at_stake']:,.0f}"
+                seen["reply"] = f"This is the first brief.\n1. {first['title']} {money}."
+                good = daily.write_brief(REC_CODE)
+        self.assertEqual(good["text"], seen["reply"])
+        self.assertEqual(seen["kind"], "analyst")
+        self.assertIn("Use only the numbers given", seen["static"])
+        # every number in what Claude was given came from the engine or the figures
+        from command_center.kpi.engine import evaluate_set
+        figs = evaluate_set([k for k, _ in daily.BRIEF_FIGURES], REC_CODE)
+        source = " ".join([r["title"] + " " + r["why"] + " " + " ".join(r["what_to_do"])
+                           + f" GHS {r['money_at_stake']:,.0f}" for r in recs]
+                          + [f"GHS {float(f['value']):,.0f}" for f in figs.values()
+                             if f.get("value") is not None]
+                          + [TODAY.strftime("%-d %B %Y")])
+        stray = daily._numbers(seen["text"]) - daily._numbers(source)
+        self.assertEqual(stray, set(), f"numbers given to Claude that the engine did not make: {stray}")
+        shown = self._call(self.manager, "current", business_code=REC_CODE).json()["message"]["brief"]
+        self.assertEqual(shown["text"], seen["reply"])
+
+    def test_digest_email(self):
+        import smtplib  # noqa: F401
+        from command_center.recommend import daily, engine
+        from insights.compat import run_as
+        with run_as("Administrator"):
+            engine.refresh(REC_CODE)
+            # not set up: recorded, not raised
+            state = daily.send_digest(REC_CODE)
+            self.assertFalse(state["ok"])
+            self.assertIn("Email is not set up", state["says"])
+            mail = {"host": "smtp.test.com", "port": 587, "security": "starttls",
+                    "user": "reports@test.com", "password": "pw-12345", "sender": "reports@test.com"}
+            with mock.patch("insights.compat.runtime.mail_config", lambda: dict(mail)), \
+                    mock.patch("smtplib.SMTP") as smtp:
+                state = daily.send_digest(REC_CODE)
+            self.assertTrue(state["ok"], state)
+            sent = smtp.return_value.send_message.call_args[0][0]
+            self.assertIn("manager@test.com", sent["To"])
+            self.assertIn("new recommendation", sent["Subject"])
+            body = sent.get_body(("html",)).get_content()
+            self.assertIn("New since the last digest", body)
+            self.assertIn(engine.visible(REC_CODE)[0]["title"].replace("'", "&#x27;")[:30], body)
+            # switched off: nothing is sent by the daily run
+            conf = engine.settings(REC_CODE)
+            conf["digest"] = False
+            engine.save_settings(REC_CODE, conf)
+            with mock.patch("insights.compat.runtime.mail_config", lambda: dict(mail)), \
+                    mock.patch("smtplib.SMTP") as smtp:
+                daily.send_digests()
+            smtp.assert_not_called()
+
+    def test_analyst_reads_them_without_writing(self):
+        from command_center.ask import tools
+        from insights.compat import run_as
+        from insights.core.models import CommandCenterRecommendation as R
+        with run_as("manager@test.com"):
+            got = tools.run("current_recommendations", {}, REC_CODE)
+        self.assertEqual(R.objects.count(), 0)
+        self.assertTrue(got["recommendations"])
+        self.assertIn("current_recommendations", [d["name"] for d in tools.declarations()])
+        money = [r.get("money_at_stake") or 0 for r in got["recommendations"]]
+        self.assertEqual(money, sorted(money, reverse=True))
+
+    def test_home_and_summary_have_their_slots(self):
+        from pathlib import Path
+        views = json.loads((Path(__file__).resolve().parent.parent / "frontend" / "src" / "legacy"
+                            / "views.json").read_text())
+        self.assertIn('data-rec="top"', views["command"])
+        self.assertIn('data-rec="all"', views["brief"])
+        self.assertIn('id="rec-brief"', views["brief"])

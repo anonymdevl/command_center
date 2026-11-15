@@ -387,3 +387,6 @@ SCREENS.setdefault("ops", {})
 FINDINGS["it"] = it_findings
 FINDINGS["aud"] = aud_findings
 FINDINGS["ops"] = ops_findings
+# The area's largest open recommendations first, as on the department screens.
+from command_center.recommend.surface import wrap as _with_recommendations  # noqa: E402
+_with_recommendations(FINDINGS, ("it", "aud", "ops"))

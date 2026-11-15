@@ -201,6 +201,31 @@ def chat(messages: list, declarations: list, static: str, dynamic: str,
     return content, None
 
 
+def complete(static: str, text: str, kind: str = "analyst", timeout: float = 90,
+             max_tokens: int = 4000) -> tuple:
+    """One request with no tools, for a piece of writing (the Daily Brief): (text, error).
+    The same model, thinking, effort and fallbacks as a question (request() above)."""
+    if not _key():
+        return None, "no Anthropic key configured"
+    try:
+        import anthropic  # noqa: F401
+    except ImportError:
+        return None, "The anthropic package is not installed on the server."
+    body = request([{"role": "user", "content": text}], [], static, "", kind, timeout)
+    body.pop("tools", None)
+    body["max_tokens"] = max_tokens
+    try:
+        msg = _client().with_options(timeout=max(5, timeout)).beta.messages.create(**body)
+    except Exception as e:  # in words, as chat() does
+        return None, f"Claude could not be reached ({type(e).__name__}: {_words(e)[:200]})."
+    _remember_usage(msg, body["model"])
+    if msg.stop_reason == "refusal":
+        return None, "Claude declined to write it."
+    out = "".join(getattr(b, "text", "") or "" for b in msg.content
+                  if getattr(b, "type", "") == "text").strip()
+    return (out, None) if out else (None, "Claude returned no text.")
+
+
 def _plain(block) -> dict:
     """A reply block as the API sent it, as plain JSON: what it returned is what it
     accepts back."""

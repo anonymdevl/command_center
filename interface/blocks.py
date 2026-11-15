@@ -335,6 +335,30 @@ div.work-table table.dt{min-width:560px}
 .alert-flash{box-shadow:0 0 0 3px var(--accent-bg2);border-color:var(--accent)!important;transition:box-shadow .3s}
 .alert-live-list{display:block}
 
+/* ---- recommendations (legacy/recommend.js): the alert card, with its steps ---- */
+.rec-live-list{display:block}
+.rec-sub{font-size:var(--fs-sm);font-weight:var(--fw-regular);color:var(--mut)}
+.rec-area{display:flex;justify-content:space-between;gap:12px;margin:20px 0 10px;font-size:var(--fs-md);
+ font-weight:var(--fw-semibold);color:var(--ink)}
+.rec-area span{font-size:var(--fs-sm);font-weight:var(--fw-regular);color:var(--mut)}
+.alert .asev.rec-area-tag{margin-left:6px;color:var(--ink2);background:var(--raised)}
+.alert>.rec-steps{flex:1 1 100%;background:var(--raised);border-radius:var(--r-sm);padding:12px 16px;
+ margin:0 0 14px;font-size:var(--fs-sm);color:var(--ink2);line-height:1.55}
+.rec-steps ol{margin:0 0 10px 18px;padding:0}
+.rec-steps li{margin:2px 0}
+.rec-steps .guide{margin-top:8px;background:var(--surface)}
+.alert>.rec-reason{flex:1 1 100%;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 14px}
+.rec-reason input{flex:1 1 220px;min-width:0;font:inherit;font-size:var(--fs-sm);padding:8px 12px;
+ border:1px solid var(--line2);border-radius:var(--r-sm);background:var(--surface);color:var(--ink)}
+.rec-note{flex:1 1 100%;font-size:var(--fs-sm);color:var(--high);margin:0 0 12px}
+.rec-brief{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 22px;
+ margin:0 0 16px}
+.rec-brief b{display:block;font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--ink);margin-bottom:6px}
+.rec-brief p{margin:4px 0;font-size:var(--fs-sm);color:var(--ink2);line-height:1.6}
+.rec-brief small{display:block;margin-top:8px;font-size:var(--fs-xs);color:var(--mut)}
+.rec-done{font-size:var(--fs-sm);color:var(--mut);margin:6px 0 16px}
+.rec-done li{margin:3px 0}
+
 /* ---- Business Health: the data behind the figures (legacy/loads.js) ---- */
 .hh-head>*{min-width:0}
 @container panel (max-width:560px){.hh-head{grid-template-columns:minmax(0,1fr)!important}}

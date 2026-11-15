@@ -2316,6 +2316,10 @@ def find_fin(ctx):
 
 
 FINDINGS = {"sales": find_sales, "fin": find_fin, "proc": find_proc, "inv": find_inv, "eng": find_eng, "cx": find_cx, "hr": find_hr}
+# The finding boxes show the area's largest open recommendations first, and the findings
+# above where the area has fewer (command_center/recommend/surface.py).
+from command_center.recommend.surface import wrap as _with_recommendations  # noqa: E402
+_with_recommendations(FINDINGS)
 
 
 SCREENS = {

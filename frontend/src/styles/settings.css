@@ -37,3 +37,15 @@
 @media (max-width:700px){
  .st-acts{justify-content:flex-start}
 }
+
+/* Settings -> Recommendations */
+.st-rec-switch{display:flex;flex-direction:column;gap:var(--sp-3)}
+.st-rec-switch label.st-check{display:flex;align-items:flex-start;gap:10px;margin:0;font-size:var(--fs-sm);
+ font-weight:var(--fw-medium);color:var(--ink)}
+.st-rec-switch label.st-check input{margin-top:3px}
+.st-rec .tag{display:inline-block;margin-top:6px}
+.st-rec-params{display:flex;flex-wrap:wrap;gap:var(--sp-2) var(--sp-4)}
+.st-rec-params label{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-xs);color:var(--mut);min-width:140px}
+.st-rec-params input{width:120px;font:inherit;font-size:var(--fs-sm);color:var(--ink);background:var(--bg);
+ border:1px solid var(--line2);border-radius:var(--r-sm);padding:6px 10px}
+.st-rec-params input:disabled{opacity:.5}

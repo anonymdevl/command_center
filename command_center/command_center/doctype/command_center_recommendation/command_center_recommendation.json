@@ -1,0 +1,200 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-15 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "business_code",
+  "rec_key",
+  "rule",
+  "area",
+  "severity",
+  "status",
+  "col1",
+  "title",
+  "money_at_stake",
+  "currency",
+  "sec",
+  "payload",
+  "sec2",
+  "first_seen",
+  "last_seen",
+  "resolved_on",
+  "col2",
+  "snoozed_until",
+  "reason",
+  "acted_by",
+  "acted_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "business_code",
+   "fieldtype": "Data",
+   "label": "Business",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "rec_key",
+   "fieldtype": "Data",
+   "label": "Key",
+   "reqd": 1,
+   "search_index": 1,
+   "read_only": 1,
+   "description": "One open recommendation per business and key. A condition that persists refreshes it instead of making another."
+  },
+  {
+   "fieldname": "rule",
+   "fieldtype": "Data",
+   "label": "Rule",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "area",
+   "fieldtype": "Data",
+   "label": "Area",
+   "read_only": 1
+  },
+  {
+   "fieldname": "severity",
+   "fieldtype": "Select",
+   "label": "Severity",
+   "options": "crit\nhigh\nmed\ninfo",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Open\nDone\nNot Relevant\nSnoozed\nResolved",
+   "default": "Open",
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "length": 255,
+   "read_only": 1
+  },
+  {
+   "fieldname": "money_at_stake",
+   "fieldtype": "Currency",
+   "label": "Money at stake",
+   "read_only": 1
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Data",
+   "label": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec",
+   "fieldtype": "Section Break",
+   "label": ""
+  },
+  {
+   "fieldname": "payload",
+   "fieldtype": "Long Text",
+   "label": "The recommendation",
+   "read_only": 1,
+   "description": "Why, what to do, the guide, the question and the records, as the engine last made it."
+  },
+  {
+   "fieldname": "sec2",
+   "fieldtype": "Section Break",
+   "label": "When"
+  },
+  {
+   "fieldname": "first_seen",
+   "fieldtype": "Datetime",
+   "label": "First seen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_seen",
+   "fieldtype": "Datetime",
+   "label": "Last seen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolved_on",
+   "fieldtype": "Datetime",
+   "label": "Closed on",
+   "read_only": 1,
+   "description": "Set when the condition cleared. The row is kept as history."
+  },
+  {
+   "fieldname": "col2",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "snoozed_until",
+   "fieldtype": "Date",
+   "label": "Snoozed until"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason"
+  },
+  {
+   "fieldname": "acted_by",
+   "fieldtype": "Data",
+   "label": "Decided by",
+   "read_only": 1
+  },
+  {
+   "fieldname": "acted_on",
+   "fieldtype": "Datetime",
+   "label": "Decided on",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Recommendation",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Insights Dashboard Manager",
+   "read": 1,
+   "write": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "autoname": "hash",
+ "title_field": "title",
+ "in_create": 1
+}

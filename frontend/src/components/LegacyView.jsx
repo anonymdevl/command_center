@@ -24,6 +24,7 @@ import { PANEL_VIEWS, renderPanels } from "../legacy/panels.js";
 import { disposeWithin } from "../legacy/viz.js";
 import { renderLoads } from "../legacy/loads.js";
 import { PEOPLE_VIEWS, renderPeople } from "../legacy/people.js";
+import { REC_VIEWS, recsFailed, renderRecs } from "../legacy/recommend.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -87,6 +88,17 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     return () => window.removeEventListener("cc-alerts-changed", again);
   }, [hasAlerts, alerts.reload]);
 
+  // Home's Top actions and the Executive Summary's list (api/recommend.py), again after
+  // a manager decides about one.
+  const hasRecs = REC_VIEWS.has(viewKey);
+  const recs = useApi(() => api.recommendations(scope), [viewKey, scope], { skip: !hasRecs });
+  useEffect(() => {
+    if (!hasRecs) return;
+    const again = () => recs.reload();
+    window.addEventListener("cc-recs-changed", again);
+    return () => window.removeEventListener("cc-recs-changed", again);
+  }, [hasRecs, recs.reload]);
+
   // Live: while the screen is being looked at, its figures, panels, work and alerts are
   // read again every minute (the platform refreshes each business's data every two
   // minutes), and at once when the tab comes back into view. The figures on screen stay
@@ -98,6 +110,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       if (hasPanels) panels.reload();
       if (isWork) work.reload();
       if (hasAlerts) alerts.reload();
+      if (hasRecs) recs.reload();
     };
     const t = setInterval(tick, 60000);
     const onShow = () => {
@@ -108,8 +121,8 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       clearInterval(t);
       document.removeEventListener("visibilitychange", onShow);
     };
-  }, [viewKey, scope, keys.length, hasPanels, isWork, hasAlerts,
-      figures.reload, panels.reload, work.reload, alerts.reload]);
+  }, [viewKey, scope, keys.length, hasPanels, isWork, hasAlerts, hasRecs,
+      figures.reload, panels.reload, work.reload, alerts.reload, recs.reload]);
 
   // Whether the selected business's ERPNext answers (components/ReachBanner.jsx).
   const [reachDown, setReachDown] = useState(false);
@@ -477,6 +490,8 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     }
     if (viewKey === "health") renderHealthTiles(root, figures.data, { openDrawer });
     if (hasAlerts && alerts.error) alertsFailed(root, viewKey, alerts.error);
+    if (hasRecs) renderRecs(root, viewKey, recs.data, opts);
+    if (hasRecs && recs.error) recsFailed(root, viewKey, recs.error);
     if (hasPanels) {
       renderPanels(root, viewKey, panels.data, { onOpen: opts.onOpen, openDrawer,
                                                  failed: !!panels.error });
@@ -494,7 +509,8 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       a.dataset.illustrative = "1";
     });
   }, [viewKey, html, figures.data, figures.error, work.data, work.error, isWork, alerts.data,
-      alerts.error, hasAlerts, scope, openDrawer, hasPanels, panels.data, panels.error, reachDown]);
+      alerts.error, hasAlerts, scope, openDrawer, hasPanels, panels.data, panels.error, reachDown,
+      hasRecs, recs.data, recs.error]);
 
   // The screen's charts (legacy/viz.js) are disposed with it, not left for the sweep.
   useEffect(() => {
@@ -554,6 +570,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
         if (hasPanels) panels.reload();
         if (isWork) work.reload();
         if (hasAlerts) alerts.reload();
+        if (hasRecs) recs.reload();
       }} />
       {figures.error ? (
         <div className="warn" style={{ margin: "0 0 14px" }}>

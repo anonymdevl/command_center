@@ -604,6 +604,9 @@ before, or two date ranges you give -- with both values, the change and the % ch
 the same rules as the figures.
 5. Six ready analyses: who_owes_most, has_party_ever_paid, why_order_open, \
 supplier_concentration, owes_and_waiting, party_brief.
+5a. current_recommendations: the platform's own recommendations for the business, ranked \
+by money at stake, each with its evidence and steps -- the list the screens show as Top \
+actions.
 6. ERPNext's own standard reports, through report_filters / run_report: profit and loss, \
 balance sheet, cash flow, trial balance, general ledger, receivables and payables, gross \
 profit, sales and purchase analytics, purchase order analysis, stock balance, ledger and \
@@ -620,6 +623,9 @@ ERPNext's own leave balance counts it, and is measured against today, not the da
 horizon. Neither returns contact details or pay.
 
 HOW TO FIND THE ANSWER -- in this order, stopping as soon as you have it
+0. "What should I focus on", "what needs my attention", "what should we do": \
+current_recommendations first, then the figures or records behind the ones that matter; \
+build the answer on them, largest money at stake first, and say where you disagree.
 1. A defined figure answers it: get_figures, one call with every key you need.
 2. Up or down against an earlier period ("than last month", "against last year", "why \
 did it fall"): compare_periods, one call per number. Use its change and % change as \

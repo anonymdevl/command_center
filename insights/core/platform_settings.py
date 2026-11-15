@@ -17,8 +17,8 @@ Who may use it:
                                                 managers -- not of administrators
   everyone else       refused (403), whatever the screen shows.
 
-The Claude key, Email (and its Notifications status), the Changes list and giving
-Settings access stay with the administrator. Every call starts with _require(section)
+The Claude key, Email (and its Notifications status), Recommendations, the Changes list
+and giving Settings access stay with the administrator. Every call starts with _require(section)
 or _require_admin(); the boot payload's settings_sections (sections_for) tells the
 screen which sections to show.
 
@@ -52,7 +52,7 @@ GRANTS = {"businesses": "Settings: Businesses", "people": "Settings: People",
           "keys": "Settings: Personal Keys"}
 GRANT_WORDS = {"businesses": "Businesses", "people": "People", "keys": "Personal ERPNext Keys"}
 # What the administrator sees, in the screen's order.
-ALL_SECTIONS = ["people", "businesses", "claude", "email", "keys", "changes"]
+ALL_SECTIONS = ["people", "businesses", "claude", "email", "keys", "recommend", "changes"]
 
 
 def _grants(u) -> list:
@@ -990,3 +990,128 @@ def notifications():
             "rules_on": sum(1 for r in RULES if rules.get(r.rule_id, 1)),
             "rules_total": len(RULES),
             "last_attempt": runtime.last_mail_attempt(), "failing": failing}
+
+
+# --- recommendations --------------------------------------------------------------------
+REC_COST = ("About one Claude request per business per day, written at 06:30 from the "
+            "recommendations and headline figures only.")
+
+
+def _rec_business(business_code: str = ""):
+    rows = list(_business_model().objects.order_by("business_name"))
+    if not rows:
+        _say("Connect a business first (Settings, Businesses).")
+    b = next((x for x in rows if x.business_code == str(business_code or "")), rows[0])
+    return b, rows
+
+
+def _rec_view(b, rows) -> dict:
+    from command_center.ask import claude
+    from command_center.recommend import daily, engine
+    from command_center.recommend.rules import AREAS, RULES
+    from insights.compat import runtime
+    conf = engine.settings(b.business_code)
+    told = engine.suggestions(b.business_code)
+    out = []
+    for r in RULES:
+        mine = conf["rules"][r.rule_id]
+        n = told.get(r.rule_id, 0)
+        out.append({
+            "rule_id": r.rule_id, "title": r.title, "area": r.area, "area_label": AREAS[r.area],
+            "severity": r.severity, "enabled": mine["enabled"], "not_relevant": n,
+            "suggestion": (f"Marked not relevant {n} times: consider raising "
+                           f"{r.params[0].label.lower()}." if n and r.params else None),
+            "params": [{"key": p.key, "label": p.label, "unit": p.unit, "default": p.default,
+                        "value": mine["params"][p.key]} for p in r.params]})
+    brief = daily._get(daily.BRIEF_PARENT, b.business_code)
+    return {"business_code": b.business_code, "business_name": b.business_name,
+            "businesses": [{"code": x.business_code, "name": x.business_name} for x in rows],
+            "rules": out, "digest": conf["digest"], "brief": conf["brief"],
+            "digest_state": daily.digest_state(b.business_code) or None,
+            "brief_state": ({k: brief.get(k) for k in ("date", "at", "text", "error", "model")}
+                            if brief else None),
+            "claude_configured": claude.configured(),
+            "email_configured": bool(runtime.mail_config().get("host")),
+            "brief_cost": REC_COST}
+
+
+@frappe.whitelist()
+def recommendations(business_code: str = ""):
+    """The recommendation rules for one business: on or off, their thresholds, how often
+    managers marked each not relevant; the digest and the Daily Brief switches."""
+    _require_admin()
+    b, rows = _rec_business(business_code)
+    return _rec_view(b, rows)
+
+
+def _rec_list(value, what):
+    import json
+    if isinstance(value, str):
+        try:
+            value = json.loads(value or "null")
+        except ValueError:
+            _say(f"The {what} could not be read.")
+    return value
+
+
+@frappe.whitelist(methods=["POST"])
+def set_recommendations(business_code: str = "", rules=None, digest=None, brief=None):
+    """Save one business's rules ({rule_id: {"enabled", "params"}}), digest and brief."""
+    _require_admin()
+    from command_center.recommend import engine
+    from command_center.recommend.rules import BY_ID
+    b, rows = _rec_business(business_code)
+    old = engine.settings(b.business_code)
+    new = {"rules": {k: {"enabled": v["enabled"], "params": dict(v["params"])}
+                     for k, v in old["rules"].items()},
+           "digest": old["digest"], "brief": old["brief"]}
+    changed = []
+    for rule_id, mine in (_rec_list(rules, "rules") or {}).items():
+        rule = BY_ID.get(rule_id)
+        if rule is None or not isinstance(mine, dict):
+            continue
+        cur = new["rules"][rule_id]
+        if "enabled" in mine and bool(mine["enabled"]) != cur["enabled"]:
+            cur["enabled"] = bool(mine["enabled"])
+            changed.append(f"{rule.title} {'on' if cur['enabled'] else 'off'}")
+        for p in rule.params:
+            v = (mine.get("params") or {}).get(p.key)
+            if v in (None, ""):
+                continue
+            try:
+                v = float(str(v).replace(",", ""))
+            except ValueError:
+                _say(f"{rule.title}: \u201c{p.label}\u201d must be a number.")
+            if v < 0 or (p.unit == "percent" and v > 1000):
+                _say(f"{rule.title}: \u201c{p.label}\u201d is out of range.")
+            if v != cur["params"][p.key]:
+                cur["params"][p.key] = v
+                changed.append(f"{rule.title}: {p.label.lower()} {v:g}")
+    for flag, word in (("digest", "daily email digest"), ("brief", "Daily Brief by Claude")):
+        v = digest if flag == "digest" else brief
+        if v is None or v == "":
+            continue
+        v = _truthy(v)
+        if v != new[flag]:
+            new[flag] = v
+            changed.append(f"{word} {'on' if v else 'off'}")
+    if not changed:
+        _say("Nothing was changed.")
+    engine.save_settings(b.business_code, new)
+    _audit(f"changed the recommendations for {b.business_name}: " + "; ".join(changed)[:1500])
+    return _rec_view(b, rows)
+
+
+@frappe.whitelist(methods=["POST"])
+def write_brief_now(business_code: str = ""):
+    """Write today's Daily Brief for one business now (one Claude request)."""
+    _require_admin()
+    from command_center.recommend import daily, engine
+    b, rows = _rec_business(business_code)
+    if not engine.settings(b.business_code)["brief"]:
+        _say("Switch the Daily Brief on for this business first.")
+    engine.ensure_fresh(b.business_code, force=True)
+    out = daily.write_brief(b.business_code)
+    _audit(f"wrote the Daily Brief for {b.business_name} now")
+    return {"ok": bool(out.get("text")), "says": "Written." if out.get("text") else out.get("error"),
+            **_rec_view(b, rows)}

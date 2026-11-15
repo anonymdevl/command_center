@@ -470,6 +470,31 @@ class CommandCenterLoadLog(DocModel):
         verbose_name_plural = "Command Center Load Log"
 
 
+class CommandCenterRecommendation(DocModel):
+    business_code = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    rec_key = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    rule = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    area = models.CharField(max_length=140, null=True, blank=True)
+    severity = models.CharField(max_length=140, null=True, blank=True)
+    status = models.CharField(max_length=140, null=True, blank=True, db_index=True, default="Open")
+    title = models.CharField(max_length=255, null=True, blank=True)
+    money_at_stake = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    currency = models.CharField(max_length=140, null=True, blank=True)
+    payload = models.TextField(null=True, blank=True)
+    first_seen = models.DateTimeField(null=True, blank=True)
+    last_seen = models.DateTimeField(null=True, blank=True)
+    resolved_on = models.DateTimeField(null=True, blank=True)
+    snoozed_until = models.DateField(null=True, blank=True)
+    reason = models.TextField(null=True, blank=True)
+    acted_by = models.CharField(max_length=140, null=True, blank=True)
+    acted_on = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "tabCommand Center Recommendation"
+        verbose_name = "Command Center Recommendation"
+        verbose_name_plural = "Command Center Recommendation"
+
+
 class CommandCenterReportSchedule(DocModel):
     report = models.CharField(max_length=140, null=True, blank=True)
     report_title = models.CharField(max_length=140, null=True, blank=True)
@@ -545,6 +570,7 @@ DOCTYPE_MODELS = {
     "Command Center Fact Task": CommandCenterFactTask,
     "Command Center Ingest State": CommandCenterIngestState,
     "Command Center Load Log": CommandCenterLoadLog,
+    "Command Center Recommendation": CommandCenterRecommendation,
     "Command Center Report Schedule": CommandCenterReportSchedule,
     "Command Center Site Credential": CommandCenterSiteCredential,
     "Connected Business": ConnectedBusiness,

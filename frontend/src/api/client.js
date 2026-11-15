@@ -217,6 +217,14 @@ export const api = {
   alertAct: ({ name, action, reason, until, todo }) =>
     call("command_center.api.alerts.act", { name, action, reason, until, todo }),
 
+  /* Recommendations (api/recommend.py): read, the bell's critical ones, and the decisions. */
+  recommendations: (business_code) =>
+    call("command_center.api.recommend.current", { business_code }),
+  recCritical: (business_code) =>
+    call("command_center.api.recommend.critical", { business_code }),
+  recAct: ({ name, action, reason, days }) =>
+    call("command_center.api.recommend.act", { name, action, reason, days }),
+
   /* Today, Approvals and Outstanding Tasks (api/work.py), and the decisions on them. */
   work: (business_code) => call("command_center.api.work.summary", { business_code }),
   decide: ({ business_code, doctype, name, action }) =>
@@ -286,4 +294,11 @@ Object.assign(settingsApi, {
   setEmail: (args) => call(`${PS}.set_email`, args),
   testEmail: (to) => call(`${PS}.test_email`, { to }),
   notifications: () => call(`${PS}.notifications`),
+
+  recommend: (business_code) => call(`${PS}.recommendations`, { business_code }),
+  setRecommend: ({ business_code, rules, digest, brief }) =>
+    call(`${PS}.set_recommendations`, { business_code, rules: JSON.stringify(rules || {}),
+      digest: digest === undefined ? undefined : digest ? 1 : 0,
+      brief: brief === undefined ? undefined : brief ? 1 : 0 }),
+  writeBriefNow: (business_code) => call(`${PS}.write_brief_now`, { business_code }),
 });

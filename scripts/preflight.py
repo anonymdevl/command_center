@@ -109,6 +109,9 @@ CONFIG_MODULES = (
     "command_center/ingest/",        # the platform's own derived tables
     "command_center/alerts/",        # Command Center Alert and Alert Rule only: the
                                      # engine runs from the scheduler, as no one
+    "command_center/recommend/",     # Command Center Recommendation only: the state of
+                                     # each recommendation, kept by the engine (hourly,
+                                     # as no one) and by the manager's own decisions
     "command_center/api/sso.py",     # the platform account of someone their ERPNext's
                                      # role lets in: made during the guest sign-in,
                                      # as no one (the role check precedes it)
