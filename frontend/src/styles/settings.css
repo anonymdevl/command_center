@@ -7,7 +7,7 @@
    corners and colours from interface/p1.py), so both themes and every accent apply.
    Panels, tables, tabs, tags, buttons and dialogs are the screens' own classes.
    =========================================================================== */
-.st-tabs{margin:0 0 var(--sp-4)}
+.st-tabs{margin:0 0 var(--sp-4);overflow-x:auto;scrollbar-width:thin}
 .st-sub{display:block;font-size:var(--fs-2xs);color:var(--dim);margin-top:2px;overflow-wrap:anywhere}
 .st-acts{display:flex;gap:var(--sp-2);flex-wrap:wrap;justify-content:flex-end}
 .st-acts .btn{margin:0}
@@ -62,3 +62,35 @@
 .st-rec-params input{width:120px;font:inherit;font-size:var(--fs-sm);color:var(--ink);background:var(--bg);
  border:1px solid var(--line2);border-radius:var(--r-sm);padding:6px 10px}
 .st-rec-params input:disabled{opacity:.5}
+
+/* Settings -> Security (SettingsSecurity.jsx) */
+.sec-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:var(--sp-3)}
+.sec-kpis>div{border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 14px;min-width:0}
+.sec-kpis b{display:block;font-size:var(--fs-xl);font-weight:var(--fw-semibold);color:var(--ink)}
+.sec-kpis b.sec-small{font-size:var(--fs-sm)}
+.sec-kpis span{display:block;font-size:var(--fs-2xs);color:var(--mut);margin-top:2px}
+.sec-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+.sec-wrap{overflow-wrap:anywhere;min-width:120px}
+.sec-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:var(--sp-4);margin-top:var(--sp-4)}
+.sec-two>.panel{margin:0;min-width:0}
+.st-stack>.sec-two+.panel{margin-top:var(--sp-4)}
+.sec-biz+.sec-biz{margin-top:var(--sp-4)}
+.sec-biz h4{margin:var(--sp-3) 0 var(--sp-2);font-size:var(--fs-md);font-weight:var(--fw-semibold)}
+.sec-biz h4 .st-dim{font-size:var(--fs-xs);font-weight:var(--fw-medium);margin-left:6px}
+.sec-biz .st-msg{margin-top:0}
+.tag.sec-med{color:var(--high);background:var(--high-bg)}
+.sec-code{font-family:var(--mono);font-size:var(--fs-xs);overflow-wrap:anywhere}
+.sec-more{margin-top:4px;font-size:var(--fs-2xs);color:var(--mut)}
+.sec-more summary{cursor:pointer}
+.sec-more ul{margin:4px 0 0;padding-left:16px}
+.sec-list{list-style:none;margin:var(--sp-2) 0 0;padding:0;font-size:var(--fs-sm)}
+.sec-list li{padding:8px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.sec-list li:last-child{border-bottom:0}
+.sec-note{display:block;margin-top:2px;white-space:pre-wrap}
+.dlg-acts.sec-left{justify-content:flex-start;margin-top:var(--sp-3)}
+.sec-manual{margin:0;padding-left:20px;font-size:var(--fs-sm)}
+.sec-manual li{margin:0 0 var(--sp-3)}
+.sec-manual code{display:block;margin-top:6px;padding:8px 10px;border-radius:var(--r-sm);background:var(--bg);
+ border:1px solid var(--line2);font-size:var(--fs-xs);overflow-x:auto;white-space:pre}
+.settings .ph select{font:inherit;font-size:var(--fs-sm);color:var(--ink);background:var(--bg);
+ border:1px solid var(--line2);border-radius:var(--r-sm);padding:6px 10px}

@@ -19,6 +19,13 @@ class CoreConfig(AppConfig):
         importlib.import_module("insights.core.platform_settings")
         # Plans, licences and usage: Plan & Usage, View Plans, Settings -> Customers.
         importlib.import_module("insights.core.plans")
+        # Settings -> Security (the administrator's only), and every successful sign-in
+        # in its record, whichever way it came.
+        importlib.import_module("insights.core.security")
+        from django.contrib.auth.signals import user_logged_in
+
+        from insights.core.security import on_logged_in
+        user_logged_in.connect(on_logged_in, dispatch_uid="insights-security-sign-in")
         # Every figure definition, once, before any request: loaded lazily, several
         # requests at once could find the catalogue half-filled.
         from command_center.kpi.registry import load_all

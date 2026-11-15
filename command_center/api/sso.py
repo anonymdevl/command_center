@@ -330,8 +330,21 @@ def _refuse(e: Refused, business: str | None):
     frappe.log_error(title="Command Center sign-in refused",
                      message=json.dumps({"why": e.why, "detail": e.detail,
                                          "business": business, "ip": ip}))
+    _security_record(e)
     ref = frappe.generate_hash(length=24)
     frappe.cache().set_value(f"{ACCESS_KEY}{ref}", {"why": e.why, "business": business},
                              expires_in_sec=STATE_TTL)
     frappe.db.commit()
     _redirect(f"{ACCESS_PAGE}?ref={ref}")
+
+
+def _security_record(e: Refused):
+    """The refusal in the platform's sign-in record too (Settings -> Security), where the
+    standalone platform keeps one; nowhere else."""
+    req = getattr(frappe.local, "request", None)
+    try:
+        from insights.core import security
+    except ImportError:
+        return
+    if req is not None and hasattr(req, "META"):
+        security.record_attempt(req, "", "refused", "sso", note=f"{e.why}: {e.detail}"[:255])

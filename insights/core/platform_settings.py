@@ -17,6 +17,7 @@ Who may use it:
                                                 managers -- not of administrators
   everyone else       refused (403), whatever the screen shows.
 
+Security (insights/core/security.py) is the administrator's alone and can never be given.
 The Claude key, Email (and its Notifications status), Branding, Customers (plans,
 licences, usage and rates: insights/core/plans.py), Recommendations, the Changes list
 and giving Settings access stay with the administrator. A business's own
@@ -57,7 +58,7 @@ GRANTS = {"businesses": "Settings: Businesses", "people": "Settings: People",
 GRANT_WORDS = {"businesses": "Businesses", "people": "People", "keys": "Personal ERPNext Keys"}
 # What the administrator sees, in the screen's order.
 ALL_SECTIONS = ["people", "businesses", "customers", "claude", "email", "branding", "keys",
-                "recommend", "changes"]
+                "recommend", "changes", "security"]
 
 
 def _grants(u) -> list:

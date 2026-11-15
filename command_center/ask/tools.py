@@ -45,6 +45,11 @@ DENIED_DOCTYPES = {
     "Social Login Key", "OAuth Client", "OAuth Bearer Token", "OAuth Authorization Code",
     "Connected App", "Token Cache", "User Social Login", "Email Account", "Webhook",
     "Integration Request", "System Settings", "Payment Gateway Account",
+    # Security records, the platform's (Settings -> Security, insights/core/security.py,
+    # which nothing on the question path imports) and the ERPNext ones it watches: who
+    # signed in from where, server code, console runs. Never the analyst's to read.
+    "Security Event", "Security Finding", "Security Incident", "Security Check",
+    "Server Script", "Console Log", "Activity Log", "Access Log", "Authentication Log",
 }
 
 MAX_ROWS = 50          # records handed to the model in one call

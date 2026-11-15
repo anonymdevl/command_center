@@ -20,7 +20,8 @@ export default function Bell({ scope, onGo }) {
   const [data, setData] = useState(null);
   const [recs, setRecs] = useState([]);
   // Plan and licence notices (insights/core/plans.py): an allowance at 80% or used, a
-  // renewal coming, the month's statements ready. One person's own, until dismissed.
+  // renewal coming, the month's statements ready; and, for administrators, security
+  // alerts (insights/core/security.py). One person's own, until dismissed.
   const [notes, setNotes] = useState([]);
   const [open, setOpen] = useState(false);
   const wrap = useRef(null);
@@ -140,20 +141,25 @@ export default function Bell({ scope, onGo }) {
               </ul>
             </>
           ) : null}
-          {notes.length ? (
-            <>
+          {[["Security", notes.filter((x) => x.kind === "security")],
+            ["Plan and licence", notes.filter((x) => x.kind !== "security")]].map(([head, list]) => (list.length ? (
+            <React.Fragment key={head}>
               <div className="bellpop-h">
-                <b>Plan and licence</b>
-                <span>{notes.length}</span>
+                <b>{head}</b>
+                <span>{list.length}</span>
               </div>
               <ul className="bellpop-l">
-                {notes.slice(0, 6).map((x) => (
+                {list.slice(0, 6).map((x) => (
                   <li key={x.id}>
                     <button type="button" title={x.body} onClick={() => {
                       setOpen(false);
-                      onGo?.(x.link === "settings" ? "settings" : "plan");
+                      if (x.link === "security") {
+                        // Settings opens on its Security section (Settings.jsx reads this once).
+                        try { sessionStorage.setItem("cc-settings-tab", "security"); } catch { /* private mode */ }
+                      }
+                      onGo?.(x.link === "settings" || x.link === "security" ? "settings" : "plan");
                     }}>
-                      <span className={`bell-dot ${x.kind === "allowance_full" || x.kind === "lapsed" ? "crit" : "high"}`} aria-hidden="true" />
+                      <span className={`bell-dot ${x.kind === "allowance_full" || x.kind === "lapsed" || x.kind === "security" ? "crit" : "high"}`} aria-hidden="true" />
                       <span className="bell-t">
                         <b>{x.title}</b>
                         <span>{x.body}</span>
@@ -165,8 +171,8 @@ export default function Bell({ scope, onGo }) {
                   </li>
                 ))}
               </ul>
-            </>
-          ) : null}
+            </React.Fragment>
+          ) : null))}
           <div className="bellpop-f">
             <button type="button" className="lnk" onClick={() => { setOpen(false); onGo?.("command"); }}>
               See them on Home
