@@ -741,6 +741,27 @@ def run_report(report: str, filters=None, business_code=None):
             "message": _clean(res.get("message") or "")}
 
 
+# People and leave, read live from the business's ERPNext the way the HR screen reads them
+# (api/people.py): the leave balances worked out as HRMS works them out, who is away,
+# what is waiting for approval. Contact details, photos and pay never come this way.
+def people(text: str | None = None, department: str | None = None,
+           status: str | None = None, business_code=None):
+    """Employees by name or ID, department or status: job, department, branch, manager."""
+    from command_center.api import people as P
+    return _clean(_far(lambda: P.people_for_analyst(business_code, text, department, status)))
+
+
+def leave(person: str | None = None, year: str | None = None, business_code=None):
+    """One person's leave balances by type and recent leave, or everyone's: who is away
+    today and this week, requests waiting for approval, balances, taken by department."""
+    from command_center.api import people as P
+    out = _far(lambda: P.for_analyst(business_code, person, year))
+    if isinstance(out.get("balances"), list) and len(out["balances"]) > MAX_GROUPS:
+        out["balances"] = out["balances"][:MAX_GROUPS]
+        out["balances_note"] = f"first {MAX_GROUPS} people only"
+    return _clean(out)
+
+
 # The six deep analyses that existed before the analyst. They stay: each is a careful,
 # tested piece of reasoning, and the model calling one is better than re-deriving it.
 def _intent(name: str, phrasing: str):
@@ -883,6 +904,24 @@ TOOLS = {
         "One ERPNext document in full, with its line items -- an invoice, order, quotation, "
         "employee, project, issue ...",
         {"doctype": {"type": "string"}, "name": {"type": "string"}}, ["doctype", "name"])),
+    "people": (people, _decl(
+        "people",
+        "Find employees by name or employee ID (or part of one), department or status "
+        "(Active, Left ...): their job, department, branch, manager, joining date and "
+        "length of service. Read live from ERPNext. No contact details and no pay.",
+        {"text": {"type": "string", "description": "a name, part of one, or an employee ID"},
+         "department": {"type": "string"}, "status": {"type": "string"}})),
+    "leave": (leave, _decl(
+        "leave",
+        "Leave, read live from ERPNext and counted as ERPNext's own leave balance counts "
+        "it. With a person (name or employee ID): their balance by leave type -- "
+        "allocated, taken, pending approval, remaining -- and their recent leave. "
+        "Without: who is on approved leave today and this week, requests waiting for "
+        "approval and for how long, every active person's balances, and days taken this "
+        "year by department.",
+        {"person": {"type": "string", "description": "a name or employee ID; leave out "
+                                                     "for everyone"},
+         "year": {"type": "string", "description": "YYYY; this year when left out"}})),
     "report_filters": (report_filters, _decl(
         "report_filters",
         "The filters an ERPNext report takes (dates, periodicity, fiscal year, company ...), "
@@ -993,6 +1032,12 @@ def describe(name: str, args: dict) -> str:
         return f"Checking how {a.get('report', 'the report')} is filtered"
     if name in ("erpnext_list", "erpnext_count", "erpnext_fields"):
         return f"Reading {a.get('doctype', 'ERPNext')} records"
+    if name == "people":
+        return (f"Looking up “{str(a.get('text'))[:40]}” among the staff" if a.get("text")
+                else "Reading the staff list")
+    if name == "leave":
+        return (f"Reading {str(a.get('person'))[:40]}'s leave" if a.get("person")
+                else "Reading who is on leave and the balances")
     if name == "erpnext_document":
         return f"Opening {a.get('doctype', '')} {a.get('name', '')}".strip()
     if name in INTENT_WORDS:
@@ -1021,6 +1066,7 @@ STEP_KINDS = {
     "report_filters": "Checking how a report is filtered",
     "erpnext_list": "Reading ERPNext records", "erpnext_count": "Reading ERPNext records",
     "erpnext_fields": "Reading ERPNext records", "erpnext_document": "Opening an ERPNext document",
+    "people": "Reading the staff list", "leave": "Reading leave",
     "who_owes_most": "Working out who owes the most",
     "has_party_ever_paid": "Reading a payment history", "why_order_open": "Looking at an open order",
     "supplier_concentration": "Measuring dependence on a supplier",
