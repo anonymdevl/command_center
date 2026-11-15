@@ -9,6 +9,11 @@ import React, { useEffect, useRef } from "react";
  */
 export default function Drawer({ content, onClose, onBack = null }) {
   const open = Boolean(content);
+  const panel = useRef(null);
+  // A new panel (a related figure, a customer's records, Back) starts at its top.
+  useEffect(() => {
+    if (panel.current) panel.current.scrollTop = 0;
+  }, [content]);
 
   useEffect(() => {
     if (!open) return;
@@ -23,7 +28,7 @@ export default function Drawer({ content, onClose, onBack = null }) {
   return (
     <>
       <div className={`scrim${open ? " on" : ""}`} onClick={onClose} />
-      <div className={`drawer${open ? " on" : ""}`}>
+      <div ref={panel} className={`drawer${open ? " on" : ""}`}>
         {onBack ? (
           <button type="button" className="btn drawer-back" onClick={onBack}
                   aria-label="Back to the previous panel">
