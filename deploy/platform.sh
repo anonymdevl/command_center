@@ -156,8 +156,14 @@ if [ -f "$CONFIG" ] && grep -q command_center_anthropic_key "$CONFIG"; then
 fi
 
 printf '\n== done.\n'
-echo "   Open it from your own computer through a tunnel (nothing is exposed publicly):"
-echo "     ssh -L $PORT:127.0.0.1:$PORT $(id -un)@<this server>"
-echo "     then http://localhost:$PORT/command-center-login"
-echo "   Administration (businesses, people, error log): http://localhost:$PORT/admin/"
-echo "   With a domain: ./deploy/domain.sh <domain> <your email> (nginx + HTTPS)."
+SITE="$(CONFIG="$CONFIG" "$PY" -c 'import json,os; print(json.load(open(os.environ["CONFIG"])).get("host_name") or "")' 2>/dev/null || true)"
+if [ -n "$SITE" ]; then
+  echo "   The platform:    $SITE/command-center-login"
+  echo "   Administration:  $SITE/admin/"
+else
+  echo "   Open it from your own computer through a tunnel (nothing is exposed publicly):"
+  echo "     ssh -L $PORT:127.0.0.1:$PORT $(id -un)@<this server>"
+  echo "     then http://localhost:$PORT/command-center-login"
+  echo "   Administration (businesses, people, error log): http://localhost:$PORT/admin/"
+  echo "   With a domain: ./deploy/domain.sh <domain> <your email> (nginx + HTTPS)."
+fi
