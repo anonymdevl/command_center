@@ -1444,3 +1444,21 @@ body.cc-auth{overflow:auto;min-height:100vh;background:var(--bg);display:grid;pl
  .av{width:38px;height:38px}
  .main{padding:20px 16px 56px;border-radius:var(--r)}
 }
+
+/* ---- Ask: grouped live steps, Stop, one question at a time (15 Nov 2026) ---- */
+.ap-stepwrap{margin-top:10px}
+.ap-stepwrap .ap-steps{margin-top:0}
+.ap-think .ap-steps .ap-stepn,.ap-deep .ap-steps .ap-stepn,.ap-steps .ap-stepn{display:inline-block;
+ margin:0 0 0 6px;padding:0 7px;border-radius:var(--r-pill);background:var(--accent-bg);
+ color:var(--accent-ink);font-size:var(--fs-xs);font-weight:var(--fw-semibold);line-height:1.6}
+.ap-steps .ap-stepd{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
+.ap-steps .ap-stepd li{padding-left:0;font-size:var(--fs-xs);color:var(--mut)}
+.ap-steps .ap-stepd li::before{content:none}
+.ap-stepall{margin:8px 0 0 24px;padding:0;border:0;background:none;color:var(--accent-ink);font:inherit;
+ font-size:var(--fs-xs);font-weight:var(--fw-semibold);cursor:pointer}
+.ap-stepall:hover{text-decoration:underline}
+.ap-busy{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px}
+.ap-act:disabled{opacity:.6;cursor:default}
+/* The starter questions are sentences with figures in them: they wrap inside the panel
+   rather than running past its edge. */
+#asksugg .btn{white-space:normal;flex:0 1 auto;max-width:100%;text-align:left;line-height:1.4}

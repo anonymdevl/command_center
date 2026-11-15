@@ -10,7 +10,8 @@ import { hydrateCards, hydrateTiles, keysFor, markLoading } from "../legacy/hydr
 import { renderAnswer, renderThinking, renderFailure } from "../legacy/answer.js";
 import { clearTurns, historyFor, remember, replaceAnswer, restore, turnsFor } from "../askHistory.js";
 import { renderConversations } from "../legacy/conversations.js";
-import { followDeep, withSteps } from "../askFlow.js";
+import { fetchStarters, followDeep, runAsk, runningFor, stopDeepLook, stopRunning } from "../askFlow.js";
+import { renderSteps } from "../legacy/steps.js";
 import { runReport } from "../legacy/reports.js";
 import { wireActions } from "../legacy/actions.js";
 import { WORK_VIEWS, renderWork } from "../legacy/work.js";
@@ -211,10 +212,14 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       const t = document.createElement("span");
       t.textContent = "This question needs more than a quick pass. A fuller answer will replace "
         + "this one in a few minutes; the first pass is below.";
-      const ol = document.createElement("ol");
-      ol.className = "ap-steps";
+      let ol = document.createElement("div");
       body.append(b, t, ol);
-      banner.append(spin, body);
+      // Stop the deeper look; the first answer below stays.
+      const halt = document.createElement("button");
+      halt.className = "ap-act";
+      halt.type = "button";
+      halt.textContent = "Stop";
+      banner.append(spin, body, halt);
       out.prepend(banner);
       const note = (text, why) => {
         const n = document.createElement("div");
@@ -227,15 +232,11 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
         }
         banner.replaceWith(n);
       };
-      followDeep(askId, {
+      const unfollow = followDeep(askId, {
         onSteps: (steps) => {
-          ol.textContent = "";
-          steps.forEach((st, i) => {
-            const li = document.createElement("li");
-            li.className = i === steps.length - 1 ? "now" : "done";
-            li.textContent = st;
-            ol.append(li);
-          });
+          const next = renderSteps(steps, banner);
+          ol.replaceWith(next);
+          ol = next;
         },
         onDone: (full) => {
           replaceAnswer(scope, q, full);
@@ -245,7 +246,13 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
           + "first-pass answer.", why),
         onStuck: () => note("The deeper look could not start: the server's background workers "
           + "are not running. This is the first-pass answer."),
+        onStopped: () => note("You stopped the deeper look, so this is the first-pass answer."),
       });
+      halt.onclick = () => {
+        stopDeepLook(askId);
+        unfollow();
+        note("You stopped the deeper look, so this is the first-pass answer.");
+      };
     };
 
     window.drawThread = () => {
@@ -258,26 +265,73 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       threadTools(thread);
     };
 
+    // One question at a time per conversation: asked while one is running (here or in
+    // the bar), it is not started, and the note under the box says so, with a Stop.
+    const busyNote = (thread) => {
+      let n = thread.parentElement?.querySelector(".ap-busy");
+      if (!n) {
+        n = document.createElement("div");
+        n.className = "ap-note ap-busy";
+        thread.before(n);
+      }
+      n.textContent = "One question at a time: the one still being worked out must finish or be "
+        + "stopped first. ";
+      const b = document.createElement("button");
+      b.className = "ap-act";
+      b.type = "button";
+      b.textContent = "Stop it";
+      b.onclick = () => stopRunning(scopeRef.current);
+      n.append(b);
+      const gone = () => {
+        if (runningFor(scopeRef.current)) return;
+        n.remove();
+        window.removeEventListener("cc-ask-running", gone);
+      };
+      window.addEventListener("cc-ask-running", gone);
+    };
+
     window.runSearch = async (question) => {
       const thread = document.getElementById("sout2") || document.getElementById("sout");
       if (!thread) return;
       const q = (question || "").trim();
       if (!q) return;
+      const scope = scopeRef.current;
+      // The same flow as the bar: the question reports each lookup, shown live.
+      let out = null;
+      let handle = null;
+      const think = (steps) => {
+        renderThinking(out, q, steps);
+        const box = out.querySelector(".ap-think");
+        if (!box || !handle) return;
+        const b = document.createElement("button");
+        b.className = "ap-act";
+        b.type = "button";
+        b.textContent = handle.stopped ? "Stopping…" : "Stop";
+        b.disabled = handle.stopped;
+        b.title = "Stop working on this question and show what it has found so far";
+        b.onclick = () => {
+          handle.stop();
+          think(steps);
+        };
+        box.append(b);
+      };
+      handle = runAsk(scope,
+        { question: q, business_code: scope, history: historyFor(scope) },
+        (steps) => out && think(steps));
+      if (!handle) {
+        busyNote(thread);
+        return;
+      }
       const box = document.getElementById("askin");
       if (box) box.value = "";
-      const out = newTurn(thread, q);
+      out = newTurn(thread, q);
       out.parentElement.scrollIntoView({ behavior: "smooth", block: "start" });
-      renderThinking(out, q);
+      think([]);
       try {
-        // The same flow as the bar: a job that reports each lookup, shown live.
-        const payload = await withSteps(
-          { question: q, business_code: scopeRef.current, history: historyFor(scopeRef.current) },
-          new AbortController().signal,
-          (steps) => renderThinking(out, q, steps),
-        );
-        remember(scopeRef.current, q, payload);
+        const payload = await handle.answer;
+        remember(scope, q, payload);
         renderAnswer(out, payload, answerOpts(q));
-        if (payload?.deep?.ask_id) deepen(out, q, payload.deep.ask_id, scopeRef.current);
+        if (payload?.deep?.ask_id) deepen(out, q, payload.deep.ask_id, scope);
       } catch (e) {
         renderFailure(out, e?.message);
       }
@@ -315,13 +369,14 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
   useEffect(() => {
     if (viewKey !== "ask") return;
     window.drawThread?.();
-    // The Ask AI screen's suggestions come from the server's one list, the same the
-    // bar offers. No suggestion asks it to change anything: one that did ("Issue a
+    // The Ask AI screen's suggestions are the starter questions the bar offers
+    // (api/starters.py): chosen from the person's role and today's figures, each asked
+    // on a click. No suggestion asks it to change anything: one that did ("Issue a
     // credit note", to show the refusal) read as if the assistant could (18 Oct 2026).
     const sugg = document.getElementById("asksugg");
     if (sugg) {
-      api.answerable().then((r) => {
-        const list = (r?.examples || []).slice(0, 6);
+      fetchStarters(scopeRef.current).then((all) => {
+        const list = all.slice(0, 6);
         if (!list.length || !document.body.contains(sugg)) return;
         sugg.textContent = "";
         list.forEach((e) => {
@@ -334,7 +389,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       }).catch(() => {});
     }
 
-  }, [viewKey]);
+  }, [viewKey, scope]);
 
   // The generated markup has an empty #greet that the old script filled on a
   // timer. Ported here so the command screen still greets the person by name

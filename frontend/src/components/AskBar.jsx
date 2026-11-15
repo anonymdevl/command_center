@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { historyFor, recentQuestions, remember, replaceAnswer } from "../askHistory.js";
-import { followDeep, withSteps } from "../askFlow.js";
+import { fetchStarters, followDeep, runAsk, runningFor, stopDeepLook, stopRunning } from "../askFlow.js";
+import { groupSteps, hasHidden } from "../legacy/steps.js";
 import { renderAnswer } from "../legacy/answer.js";
 import { renderMarkdown } from "../legacy/markdown.js";
 import Icon from "./Icon.jsx";
@@ -22,7 +23,8 @@ const AI = { name: boot.ai?.name || "Gemini", provider: boot.ai?.provider || "ge
  *
  * The analyst can take tens of seconds on a real question, because it looks several
  * things up before it answers. So the wait is shown honestly -- what is happening and
- * for how long -- and can be cancelled, rather than a spinner that implies a second.
+ * for how long -- and can be stopped, keeping what it has found, rather than a spinner
+ * that implies a second.
  */
 
 // Used until the server's list arrives, or if it cannot be fetched.
@@ -31,7 +33,10 @@ const FALLBACK = [
   { q: "How did sales trend over the last 12 months, and where are we heading?", area: "Sales" },
   { q: "Which suppliers do we depend on most?", area: "Buying" },
 ];
-let examplesCache = null;
+// The starter questions (api/starters.py), per business: chosen from the person's role
+// and from what that business's figures say today. Fetched once a page per business;
+// the server keeps them for ten minutes.
+const startersCache = {};
 
 export default function AskBar({ scope, openDrawer }) {
   const [q, setQ] = useState("");
@@ -46,11 +51,13 @@ export default function AskBar({ scope, openDrawer }) {
   // A big question's deeper look, carrying on in the background after the first answer.
   const [deep, setDeep] = useState(null); // {state: running|stuck|failed, steps, error}
   const stopDeep = useRef(null);
-  const [examples, setExamples] = useState(examplesCache || FALLBACK);
+  const [examples, setExamples] = useState(startersCache[scope] || FALLBACK);
+  const [stopping, setStopping] = useState(false);
+  const [busy, setBusy] = useState(""); // a question is already running in this conversation
   const [hi, setHi] = useState(-1);
   const wrap = useRef(null);
   const input = useRef(null);
-  const ctrl = useRef(null);
+  const run = useRef(null); // this bar's running question (askFlow.runAsk)
 
   // Cmd/Ctrl-K from anywhere.
   useEffect(() => {
@@ -75,19 +82,35 @@ export default function AskBar({ scope, openDrawer }) {
     return () => document.removeEventListener("mousedown", away);
   }, [open]);
 
-  // The suggestions, once per page, from the server's own list.
+  // The starter questions for this business, once a page per business.
   useEffect(() => {
-    if (!open || examplesCache) return;
-    api.answerable()
-      .then((r) => {
-        const list = (r?.examples || []).filter((e) => e?.q);
-        if (list.length) {
-          examplesCache = list;
-          setExamples(list);
-        }
+    if (startersCache[scope]) {
+      setExamples(startersCache[scope]);
+      return;
+    }
+    setExamples(FALLBACK);
+    if (!open) return;
+    let live = true;
+    fetchStarters(scope)
+      .then((list) => {
+        if (!list.length) return;
+        startersCache[scope] = list;
+        if (live) setExamples(list);
       })
       .catch(() => {});
-  }, [open]);
+    return () => {
+      live = false;
+    };
+  }, [open, scope]);
+
+  // One question at a time per conversation: the note saying so goes once it is free.
+  useEffect(() => {
+    const on = () => {
+      if (!runningFor(scope)) setBusy("");
+    };
+    window.addEventListener("cc-ask-running", on);
+    return () => window.removeEventListener("cc-ask-running", on);
+  }, [scope]);
 
   // Seconds counter while the analyst works.
   useEffect(() => {
@@ -103,12 +126,22 @@ export default function AskBar({ scope, openDrawer }) {
       input.current?.focus();
       return;
     }
-    ctrl.current?.abort();
+    setOpen(true);
+    const other = runningFor(scope);
+    if (other) {
+      setBusy(other === run.current
+        ? "This question is still being worked out. Stop it to ask another."
+        : "A question is still being worked out on the Ask AI screen. Wait for its answer, or stop it.");
+      return;
+    }
+    const args = { question: text, business_code: scope, history: historyFor(scope) };
+    const handle = runAsk(scope, args, setSteps);
+    if (!handle) return;
+    run.current = handle;
     stopDeep.current?.();
     setDeep(null);
-    const c = new AbortController();
-    ctrl.current = c;
-    setOpen(true);
+    setBusy("");
+    setStopping(false);
     setPending(text);
     setQ("");
     setHi(-1);
@@ -116,16 +149,18 @@ export default function AskBar({ scope, openDrawer }) {
     setSteps([]);
     setPhase("thinking");
     try {
-      const args = { question: text, business_code: scope, history: historyFor(scope) };
-      const payload = await withSteps(args, c.signal, setSteps);
-      if (c.signal.aborted) return;
+      const payload = await handle.answer;
+      if (run.current !== handle) return;
+      run.current = null;
+      setStopping(false);
       remember(scope, text, payload);
       setAsked(text);
       setResult(payload);
       setPhase("answer");
       if (payload?.deep?.ask_id) {
-        setDeep({ state: "running", steps: [] });
-        stopDeep.current = followDeep(payload.deep.ask_id, {
+        const deepId = payload.deep.ask_id;
+        setDeep({ state: "running", steps: [], askId: deepId });
+        stopDeep.current = followDeep(deepId, {
           onSteps: (st) => setDeep((d) => (d?.state === "running" ? { ...d, steps: st } : d)),
           onDone: (full) => {
             replaceAnswer(scope, text, full);
@@ -134,9 +169,12 @@ export default function AskBar({ scope, openDrawer }) {
           },
           onFailed: (why) => setDeep({ state: "failed", error: why }),
           onStuck: () => setDeep({ state: "stuck" }),
+          onStopped: () => setDeep({ state: "stopped" }),
         });
       }
     } catch (e) {
+      if (run.current === handle) run.current = null;
+      setStopping(false);
       if (e?.name === "AbortError") return;
       setError(e?.message || "The question could not be answered.");
       setPhase("error");
@@ -157,13 +195,21 @@ export default function AskBar({ scope, openDrawer }) {
     return () => window.removeEventListener("cc-ask", on);
   }, []);
 
-  const cancel = () => {
-    ctrl.current?.abort();
-    setPhase(result ? "answer" : "idle");
+  // Stop: the server ends the question at its next check and answers with what it had;
+  // that partial answer is shown like any other, and the bar is ready for the next one.
+  const stop = () => {
+    if (!run.current) return;
+    setStopping(true);
+    run.current.stop();
+  };
+
+  const stopDeepLookNow = () => {
+    if (deep?.askId) stopDeepLook(deep.askId);
+    stopDeep.current?.();
+    setDeep({ state: "stopped" });
   };
 
   const reset = () => {
-    ctrl.current?.abort();
     stopDeep.current?.();
     setDeep(null);
     setPhase("idle");
@@ -238,6 +284,15 @@ export default function AskBar({ scope, openDrawer }) {
       {open ? (
         <div className={`askpop${wide ? " wide" : ""}`} id="askpop" role="region"
           aria-live="polite" aria-label="Answer">
+          {busy ? (
+            <div className="ap-note ap-busy">
+              {busy}
+              <button className="ap-act" type="button" onClick={() => stopRunning(scope)}>
+                Stop it
+              </button>
+            </div>
+          ) : null}
+
           {phase === "idle" ? (
             <Suggestions choices={choices} recentCount={recent.length} hi={hi} onPick={ask} />
           ) : null}
@@ -248,23 +303,17 @@ export default function AskBar({ scope, openDrawer }) {
               <div>
                 <b>Looking into “{pending}”</b>
                 <span>
-                  {steps.length ? "Working through it"
+                  {stopping ? "Stopping — keeping what it has found so far"
+                    : steps.length ? "Working through it"
                     : elapsed >= 12 ? `Waiting for ${AI.name}, the AI model, to reply` : "Reading the question"}
                   {elapsed >= 3 ? ` · ${elapsed}s` : ""}
                   {elapsed >= 40 ? (AI.provider === "claude" ? " — big questions take longer; a fuller look carries on if needed" : " — Google is replying slowly; a model that stalls is swapped for another") : ""}
                 </span>
-                {steps.length ? (
-                  <ol className="ap-steps">
-                    {steps.map((s, i) => (
-                      <li key={i} className={i === steps.length - 1 ? "now" : "done"}>
-                        {s}
-                      </li>
-                    ))}
-                  </ol>
-                ) : null}
+                <StepList steps={steps} />
               </div>
-              <button className="ap-act" type="button" onClick={cancel}>
-                Cancel
+              <button className="ap-act" type="button" onClick={stop} disabled={stopping}
+                title="Stop working on this question and show what it has found so far">
+                {stopping ? "Stopping…" : "Stop"}
               </button>
             </div>
           ) : null}
@@ -292,6 +341,7 @@ export default function AskBar({ scope, openDrawer }) {
               onReset={reset}
               onAsk={ask}
               deep={deep}
+              onStopDeep={stopDeepLookNow}
               onContinue={() => {
                 setOpen(false);
                 window.location.hash = "ask";
@@ -328,7 +378,7 @@ function Suggestions({ choices, recentCount, hi, onPick }) {
   );
 }
 
-function Answer({ asked, result, scope, openDrawer, onReset, onAsk, onContinue, deep }) {
+function Answer({ asked, result, scope, openDrawer, onReset, onAsk, onContinue, deep, onStopDeep }) {
   const body = useRef(null);
   const [copied, setCopied] = useState(false);
   const [hasTables, setHasTables] = useState(false);
@@ -372,7 +422,7 @@ function Answer({ asked, result, scope, openDrawer, onReset, onAsk, onContinue, 
       </div>
       <div className="ap-q">{asked}</div>
       {result.notice ? <div className="ap-note info">{result.notice}</div> : null}
-      <DeepLook deep={deep} />
+      <DeepLook deep={deep} onStop={onStopDeep} />
       {result.analyst_error ? (
         // The analyst failed and the basic engine answered. Said, not hidden: a
         // fallback that passes for the analyst is how a broken one goes unnoticed.
@@ -443,8 +493,40 @@ function Answer({ asked, result, scope, openDrawer, onReset, onAsk, onContinue, 
   );
 }
 
+/**
+ * The live steps, a run of one kind of lookup shown as one line with a count, and
+ * "Show all" for each step's own line (the same grouping as legacy/steps.js draws).
+ */
+export function StepList({ steps }) {
+  const [all, setAll] = useState(false);
+  const rows = groupSteps(steps);
+  if (!rows.length) return null;
+  return (
+    <div className="ap-stepwrap">
+      <ol className="ap-steps">
+        {rows.map((r, i) => (
+          <li key={i} className={i === rows.length - 1 ? "now" : "done"}>
+            {r.label}
+            {r.count > 1 ? <span className="ap-stepn">×{r.count}</span> : null}
+            {all && r.count > 1 ? (
+              <ul className="ap-stepd">
+                {r.details.map((d, j) => <li key={j}>{d}</li>)}
+              </ul>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+      {hasHidden(rows) ? (
+        <button type="button" className="ap-stepall" onClick={() => setAll((a) => !a)}>
+          {all ? "Show less" : "Show all"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 /** Where a big question's deeper look has got to, above the first answer. */
-export function DeepLook({ deep }) {
+export function DeepLook({ deep, onStop }) {
   if (!deep) return null;
   if (deep.state === "running") {
     return (
@@ -456,14 +538,14 @@ export function DeepLook({ deep }) {
             This question needs more than a quick pass. A fuller answer will replace this one in a
             few minutes; the first pass is below.
           </span>
-          {deep.steps?.length ? (
-            <ol className="ap-steps">
-              {deep.steps.map((s, i) => (
-                <li key={i} className={i === deep.steps.length - 1 ? "now" : "done"}>{s}</li>
-              ))}
-            </ol>
-          ) : null}
+          <StepList steps={deep.steps} />
         </div>
+        {onStop ? (
+          <button className="ap-act" type="button" onClick={onStop}
+            title="Stop the deeper look and keep the first-pass answer">
+            Stop
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -471,7 +553,9 @@ export function DeepLook({ deep }) {
     <div className="ap-note">
       {deep.state === "stuck"
         ? "The deeper look could not start: the server's background workers are not running. This is the first-pass answer."
-        : "The deeper look stopped before it finished, so this is the first-pass answer."}
+        : deep.state === "stopped"
+          ? "You stopped the deeper look, so this is the first-pass answer."
+          : "The deeper look stopped before it finished, so this is the first-pass answer."}
       {deep.error ? <span>Reason: {deep.error}</span> : null}
     </div>
   );
