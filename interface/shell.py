@@ -895,7 +895,7 @@ body.cc-signin .auth-by{position:relative;z-index:1;justify-self:center;width:mi
    TABLES, EVERY SCREEN (16 Nov 2026): headers never wrap ("On Open Invoices / GHS" was
    two lines on Sales and Payments), nor do figures and dates; a table wider than its
    panel scrolls sideways in its own box (legacy/tables.js puts each in a .dt-x), never
-   the page. Text cells keep wrapping, so a long name or reason stays readable -- unless
+   the page. Text cells keep wrapping at a readable measure (TABLE TEXT, below) -- unless
    the cell carries its full text in a title, when it may end in an ellipsis.
    ====================================================================== */
 table.dt th,[data-theme="light"] table.dt th{white-space:nowrap}
@@ -1209,5 +1209,29 @@ table.dt.fs-t :is(.fs-bar-h,.fs-bar-c){width:20%;min-width:96px;padding-left:var
  .ov .ov-as-row > .khead > .flag{order:5}
  .ov .ov-as-row > .flag[data-prov]{order:6}
  .ov .ov-as-row > .ov-note{order:7;flex:1 1 12ch;min-width:0}
+}
+
+/* ======================================================================
+   TABLE TEXT, EVERY SCREEN (16 Nov 2026): a text cell never collapses to a word a line.
+   Headers, dates and figures do not wrap (TABLES, above), so beside ten figure columns
+   Finances' "Why" column was squeezed to one word wide and one row filled the page.
+   legacy/tables.js gives each text cell a band by the length of its text, and its plain
+   words one block (.dt-tx) that holds the width: a floor, so it wraps at a readable
+   measure, and a ceiling, so it does not run on; an explanation stops at three lines,
+   its whole text in the title (and where the row opens, there). A table then wider
+   than its panel scrolls sideways in its own box (.dt-x, .dt-scroll), never the page.
+   ====================================================================== */
+table.dt td:is(.dt-w1,.dt-w2,.dt-w3){white-space:normal}
+table.dt td.dt-w1{min-width:12ch}
+table.dt td.dt-w2{min-width:18ch}
+table.dt td.dt-w3{min-width:26ch}
+table.dt td > .dt-tx{display:block;overflow-wrap:break-word}
+table.dt td.dt-w1 > .dt-tx{min-width:12ch;max-width:28ch}
+table.dt td.dt-w2 > .dt-tx{min-width:18ch;max-width:34ch}
+table.dt td.dt-w3 > .dt-tx{min-width:26ch;max-width:44ch;display:-webkit-box;-webkit-box-orient:vertical;
+ -webkit-line-clamp:3;line-clamp:3;overflow:hidden}
+@container panel (max-width:560px){
+ table.dt td.dt-w3{min-width:24ch}
+ table.dt td.dt-w3 > .dt-tx{min-width:24ch;max-width:34ch}
 }
 """

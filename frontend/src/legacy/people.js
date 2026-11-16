@@ -11,6 +11,7 @@
 
 import { call } from "../api/client.js";
 import { guideBox } from "./guide.js";
+import { waitingLine } from "./reach.js";
 
 export const PEOPLE_VIEWS = new Set(["hr"]);
 
@@ -553,17 +554,7 @@ function drawBalances(body, res, open) {
 /* ------------------------------------------------------------------ shared */
 function stateNode(res) {
   if (res?.kind === "guide" && res.guide) return guideBox(res.guide);
-  if (res?.kind === "unreachable") {
-    const who = res.business ? `${res.business}'s` : "the business's";
-    let when = "";
-    if (res.last_loaded) {
-      const d = new Date(String(res.last_loaded).replace(" ", "T"));
-      if (!Number.isNaN(d.getTime())) {
-        when = ` Last loaded ${d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.`;
-      }
-    }
-    return el("div", "thin", `Can't reach ${who} ERPNext right now — showing nothing new until it's back.${when}`);
-  }
+  if (res?.kind === "unreachable") return el("div", "thin", waitingLine(res.business, res.last_loaded));
   if (res?.kind === "missing") return el("div", "thin", res.message || "This person is not on the books.");
   if (res?.kind === "refused") {
     return el("div", "thin", "The business's ERPNext refused this read: the platform's key there "

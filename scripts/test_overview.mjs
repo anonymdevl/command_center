@@ -104,8 +104,9 @@ check(leadSentence({ label: "Work in flight", value: 40, unit: "count", note: "2
   data_status: { state: "stale" } }, "tasks") === "Work in flight: 40 tasks, 23 of them past due.",
   "the sentence is the figure and its note");
 check(leadSentence({ label: "X", value: null, data_status: { state: "unreachable",
-  message: "Can't reach this business's ERPNext right now." } })
-  === "Can't reach this business's ERPNext right now.", "an unreachable figure says so, no number");
+  message: "This business's ERPNext is taking longer than usual to answer; this figure appears as soon as it does." } })
+  === "This business's ERPNext is taking longer than usual to answer; this figure appears as soon as it does.",
+  "an unreachable figure says so, no number");
 check(leadSentence({ label: "X", value: null, data_status: { state: "needs_setup",
   guide: { text: "Nothing is recorded yet." } } }) === "Nothing is recorded yet.",
   "a figure with a guide says the guide's sentence");

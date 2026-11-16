@@ -6,7 +6,7 @@
  * export buttons and one tab per statement. This file asks for the chosen period and
  * draws what comes back -- the five cards, the statement tables (indented account tree,
  * subtotals in bold, negatives in brackets, the business's currency), the comparison
- * column, a guide where ERPNext is not set up for a statement, "can't reach" where it
+ * column, a guide where ERPNext is not set up for a statement, "not updated yet" where it
  * does not answer. An account opens its General Ledger on the business's ERPNext.
  *
  * Three requests, so the first statements draw while ERPNext is still working out the
@@ -17,6 +17,7 @@
 import { api } from "../api/client.js";
 import { exact, money } from "../format.js";
 import { guideBox } from "./guide.js";
+import { waitingLine } from "./reach.js";
 
 export const STATEMENT_VIEWS = new Set(["fin"]);
 const SECTIONS = ["summary", "tb", "cf"];
@@ -185,15 +186,7 @@ function notOk(target, res) {
   if (state === "needs_setup" && res.guide) {
     target.append(guideBox(res.guide));
   } else if (state === "unreachable") {
-    let when = "";
-    if (res.last_loaded) {
-      const d = new Date(String(res.last_loaded).replace(" ", "T"));
-      if (!Number.isNaN(d.getTime())) {
-        when = ` Last loaded ${d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.`;
-      }
-    }
-    const who = res.business ? `${res.business}'s` : "the business's";
-    target.append(el("div", "thin", `Can't reach ${who} ERPNext right now — showing nothing new until it's back.${when}`));
+    target.append(el("div", "thin", waitingLine(res.business, res.last_loaded)));
   } else {
     target.append(el("div", "thin", res?.message
       || "The statements could not be read just now. They will be asked for again shortly."));

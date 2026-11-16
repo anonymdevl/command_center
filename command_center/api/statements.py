@@ -186,9 +186,10 @@ class _Ctx:
                 "as_of": _today()}
 
     def unreachable(self) -> dict:
+        from command_center.kpi.live_departments import waiting_words
         return {"state": "unreachable", "business": self.name,
                 "last_loaded": str(self.row["last_sync"]) if self.row.get("last_sync") else None,
-                "message": f"Can't reach {self.name}'s ERPNext right now."}
+                "message": f"{waiting_words(self.name)}; the statements appear as soon as it does."}
 
     def site(self) -> str:
         if self._site is None:

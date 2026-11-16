@@ -65,7 +65,11 @@ def get_visible_businesses():
         # Reading is available wherever the platform can reach. Acting requires
         # the manager's own account on the owning site: a peer can be acted in once
         # this manager has linked their own key for it (credentials.link_account).
-        row["can_read"] = row["status"] == "Active"
+        # A business whose ERPNext has not answered lately (Unreachable) is still read:
+        # its loaded figures stand, the rest follow as soon as it answers (16 Nov 2026:
+        # it used to be greyed out of the picker as "unreachable").
+        row["can_read"] = row["status"] in ("Active", "Unreachable")
+        row["waiting"] = row["status"] == "Unreachable"
         row["can_act"] = bool(row["is_local"]) or bool(frappe.db.exists(
             "Command Center Site Credential",
             {"user": frappe.session.user, "business_code": row["business_code"]}))

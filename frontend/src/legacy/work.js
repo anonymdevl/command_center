@@ -13,11 +13,12 @@
  * Built as DOM, never as HTML from the server, in the classes the designed cards use, so
  * the cards look like every other alert. The markup carries no sample request or task:
  * until the queue is read the lists say so, and when it cannot be read as this person
- * they show how to link their own ERPNext key, or that ERPNext is not answering. The decisions -- approve, reject, accept, send
+ * they show how to link their own ERPNext key, or that ERPNext has not answered yet. The decisions -- approve, reject, accept, send
  * back -- open the action dialog, which asks before anything changes. Escalate on open
  * work handed out sends it to the manager of the person it was given to (ActionDialog).
  */
 
+import { WAITING } from "./reach.js";
 import { count, exact, shortDate } from "../format.js";
 import { guideBox } from "./guide.js";
 import { hydrateTiles } from "./hydrate.js";
@@ -53,11 +54,11 @@ export function renderWork(root, view, data, opts = {}) {
 }
 
 /** The queue cannot be read as this person: their own ERPNext key is not linked (a guide
- *  to linking it), or the business's ERPNext is not answering. Never a sample request. */
+ *  to linking it), or the business's ERPNext has not answered yet. Never a sample request. */
 function unavailable(root, view, data, opts) {
   const down = !!data.unreachable;
   const figure = (key) => ({
-    key, value: null, unit: "count", note: down ? "can't reach ERPNext" : "your ERPNext key is not linked",
+    key, value: null, unit: "count", note: down ? WAITING.foot : "your ERPNext key is not linked",
     data_status: down ? { state: "unreachable", message: data.reason }
       : { state: "needs_setup", message: data.reason, guide: data.guide },
   });
@@ -69,7 +70,7 @@ function unavailable(root, view, data, opts) {
     wrap.dataset.unavailable = "1";
     if (down || !data.guide) {
       const e = el("div", "work-empty");
-      e.append(el("b", null, down ? "Can't reach ERPNext just now." : "Not available yet."),
+      e.append(el("b", null, down ? `${WAITING.line}.` : "Not available yet."),
         el("span", null, data.reason || ""));
       wrap.append(e);
     } else {
@@ -85,7 +86,7 @@ function unavailable(root, view, data, opts) {
   } else {
     (anchor || root.querySelector(".topbar")).after(box());
   }
-  setWhen(root, down ? "can't reach ERPNext just now" : "your ERPNext key is not linked yet");
+  setWhen(root, down ? WAITING.foot : "your ERPNext key is not linked yet");
   return live;
 }
 

@@ -22,14 +22,25 @@ def is_down(error) -> bool:
 
     The connector raises BusinessUnreachable for both a dead connection and any non-2xx
     reply (a field a v14 site does not have comes back as HTTP 417). Only the first is
-    "can't reach": a refused read is one figure's problem, not the business's."""
+    "not answered": a refused read is one figure's problem, not the business's. A read
+    that was only slow (BusinessSlow: the site answered a check straight after) is not
+    answered too, though the business itself is not marked down for it."""
     from command_center.connectors.base import BusinessUnreachable, RequestRefused
     return isinstance(error, BusinessUnreachable) and not isinstance(error, RequestRefused)
 
 
+def waiting_words(name: str | None = None) -> str:
+    """The one way a part not answered by the business's ERPNext is said (16 Nov 2026):
+    calm, and never "can't reach" -- most often the site is only slow, and a client
+    reading "can't reach" thinks the connection is broken. The state stays
+    "unreachable" in the data; only the words changed."""
+    who = f"{name}'s" if name else "This business's"
+    return f"{who} ERPNext is taking longer than usual to answer"
+
+
 def unreachable_status(error) -> dict:
     return {"state": "unreachable",
-            "message": "Can't reach this business's ERPNext right now."}
+            "message": f"{waiting_words()}; this figure appears as soon as it does."}
 
 
 def _scope(r):

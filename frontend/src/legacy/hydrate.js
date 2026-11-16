@@ -19,6 +19,7 @@
  * behind.
  */
 
+import { WAITING } from "./reach.js";
 import { guideCard, guideWords, hasGuide } from "./guide.js";
 import { money, count, exact } from "../format.js";
 import { LEAD_FIGURES } from "./overview.js";
@@ -479,10 +480,10 @@ function provenance(node, figure) {
   if (state === "stale") setFlag(node, "as at", "f-asat");
   else if (state === "failed") setFlag(node, "load failed", "f-crit");
   else clearFlag(node);
-  // The business's ERPNext did not answer: no figure, and the footnote says why.
+  // The business's ERPNext did not answer: no figure, and the footnote says why, calmly.
   if (state === "unreachable") {
     const foot = node.querySelector(".delta, .v");
-    if (foot) foot.textContent = "Can't reach ERPNext";
+    if (foot) foot.textContent = WAITING.foot;
   }
 }
 

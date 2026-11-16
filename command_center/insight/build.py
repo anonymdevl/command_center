@@ -530,8 +530,9 @@ def understand(key: str, business_code: str | None = None) -> dict:
             except Exception as e:
                 from command_center.kpi.live_departments import is_down
                 if is_down(e):
-                    d = {"diagnosis": ["The business's ERPNext is not answering just now, so "
-                                       "the breakdown read from it is not shown."]}
+                    from command_center.kpi.live_departments import waiting_words
+                    d = {"diagnosis": [f"{waiting_words('The business')}, so the breakdown "
+                                       "read from it is not shown yet."]}
                 else:
                     frappe.log_error(title=f"Command Center insight: diagnosis of {key}",
                                      message=frappe.get_traceback())

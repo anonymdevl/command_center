@@ -145,6 +145,14 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     window.addEventListener("cc-reach", on);
     return () => window.removeEventListener("cc-reach", on);
   }, []);
+  // An answer with parts ERPNext did not answer: the banner asks again now, so it says
+  // what is true (most often the site was only slow, and it stays away), rather than
+  // what it found when the screen opened.
+  const notAnswered = !!(panels.data?.unreachable || work.data?.unreachable
+    || Object.values(figures.data || {}).some((f) => f?.data_status?.state === "unreachable"));
+  useEffect(() => {
+    if (notAnswered) window.dispatchEvent(new CustomEvent("cc-reach-check"));
+  }, [notAnswered, figures.data, panels.data, work.data]);
 
   // Business Health says how fresh the data is, and can refresh it.
   const isHealth = viewKey === "health";

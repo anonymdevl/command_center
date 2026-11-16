@@ -523,7 +523,8 @@ BOOT_JS = """
     ent.innerHTML=list.map(function(s){
       var b=byCode[s.code], bits=[s.label];
       if(b && b.currency) bits.push(b.currency);
-      if(b && !b.can_read) bits.push('unreachable');
+      if(b && b.waiting) bits.push('updating');
+      else if(b && !b.can_read) bits.push('paused');
       else if(b && !b.can_act) bits.push('read only here');
       return '<option value="'+s.code+'"'+((b&&!b.can_read)?' disabled':'')+'>'
              + bits.join(' \u00b7 ') + '</option>';

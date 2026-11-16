@@ -648,7 +648,7 @@ def compute(keys, business_code=None, side_by_side: bool = True) -> dict:
                 # The business's ERPNext did not answer: once is enough for this screen
                 # (the guarded reader fails the others at once), and the card says so
                 # rather than "could not be read".
-                value, note, state = None, "Can't reach ERPNext", unreachable_status(got)
+                value, note, state = None, "waiting for ERPNext", unreachable_status(got)
             else:
                 frappe.log_error(title=f"Command Center live figure {key}",
                                  message=getattr(got, "__cc_traceback__", "") or repr(got))

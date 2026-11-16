@@ -15,13 +15,14 @@
  * never stacks charts up. A panel that shows parts of a whole (COMPOSITION) offers a
  * donut and a pie in its switcher; a trend offers line, area and bars.
  *
- * A panel the server could not answer says so under its heading -- "can't reach the
- * business's ERPNext", or "could not be read" -- and never shows anything it did not
- * read. Nothing from the API is written as HTML; every node is built here.
+ * A panel the server could not answer says so under its heading -- "not updated yet:
+ * the business's ERPNext is taking longer than usual to answer" (reach.js), or "could
+ * not be read" -- and never shows anything it did not read. Nothing from the API is written as HTML; every node is built here.
  */
 
 import { drawCover } from "./cover.js";
 import { guideBox } from "./guide.js";
+import { UPDATING, WAITING, waitingLine } from "./reach.js";
 import { createViz, vizOf } from "./viz.js";
 
 export const PANEL_VIEWS = new Set(["sales", "proc", "inv", "eng", "cx", "fin", "hr", "it", "aud", "risk"]);
@@ -45,7 +46,16 @@ export function renderPanels(root, viewKey, data, { onOpen, openDrawer, scope, f
   if (!root || !PANEL_VIEWS.has(viewKey)) return 0;
   // The previous screen's answer, still in hand while this one's is on its way.
   if (data?.view && data.view !== viewKey) return 0;
-  if (!data && !failed) return 0;
+  if (!data && !failed) {
+    // Asked for, and on its way: each panel that will be drawn says it is being read
+    // (once the answer is in, reset() takes the line away again).
+    root.querySelectorAll(".panel").forEach((panel) => {
+      if (panel.querySelector(".bk") || panel.dataset.live === "1" || !panel.querySelector(MARKS)) return;
+      if (panel.querySelector(":scope > .thin[data-prov]")) return;
+      notice(panel, UPDATING);
+    });
+    return 0;
+  }
   const panels = data?.panels || {};
   let live = 0;
 
@@ -73,6 +83,12 @@ export function renderPanels(root, viewKey, data, { onOpen, openDrawer, scope, f
     }
     if (spec.kind === "unreachable") {
       notice(panel, unreachable(data));
+      // A designed "Reading …" line under the heading would say it is still on its way.
+      const sub = panel.querySelector(".ph b + span");
+      if (sub && /…$/.test(sub.textContent.trim())) {
+        sub.dataset.designed = sub.textContent;
+        sub.textContent = WAITING.line;
+      }
       return;
     }
     if (spec.kind === "failed") {
@@ -96,15 +112,7 @@ export function renderPanels(root, viewKey, data, { onOpen, openDrawer, scope, f
 }
 
 function unreachable(data) {
-  const who = data?.business ? `${data.business}'s` : "the business's";
-  let when = "";
-  if (data?.last_loaded) {
-    const d = new Date(String(data.last_loaded).replace(" ", "T"));
-    if (!Number.isNaN(d.getTime())) {
-      when = ` Last loaded ${d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.`;
-    }
-  }
-  return `Can't reach ${who} ERPNext right now — showing nothing new until it's back.${when}`;
+  return waitingLine(data?.business, data?.last_loaded);
 }
 
 /** Undo what a previous answer did to the panel, so a new answer starts from the design. */
@@ -116,7 +124,7 @@ function reset(panel) {
     n.style.display = "";
     delete n.dataset.hid;
   });
-  panel.querySelectorAll(":scope > .thin[data-designed]").forEach((n) => {
+  panel.querySelectorAll(":scope > .thin[data-designed], :scope > .ph span[data-designed]").forEach((n) => {
     n.textContent = n.dataset.designed;
     delete n.dataset.designed;
   });

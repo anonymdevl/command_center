@@ -43,8 +43,19 @@ class RequestRefused(BusinessUnreachable):
 
     A kind of BusinessUnreachable so every caller that already handles a failed read
     keeps working; but the business is NOT unreachable: it stays Active, the shell shows
-    no "can't reach" banner, and a screen's other reads carry on (is_down() and the
-    panels' guard tell the two apart)."""
+    no "taking longer than usual" banner, and a screen's other reads carry on (is_down()
+    and the panels' guard tell the two apart)."""
+
+
+class BusinessSlow(BusinessUnreachable):
+    """This read went unanswered after its retries (a timeout, or 429/5xx), but the
+    business answered a quick check straight after (RemoteConnector._gave_up): it is
+    up, only slow on this read -- a large ERPNext working through a heavy query.
+
+    The read's own callers treat it as not answered (is_down() is True, so the part
+    shows the calm "waiting for ERPNext" state and the screen's other reads do not each
+    wait out the retries), but the business is NOT marked Unreachable: no banner, and
+    the next screen asks again as usual (16 Nov 2026)."""
 
 
 class CredentialRequired(ConnectorError):

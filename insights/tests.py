@@ -1926,7 +1926,8 @@ class ManagementScreens(TransactionTestCase):
                     work_api._Remote(connector_for("test_medical_ltd")), None)):
                 w = post("command_center.api.work.summary", business_code="test_medical_ltd")
             self.assertTrue(w["unreachable"])
-            self.assertIn("Can't reach", w["reason"])
+            self.assertIn("taking longer than usual to answer", w["reason"])
+            self.assertNotIn("Can't reach", w["reason"])
             self.assertFalse(post("command_center.api.reach.retry",
                                   business_code="test_medical_ltd")["reachable"])
         # it answers again: Retry finds it, and the status recovers by itself
@@ -1974,6 +1975,151 @@ class RefusedIsNotUnreachable(TransactionTestCase):
                     if status == 503:
                         self.assertNotIsInstance(caught.exception, RequestRefused)
             self.assertEqual(ConnectedBusiness.objects.get().status, expect, f"after HTTP {status}")
+
+
+class SlowIsNotDown(TransactionTestCase):
+    """16 Nov 2026: one slow read used to mark the whole business Unreachable -- the
+    "can't reach" banner for everyone, every screen's live reads giving up at once --
+    until the next poll answered. Now a read unanswered after its retries is followed by
+    one quick check: answered, the read was only slow (BusinessSlow: that part waits,
+    nothing is marked); not answered, the business is marked Unreachable, as before. And
+    a business marked down is asked again by the banner's status, at most once a minute,
+    so it clears by itself on the next look once it answers."""
+
+    databases = {"default", "aux"}
+
+    def setUp(self):
+        from cryptography.fernet import Fernet
+        from django.conf import settings
+        from django.core.cache import cache
+        settings.CONFIG.setdefault("encryption_key", Fernet.generate_key().decode())
+        cache.clear()
+        from command_center import install
+        from insights.compat import run_as
+        from insights.core.models import ConnectedBusiness
+        fake = FakeERPNext()
+        with mock.patch("requests.get", fake("GET")), mock.patch("requests.post", fake("POST")), \
+                mock.patch("time.sleep", lambda s: None):
+            with run_as("Administrator"):
+                install.register_business("Test Medical Ltd", "https://erp.test", "key", "s3cret")
+        self.code = ConnectedBusiness.objects.get().business_code
+        self.fake = fake
+
+    def _status(self):
+        from insights.core.models import ConnectedBusiness
+        return ConnectedBusiness.objects.get().status
+
+    def _site(self, read, check):
+        """requests.get/post answering a read with `read` and the quick check with `check`
+        (each a status code, or an exception class to raise); every call is counted."""
+        calls = []
+
+        def call(url, headers=None, params=None, data=None, json=None, timeout=None):
+            method = url.split("/api/method/", 1)[1]
+            calls.append(method)
+            how = check if method == "frappe.auth.get_logged_user" else read
+            if isinstance(how, type) and issubclass(how, Exception):
+                raise how("scratch")
+            if how == 200:
+                return self.fake("GET")(url, headers=headers, params=params, json=json)
+            return _R(how, {"exc": "x"})
+        return call, calls
+
+    def _read(self, read, check):
+        from command_center.connectors.registry import connector_for
+        from insights.compat import run_as
+        call, calls = self._site(read, check)
+        with mock.patch("requests.get", call), mock.patch("requests.post", call), \
+                mock.patch("time.sleep", lambda s: None), run_as("Administrator"):
+            conn = connector_for(self.code)
+            try:
+                conn.get_list("Sales Invoice", fields=["name"], limit=1)
+                return None, calls
+            except Exception as e:  # noqa: BLE001
+                return e, calls
+
+    def test_a_slow_read_is_not_down(self):
+        import requests
+        from command_center.connectors.base import BusinessSlow, BusinessUnreachable, RequestRefused
+        from command_center.kpi.live_departments import is_down
+        from insights.core.models import ConnectedBusiness
+        for read in (requests.ReadTimeout, 504, 500):
+            e, calls = self._read(read, 200)
+            self.assertIsInstance(e, BusinessSlow, read)
+            self.assertNotIsInstance(e, RequestRefused, read)
+            self.assertTrue(is_down(e), "the part itself waits, and the screen's others do not")
+            self.assertEqual(self._status(), "Active", f"one slow read ({read}) marks nothing")
+            self.assertEqual(calls.count("frappe.auth.get_logged_user"), 1, "one quick check")
+        # truly down: the check fails too, and the business is marked, as before
+        for read, check in ((requests.ConnectionError, requests.ConnectionError),
+                            (requests.ReadTimeout, requests.ConnectTimeout), (503, 503)):
+            ConnectedBusiness.objects.update(status="Active")
+            e, _ = self._read(read, check)
+            self.assertIsInstance(e, BusinessUnreachable)
+            self.assertNotIsInstance(e, BusinessSlow, (read, check))
+            self.assertEqual(self._status(), "Unreachable", (read, check))
+        # a check answered by a 401 is the site answering: up, only slow
+        ConnectedBusiness.objects.update(status="Active")
+        e, _ = self._read(requests.ReadTimeout, 401)
+        self.assertIsInstance(e, BusinessSlow)
+        self.assertEqual(self._status(), "Active")
+
+    def test_a_slow_read_on_a_screen_leaves_no_banner(self):
+        import requests
+        from command_center.api import panels, reach
+        from insights.compat import run_as
+        call, _ = self._site(requests.ReadTimeout, 200)
+        with mock.patch("requests.get", call), mock.patch("requests.post", call), \
+                mock.patch("time.sleep", lambda s: None), run_as("Administrator"):
+            out = panels.get("proc", self.code)
+            st = reach.status(self.code)
+        self.assertEqual(out["panels"]["Orders still open"]["kind"], "unreachable",
+                         "the part not answered says so, calmly")
+        self.assertEqual(self._status(), "Active")
+        self.assertTrue(st["reachable"], "no banner for a slow read")
+
+    def test_a_stale_mark_clears_on_the_next_look(self):
+        import requests
+        from django.core.cache import cache
+        from command_center.api import reach
+        from insights.compat import run_as
+        from insights.core.models import ConnectedBusiness
+        ConnectedBusiness.objects.update(status="Unreachable", last_error="timed out")
+        cache.clear()
+        # still down: asked once, then not again inside the minute
+        call, calls = self._site(requests.ConnectionError, requests.ConnectionError)
+        with mock.patch("requests.get", call), mock.patch("requests.post", call), \
+                run_as("Administrator"):
+            self.assertFalse(reach.status(self.code)["reachable"])
+            self.assertFalse(reach.status(self.code)["reachable"])
+        self.assertEqual(calls, ["frappe.auth.get_logged_user"], calls)
+        # it answers again: the next look past the minute finds it, and clears the mark
+        cache.clear()
+        call, calls = self._site(200, 200)
+        with mock.patch("requests.get", call), mock.patch("requests.post", call), \
+                run_as("Administrator"):
+            st = reach.status(self.code)
+        self.assertTrue(st["reachable"])
+        self.assertIsNone(st["since"])
+        self.assertEqual(self._status(), "Active")
+        # Retry is the same one quick check, now
+        ConnectedBusiness.objects.update(status="Unreachable")
+        call, calls = self._site(200, 200)
+        with mock.patch("requests.get", call), mock.patch("requests.post", call), \
+                run_as("Administrator"):
+            self.assertTrue(reach.retry(self.code)["reachable"])
+        self.assertEqual(calls, ["frappe.auth.get_logged_user"])
+
+    def test_the_words_are_calm(self):
+        from command_center.api import statements, work
+        from command_center.kpi.live_departments import unreachable_status, waiting_words
+        said = [unreachable_status(None)["message"], waiting_words("Test Medical Ltd"),
+                work._unreachable(self.code, None)["reason"],
+                statements._Ctx(self.code).unreachable()["message"]]
+        for text in said:
+            self.assertIn("taking longer than usual to answer", text)
+            for loud in ("can't reach", "cannot reach", "unreachable", "not answering"):
+                self.assertNotIn(loud, text.lower())
 
 
 class RefusingERPNext(FakeERPNext):
@@ -6994,7 +7140,7 @@ HEALTH_INVENTORY = (
      "the six questions' figures, unchanged"),
     ("home.js", "export function renderHealthTiles", "the renderer"),
     ("home.js", "GUIDE_STATES.has(state) ? guideWords(state)", "needs setup and no access"),
-    ("home.js", "Can't reach ERPNext just now", "can't reach"),
+    ("home.js", 'state === "unreachable" ? WAITING.line', "waiting for ERPNext (was can't reach)"),
     ("home.js", "Could not be read just now", "not read"),
     ("home.js", "Nothing to score yet", "not scored"),
     ("home.js", "hasGuide(f) && openDrawer", "a row opens only its guide"),
