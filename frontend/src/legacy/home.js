@@ -18,7 +18,7 @@
 
 import { api } from "../api/client.js";
 import { count, exact, money, shortDate } from "../format.js";
-import { guideBox } from "./guide.js";
+import { GUIDE_STATES, guideBox, guideWords, hasGuide } from "./guide.js";
 
 const SCORES = [
   ["score_deliver", "Delivering what we sold", "Can we deliver what we sold?"],
@@ -70,18 +70,21 @@ export function renderHealthTiles(root, figures, { openDrawer } = {}) {
     const f = key && figures[key];
     tile.querySelector(":scope > .flag[data-prov]")?.remove();
     delete tile.dataset.illustrative;
+    // A question opens nothing unless it has a guide to show (below): no arrow, no click.
+    tile.classList.remove("clickable");
+    tile.onclick = null;
     const flag = tile.querySelector(".khead .flag");
     const foot = tile.querySelector(".v");
     const state = f?.data_status?.state;
     if (!f || f.value === null || f.value === undefined) {
       if (flag) {
         flag.className = "flag f-dim";
-        flag.textContent = state === "needs_setup" ? "Set up" : state === "unreachable"
+        flag.textContent = GUIDE_STATES.has(state) ? guideWords(state).flag : state === "unreachable"
           ? "Can't reach" : state === "failed" ? "Not read" : "Not scored";
       }
       if (foot) foot.textContent = f?.note || (f ? "nothing to score yet" : "could not be read just now");
       tile.removeAttribute("onclick");
-      if (state === "needs_setup" && f.data_status.guide && openDrawer) {
+      if (hasGuide(f) && openDrawer) {
         tile.classList.add("clickable");
         tile.onclick = () => openDrawer({ node: guideDrawer(label, f.data_status.guide) });
       }

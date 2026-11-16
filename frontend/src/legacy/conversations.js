@@ -25,6 +25,10 @@ export async function renderConversations(root, scope) {
   box.append(head);
   const ul = el("ul", "askconvs-l");
   const now = currentConversation(scope);
+  // Newest first, top-down under the question box: the server sends them so; sorted
+  // here as well so the list cannot come out the other way round.
+  const at = (c) => String(c.last_at || "");
+  list = [...list].sort((a, b) => (at(a) < at(b) ? 1 : at(a) > at(b) ? -1 : 0));
   list.slice(0, 8).forEach((c) => {
     const li = el("li", c.name === now ? "on" : "");
     const b = el("button", "askconv");

@@ -23,6 +23,7 @@ about who made it, and the audit trail is most of what this platform is for.
 from __future__ import annotations
 
 import json
+import re
 from urllib.parse import urlencode
 
 import frappe
@@ -136,7 +137,7 @@ class RemoteConnector(BusinessConnector):
             r = self._send(url, headers, data, post, write, timeout)
         finally:
             _count(started)
-        return self._answer(r, whole)
+        return self._answer(r, whole, doctype=(params or {}).get("doctype"))
 
     def _send(self, url, headers, data, post, write, timeout):
         import time
@@ -169,13 +170,17 @@ class RemoteConnector(BusinessConnector):
             break
         return r
 
-    def _answer(self, r, whole):
+    def _answer(self, r, whole, doctype=None):
         if r.status_code in (401, 403):
+            said = _server_message(r)
             raise RemotePermissionDenied(
                 f"{self.name} refused this. Your account there does not have "
-                f"permission for it, or the key has been revoked on that site."
-                + _server_message(r)
-            )
+                f"permission for it, or the key has been revoked on that site." + said,
+                # The record type refused: the one asked for, else (a report, a method)
+                # the one the site names in its own refusal.
+                doctype=(doctype if isinstance(doctype, str) and doctype else None)
+                or _refused_doctype(said),
+                status=r.status_code)
         if not r.ok:
             if r.status_code >= 500 or r.status_code == 429:
                 # Broken or overloaded even after the retries: the business is down.
@@ -539,6 +544,19 @@ def _server_message(r) -> str:
         except Exception:
             msg = ""
     return f" ({str(msg)[:300]})" if msg else ""
+
+
+# Frappe's refusals name the record type: "No permission for Issue Type", "Insufficient
+# Permission for Issue", "User x does not have doctype access via role permission for
+# document Issue". Only a name shaped like a doctype is taken, and only when the request
+# itself named none.
+_REFUSED = re.compile(r"(?:[Pp]ermission for(?: document)?|[Nn]o permission to read|access to)"
+                      r"\s+([A-Z][A-Za-z0-9]*(?: [A-Z][A-Za-z0-9]*){0,4})")
+
+
+def _refused_doctype(said: str) -> str | None:
+    m = _REFUSED.search(re.sub(r"<[^>]+>", "", said or ""))
+    return m.group(1) if m else None
 
 
 def _encode(params: dict) -> dict:

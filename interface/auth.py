@@ -28,7 +28,6 @@ body.cc-auth{overflow:auto;min-height:100vh;background:var(--bg);display:grid;pl
 [data-theme="dark"] .auth-logo.lt{display:none}
 [data-theme="dark"] .auth-logo.dk{display:block}
 .auth-tag{display:block;font-size:var(--fs-sm);color:var(--mut);margin-top:2px}
-.auth-by{font-size:var(--fs-2xs);color:var(--dim);line-height:1.5}
 .auth-card{padding:48px 44px;display:flex;flex-direction:column;justify-content:center}
 .auth-card h1{font-size:var(--fs-3xl);font-weight:var(--fw-semibold);letter-spacing:-.03em;line-height:1.15;color:var(--ink)}
 .auth-sub{color:var(--mut);font-size:var(--fs-md);margin-top:8px;line-height:1.55}

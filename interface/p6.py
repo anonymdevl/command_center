@@ -5,9 +5,9 @@ V_MYDAY=f'''<div class="topbar"><div><h3>Today</h3>
 <div class="when">Only what is waiting on you</div></div></div>
 <div class="grid" style="grid-template-columns:repeat(4,1fr)">
 <div class="bk" onclick="go('approvals')"><div class="n">—</div><div class="l">Awaiting you</div><div class="v">&nbsp;</div></div>
-<div class="bk"><div class="n">—</div><div class="l">Due today</div><div class="v">on your own list</div></div>
+<div class="bk" data-opens="figure"><div class="n">—</div><div class="l">Due today</div><div class="v">on your own list</div></div>
 <div class="bk" onclick="go('delegation')"><div class="n">—</div><div class="l">Evidence to check</div><div class="v">work marked done</div></div>
-<div class="bk"><div class="n">—</div><div class="l">Promises unkept</div><div class="v">&nbsp;</div></div></div>
+<div class="bk" onclick="go('delegation')"><div class="n">—</div><div class="l">Promises unkept</div><div class="v">&nbsp;</div></div></div>
 <div class="sect">Awaiting you</div>
 <div class="work-list"><div class="work-empty"><b>Reading what is waiting on you&hellip;</b></div></div>
 <div class="sect" style="margin-top:20px">Work you handed out that is past its date</div>

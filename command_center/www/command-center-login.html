@@ -17,11 +17,9 @@ d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
 <body class="cc-auth">
 <main class="auth">
   <section class="auth-brand" aria-hidden="true">
-    {% if brand.logo_light_url %}
-    <div>
-      <img class="auth-logo lt" src="{{ brand.logo_light_url }}" alt="">
-      <img class="auth-logo dk" src="{{ brand.logo_dark_url }}" alt="">
-    </div>
+    {# The Sign-In Logo (Settings -> Branding), else the platform's built-in mark. #}
+    {% if brand.logo_signin_url %}
+    <div><img class="auth-logo" src="{{ brand.logo_signin_url }}" alt=""></div>
     {% else %}<div class="auth-mark"><i></i></div>{% endif %}
     <div>
       <b>{{ brand.product }}</b>
@@ -33,7 +31,6 @@ d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
       <li>Ask anything, in your own words</li>
       <li>The AI only reads &mdash; it never creates, changes or deletes a record</li>
     </ul>
-    <div class="auth-by">{{ brand.footer }}</div>
   </section>
 
   <section class="auth-card">
@@ -63,8 +60,33 @@ d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
   </section>
 </main>
 
+{# Who built it, quietly, under the card: the product and "Built by", then the contact
+   items. Each item is one unit that never breaks inside itself; they wrap as whole items. #}
+<footer class="auth-by">
+  <p class="auth-by-l"><span>{{ brand.product }}</span><span>Built by {{ brand.built_by }}</span></p>
+  {% if brand.contacts %}<p class="auth-by-l auth-by-c">{% for c in brand.contacts %}<span>{{ c }}</span>{% endfor %}</p>{% endif %}
+</footer>
+
 <script>
 window.csrf_token = {{ csrf_token | safe }};
+/* The footer's separators: an item that starts a line carries none, so a wrapped line
+   never begins with a stray dot. The dots take no room (shell.py), so hiding one never
+   moves an item to another line. */
+(function () {
+  function mark() {
+    document.querySelectorAll(".auth-by-l").forEach(function (line) {
+      var top = null;
+      Array.prototype.forEach.call(line.children, function (item) {
+        var t = item.offsetTop;
+        item.classList.toggle("ls", top === null || t > top + 2);
+        top = t;
+      });
+    });
+  }
+  mark();
+  window.addEventListener("resize", mark);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(mark);
+})();
 (function () {
   var form = document.getElementById("auth"), msg = document.getElementById("msg"),
       go = document.getElementById("go"), pwd = document.getElementById("pwd"),

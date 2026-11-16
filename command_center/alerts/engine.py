@@ -186,15 +186,21 @@ def _horizon(figures, rule):
 
 
 def elapsed(since, until=None) -> str:
-    """'over 3 months', '12 days' -- measured to the data's own horizon, not today."""
+    """How long the OLDEST item behind an alert has been in that state, said so:
+    'oldest over 3 months', 'oldest 12 days' (the oldest overdue invoice's due date, the
+    oldest late order's promised date ...), measured to the data's own horizon, not today.
+    The bell and the alert cards both show it as it is (16 Nov 2026: "over 2 years" alone
+    did not say what was that old)."""
     if not since:
         return "—"
     days = (getdate(until or today()) - getdate(since)).days
     if days < 0:
         return "not yet"
+    if days == 0:
+        return "new today"
     if days >= 730:
-        return f"over {days // 365} years"
+        return f"oldest over {days // 365} years"
     if days >= 60:
-        return f"over {days // 30} months"
-    return f"{days} day" + ("" if days == 1 else "s")
+        return f"oldest over {days // 30} months"
+    return f"oldest {days} day" + ("" if days == 1 else "s")
 

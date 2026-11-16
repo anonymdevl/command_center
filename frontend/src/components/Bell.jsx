@@ -194,7 +194,7 @@ export default function Bell({ scope, onGo }) {
                     <span className={`bell-dot ${a.severity}`} aria-hidden="true" />
                     <span className="bell-t">
                       <b>{a.title}</b>
-                      <span>{WORDS[a.severity] || a.severity} · {a.owner_label} · {a.elapsed}</span>
+                      <span>{[WORDS[a.severity] || a.severity, a.owner_label, a.elapsed].filter(Boolean).join(" · ")}</span>
                     </span>
                   </button>
                 </li>

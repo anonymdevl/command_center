@@ -61,7 +61,19 @@ class RemotePermissionDenied(ConnectorError):
 
     This is the correct place for that decision to be made, and the correct
     system to make it.
+
+    `doctype` is the ERPNext record type that was refused, when the request named one
+    (connectors/remote.py takes it from the request, or from the site's own message),
+    and `status` the HTTP status (401: the key itself was refused; 403: the account may
+    not read that record type). A figure refused so says which record type to give
+    access to (guides.no_access), rather than "could not be read".
     """
+
+    def __init__(self, message: str = "", doctype: str | None = None,
+                 status: int | None = None):
+        super().__init__(message)
+        self.doctype = doctype or None
+        self.status = status
 
 
 class BusinessConnector:

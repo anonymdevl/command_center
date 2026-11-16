@@ -1338,10 +1338,10 @@ def set_brand(product_name: str = "", tagline: str = "", company: str = "", pers
 
 @frappe.whitelist(methods=["POST"])
 def upload_brand_logo(kind: str = "", data: str = ""):
-    """A logo for light backgrounds, one for dark backgrounds, or the favicon: PNG, JPEG
-    or WebP, at most branding.MAX_BYTES, checked by its content (never SVG). Or the
-    Report Logo the PDFs use instead of the light-background one: PNG or JPEG only (the
-    PDF engine cannot draw WebP)."""
+    """A logo for light backgrounds, one for dark backgrounds, the favicon, or the
+    Sign-In Logo (the sign-in page's own): PNG, JPEG or WebP, at most branding.MAX_BYTES,
+    checked by its content (never SVG). Or the Report Logo the PDFs use instead of the
+    light-background one: PNG or JPEG only (the PDF engine cannot draw WebP)."""
     _require_admin()
     if kind not in branding.PLATFORM_KINDS:
         _say("Choose which logo this is.")

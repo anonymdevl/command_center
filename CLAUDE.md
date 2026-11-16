@@ -176,9 +176,11 @@ screen's `runSearch`, so there is one answering path. The alerts bell (`Bell.jsx
 `api/alerts.open_alerts`, the same list as Home's "Needs your attention".
 `interface/blocks.py` is the skin of the screens' blocks (cards, tiles, panels, tables,
 tags, tabs, alerts, buttons, notes, drawer), appended after the generators and before
-the shell: it owns appearance, the generators keep layout. Business Overview's tiles get
-the mockup's cut corner and arrow from `signature_tiles()` in build.py -- that screen
-only. The screens' inline `style` sizes and weights are on the scale too, and preflight
+the shell: it owns appearance, the generators keep layout. Every .kpi/.bk gets the
+mockup's cut corner and arrow from `signature_tiles()` in build.py, but they show only on
+a `.clickable` tile (16 Nov 2026): Business Health's six questions (`bk q`) and a figure
+not read have none; a tile marked `data-opens="figure"` gets its click (and arrow) when
+its figure's link arrives. The screens' inline `style` sizes and weights are on the scale too, and preflight
 holds them there.
 `preview.html?theme=light&accent=cobalt&audit=1` walks all nineteen screens and lists
 anything wider than its box.
@@ -411,7 +413,10 @@ and a Report Style (15 Nov 2026): Platform Branding / Client Branding / Client L
 (header and footer images on every page via `export.page_options`, which writes two small
 header/footer HTML files of our own to a temp folder and removes them), vendor credit
 Show / Small / Hide (Hide: administrator only). PDFs use the Report Logo (`logo_report`),
-not the screens' logos. `branding.document(code, own=...)` resolves it; the platform's own
+not the screens' logos. The sign-in page uses the Sign-In Logo (`logo_signin`, 16 Nov
+2026), else the built-in `.auth-mark` (interface/auth.py) -- never another logo; its
+vendor footer is two quiet lines under the card, each item whole (`branding.public()`
+`built_by`, `contacts`). `branding.document(code, own=...)` resolves it; the platform's own
 documents (usage statements, incident reports) pass own=True.
 `command_center/branding.py` is the one source: every page, the boot payload, every PDF
 (`export.brand_header`, `export.pdf_options` -- the vendor's line and "Page X of Y" on
@@ -428,6 +433,13 @@ Manager": that is Frappe's own standard role, and anyone holding it would have w
 Never rename these without a migration plan.
 
 ## Home and the health score
+
+A live figure or panel the business's ERPNext refuses by permission (HTTP 401/403,
+`RemotePermissionDenied`, which carries `.doctype` and `.status`) is `no_access`, not
+failed (16 Nov 2026): `guides.no_access` names the record type and how to give the
+platform's API user read access to it (Issue / Issue Type: Support Team), drawn like
+`needs_setup` (guide.js `GUIDE_STATES`). An alert's age is its oldest item's ("oldest
+over 2 years", `alerts/engine.elapsed`); a rule with no `since` shows none.
 
 Home follows the approved mockup (`gigmann-redesign/home.html`, 18 Oct 2026): three hero
 tiles (TILE_KPIS.command), the morning brief (the alert engine's top three), largest
