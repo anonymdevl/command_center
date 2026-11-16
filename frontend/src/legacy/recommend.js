@@ -62,7 +62,7 @@ export function renderRecs(root, view, data, { onOpen } = {}) {
   }
   if (data.unreachable || (data.failed || []).length) {
     list.append(el("div", "rec-done", data.unreachable
-      ? "The business's ERPNext did not answer, so the recommendations that read it were not checked this time."
+      ? "The business's ERPNext was taking longer than usual to answer, so the recommendations that read it were not checked this time; they are checked again shortly."
       : `Not checked this time: ${(data.failed || []).map((f) => f.rule.toLowerCase()).join(", ")}.`));
   }
   slot.replaceWith(list);
@@ -84,7 +84,7 @@ function empty(data) {
   const e = el("div", "work-empty");
   e.append(el("b", null, "Nothing to recommend right now."),
     el("span", null, data.unreachable
-      ? "The business's ERPNext did not answer; what reads it is checked again shortly."
+      ? "The business's ERPNext is taking longer than usual to answer; what reads it is checked again shortly."
       : "The rules found nothing worth acting on in the latest data."));
   return e;
 }
