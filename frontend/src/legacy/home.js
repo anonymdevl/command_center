@@ -96,9 +96,12 @@ function standing(f) {
   const why = GUIDE_STATES.has(state) ? guideWords(state).foot
     : state === "unreachable" ? "Can't reach ERPNext just now"
       : state === "failed" || !f ? "Could not be read just now" : "Nothing to score yet";
-  return state === "no_access"
-    ? { scored: false, access: true, pill: "No Access", flag: "f-high", why }
-    : { scored: false, access: false, pill: "Waiting", flag: "f-dim", why };
+  if (state === "no_access") return { scored: false, access: true, pill: "No Access", flag: "f-high", why };
+  // Read, and there was nothing to score (e.g. nothing owed): not waiting on anything.
+  if (why === "Nothing to score yet") {
+    return { scored: false, access: false, idle: true, pill: "Nothing to Score", flag: "f-dim", why };
+  }
+  return { scored: false, access: false, pill: "Waiting", flag: "f-dim", why };
 }
 
 function pct(v) {
@@ -178,7 +181,8 @@ function verdict(root, figures, rows, lastWeek, data) {
     tally.textContent = "";
     const answered = rows.filter((r) => r.s.scored).length;
     const access = rows.filter((r) => !r.s.scored && r.s.access).length;
-    const waiting = rows.length - answered - access;
+    const idle = rows.filter((r) => !r.s.scored && r.s.idle).length;
+    const waiting = rows.length - answered - access - idle;
     const part = (n, rest) => {
       const p = el("span");
       p.append(el("b", null, String(n)), document.createTextNode(` ${rest}`));
@@ -186,6 +190,7 @@ function verdict(root, figures, rows, lastWeek, data) {
     };
     part(answered, `of ${rows.length} answered`);
     if (waiting) part(waiting, "waiting");
+    if (idle) part(idle, "nothing to score");
     if (access) part(access, access === 1 ? "needs access" : "need access");
   }
   say(root, rows, lastWeek, !!data);
