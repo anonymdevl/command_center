@@ -15,13 +15,23 @@ doms=[("Sales & money owed","owed to us","sales"),
  ("Internal Audit","open alerts to review","aud")]
 dh=""
 for name,note,key in doms:
-    dh+=f'''<div class="bk" onclick="go(&#39;{key}&#39;)">
+    dh+=f'''<div class="bk" data-dept="{key}" onclick="go(&#39;{key}&#39;)">
 <div class="khead"><div class="l">{name}</div><span class="flag f-ok">Live data</span></div>
 <div class="n">—</div><div class="v">{note}</div></div>'''
 
+# The front page (16 Nov 2026, the approved mockup's B over A): the area that most needs
+# attention leads, the next three stand beside it, and the rest are a ruled register.
+# The nine tiles are the same tiles as before -- same labels, figures, flags and go()
+# -- and start in the register; legacy/overview.js moves each into its place once the
+# figures and the open alerts are read. It moves them, never copies or rebuilds them,
+# so everything hydrate.js and core.js write into a tile stays where it is.
 V_OPS=f'''<div class="topbar"><div><h3>Business Overview</h3>
 <div class="when">Nine areas · open any one of them</div></div></div>
-<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:10px">{dh}</div>
+<div class="ov" id="ov">
+<div class="ov-front"><div class="ov-lead" id="ov-lead"></div><div class="ov-sec" id="ov-sec"></div></div>
+<div class="ov-reg"><div class="ov-rows" id="ov-rows"><div class="ov-rh" aria-hidden="true">
+<span>Department</span><span>Headline</span><span>Status</span><span>What It Says</span></div>
+{dh}</div></div></div>
 <div class="warn" hidden></div>'''
 
 # ---------------- V: ENGINEERING ----------------

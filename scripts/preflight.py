@@ -1484,6 +1484,13 @@ if _node:
     check(_t.returncode == 0,
           "scripts/test_swr.mjs failed:\n" + (_t.stdout + _t.stderr)[-1500:])
 
+# Business Overview's front page keeps every tile, figure, footnote, flag and click it had
+# (Michael, 16 Nov 2026: appearance only, not content), and places every area once.
+_t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_overview_parity.py")],
+             capture_output=True, text=True, timeout=180)
+check(_t.returncode == 0,
+      "scripts/test_overview_parity.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+
 # --------------------------------------------------------------------------
 print(f"preflight: {checks} checks")
 if problems:

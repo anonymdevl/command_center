@@ -21,6 +21,7 @@
 
 import { guideCard, guideWords, hasGuide } from "./guide.js";
 import { money, count, exact } from "../format.js";
+import { LEAD_FIGURES } from "./overview.js";
 
 /**
  * Designed card label -> KPI key, per view.
@@ -265,6 +266,9 @@ export const EXTRA_KPIS = {
             "score_approvals", "score_records", "score_access", "control_score"],
   health: ["score_paid", "score_deliver", "score_paperwork", "score_approvals", "score_records",
            "score_access", "control_score"],
+  // Business Overview's lead story quotes the figures its headline's note prints
+  // (legacy/overview.js LEAD_FIGURES); the engine evaluates them for the note anyway.
+  ops: Object.values(LEAD_FIGURES).flat(),
 };
 
 export function keysFor(viewKey) {

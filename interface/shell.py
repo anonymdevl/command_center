@@ -1072,4 +1072,142 @@ table.dt.fs-t :is(.fs-bar-h,.fs-bar-c){width:20%;min-width:96px;padding-left:var
 .view:has(> #fs) .warn{border-radius:var(--r-sm)}
 @container panel (max-width:560px){
  .view:has(> #fs) .panel{padding:var(--sp-4)}}
+/* ======================================================================
+   Business Overview as a front page (16 Nov 2026, the approved mockup: B over A).
+   The lead story on the left, three areas beside it, the rest a ruled register.
+   The nine tiles are the designed .bk tiles, moved into place by
+   legacy/overview.js and restyled here by role (ov-as-lead / ov-as-sec /
+   ov-as-row): no card, no tint, no grid of boxes -- type, figures and hairlines.
+   The arrow stays only where a tile opens something (the rule above); the cut
+   corner belongs to the tinted card, which this screen no longer draws.
+   ====================================================================== */
+.ov{border-top:1px solid var(--ink);margin-top:var(--sp-2)}
+.ov-front{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);padding:var(--sp-6) 0 var(--sp-8)}
+.ov-lead{min-width:0;padding-right:var(--sp-8);border-right:1px solid var(--line)}
+.ov-sec{min-width:0;padding-left:var(--sp-8);display:flex;flex-direction:column}
+
+/* every tile on this screen sheds the card */
+.ov .bk.sig{background:none;border:0;border-radius:0;box-shadow:none;min-height:0;padding:0;margin:0;
+ text-align:left;align-items:stretch;justify-content:flex-start;container-type:normal;transform:none;
+ transition:color .15s}
+.ov .bk.sig:hover{background:none;border:0;box-shadow:none;transform:none}
+.ov .bk.sig > .sig-cut{display:none}
+.ov .bk.sig .n{flex:none;display:block;width:auto;margin:0;padding:0;text-align:left;color:var(--ink);
+ font-weight:var(--fw-semibold);line-height:1.05}
+.ov .bk.sig .v{border:0;padding:0;max-width:none;width:auto;min-height:0;white-space:normal;color:var(--mut);
+ font-size:var(--fs-xs);line-height:1.45}
+.ov .bk.sig .l{white-space:normal;overflow:visible;max-width:none;order:0}
+.ov .bk.sig .flag{margin:0;align-self:auto}
+.ov .bk.clickable:focus-visible{outline:2px solid var(--accent);outline-offset:6px;border-radius:var(--r-xs)}
+.ov .bk.clickable:hover > .sig-go,.ov .bk.clickable:focus-visible > .sig-go{transform:rotate(45deg)}
+
+/* ---- the lead story ---- */
+.ov .bk.ov-as-lead{display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:var(--sp-10);
+ grid-template-areas:"head head" "say say" "dek dek" "n figs" "v figs" "prov prov";align-content:start;
+ position:relative}
+.ov .ov-as-lead > .khead{grid-area:head;display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;
+ padding-right:60px;min-height:44px}
+.ov-kick{font-size:var(--fs-3xs);font-weight:var(--fw-bold);letter-spacing:.16em;text-transform:uppercase;
+ color:var(--accent-ink);white-space:nowrap}
+.ov-kick::after{content:"·";margin-left:10px;color:var(--dim)}
+.ov .bk.ov-as-lead .l{font-size:var(--fs-3xs);font-weight:var(--fw-bold);letter-spacing:.16em;
+ text-transform:uppercase;color:var(--ink2)}
+.ov-say{grid-area:say;margin:var(--sp-3) 0 0;max-width:30ch;font-size:var(--fs-3xl);font-weight:var(--fw-medium);
+ line-height:1.22;letter-spacing:-.022em;color:var(--ink);text-wrap:balance;text-decoration:underline;
+ text-decoration-color:transparent;text-decoration-thickness:1px;text-underline-offset:.16em;
+ transition:text-decoration-color .15s}
+.ov .ov-as-lead.clickable:hover .ov-say,.ov .ov-as-lead.clickable:focus-visible .ov-say{
+ text-decoration-color:var(--line2)}
+.ov-dek{grid-area:dek;margin:var(--sp-3) 0 0;max-width:58ch;font-size:var(--fs-md);line-height:1.55;
+ color:var(--ink2)}
+.ov .bk.ov-as-lead .n{grid-area:n;margin-top:var(--sp-8);font-size:var(--fs-5xl);letter-spacing:-.035em}
+.ov .bk.ov-as-lead .n .cx{font-size:var(--fs-md)}
+.ov .bk.ov-as-lead .n .mag{font-size:var(--fs-2xl)}
+.ov .bk.ov-as-lead .n small{font-size:var(--fs-md)}
+.ov .bk.ov-as-lead .v{grid-area:v;margin-top:var(--sp-2)}
+.ov-figs{grid-area:figs;align-self:end;display:flex;flex-wrap:wrap;gap:var(--sp-4) var(--sp-8);
+ padding-left:var(--sp-8);border-left:1px solid var(--line)}
+.ov-fig b{display:block;font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em;
+ line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ov-fig span{display:block;margin-top:6px;font-size:var(--fs-xs);color:var(--mut)}
+.ov .ov-as-lead > .flag[data-prov]{grid-area:prov;justify-self:start;margin-top:var(--sp-4)}
+.ov .ov-as-lead.clickable > .sig-go{top:0;right:0;bottom:auto;width:44px;height:44px}
+
+/* ---- the column beside it ---- */
+.ov .bk.ov-as-sec{display:grid;grid-template-columns:minmax(0,1fr) auto;
+ grid-template-areas:"head go" "n go" "v v" "note note" "prov prov";align-items:start;position:relative;
+ padding:var(--sp-4) 0;border-top:1px solid var(--line)}
+.ov .bk.ov-as-sec:first-child{padding-top:0;border-top:0}
+.ov .bk.ov-as-sec:last-child{padding-bottom:0}
+.ov .ov-as-sec > .khead{grid-area:head;display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px}
+.ov .bk.ov-as-sec .l{font-size:var(--fs-3xs);font-weight:var(--fw-bold);letter-spacing:.14em;
+ text-transform:uppercase;color:var(--ink2)}
+.ov .bk.ov-as-sec .n{grid-area:n;margin-top:var(--sp-2);font-size:var(--fs-2xl);letter-spacing:-.025em}
+.ov .bk.ov-as-sec .n .cx{font-size:var(--fs-xs)}
+.ov .bk.ov-as-sec .n .mag{font-size:var(--fs-lg)}
+.ov .bk.ov-as-sec .n small{font-size:var(--fs-xs)}
+.ov .bk.ov-as-sec .v{grid-area:v;margin-top:var(--sp-1)}
+.ov-note{font-size:var(--fs-sm);line-height:1.45;color:var(--ink2)}
+.ov .ov-as-sec > .ov-note{grid-area:note;margin-top:var(--sp-1)}
+.ov .ov-as-sec > .flag[data-prov]{grid-area:prov;justify-self:start;margin-top:var(--sp-2)}
+
+/* the small arrow of a column line and a register line */
+.ov :is(.ov-as-sec,.ov-as-row).clickable > .sig-go{position:static;width:28px;height:28px;background:none;
+ color:var(--mut);box-shadow:inset 0 0 0 1px var(--line2);transition:transform .2s,background .15s,color .15s}
+.ov :is(.ov-as-sec,.ov-as-row).clickable > .sig-go svg{width:14px;height:14px}
+.ov .ov-as-sec.clickable > .sig-go{grid-area:go;align-self:start}
+.ov :is(.ov-as-sec,.ov-as-row).clickable:is(:hover,:focus-visible) > .sig-go{background:var(--ink);
+ color:var(--surface);box-shadow:none}
+.ov :is(.ov-as-sec,.ov-as-row).clickable:is(:hover,:focus-visible) .l{color:var(--accent-ink)}
+
+/* ---- the register ---- */
+.ov-reg{border-top:1px solid var(--ink)}
+.ov-rows{display:grid;column-gap:var(--sp-5);
+ grid-template-columns:minmax(150px,1.15fr) minmax(110px,max-content) max-content max-content minmax(0,2.6fr) 28px}
+.ov-rh{grid-column:1 / -1;display:grid;grid-template-columns:subgrid;padding:10px 0 9px;
+ border-bottom:1px solid var(--line2);font-size:var(--fs-3xs);font-weight:var(--fw-bold);letter-spacing:.14em;
+ text-transform:uppercase;color:var(--dim)}
+.ov-rh > span:nth-child(2){text-align:right}
+.ov-rh > span:nth-child(3){grid-column:3 / 5}
+.ov-rh > span:nth-child(4){grid-column:5}
+.ov .bk.ov-as-row{grid-column:1 / -1;display:grid;grid-template-columns:subgrid;align-items:center;
+ padding:14px 0;border-bottom:1px solid var(--line)}
+.ov .bk.ov-as-row.clickable:is(:hover,:focus-visible){background:var(--hover);
+ box-shadow:-10px 0 0 var(--hover),10px 0 0 var(--hover)}
+.ov .ov-as-row > .khead{display:contents}
+.ov .bk.ov-as-row .l{grid-column:1;grid-row:1 / 3;font-size:var(--fs-sm);font-weight:var(--fw-semibold);
+ color:var(--ink);letter-spacing:-.005em;text-transform:none;line-height:1.35}
+.ov .bk.ov-as-row .n{grid-column:2;grid-row:1;justify-self:end;text-align:right;font-size:var(--fs-lg);
+ letter-spacing:-.01em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ov .bk.ov-as-row .n .cx,.ov .bk.ov-as-row .n small{font-size:var(--fs-2xs)}
+.ov .bk.ov-as-row .n .mag{font-size:inherit;color:var(--ink)}
+.ov .bk.ov-as-row .v{grid-column:2;grid-row:2;justify-self:end;text-align:right;margin-top:2px;
+ font-size:var(--fs-2xs)}
+.ov .ov-as-row > .khead > .flag{grid-column:3;grid-row:1 / 3;justify-self:start}
+.ov .ov-as-row > .flag[data-prov]{grid-column:4;grid-row:1 / 3;justify-self:start}
+.ov .ov-as-row > .ov-note{grid-column:5;grid-row:1 / 3}
+.ov .ov-as-row.clickable > .sig-go{grid-column:6;grid-row:1 / 3;justify-self:end}
+
+/* ---- narrower: the columns stack, a register line wraps ---- */
+@container panel (max-width:760px){
+ .ov-front{grid-template-columns:minmax(0,1fr);padding:var(--sp-5) 0 var(--sp-6)}
+ .ov-lead{padding:0 0 var(--sp-6);border-right:0;border-bottom:1px solid var(--line)}
+ .ov-sec{padding:var(--sp-5) 0 0}
+ .ov .bk.ov-as-lead{grid-template-columns:minmax(0,1fr);grid-template-areas:"head" "say" "dek" "n" "v" "figs" "prov"}
+ .ov-say{font-size:var(--fs-xl);line-height:1.3}
+ .ov .bk.ov-as-lead .n{margin-top:var(--sp-5);font-size:var(--fs-4xl)}
+ .ov-figs{align-self:start;margin-top:var(--sp-4);padding:var(--sp-4) 0 0;border-left:0;border-top:1px solid var(--line)}
+ .ov-dek{font-size:var(--fs-sm)}
+ .ov-rows{display:block}
+ .ov-rh{display:none}
+ .ov .bk.ov-as-row{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:14px 0}
+ .ov .bk.ov-as-row.clickable:is(:hover,:focus-visible){box-shadow:none}
+ .ov .bk.ov-as-row .l{order:1;flex:1 1 0;min-width:0}
+ .ov .bk.ov-as-row .n{order:2}
+ .ov .ov-as-row.clickable > .sig-go{order:3;align-self:center}
+ .ov .bk.ov-as-row .v{order:4;flex:1 0 100%;margin:0;text-align:right}
+ .ov .ov-as-row > .khead > .flag{order:5}
+ .ov .ov-as-row > .flag[data-prov]{order:6}
+ .ov .ov-as-row > .ov-note{order:7;flex:1 1 12ch;min-width:0}
+}
 """
