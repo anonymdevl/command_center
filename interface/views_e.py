@@ -13,7 +13,7 @@ V_AUD_OVERVIEW=f'''<div class="kpis six">
 {kpi("Overdue actions","—","","","flat","","find")}
 {kpi("Repeat findings","—","","","flat","","find")}
 {kpi("Unsupported","—","","","flat","","drafts")}
-{kpi("Control score","—","","","flat","","score")}
+{kpi("Overall Business Health","—","","","flat","","score")}
 </div>
 {panel("What an auditor would raise on day one",
  _atbl("Finding","Risk","Area","")

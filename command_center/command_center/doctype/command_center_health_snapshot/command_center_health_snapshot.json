@@ -35,7 +35,7 @@
   {
    "fieldname": "control_score",
    "fieldtype": "Float",
-   "label": "Control Health",
+   "label": "Overall Business Health",
    "in_list_view": 1,
    "read_only": 1,
    "description": "The plain average of the questions scored that day, as a percentage; empty when none could be scored."

@@ -153,7 +153,7 @@ export const CARD_KPIS = {
     // What would be raised today: the open alerts, the same list Business Health shows.
     "Raise today": "alerts_open",
     // The average of the Business Health questions scored, as Home's gauge.
-    "Control score": "control_score",
+    "Overall Business Health": "control_score",
     // The roles ERPNext's own permission rules let delete a change-log entry.
     "Can be deleted": "versions_deletable",
   },

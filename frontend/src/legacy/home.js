@@ -165,7 +165,7 @@ function verdict(root, figures, rows, lastWeek, data) {
       delta.hidden = false;
       delta.className = `hh-delta ${d > 0 ? "up" : d < 0 ? "dn" : "eq"}`;
       delta.textContent = d > 0 ? `▲ ${d} on last week` : d < 0 ? `▼ ${-d} on last week` : "No change on last week";
-      delta.title = `Last week's Control Health was ${pct(before)} (stored ${shortDate(lastWeek.day)}).`;
+      delta.title = `Last week's Overall Business Health was ${pct(before)} (stored ${shortDate(lastWeek.day)}).`;
     } else {
       delta.hidden = true;
       delta.textContent = "";
@@ -174,7 +174,7 @@ function verdict(root, figures, rows, lastWeek, data) {
   const trend = root.querySelector("#hh-trend");
   if (trend) {
     const note = (total?.note || "").replace(/^out of 100:\s*/i, "").trim();
-    trend.textContent = note ? `Control Health is ${note}.`.replace(/\.\.$/, ".") : " ";
+    trend.textContent = note ? `Overall Business Health is ${note}.`.replace(/\.\.$/, ".") : " ";
   }
   const tally = root.querySelector("#hh-count");
   if (tally) {
@@ -558,7 +558,7 @@ function ring(box, score) {
   arc.setAttribute("stroke-dasharray", `${on.toFixed(1)} ${len.toFixed(1)}`);
   arc.style.display = on > 0 ? "" : "none";
   box.setAttribute("role", "img");
-  box.setAttribute("aria-label", score === null ? "Control Health: not scored yet" : `Control Health ${score}%`);
+  box.setAttribute("aria-label", score === null ? "Overall Business Health: not scored yet" : `Overall Business Health ${score}%`);
 }
 
 function dial(score, color) {

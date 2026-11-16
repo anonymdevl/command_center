@@ -339,7 +339,7 @@ LIVE = {k.key: k for k in (
     Live("score_access", "Who can see what?", "percent", score_access, "/app/user?enabled=1"),
     # Worked out mostly from the loaded records, so it is not held back when ERPNext is
     # down: the questions read from ERPNext are left out and the note says so.
-    Live("control_score", "Control score", "percent", control_score, "/app/version",
+    Live("control_score", "Overall Business Health", "percent", control_score, "/app/version",
          source="fact_sales_invoice"),
     Live("alerts_open", "Open alerts", "count", alerts_open, "/app/version",
          source="fact_sales_invoice", reads_erp=False),

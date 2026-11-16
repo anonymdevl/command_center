@@ -75,7 +75,7 @@ V_HEALTH=f'''<div class="topbar"><div><h3>Business Health</h3>
 <div class="when">Six questions, asked of the business every morning</div></div></div>
 <div class="hh-report"><div class="hh-verdict">
 <div class="hh-gauge"><div class="hh-ring" id="hh-ring"><div class="hh-ring-n" id="hh-score">&mdash;</div></div>
-<div class="hh-cap">Control Health</div><div class="hh-delta" id="hh-delta" hidden></div></div>
+<div class="hh-cap">Overall Business Health</div><div class="hh-delta" id="hh-delta" hidden></div></div>
 <div class="hh-word"><p class="hh-say" id="hh-say">Working it out&hellip;</p>
 <p class="hh-note">This is not a score about the software.
 It measures whether the records the business runs on can be trusted this week.</p>
