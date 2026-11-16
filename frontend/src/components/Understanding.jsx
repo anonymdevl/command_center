@@ -1,16 +1,13 @@
-import React, { useEffect, useRef, useState } from "react";
-import { api } from "../api/client.js";
-import { useApi } from "../useApi.js";
+import React, { useEffect, useRef } from "react";
 import Records from "./Records.jsx";
-import ExportButton from "./ExportButton.jsx";
-import { Loading, Failed } from "./States.jsx";
 import { exact, count } from "../format.js";
 import { chartModel } from "../legacy/charts.js";
 import { createViz } from "../legacy/viz.js";
 import "../styles/insight.css";
 
 /**
- * "Understanding This Figure": the top of every figure's drawer (api/insight.py).
+ * "Understanding This Figure" (api/insight.py), drawn as the drawer's Insight and Trend
+ * tabs (Records.jsx owns the frame: header, hero, tabs, records).
  *
  * The records alone present the data; this says what the figure is and how it is worked
  * out, what it should look like, what is driving it now (with the reconciliation bridge
@@ -19,95 +16,125 @@ import "../styles/insight.css";
  * written here. Explain This asks the analyst for a short management explanation of
  * the same numbers; the section stands on its own without it.
  */
-export default function Understanding({ figureKey, scope, openDrawer }) {
-  const { data, error, loading, reload } = useApi(
-    ({ signal } = {}) => api.insight({ key: figureKey, business_code: scope }, { signal }),
-    [figureKey, scope]
-  );
-  if (loading && !data) return <Loading what="Working out what is behind this figure" />;
-  if (error) return <Failed error={error} onRetry={reload} what="the explanation" />;
-  if (!data) return null;
-  return <Section s={data} scope={scope} openDrawer={openDrawer} />;
-}
 
 /** The drawer a figure opens: its explanation, then its records (or its ERPNext list). */
 export function FigureDrawer({ figure, scope, openDrawer }) {
-  if (figure?.drill?.fact) {
-    return (
-      <Records scope={scope} kpi={figure.key} fact={figure.drill.fact}
-               filters={figure.drill.filters} title={figure.label} subset={figure.subset_of}
-               explainedBy={figure.explained_by} openDrawer={openDrawer} />
-    );
-  }
   return (
-    <>
-      <div className="dhead">
-        <div>
-          <div className="dt">What is behind it</div>
-          <h4>{figure.label}</h4>
-          {figure.subset_of ? <div className="when">a subset of {figure.subset_of}</div> : null}
-        </div>
-        <ExportButton label="Excel" title="Download this explanation as an Excel sheet"
-                      run={() => api.insightXlsx({ key: figure.key, business_code: scope })} />
-      </div>
-      <Understanding figureKey={figure.key} scope={scope} openDrawer={openDrawer} />
-      {figure.drill?.href ? (
-        <p className="ins-foot">
-          <a className="btn" href={figure.drill.href} target="_blank" rel="noreferrer">
-            Open the records in ERPNext ↗
-          </a>
-        </p>
-      ) : null}
-    </>
+    <Records scope={scope} kpi={figure.key} figure={figure} fact={figure.drill?.fact || null}
+             filters={figure.drill?.filters} title={figure.label} subset={figure.subset_of}
+             explainedBy={figure.explained_by} href={figure.drill?.href || null}
+             openDrawer={openDrawer} />
   );
 }
+FigureDrawer.ownsHeader = true;
+
+/** Whether the figure has a series worth a Trend tab of its own. */
+export function hasTrend(s) {
+  const pts = (s?.trend?.points || []).filter((p) => p.value !== null && p.value !== undefined);
+  return pts.length >= 2;
+}
+
+/** The status chip's tone, from api/insight's status. */
+export const STATUS_TONE = { attention: "dw-c-crit", watch: "dw-c-high", on_target: "dw-c-ok" };
 
 /* ------------------------------------------------------------------------- */
-function Section({ s, scope, openDrawer }) {
+/**
+ * The Insight tab of a figure: key numbers, the bridge, what to do and how to prevent
+ * it, then the working -- checks, what is driving it, related figures, what it is.
+ * `extra` is what the records add (what covers it, where it is concentrated); `tiles`
+ * stand in when the explanation has no key numbers of its own.
+ */
+export function InsightBody({ s, scope, openDrawer, extra = null, tiles = null, href = null }) {
   const cur = s.currency || "";
   const d = s.diagnosis;
+  const chips = (d?.chips || []).slice(0, 4).map((c) => ({
+    label: c.label, value: fmt(c.value, c.unit, cur), tone: TONE[c.state],
+  }));
+  const rest = (d?.sentences || []).filter((t) => t !== s.headline);
+  const res = s.resolution || {};
+  const todo = res.steps?.length ? res.steps : null;
+  const improve = !todo && res.improve?.length ? res.improve : null;
   return (
-    <section className="ins" aria-label="Understanding this figure">
-      <div className="ins-top">
-        <span className="ins-eyebrow">Understanding this figure</span>
-        <Explain figureKey={s.key} scope={scope} />
-      </div>
-
-      <Part title="What it is">
-        <p>{s.what.text}</p>
-        <p className="ins-mut">{s.what.how}</p>
-        {s.as_of?.date ? <p className="ins-mut">As at {s.as_of.date}, {s.as_of.basis}.</p> : null}
-      </Part>
-
+    <>
       {s.guide ? (
-        <Part title="Nothing recorded yet">
-          <Guide g={s.guide} />
-        </Part>
+        <Sec title="Nothing Recorded Yet"><Guide g={s.guide} /></Sec>
       ) : null}
 
-      <Part title="What it should look like">
-        <p>{s.expected.text}</p>
-        {s.expected.checks?.length ? (
-          <ul className="ins-checks">
-            {s.expected.checks.map((c) => (
-              <li key={c.label} className={`ins-c ins-${c.state}`}>
-                <span className="ins-dot" aria-hidden="true" />
-                <div>
-                  <b>{c.label}</b>
-                  <span className="ins-state">{STATE[c.state]}</span>
-                  <p>{c.text}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </Part>
+      {chips.length ? <Sec><Tiles tiles={chips} /></Sec> : tiles?.length ? <Sec><Tiles tiles={tiles} /></Sec> : null}
 
-      {d ? (
-        <Part title="What is driving it now">
-          {d.chips?.length ? <Chips chips={d.chips} cur={cur} /> : null}
-          {(d.sentences || []).map((t) => <p key={t}>{t}</p>)}
-          {d.bridge ? <Bridge b={d.bridge} cur={cur} /> : null}
+      {d?.bridge ? (
+        <Sec title={`From ${title(String(d.bridge.steps[0]?.label || "the invoices").replace(/^On /, ""))} To The Ledger`}>
+          <BridgeBars b={d.bridge} cur={cur} />
+        </Sec>
+      ) : null}
+
+      {todo || improve || s.prevention?.length ? (
+        <div className="dw-sec dw-two">
+          {todo || improve ? (
+            <div>
+              <h5 className="dw-lab">{todo ? "What To Do" : "How To Improve It"}</h5>
+              {todo ? <ol className="dw-steps">{todo.map((t) => <li key={t}>{t}</li>)}</ol> : null}
+              {improve ? (
+                <ul className="dw-steps dw-plain">
+                  {improve.map((x) => (
+                    <li key={x.text}>{x.text}{x.href ? <> <Ext href={x.href} label={x.label} /></> : null}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {res.owner || res.order ? (
+                <div className="dw-chips">
+                  {res.owner ? <span className="dw-chip">Owner: {res.owner}</span> : null}
+                </div>
+              ) : null}
+              {res.order ? <p className="dw-note">{res.order}</p> : null}
+              {res.guide?.href ? (
+                <a className="dw-btn dw-cta" href={res.guide.href} target="_blank" rel="noreferrer">
+                  {res.guide.label || "Open in ERPNext"} ↗
+                </a>
+              ) : null}
+            </div>
+          ) : <div />}
+          {s.prevention?.length ? (
+            <div>
+              <h5 className="dw-lab">Prevent It</h5>
+              <ul className="dw-prev">
+                {s.prevention.map((p) => (
+                  <li key={p.text} className={p.state === "ok" ? "on" : p.state === "warn" ? "off" : undefined}>
+                    <span className="dw-tick" aria-label={p.state === "ok" ? "In place" : "Not confirmed"}>
+                      {p.state === "ok" ? "✓" : ""}
+                    </span>
+                    <span>{p.text} {p.href ? <Ext href={p.href} label={p.label} /> : null}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {s.expected?.text || s.expected?.checks?.length ? (
+        <Sec title="What It Should Look Like">
+          {s.expected.text ? <p className="dw-p">{s.expected.text}</p> : null}
+          {s.expected.checks?.length ? (
+            <ul className="ins-checks">
+              {s.expected.checks.map((c) => (
+                <li key={c.label} className={`ins-c ins-${c.state}`}>
+                  <span className="ins-dot" aria-hidden="true" />
+                  <div>
+                    <b>{c.label}</b>
+                    <span className="ins-state">{STATE[c.state]}</span>
+                    <p>{c.text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </Sec>
+      ) : null}
+
+      {d && (rest.length || d.contributors || d.unmatched || d.ageing || d.tables?.length) ? (
+        <Sec title="What Is Driving It">
+          {rest.map((t) => <p key={t} className="dw-p">{t}</p>)}
           {d.contributors ? (
             <Contributors c={d.contributors} cur={cur} scope={scope} openDrawer={openDrawer} />
           ) : null}
@@ -119,65 +146,13 @@ function Section({ s, scope, openDrawer }) {
           {(d.tables || []).map((t) => (
             <Table key={t.title} t={t} cur={cur} scope={scope} openDrawer={openDrawer} />
           ))}
-        </Part>
+        </Sec>
       ) : null}
 
-      {s.trend ? (
-        <Part title="Its trend">
-          <Trend t={s.trend} cur={cur} />
-        </Part>
-      ) : null}
+      {extra}
 
-      {s.link ? (
-        <Part title="Where it is explained">
-          <button type="button" className="btn" onClick={() => {
-            window.closeDrawer?.();
-            window.go?.(s.link.view);
-          }}>{s.link.label}</button>
-        </Part>
-      ) : null}
-
-      {s.resolution && (s.resolution.steps?.length || s.resolution.improve?.length) ? (
-        <Part title={s.resolution.steps?.length ? "Recommended resolution" : "How to improve it"}>
-          {s.resolution.owner || s.resolution.order ? (
-            <div className="ins-meta">
-              {s.resolution.owner ? <span><b>Owner</b> {s.resolution.owner}</span> : null}
-              {s.resolution.order ? <span><b>Order</b> {s.resolution.order}</span> : null}
-            </div>
-          ) : null}
-          {s.resolution.steps?.length ? (
-            <ol className="ins-steps">{s.resolution.steps.map((t) => <li key={t}>{t}</li>)}</ol>
-          ) : null}
-          {s.resolution.improve?.length ? (
-            <ul className="ins-list">
-              {s.resolution.improve.map((x) => (
-                <li key={x.text}>{x.text}{x.href ? <> <Ext href={x.href} label={x.label} /></> : null}</li>
-              ))}
-            </ul>
-          ) : null}
-          {s.resolution.guide?.href ? (
-            <a className="btn ins-cta" href={s.resolution.guide.href} target="_blank" rel="noreferrer">
-              {s.resolution.guide.label || "Open in ERPNext"} ↗
-            </a>
-          ) : null}
-        </Part>
-      ) : null}
-
-      {s.prevention?.length ? (
-        <Part title="Prevention">
-          <ul className="ins-prev">
-            {s.prevention.map((p) => (
-              <li key={p.text} className={p.state ? `ins-${p.state}` : undefined}>
-                {p.state ? <span className="ins-dot" aria-hidden="true" /> : null}
-                <span>{p.text} {p.href ? <Ext href={p.href} label={p.label} /> : null}</span>
-              </li>
-            ))}
-          </ul>
-        </Part>
-      ) : null}
-
-      {s.related?.length || s.open_items?.length ? (
-        <Part title="Related">
+      {s.related?.length || s.open_items?.length || s.link || href ? (
+        <Sec title="Related">
           {s.related?.length ? (
             <div className="ins-rel">
               {s.related.map((r) => (
@@ -201,21 +176,84 @@ function Section({ s, scope, openDrawer }) {
               ))}
             </ul>
           ) : null}
-        </Part>
+          {s.link || href ? (
+            <div className="dw-chips">
+              {s.link ? (
+                <button type="button" className="dw-btn" onClick={() => {
+                  window.closeDrawer?.();
+                  window.go?.(s.link.view);
+                }}>{s.link.label}</button>
+              ) : null}
+              {href ? (
+                <a className="dw-btn" href={href} target="_blank" rel="noreferrer">
+                  Open The Records In ERPNext ↗
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+        </Sec>
       ) : null}
-      <div className="ins-rule"><span>The records behind it</span></div>
+
+      <Sec title="What It Is">
+        <p className="dw-p">{s.what.text}</p>
+        {s.what.how ? <p className="dw-note">{s.what.how}</p> : null}
+        {s.as_of?.date ? <p className="dw-note">As at {s.as_of.date}, {s.as_of.basis}.</p> : null}
+      </Sec>
+    </>
+  );
+}
+
+/** The Trend tab: the series, and how the latest compares. */
+export function TrendBody({ s }) {
+  return (
+    <Sec title={s.trend.title}>
+      <Trend t={s.trend} cur={s.currency || ""} />
+    </Sec>
+  );
+}
+
+/** The analyst's explanation, at the top of the Insight tab once asked for. */
+export function AiNote({ ai }) {
+  if (!ai.text && !ai.error && !ai.busy) return null;
+  return (
+    <div className={`dw-sec dw-ai${ai.error ? " dw-ai-err" : ""}`} role="status">
+      <h5 className="dw-lab">The Analyst's Explanation</h5>
+      {ai.busy ? <p className="dw-note">Writing a short explanation of these figures…</p> : null}
+      {ai.error ? <p className="dw-p">{ai.error}</p> : null}
+      {ai.text ? <AiText text={ai.text} /> : null}
+      {ai.text ? (
+        <p className="dw-note">Written by the analyst from the figures in this drawer only; every number in it was checked against them.</p>
+      ) : null}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+const STATE = { ok: "As expected", warn: "Needs attention", bad: "Off target", info: "For information" };
+const KIND = { process: "Process", timing: "Timing", position: "Position", unexplained: "Unexplained" };
+const TONE = { bad: "crit", warn: "high", ok: "ok" };
+const title = (t) => t.replace(/(^|\s)(\S)/g, (m, sp, c) => sp + c.toUpperCase());
+
+export function Sec({ title, children }) {
+  return (
+    <section className="dw-sec">
+      {title ? <h5 className="dw-lab">{title}</h5> : null}
+      {children}
     </section>
   );
 }
 
-const STATE = { ok: "As expected", warn: "Needs attention", bad: "Off target", info: "For information" };
-const KIND = { process: "Process", timing: "Timing", position: "Position", unexplained: "Unexplained" };
-
-function Part({ title, children }) {
+/** Up to four key numbers. */
+export function Tiles({ tiles }) {
   return (
-    <div className="ins-part">
-      <h5>{title}</h5>
-      {children}
+    <div className="dw-tiles">
+      {tiles.slice(0, 4).map((t) => (
+        <div key={t.label} className={`dw-tile${t.tone ? ` dw-t-${t.tone}` : ""}`}>
+          <span className="dw-tile-l">{t.label}</span>
+          <b title={t.value}>{t.value}</b>
+          {t.note ? <span className="dw-tile-n" title={t.note}>{t.note}</span> : null}
+        </div>
+      ))}
     </div>
   );
 }
@@ -275,46 +313,58 @@ function Chart({ spec, title }) {
   return <div ref={ref} className="ins-chart" />;
 }
 
-function Bridge({ b, cur }) {
+/**
+ * The bridge as horizontal bars, each step against the largest, then the step-by-step
+ * table (kind, how many) a click away. The arithmetic is the server's.
+ */
+function BridgeBars({ b, cur }) {
   const drawn = b.steps.filter((x) => x.kind === "total" || Math.abs(x.value) >= 0.005);
-  const spec = {
-    type: "waterfall", title: "From the open invoices to the ledger", unit: cur,
-    labels: drawn.map((x) => short(x.label)),
-    series: [{ name: cur, values: drawn.map((x) => x.value) }],
-    totals: drawn.map((x, i) => (x.kind === "total" ? i : -1)).filter((i) => i >= 0),
-  };
+  const most = Math.max(...drawn.map((x) => Math.abs(x.value)), 0) || 1;
   return (
-    <div className="ins-block">
-      <h6>The reconciliation, step by step</h6>
-      <Chart spec={spec} title="From the open invoices to the ledger" />
-      <div className="ins-scroll">
-        <table className="dt ins-t">
-          <thead>
-            <tr><th>Step</th><th>Kind</th><th style={{ textAlign: "right" }}>How many</th>
-              <th style={{ textAlign: "right" }}>{cur}</th></tr>
-          </thead>
-          <tbody>
-            {b.steps.map((x) => (
-              <tr key={x.id} className={x.kind === "total" ? "ins-total" : undefined}>
-                <td>{x.label}{x.note ? <div className="ins-mut">{x.note}</div> : null}</td>
-                <td>{KIND[x.kind] ? <span className={`ins-tag ins-k-${x.kind}`}>{KIND[x.kind]}</span> : null}</td>
-                <td className="num">{x.count ? `${count(x.count)} ${x.count_word || ""}` : ""}</td>
-                <td className="num">{exact(x.value)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <>
+      <div className="dw-bars">
+        {drawn.map((x, i) => {
+          const tone = i === 0 ? "start" : x.kind === "total" ? "end" : x.kind;
+          return (
+            <div key={x.id} className={`dw-bar${x.kind === "total" ? " dw-bar-tot" : ""}`}>
+              <span className="dw-bar-l" title={x.note ? `${x.label} (${x.note})` : x.label}>{x.label}</span>
+              <span className="dw-bar-t" aria-hidden="true">
+                <i className={`dw-b-${tone}`} style={{ width: `${Math.max(1, (100 * Math.abs(x.value)) / most)}%` }} />
+              </span>
+              <span className="dw-bar-v">{x.value < 0 ? `−${exact(-x.value)}` : exact(x.value)}</span>
+            </div>
+          );
+        })}
       </div>
-      <p className={`ins-mut ins-recon ${b.reconciles ? "ins-ok" : "ins-bad"}`}>
+      <p className={`dw-note ${b.reconciles ? "dw-ok" : "dw-bad"}`}>
         {b.reconciles
           ? `Reconciles to the cent; ${cur} ${exact(b.unexplained)} is not explained by the records.`
           : `Does not reconcile: ${cur} ${exact(b.residual)} is left by the arithmetic.`}
       </p>
-    </div>
+      <details className="dw-more">
+        <summary>Step By Step</summary>
+        <div className="ins-scroll">
+          <table className="dt ins-t">
+            <thead>
+              <tr><th>Step</th><th>Kind</th><th style={{ textAlign: "right" }}>How Many</th>
+                <th style={{ textAlign: "right" }}>{cur}</th></tr>
+            </thead>
+            <tbody>
+              {b.steps.map((x) => (
+                <tr key={x.id} className={x.kind === "total" ? "ins-total" : undefined}>
+                  <td>{x.label}{x.note ? <div className="ins-mut">{x.note}</div> : null}</td>
+                  <td>{KIND[x.kind] ? <span className={`ins-tag ins-k-${x.kind}`}>{KIND[x.kind]}</span> : null}</td>
+                  <td className="num">{x.count ? `${count(x.count)} ${x.count_word || ""}` : ""}</td>
+                  <td className="num">{exact(x.value)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </>
   );
 }
-
-const short = (t) => (t.length > 26 ? `${t.slice(0, 24)}…` : t);
 
 const BY = {
   gap: ["The largest differences", "Difference"],
@@ -342,7 +392,7 @@ function Contributors({ c, cur, scope, openDrawer }) {
                   onClick={() => openDrawer?.(
                     <Records scope={scope} fact={r.open.fact} filters={r.open.filters}
                              title={r.open.title} openDrawer={openDrawer} />)}>
-                <td>{r.party}</td>
+                <td className="dw-name"><span className="dw-clip" title={r.party}>{r.party}</span></td>
                 <td className="num">{exact(r.value)}</td>
                 <td className="num">{r.share == null ? "—" : `${r.share}%`}</td>
                 <td className="num">{exact(r.open_invoices)}</td>
@@ -380,8 +430,8 @@ function Unmatched({ u, cur }) {
             {u.oldest.map((i) => (
               <tr key={i.name}>
                 <td><a className="dlink" href={i.href} target="_blank" rel="noreferrer">{i.name} ↗</a></td>
-                <td>{i.party}</td>
-                <td>{i.date}</td>
+                <td className="dw-name"><span className="dw-clip" title={i.party}>{i.party}</span></td>
+                <td className="dw-date">{i.date}</td>
                 <td className="num">{i.days == null ? "—" : count(i.days)}</td>
                 <td className="num">{exact(i.amount)}</td>
               </tr>
@@ -433,7 +483,8 @@ function Table({ t, cur, scope, openDrawer }) {
                              title={r.open.title} openDrawer={openDrawer} />) : undefined}>
                 {r.cells.map((v, j) => {
                   const unit = t.columns[j]?.[1];
-                  return unit === "text" ? <td key={j}>{String(v)}</td>
+                  return unit === "text"
+                    ? <td key={j} className="dw-name"><span className="dw-clip" title={String(v)}>{String(v)}</span></td>
                     : <td key={j} className="num">{unit === "currency" ? exact(v) : fmt(v, unit, cur)}</td>;
                 })}
                 {r.links?.length ? (
@@ -472,42 +523,14 @@ function Trend({ t, cur }) {
   );
 }
 
-/** Explain This: the analyst, on the drawer's own numbers only. */
-function Explain({ figureKey, scope }) {
-  const [state, setState] = useState({ busy: false, text: null, error: null });
-  const run = async () => {
-    setState({ busy: true, text: null, error: null });
-    try {
-      const got = await api.insightExplain({ key: figureKey, business_code: scope });
-      setState({ busy: false, text: got?.text || null, error: got?.error || null, model: got?.model });
-    } catch (e) {
-      setState({ busy: false, text: null, error: e?.message || "The explanation could not be written." });
-    }
-  };
-  return (
-    <>
-      <button type="button" className="btn ins-explain" onClick={run} disabled={state.busy}
-              title="Ask the analyst for a short management explanation of these figures">
-        {state.busy ? "Explaining…" : "Explain This"}
-      </button>
-      {state.text || state.error ? (
-        <div className={`ins-ai${state.error ? " ins-ai-err" : ""}`} role="status">
-          {state.error ? <p>{state.error}</p> : <AiText text={state.text} />}
-          {state.text ? <p className="ins-mut">Written by the analyst from the figures in this drawer only; every number in it was checked against them.</p> : null}
-        </div>
-      ) : null}
-    </>
-  );
-}
-
 function AiText({ text }) {
   const lines = String(text || "").split("\n").map((l) => l.trim()).filter(Boolean);
   const intro = lines.filter((l) => !/^[-•*]\s+/.test(l));
   const bullets = lines.filter((l) => /^[-•*]\s+/.test(l)).map((l) => l.replace(/^[-•*]\s+/, ""));
   return (
     <>
-      {intro.map((l) => <p key={l}>{l.replace(/\*\*/g, "")}</p>)}
-      {bullets.length ? <ul>{bullets.map((l) => <li key={l}>{l.replace(/\*\*/g, "")}</li>)}</ul> : null}
+      {intro.map((l) => <p key={l} className="dw-p">{l.replace(/\*\*/g, "")}</p>)}
+      {bullets.length ? <ul className="dw-steps dw-plain">{bullets.map((l) => <li key={l}>{l.replace(/\*\*/g, "")}</li>)}</ul> : null}
     </>
   );
 }

@@ -40,6 +40,13 @@ def money(cur, v) -> str:
     return f"{cur} {flt(v):,.2f}".strip()
 
 
+def short(cur, v) -> str:
+    """Money for a sentence: GHS 10.07M, GHS 341,565. The tables keep the cents."""
+    v = flt(v)
+    body = f"{v / 1e6:,.2f}M" if abs(v) >= 1e6 else f"{v:,.0f}"
+    return f"{cur} {body}".strip()
+
+
 def pct(part, whole):
     return round(flt(part) / flt(whole) * 100, 1) if flt(whole) else None
 
@@ -377,6 +384,8 @@ def ledger(ctx, party_type: str, key: str) -> dict:
                     f"{money(cur, over)} is.")
     return {"focus": focus, "bridge": b, "contributors": contrib, "unmatched": live,
             "ageing": aged, "credit": credit, "checks": checks, "diagnosis": said,
+            "headline": ledger_headline(focus, b, contrib, aged, over, share, n_credit, tol,
+                                        w, cur),
             "chips": [
                 {"label": w["invoices"].capitalize(), "value": t["open_invoices"], "unit": "currency"},
                 {"label": "By the ledger", "value": owed, "unit": "currency"},
@@ -385,6 +394,49 @@ def ledger(ctx, party_type: str, key: str) -> dict:
                 {"label": "Not explained", "value": b["unexplained"], "unit": "currency",
                  "state": "ok" if abs(b["unexplained"]) <= 1 else "warn"},
             ]}
+
+
+def ledger_headline(focus, b, contrib, aged, over, share, n_credit, tol, w, cur) -> str:
+    """The drawer's one sentence: what is going on, and what clears most of it -- every
+    figure in it read off the bridge, the ageing or the contributors above."""
+    t, gap, owed = b["totals"], b["gap"], b["totals"]["owed"]
+    lead = ""
+    if contrib and contrib["rows"]:
+        n, every = len(contrib["rows"]), len(contrib["rows"]) == contrib["parties"]
+        who = (contrib["rows"][0]["party"] if n == 1 else
+               f"the {plural(n, w['who'])} concerned" if every else
+               f"the {plural(n, w['who'])} with the largest amounts")
+        verb = {"gap": "Reconciling", "unmatched": "Matching the payments of",
+                "d90_plus": "Collecting from" if w["who"] == "customer" else "Settling",
+                "in_credit": "Setting off the credit of"}[contrib["by"]]
+        lead = (f" {verb} {who} clears " +
+                ("all of it." if every else f"{contrib['top_share']}% of it."))
+    if focus == "ageing":
+        if over <= CENT or share is None:
+            return f"Nothing owed is over 90 days late: {short(cur, owed)} is owed by the ledger."
+        return (f"{short(cur, over)} of the {short(cur, owed)} owed by the ledger is over 90 days "
+                f"late ({share}%), after payments not yet matched are set against the oldest "
+                f"invoices." + lead)
+    if focus == "unmatched":
+        if t["unmatched_payments"] <= CENT:
+            return f"Every payment {w['verb']} is matched to an invoice."
+        return (f"{short(cur, t['unmatched_payments'])} {w['verb']} is not matched to any "
+                f"invoice, so the {w['invoices']} overstate what is owed by that much." + lead)
+    if focus == "credit":
+        if t["in_credit"] <= CENT:
+            return f"No {w['who']} is {w['credit_word']}."
+        return (f"{plural(n_credit, w['who'])} {'is' if n_credit == 1 else 'are'} "
+                f"{w['credit_word']} by {short(cur, t['in_credit'])}." + lead)
+    if abs(gap) <= tol:
+        return (f"The {w['invoices']} and the ledger agree: {short(cur, owed)} is owed.")
+    parts = sorted([s for s in b["steps"] if s["kind"] in ("process", "unexplained")
+                    and abs(s["value"]) > CENT], key=lambda s: -abs(s["value"]))
+    said = (f"The {w['invoices']} say {short(cur, t['open_invoices'])}, but the ledger says "
+            f"{short(cur, owed)} is owed")
+    if parts:
+        p = parts[0]
+        said += f"; {short(cur, abs(p['value']))} of the gap is {p['label'][0].lower()}{p['label'][1:]}"
+    return said + "." + (lead if contrib and contrib["by"] == "gap" else "")
 
 
 # =========================================================================== revenue and margin

@@ -120,11 +120,18 @@ export default function App() {
         </main>
       </div>
       <Drawer content={drawer} onClose={() => setDrawer(null)}
-              onBack={drawerStack.length > 1 ? drawerBack : null} />
+              onBack={drawerStack.length > 1 ? drawerBack : null}
+              trail={[captionOf(view), ...drawerStack.slice(0, -1).map(drawerTitle)].filter(Boolean)} />
       <ActionDialog scope={scope} />
       <ScheduleDialog scope={scope} />
     </div>
   );
+}
+
+/** What a drawer in the stack is about, for the breadcrumb of the one above it. */
+function drawerTitle(content) {
+  const p = React.isValidElement(content) ? content.props || {} : {};
+  return p.title || p.figure?.label || null;
 }
 
 function captionOf(key) {

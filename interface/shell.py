@@ -464,6 +464,171 @@ table.dt th[aria-sort="ascending"]::after{border-bottom:5px solid currentColor;o
 .guide-a{display:inline-flex;text-decoration:none}
 .guide-drawer{padding:20px}
 .guide-drawer h3{margin:0 0 12px;font-size:var(--fs-lg)}
-/* ---- Drawer history: Back to the previous panel (App.jsx, Drawer.jsx) ---- */
-.drawer-back{position:sticky;top:0;z-index:2;margin:12px 0 0 16px;display:inline-flex;align-items:center;gap:6px}
+/* ======================================================================
+   The record drawer (Drawer.jsx, Records.jsx, Understanding.jsx), 16 Nov 2026, from
+   the approved mockup: wider, a solid header that stays put, a hero with the figure
+   and one sentence, then Insight / Records / Trend. The drawer itself has no padding
+   now; each band pads itself, so the header can run edge to edge and nothing shows
+   through above it. Tokens only.
+   ====================================================================== */
+.drawer{width:min(880px,calc(100vw - 48px));max-width:none;padding:0;background:var(--panel)}
+@media(max-width:900px){.drawer{width:100%;border-radius:0}}
+.dw-body{padding:var(--sp-5) 22px}
+
+/* ---- the header: Back, breadcrumb, title, actions, close ---- */
+.dw-head{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:var(--sp-3);
+ padding:14px 22px;background:var(--panel);border-bottom:1px solid var(--line);
+ transition:box-shadow .15s}
+.drawer.dw-scrolled .dw-head{box-shadow:var(--shadow)}
+.dw-titles{flex:1;min-width:0}
+.dw-crumb{font-size:var(--fs-2xs);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ margin-bottom:2px}
+.dw-title{margin:0;font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--ink);letter-spacing:-.01em;
+ line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-acts{display:flex;align-items:center;gap:6px;flex:none}
+.dw-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;
+ border:1px solid var(--line2);border-radius:var(--r-pill);background:var(--surface);color:var(--ink);
+ font:var(--fw-semibold) var(--fs-xs)/1 var(--sans);white-space:nowrap;cursor:pointer;text-decoration:none;
+ transition:border-color .15s,background .15s}
+.dw-btn:hover:not(:disabled){border-color:var(--ink2);background:var(--raised)}
+.dw-btn:disabled{opacity:.6;cursor:default}
+.dw-btn:focus-visible,.dw-tab:focus-visible,.dw-search:focus-visible,.dw-bar-link:focus-visible{
+ outline:2px solid var(--accent);outline-offset:2px}
+.dw-btn.failed{border-color:var(--crit-line);color:var(--crit)}
+.dw-x{width:32px;padding:0;font-size:var(--fs-lg);font-weight:var(--fw-regular)}
+.dw-back{flex:none}
+
+/* ---- the hero: the figure, its chips, and the one sentence ---- */
+.dw-hero{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--sp-4) var(--sp-8);padding:22px 22px 20px}
+.dw-hero-fig{min-width:0;max-width:100%}
+.dw-big{font-size:var(--fs-3xl);font-weight:var(--fw-semibold);letter-spacing:-.025em;line-height:1.15;color:var(--ink);
+ font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-say{flex:1 1 300px;margin:0;max-width:62ch;font-size:var(--fs-md);line-height:1.6;color:var(--ink2)}
+.dw-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.dw-chip,.dw-pill{display:inline-flex;align-items:center;font-size:var(--fs-2xs);font-weight:var(--fw-semibold);
+ line-height:1.5;padding:2px 9px;border-radius:var(--r-pill);white-space:nowrap;color:var(--ink2);
+ background:var(--raised);border:1px solid var(--line)}
+.dw-c-crit{color:var(--crit);background:var(--crit-bg);border-color:var(--crit-line)}
+.dw-c-high{color:var(--high);background:var(--high-bg);border-color:var(--high-line)}
+.dw-c-ok{color:var(--ok);background:var(--ok-bg);border-color:var(--ok-line)}
+
+/* ---- tabs ---- */
+.dw-tabs{display:flex;gap:4px;padding:8px 18px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+ overflow-x:auto;scrollbar-width:none}
+.dw-tabs::-webkit-scrollbar{display:none}
+.dw-tab{appearance:none;border:0;background:none;cursor:pointer;padding:6px 14px;border-radius:var(--r-pill);
+ font:var(--fw-medium) var(--fs-sm)/1.4 var(--sans);color:var(--mut);white-space:nowrap;transition:background .15s,color .15s}
+.dw-tab:hover{color:var(--ink)}
+.dw-tab.on{background:var(--raised);color:var(--ink);font-weight:var(--fw-semibold);box-shadow:inset 0 0 0 1px var(--line)}
+
+/* ---- the bands of a tab ---- */
+.dw-sec{padding:18px 22px;border-bottom:1px solid var(--line)}
+.dw-pane > .dw-sec:last-child,.dw-pane > :last-child .dw-sec:last-child{border-bottom:0}
+.dw-lab{margin:0 0 10px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--mut);letter-spacing:0}
+.dw-p{margin:0 0 8px;max-width:72ch;font-size:var(--fs-sm);line-height:1.6;color:var(--ink2)}
+.dw-note{margin:8px 0 0;font-size:var(--fs-xs);line-height:1.5;color:var(--mut)}
+.dw-pad{padding:14px 22px 18px;margin:0}
+.dw-note.dw-note-top{margin:-4px 0 10px}
+.dw-note.dw-ok{color:var(--ok)}
+.dw-note.dw-bad{color:var(--crit)}
+.dw-ai{background:var(--accent-bg)}
+.dw-ai-err{background:var(--crit-bg)}
+
+/* key numbers */
+.dw-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.dw-tile{min-width:0;padding:12px 14px;border-radius:var(--r-sm);background:var(--raised)}
+.dw-tile-l{display:block;font-size:var(--fs-2xs);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-tile b{display:block;margin-top:4px;font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--ink);
+ font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-tile-n{display:block;margin-top:2px;font-size:var(--fs-2xs);color:var(--dim);white-space:nowrap;overflow:hidden;
+ text-overflow:ellipsis}
+.dw-t-crit b{color:var(--crit)}
+.dw-t-high b{color:var(--high)}
+.dw-t-ok b{color:var(--ok)}
+
+/* horizontal bars: the bridge, the concentration, what covers it */
+/* One grid for every row (subgrid), so the tracks start and end together whatever the
+   width of each figure. */
+.dw-bars{display:grid;grid-template-columns:minmax(0,260px) minmax(60px,1fr) auto;column-gap:12px;row-gap:2px}
+.dw-bar{grid-column:1/-1;display:grid;grid-template-columns:subgrid;align-items:center;
+ padding:5px 0;font-size:var(--fs-sm);color:var(--ink2)}
+.dw-bar-tot{color:var(--ink);font-weight:var(--fw-semibold)}
+.dw-bar-l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dw-bar-t{position:relative;display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden}
+.dw-bar-t i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--accent)}
+.dw-bar-t i.dw-b-start{background:var(--accent)}
+.dw-bar-t i.dw-b-end,.dw-bar-t i.dw-b-position{background:var(--ok)}
+.dw-bar-t i.dw-b-process{background:var(--high)}
+.dw-bar-t i.dw-b-timing{background:var(--accent-ink)}
+.dw-bar-t i.dw-b-unexplained{background:var(--dim)}
+.dw-bar-v{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dw-bar-v small{margin-left:8px;font-size:var(--fs-2xs);color:var(--mut)}
+.dw-bar-link{appearance:none;width:calc(100% + 16px);margin:0 -8px;padding:6px 8px;border:0;border-radius:var(--r-xs);
+ background:none;font:inherit;text-align:left;cursor:pointer}
+.dw-bar-link:hover:not(:disabled){background:var(--hover);color:var(--ink)}
+a.dw-bar-link{color:inherit;text-decoration:none}
+.dw-bar-link:disabled{cursor:default}
+.dw-more{margin-top:10px}
+.dw-more summary{cursor:pointer;font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--accent-ink)}
+.dw-more[open] summary{margin-bottom:8px}
+
+/* what to do, prevent it */
+.dw-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--sp-6)}
+.dw-steps{margin:0;padding-left:18px;font-size:var(--fs-sm);line-height:1.55;color:var(--ink2)}
+.dw-steps li{margin:0 0 6px;padding-left:2px}
+.dw-plain{list-style:disc}
+.dw-cta{margin-top:12px}
+.dw-prev{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.dw-prev li{display:flex;gap:10px;align-items:flex-start;font-size:var(--fs-sm);line-height:1.5;color:var(--ink2)}
+.dw-tick{flex:none;display:inline-grid;place-items:center;width:16px;height:16px;margin-top:2px;
+ border-radius:var(--r-pill);border:1.5px solid var(--line2);font-size:var(--fs-3xs);font-weight:var(--fw-bold);line-height:1}
+.dw-prev li.on .dw-tick{color:var(--ok);background:var(--ok-bg);border-color:var(--ok-line)}
+.dw-prev li.off .dw-tick{border-color:var(--high-line)}
+
+/* the explanation's own tables: one line per row as well */
+.dw-sec .ins-t td,.dw-sec .ins-t th{white-space:nowrap}
+.dw-sec .ins-block:first-child{margin-top:0}
+.dw-clip{display:inline-block;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+ vertical-align:bottom}
+.dw-date{white-space:nowrap}
+
+/* ---- the records: search, a scroll box of their own, header and totals that stay ---- */
+.dw-tbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:0 0 12px}
+.dw-tbar .dw-note{margin:0}
+.dw-search{height:34px;width:min(300px,100%);padding:0 14px;border:1px solid var(--line2);border-radius:var(--r-pill);
+ background:var(--surface);color:var(--ink);font:var(--fw-regular) var(--fs-sm)/1 var(--sans)}
+.dw-search::placeholder{color:var(--dim)}
+.dw-tbox{max-width:100%;max-height:min(64vh,680px);overflow:auto;border:1px solid var(--line);
+ border-radius:var(--r-sm);background:var(--surface);overscroll-behavior:contain}
+table.dt.dw-t{width:100%;border-collapse:separate;border-spacing:0;font-size:var(--fs-sm)}
+table.dt.dw-t th,table.dt.dw-t td{white-space:nowrap;font-variant-numeric:tabular-nums}
+table.dt.dw-t thead th{position:sticky;top:0;z-index:2;padding:10px 12px;background:var(--raised);
+ border-bottom:1px solid var(--line2);text-align:left}
+table.dt.dw-t th.num,table.dt.dw-t td.num{text-align:right}
+table.dt.dw-t td{padding:9px 12px;border-bottom:1px solid var(--line)}
+table.dt.dw-t tbody tr:nth-child(even) td{background:var(--zebra)}
+table.dt.dw-t tbody tr:hover td{background:var(--hover)}
+table.dt.dw-t tfoot td{position:sticky;bottom:0;z-index:1;padding:10px 12px;background:var(--raised);
+ border-top:1px solid var(--line2);border-bottom:0;font-weight:var(--fw-semibold);color:var(--ink)}
+.dw-tbox .thin{padding:14px}
+
+/* ---- narrower ---- */
+@media(max-width:640px){
+ .dw-head{flex-wrap:wrap;padding:12px 16px;gap:8px 10px}
+ .dw-titles{flex:1 1 calc(100% - 110px)}
+ .dw-acts{order:3;width:100%}
+ .dw-acts .dw-x{margin-left:auto}
+ .dw-hero{padding:18px 16px 16px}
+ .dw-big{font-size:var(--fs-2xl)}
+ .dw-tabs{padding:8px 12px}
+ .dw-sec{padding:16px}
+ .dw-pad{padding:12px 16px 16px}
+ .dw-body{padding:16px}
+ .dw-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .dw-two{grid-template-columns:minmax(0,1fr)}
+ .dw-bars{grid-template-columns:minmax(0,1fr) minmax(40px,.6fr) auto;column-gap:8px}
+ .dw-bar-v small{display:block;margin-left:0}
+ .dw-clip{max-width:180px}
+ .dw-search{width:100%}
+}
 """
