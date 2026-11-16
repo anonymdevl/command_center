@@ -3580,6 +3580,45 @@ class Branding(TransactionTestCase):
         self.assertIn(_MARK_TILE, login)
         self.assertIn(f'<link rel="icon" href="{branding.DEFAULT_FAVICON}">', login)
 
+    def test_sign_in_page_threads(self):
+        """The sign-in page is "It notices you" (L3, 16 Nov 2026): a canvas of threads behind
+        everything, the brand with the tagline from Settings, the card and the footer; no
+        slogan, no feature points; one screen; and the sign-in itself exactly as it was."""
+        from django.conf import settings
+        self._ok("set_brand", tagline="Board Intelligence")
+        page = Client().get("/command-center-login").content.decode()
+        body = page.split("<body", 1)[1]
+        # the threads: decoration, behind everything, never taking a click
+        self.assertIn('<canvas class="sg-threads" id="sgthreads" aria-hidden="true"></canvas>', page)
+        for gone in ("sg-notes", "sg-line", "sg-paper", "The whole business in one place",
+                     "Ask anything, in your own words", "<h2"):
+            self.assertFalse(gone in body, f"{gone!r} is no longer on the sign-in page")
+        self.assertIn('<span class="auth-tag">Board Intelligence</span>', page, "the tagline from Settings")
+        self.assertIn(_MARK_TILE, page, "no Sign-In Logo: the built-in mark")
+        self.assertIn('<footer class="auth-by">', page)
+        # the motion's manners
+        for manner in ("prefers-reduced-motion: reduce", "visibilitychange",
+                       "Math.min(window.devicePixelRatio || 1, 2)", "Math.min(96,", "passive: true"):
+            self.assertIn(manner, page, manner)
+        # the sign-in, untouched
+        for kept in ("window.csrf_token = ", 'fetch("/api/method/login"', '"X-Frappe-CSRF-Token"',
+                     "b.verification || b.tmp_id", "That email or password is not right.",
+                     'id="show" aria-label="Show password"', 'var HOME = "/command-center"',
+                     'autocomplete="username"', 'autocomplete="current-password"', "autofocus",
+                     "localStorage.getItem('icc-theme')", '<meta name="robots" content="noindex,nofollow">',
+                     '<link rel="icon" href="'):
+            self.assertIn(kept, page, kept)
+        # one screen: the page is the screen's height and does not scroll; the canvas
+        # takes no pointer events; all of it under body.cc-signin only
+        css = (settings.BASE_DIR / "frontend" / "src" / "styles" / "command-center.css").read_text()
+        rule = re.search(r"body\.cc-auth\.cc-signin\{([^}]*)\}", css).group(1)
+        self.assertIn("height:100dvh", rule)
+        self.assertIn("overflow:hidden", rule)
+        self.assertIn("pointer-events:none", re.search(r"\.sg-threads\{([^}]*)\}", css).group(1))
+        self.assertNotIn("sg-notes", css)
+        access = Client().get("/management-only")
+        self.assertNotIn("cc-signin", access.content.decode() if access.status_code == 200 else "")
+
     def test_outputs_carry_the_brand(self):
         import io
         import sys

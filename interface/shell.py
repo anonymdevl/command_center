@@ -654,36 +654,41 @@ table.dt.dw-t tfoot td{position:sticky;bottom:0;z-index:1;padding:10px 12px;back
  .dw-search{width:100%}
 }
 /* ======================================================================
-   The sign-in page: "The Signal Line" (command-center-login.html), 16 Nov 2026, from
-   the approved option C. A paper ground (light) or an ink one (dark) with a faint
-   ruling; one quiet line drawn across the page behind a compact, solid card; a faint
-   baseline under it with the three points beneath. Scoped to body.cc-signin, so the
+   The sign-in page: "It notices you" (L3, command-center-login.html), 16 Nov 2026,
+   from the approved mockup-signin-L3.html. A warm grey ground (light) or a deep ink
+   one (dark); about two dozen fine threads in the accent hue flow across the whole
+   screen on a canvas behind everything, with ring nodes on every fifth thread. They
+   lean gently towards the pointer (or the finger) and the nodes near it brighten and
+   grow. One screen, never a scroll: the page is exactly the screen's height and the
+   card, the brand and the footer fit inside it. Scoped to body.cc-signin, so the
    access pages (.auth.single) keep their own look. Tokens only: the page's few colours
-   are mixed from the palette, in both themes.
+   are mixed from the palette, in both themes; the threads read the accent from CSS.
    ====================================================================== */
 body.cc-signin{
  --sg-ground:color-mix(in srgb,var(--t3) 38%,var(--bg));
- --sg-rule:color-mix(in srgb,var(--line) 50%,transparent);
- --sg-signal:color-mix(in srgb,var(--ink2) 40%,transparent);
- --sg-base:var(--line2);
+ --sg-thread:var(--accent);
  --sg-card:var(--raised);
  --sg-card-line:var(--line2);
  --sg-field:var(--surface);
 }
 [data-theme="light"] body.cc-signin{
- --sg-ground:color-mix(in srgb,var(--t2) 34%,var(--surface));
- --sg-rule:color-mix(in srgb,var(--t2) 62%,var(--surface));
- --sg-signal:color-mix(in srgb,var(--ink2) 48%,transparent);
- --sg-base:color-mix(in srgb,var(--t2) 40%,var(--line2));
+ --sg-ground:color-mix(in srgb,var(--t2) 45%,var(--line2));
+ --sg-thread:var(--accent);
  --sg-card:var(--surface);
- --sg-card-line:color-mix(in srgb,var(--t2) 45%,var(--line2));
+ --sg-card-line:color-mix(in srgb,var(--t2) 30%,var(--line2));
  --sg-field:var(--surface);
 }
 body.cc-auth.cc-signin{position:relative;display:grid;grid-template-columns:minmax(0,1fr);
- grid-template-rows:auto minmax(0,1fr) auto auto;place-items:stretch;align-content:stretch;gap:0;padding:0;
- height:auto;min-height:100vh;min-height:100dvh;overflow-x:hidden;background:var(--sg-ground)}
-.sg-paper{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
-.sg-paper line{stroke:var(--sg-rule);stroke-width:1}
+ grid-template-rows:auto minmax(0,1fr) auto;place-items:stretch;align-content:stretch;gap:0;padding:0;
+ height:100vh;height:100dvh;min-height:0;overflow:hidden;background:var(--sg-ground)}
+/* Only a screen too short to hold the form at all (a phone on its side) may scroll:
+   cutting the Sign In button off would be worse than a scroll. */
+@media (max-height:519px){
+ body.cc-auth.cc-signin{height:auto;min-height:100vh;min-height:100dvh;overflow-x:hidden;overflow-y:auto}
+}
+/* The threads: decoration only, never in the way of the form. */
+.sg-threads{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;
+ color:var(--sg-thread)}
 /* ---- top left: the logo, the product's name and tagline; the dateline right ---- */
 .sg-top{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;
  gap:var(--sp-4);padding:var(--sp-8) var(--sp-10) 0}
@@ -693,15 +698,12 @@ body.cc-auth.cc-signin{position:relative;display:grid;grid-template-columns:minm
 .sg-name{min-width:0}
 .sg-name b{display:block;font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.015em;
  line-height:1.25;color:var(--ink)}
-.sg-name .auth-tag{font-size:var(--fs-xs);line-height:1.4;margin-top:2px}
-.sg-date{margin:0;font-size:var(--fs-xs);color:var(--mut);white-space:nowrap;font-variant-numeric:tabular-nums}
-/* ---- the stage: the line runs across it, the card sits on the line ---- */
-.sg-stage{position:relative;z-index:1;display:grid;place-items:center;padding:var(--sp-10) var(--sp-4);min-height:0}
-.sg-line{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;overflow:visible}
-.sg-sig{fill:none;stroke:var(--sg-signal);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round;
- vector-effect:non-scaling-stroke}
+.sg-name .auth-tag{font-size:var(--fs-xs);line-height:1.4;margin-top:2px;color:var(--ink2)}
+.sg-date{margin:0;font-size:var(--fs-xs);color:var(--ink2);white-space:nowrap;font-variant-numeric:tabular-nums}
+/* ---- the stage: the card, with the threads running behind it ---- */
+.sg-stage{position:relative;z-index:1;display:grid;place-items:center;padding:var(--sp-6) var(--sp-4);min-height:0}
 .sg-card{position:relative;z-index:1;width:min(392px,100%);padding:36px 34px 26px;background:var(--sg-card);
- border:1px solid var(--sg-card-line);border-radius:var(--r-sm);box-shadow:var(--shadow)}
+ border:1px solid var(--sg-card-line);border-radius:var(--r-sm);box-shadow:var(--shadow2)}
 /* A short accent rule at the card's head, the way a page marks its section. */
 .sg-card::before{content:"";position:absolute;left:34px;top:-1px;width:28px;height:2px;background:var(--accent)}
 .sg-card h1{margin:0;font-size:var(--fs-2xl);font-weight:var(--fw-semibold);letter-spacing:-.025em;line-height:1.2;
@@ -732,43 +734,43 @@ body.cc-auth.cc-signin{position:relative;display:grid;grid-template-columns:minm
 .sg-card .auth-foot{gap:4px;margin-top:22px;padding-top:var(--sp-4);border-top:1px solid var(--line);line-height:1.5}
 .sg-card .auth-foot a{justify-self:start;align-self:flex-start}
 .sg-card .auth-foot a:hover{text-decoration:underline;text-underline-offset:3px}
-/* ---- the baseline, and the three points under it ---- */
-.sg-notes{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,240px) minmax(0,820px);
- gap:var(--sp-10);align-items:baseline;margin:0;padding:18px var(--sp-10) 0}
-.sg-notes::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:var(--sg-base);
- transform-origin:left center}
-.sg-lede{margin:0;max-width:260px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);line-height:1.55;color:var(--ink2)}
-.sg-notes ul{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-8);margin:0;padding:0;list-style:none}
-.sg-notes li{position:relative;padding-left:14px;font-size:var(--fs-xs);line-height:1.55;color:var(--mut)}
-.sg-notes li::before{content:"";position:absolute;left:0;top:.6em;width:5px;height:5px;border-radius:50%;
- background:var(--accent)}
 body.cc-signin .auth-by{position:relative;z-index:1;justify-self:center;width:min(960px,100%);
- padding:var(--sp-8) var(--sp-4) 26px}
-/* Drawn once on load: the baseline first, then the line, left to right. */
-@media (prefers-reduced-motion:no-preference){
- .sg-line{animation:sg-draw 1.9s cubic-bezier(.3,0,.1,1) .25s both}
- .sg-notes::before{animation:sg-rule 1.1s cubic-bezier(.3,0,.1,1) both}
+ padding:var(--sp-4) var(--sp-4) 22px;color:var(--mut)}
+/* A wide screen: the card stands to the right, as in the mockup, and the threads have
+   the rest of the page to themselves. */
+@media(min-width:1100px){
+ .sg-stage{justify-items:end;padding-right:clamp(40px,9vw,160px)}
 }
-@keyframes sg-draw{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
-@keyframes sg-rule{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-@media(max-width:980px){
- .sg-notes{grid-template-columns:minmax(0,1fr);gap:10px}
+/* A short screen (a laptop at 720 or less): everything a little tighter, so the card
+   and the footer still fit without a scroll. */
+@media(max-height:760px){
+ .sg-top{padding-top:var(--sp-6)}
+ .sg-stage{padding-top:var(--sp-4);padding-bottom:var(--sp-4)}
+ .sg-card{padding:28px 30px 20px}
+ .sg-card form{margin-top:var(--sp-5)}
+ .sg-card label:not(:first-child){margin-top:var(--sp-3)}
+ .sg-card .auth-go{margin-top:18px}
+ .sg-card .auth-foot{margin-top:18px;padding-top:var(--sp-3)}
+ body.cc-signin .auth-by{padding-top:var(--sp-2);padding-bottom:16px}
 }
-/* The phone: the line crosses the band above the card and meets it at the left; the card
-   fills the width less the gutter; the points stack. */
+/* The phone: the card fills the width less the gutter; the threads cross the band above
+   it and run on behind it, showing in the gutters. */
 @media(max-width:640px){
- .sg-top{padding:20px var(--sp-4) 0;align-items:flex-start}
- .sg-brand{flex-wrap:wrap;row-gap:10px}
+ .sg-top{padding:18px var(--sp-4) 0;align-items:flex-start}
+ .sg-brand{gap:12px}
+ .sg-brand .auth-mark{width:40px;height:40px;border-radius:12px}
  .sg-brand .auth-logo{height:32px;max-width:140px}
- .sg-name{flex:1 1 180px}
+ .sg-name b{font-size:var(--fs-md)}
+ .sg-name .auth-tag{font-size:var(--fs-2xs)}
  .sg-date{display:none}
- .sg-stage{place-items:start center;padding:112px var(--sp-4) var(--sp-8)}
- .sg-line{top:var(--sp-4);bottom:auto;height:140px}
- .sg-card{padding:30px 22px 22px}
+ .sg-stage{padding:var(--sp-4) var(--sp-4) var(--sp-2)}
+ .sg-card{padding:26px 22px 18px}
  .sg-card::before{left:22px}
- .sg-notes{padding:16px var(--sp-4) 0}
- .sg-notes ul{grid-template-columns:minmax(0,1fr);gap:8px}
- body.cc-signin .auth-by{padding:var(--sp-6) var(--sp-4) 22px}
+ .sg-card form{margin-top:var(--sp-4)}
+ .sg-card label:not(:first-child){margin-top:var(--sp-3)}
+ .sg-card .auth-go{margin-top:18px}
+ .sg-card .auth-foot{margin-top:16px;padding-top:var(--sp-3)}
+ body.cc-signin .auth-by{padding:var(--sp-2) var(--sp-4) 14px}
 }
 
 /* ======================================================================
