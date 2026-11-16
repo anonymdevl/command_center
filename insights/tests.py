@@ -3546,6 +3546,15 @@ class Branding(TransactionTestCase):
         self.assertIsNotNone(tile, "the sign-in page draws the lens mark in its tile")
         self.assertIn('stroke="currentColor"', tile.group(1), "drawn in the theme's colour")
         self.assertNotIn("<i></i>", login, "the old ring mark is gone")
+        # Like the old ring, the trend line and its nodes follow the accent chosen under
+        # Appearance; the lens and bars keep the tile's colour.
+        self.assertIn('<g class="cc-lens-a"', tile.group(1), "the sign-in mark's line is the accent part")
+        shell_css = (settings.BASE_DIR / "interface" / "shell.py").read_text()
+        self.assertIn(".cc-lens .cc-lens-a{stroke:color-mix(in srgb,var(--accent) 72%,var(--surface))}", shell_css)
+        self.assertIn('[data-accent="ink"] .cc-lens .cc-lens-a{stroke:currentColor}', shell_css,
+                      "Ink, the no-colour accent, would vanish on the ink tile")
+        self.assertIn('className="cc-lens-a"', (settings.BASE_DIR / "frontend" / "src" / "components"
+                                                / "LensMark.jsx").read_text())
         components = settings.BASE_DIR / "frontend" / "src" / "components"
         jsx = (components / "LensMark.jsx").read_text()
         icon = (settings.APP_PUBLIC / branding.DEFAULT_FAVICON.split("/assets/command_center/", 1)[1]).read_text()

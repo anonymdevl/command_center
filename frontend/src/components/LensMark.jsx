@@ -7,7 +7,8 @@ import React from "react";
  * previews. The favicon file (public/images/command-center.svg) is the same drawing on
  * its own tile.
  *
- * One colour, currentColor, so the tile around it (shell.py) decides light or dark.
+ * Drawn in currentColor, so the tile around it (shell.py) decides light or dark; the
+ * trend line and its nodes take the accent chosen under Appearance (.cc-lens-a).
  * The line stops short of each node instead of being masked, so the drawing carries no
  * ids and can appear any number of times on a page. insights/tests.py checks that the
  * three copies keep the same geometry.
@@ -19,6 +20,10 @@ export default function LensMark({ className = "cc-lens" }) {
         <circle cx="222" cy="222" r="158" strokeWidth="44" />
         <path d="M335 335L378 378" strokeWidth="34" />
         <path d="M392 392L462 462" strokeWidth="70" strokeLinecap="round" />
+      </g>
+      {/* The trend line and its nodes take the chosen accent (shell.py .cc-lens-a), as the
+          old mark's ring did; currentColor stays as the fallback where no CSS applies. */}
+      <g className="cc-lens-a" fill="none" stroke="currentColor">
         <path d="M174.6 205.2L188.4 212.8M217.5 207.7L239.5 182.3M267.2 156.6L284.8 143.4" strokeWidth="10" />
         <circle cx="158" cy="196" r="13" strokeWidth="10" />
         <circle cx="205" cy="222" r="13" strokeWidth="10" />
