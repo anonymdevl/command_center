@@ -19,6 +19,7 @@
 import { api } from "../api/client.js";
 import { count, exact, money, shortDate } from "../format.js";
 import { GUIDE_STATES, guideBox, guideWords, hasGuide } from "./guide.js";
+import { WAITING } from "./reach.js";
 
 const SCORES = [
   ["score_deliver", "Delivering what we sold", "Can we deliver what we sold?"],
@@ -49,7 +50,7 @@ export function renderHome(root, { figures, alerts, scope, onOpen }) {
  *  each with what it was counted from in ERPNext, its last eight weeks and a status.
  *  The figures are the same as Home's gauge; the weeks are the stored daily snapshots
  *  (api/health.history; the last one in each ISO week). A question not scored yet says
- *  why on its row -- a guide to set it up or to give access, "can't reach ERPNext", or
+ *  why on its row -- a guide to set it up or to give access, "waiting for ERPNext", or
  *  "could not be read" -- never a sample score. A row opens its guide, and only that. */
 export function renderHealthTiles(root, figures, { openDrawer, scope } = {}) {
   if (!root || !figures) return 0;
@@ -94,7 +95,7 @@ function standing(f) {
   }
   const state = f?.data_status?.state;
   const why = GUIDE_STATES.has(state) ? guideWords(state).foot
-    : state === "unreachable" ? "Can't reach ERPNext just now"
+    : state === "unreachable" ? WAITING.line
       : state === "failed" || !f ? "Could not be read just now" : "Nothing to score yet";
   if (state === "no_access") return { scored: false, access: true, pill: "No Access", flag: "f-high", why };
   // Read, and there was nothing to score (e.g. nothing owed): not waiting on anything.
@@ -489,7 +490,7 @@ function gauge(root, figures) {
   box.textContent = "";
   if (!parts.length || !total || total.value === null || total.value === undefined) {
     box.append(el("div", "home-wait", total?.data_status?.state === "unreachable"
-      ? "Can't reach ERPNext to score it just now." : "Not enough data to score yet."));
+      ? `${WAITING.line} before scoring.` : "Not enough data to score yet."));
     return;
   }
   const score = Math.round(Number(total.value));

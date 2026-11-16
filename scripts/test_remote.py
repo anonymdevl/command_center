@@ -85,7 +85,7 @@ hooks = types.ModuleType("command_center.hooks")
 hooks.TRACKED_DOCTYPES = ["Sales Invoice", "Task"]
 sys.modules["command_center.hooks"] = hooks
 
-from command_center.connectors.base import RemotePermissionDenied  # noqa: E402
+from command_center.connectors.base import BusinessSlow, RemotePermissionDenied  # noqa: E402
 from command_center.connectors.remote import RemoteConnector  # noqa: E402
 
 # This file tests the transport (paging, GET vs POST, retries, whose key). Fitting reads
@@ -228,8 +228,20 @@ except Exception:
     pass
 check(not frappe.writes, f"nothing written mid-question: {frappe.writes}")
 frappe.local.cc_deadline = None
+# A 500 on one read, but the site answers the quick check straight after: slow on that
+# read (BusinessSlow), not down -- nothing recorded (16 Nov 2026).
 reset()
 script.extend([500])
+try:
+    conn.get_list("Sales Invoice", limit=5)
+    check(False, "a 500 read raises")
+except BusinessSlow:
+    check(True, "")
+check(not frappe.writes, f"a read that was only slow marks nothing: {frappe.writes}")
+check([c["url"].rsplit("/", 1)[1] for c in calls] == ["frappe.client.get_list", "frappe.auth.get_logged_user"],
+      f"one quick check after it: {[c['url'] for c in calls]}")
+reset()
+script.extend([500, 500])  # the read, and the quick check after it
 try:
     conn.get_list("Sales Invoice", limit=5)
 except Exception:

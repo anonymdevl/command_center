@@ -435,7 +435,7 @@ function CoverSplit({ scope, lateOnly }) {
       <Sec title="What Covers It">
         <p className="dw-note cv-split">
           {data && data.kind === "unreachable"
-            ? "What covers it cannot be read just now: the business's ERPNext is not answering."
+            ? "What covers it is not updated yet: the business's ERPNext is taking longer than usual to answer. It fills in as soon as it does."
             : "What covers it could not be read just now."}
         </p>
       </Sec>

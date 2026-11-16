@@ -77,9 +77,10 @@ def _key_guide(code, name) -> dict:
 def _unreachable(code, e) -> dict:
     name = frappe.db.get_value("Connected Business", {"business_code": code},
                                "business_name") if code else None
+    from command_center.kpi.live_departments import waiting_words
     return {"available": False, "unreachable": True,
-            "reason": f"Can't reach {name or 'the business'}'s ERPNext just now, so what is "
-                      f"waiting on you cannot be read. It is read again when it answers."}
+            "reason": f"{waiting_words(name or 'The business')}, so what is waiting on you "
+                      f"appears as soon as it does."}
 
 
 @frappe.whitelist()

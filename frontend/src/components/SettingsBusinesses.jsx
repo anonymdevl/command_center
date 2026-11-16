@@ -287,7 +287,7 @@ function ManageBusiness({ b, onClose, onDone }) {
         <dt>Status</dt>
         <dd>
           {b.status === "Unreachable"
-            ? "Unreachable: the last attempt to read it failed. Test Connection says why."
+            ? "Unreachable: a read went unanswered after its retries, and so did the quick check after it. It clears by itself on the next read that is answered. Test Connection says why."
             : b.status}
         </dd>
         <dt>Company</dt><dd>{b.erpnext_company || "—"}</dd>

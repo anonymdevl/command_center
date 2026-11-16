@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { WAITING } from "../legacy/reach.js";
 import { boot, brand } from "../api/boot.js";
 import Icon, { VIEW_ICON } from "./Icon.jsx";
 import { canOpenSettings, settingsSections } from "./Settings.jsx";
@@ -142,7 +143,8 @@ function Business({ scope, onScope }) {
         <div className="biz-menu" role="listbox" aria-label="Businesses">
           {options.map((s) => {
             const b = byCode[s.code];
-            const note = !b ? "" : !b.can_read ? "unreachable" : !b.can_act ? "read only here" : "";
+            const note = !b ? "" : b.waiting ? WAITING.pill : !b.can_read ? "paused"
+              : !b.can_act ? "read only here" : "";
             return (
               <button
                 key={s.code}

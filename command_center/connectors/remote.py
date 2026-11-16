@@ -31,6 +31,7 @@ import requests
 
 from command_center.connectors.base import (
     BusinessConnector,
+    BusinessSlow,
     BusinessUnreachable,
     RequestRefused,
     CredentialRequired,
@@ -52,6 +53,13 @@ RETRIES = 3
 # Pages of a screen's read (not a load) asked for without the pause between them.
 INTERACTIVE_PAGES = 4
 REPORT_TIMEOUT = 90
+# The quick check made once a read has gone unanswered after its retries: does the site
+# answer at all? One request, no retries, this long at most. It answers: the business is
+# up and only slow on that read (BusinessSlow), never marked Unreachable for it. It does
+# not: the business is marked Unreachable, and the shell's banner says so (16 Nov 2026 --
+# one slow read used to flip the whole business, for everyone, until the next poll).
+CHECK_TIMEOUT = 8
+CHECK_METHOD = "frappe.auth.get_logged_user"
 # Above this many characters of query string a read goes by POST. The binding limit is
 # gunicorn's, behind the site's nginx: limit_request_line defaults to 4094 for the
 # whole request line (method, path, query, protocol), and Gigmann's site refused a
@@ -137,7 +145,7 @@ class RemoteConnector(BusinessConnector):
             r = self._send(url, headers, data, post, write, timeout)
         finally:
             _count(started)
-        return self._answer(r, whole, doctype=(params or {}).get("doctype"))
+        return self._answer(r, whole, doctype=(params or {}).get("doctype"), write=write)
 
     def _send(self, url, headers, data, post, write, timeout):
         import time
@@ -158,8 +166,7 @@ class RemoteConnector(BusinessConnector):
                 if not write and attempt < RETRIES and _time_left(5 * (attempt + 1)):
                     time.sleep(2 * (attempt + 1))
                     continue
-                self._mark_unreachable(str(e))
-                raise BusinessUnreachable(f"{self.name} did not answer: {e}") from e
+                raise self._gave_up(str(e), f"{self.name} did not answer: {e}", write) from e
             # The far site is busy, not broken: wait as long as it asks (capped), retry.
             # Writes are never retried -- a second insert is a second document.
             if (r.status_code in (429, 502, 503, 504) and not write and attempt < RETRIES):
@@ -170,7 +177,7 @@ class RemoteConnector(BusinessConnector):
             break
         return r
 
-    def _answer(self, r, whole, doctype=None):
+    def _answer(self, r, whole, doctype=None, write=False):
         if r.status_code in (401, 403):
             said = _server_message(r)
             raise RemotePermissionDenied(
@@ -183,10 +190,11 @@ class RemoteConnector(BusinessConnector):
                 status=r.status_code)
         if not r.ok:
             if r.status_code >= 500 or r.status_code == 429:
-                # Broken or overloaded even after the retries: the business is down.
-                self._mark_unreachable(f"HTTP {r.status_code}")
-                raise BusinessUnreachable(f"{self.name} returned HTTP {r.status_code}"
-                                          + _server_message(r))
+                # Broken or overloaded even after the retries: down, unless it answers
+                # the quick check (a proxy's 504 on one heavy query, one method's 500).
+                raise self._gave_up(f"HTTP {r.status_code}",
+                                    f"{self.name} returned HTTP {r.status_code}"
+                                    + _server_message(r), write)
             # It answered and refused this one request (a field its version lacks, a
             # filter it rejects): one figure's problem, not the business's.
             self._mark_reachable()
@@ -197,10 +205,60 @@ class RemoteConnector(BusinessConnector):
         body = r.json()
         return body if whole else body.get("message")
 
+    def _gave_up(self, error: str, message: str, write: bool = False) -> BusinessUnreachable:
+        """A read unanswered after its retries. Whether the business is down is asked
+        once, by the quick check: answered, this read was only slow (BusinessSlow, the
+        business stays as it is); not answered, the business is marked Unreachable.
+        Inside a question nothing is marked and no check is spent (the analyst's
+        deadline), as before; a business already marked down is not checked again, and
+        a write is exactly one request -- it is recorded as before, never followed up."""
+        if _in_question():
+            return BusinessUnreachable(message)
+        if not write and self.business.status != "Unreachable" and self._answers():
+            return BusinessSlow(message + " (it answered a check straight after, so it is "
+                                          "slow on this read, not down)")
+        self._mark_unreachable(error)
+        return BusinessUnreachable(message)
+
+    def _answers(self) -> bool:
+        """One quick request, no retries: does the site answer at all? Any reply short
+        of a 429/5xx is an answer (a 401 or 403 is the site answering too)."""
+        import time
+        started = time.perf_counter()
+        self.check_error = ""
+        try:
+            r = requests.get(f"{self.base_url}/api/method/{CHECK_METHOD}",
+                             headers=self._headers(), timeout=_timeout(CHECK_TIMEOUT))
+        except Exception as e:
+            self.check_error = str(e)
+            return False
+        finally:
+            _count(started)
+        code = getattr(r, "status_code", 0) or 0
+        if code >= 500 or code == 429 or code == 0:
+            self.check_error = f"HTTP {code}"
+            return False
+        self._mark_reachable()
+        return True
+
+    def recheck(self) -> bool:
+        """The shell's check (api/reach.status and Retry): the quick check, recorded
+        either way -- Active when it answers, Unreachable when it does not."""
+        if _in_question():
+            return self._answers()
+        if self._answers():
+            _checked(self.code)
+            return True
+        self._mark_unreachable(self.check_error or "did not answer the check")
+        return False
+
     def _mark_unreachable(self, error: str):
         if _in_question():
             return
         _mark(self.business.name, {"status": "Unreachable", "last_error": error[:500]})
+        # Just found down: the banner's own check (api/reach.status) waits a minute
+        # before asking again.
+        _checked(self.code)
         # Remember it here too, so the next call that succeeds marks it Active again
         # (_mark_reachable reads this copy, not the database).
         self.business.status = "Unreachable"
@@ -506,6 +564,19 @@ def _mark(name: str, values: dict):
         marks.append((name, values))
         return
     frappe.db.set_value("Connected Business", name, values, update_modified=False)
+
+
+CHECKED_KEY = "cc:reach:checked:{}"
+RECHECK_SECONDS = 60
+
+
+def _checked(code):
+    """Note that the business's reachability was just found out, so api/reach.status
+    does not ask it again within RECHECK_SECONDS."""
+    try:
+        frappe.cache().set_value(CHECKED_KEY.format(code), 1, expires_in_sec=RECHECK_SECONDS)
+    except Exception:
+        pass
 
 
 def _count(started: float):

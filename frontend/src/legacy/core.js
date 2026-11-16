@@ -3,7 +3,8 @@
  * and work have been drawn: what is left so that nothing on them is ever a sample.
  *
  *   settle      a card or tile whose figure could not be read shows a dash and says so
- *               ("not read", or "can't reach" when the business's ERPNext is down) --
+ *               ("not read", or "updating" when the business's ERPNext has not
+ *               answered yet, reach.js) --
  *               never the designed figure, never "illustrative"
  *   notes       a tile with an empty footnote takes its figure's note
  *   findings    Business Overview's finding box (api/panels_core.ops_findings)
@@ -17,6 +18,7 @@
  */
 
 import { GUIDE_STATES, guideWords } from "./guide.js";
+import { WAITING } from "./reach.js";
 import { CARD_KPIS, TILE_KPIS } from "./hydrate.js";
 import { HEALTH_QUESTIONS } from "./home.js";
 import { OVERVIEW_VIEWS, renderOverview } from "./overview.js";
@@ -46,10 +48,10 @@ export function renderCore(root, view, state = {}) {
   root.querySelectorAll(".panel[data-illustrative]").forEach((panel) => {
     delete panel.dataset.illustrative;
     panel.querySelectorAll(".flag[data-prov]").forEach((f) => {
-      f.textContent = reachDown ? "can't reach" : "not read";
+      f.textContent = reachDown ? WAITING.pill : "not read";
     });
     const sub = panel.querySelector(".ph b + span");
-    if (sub) sub.textContent = reachDown ? "Can't reach ERPNext just now" : "Could not be read just now";
+    if (sub) sub.textContent = reachDown ? WAITING.line : "Could not be read just now";
   });
   root.querySelectorAll(".kpi").forEach((card) => finish(card, view, "card", figs, done, reachDown));
   root.querySelectorAll(".bk").forEach((tile) => finish(tile, view, "tile", figs, done, reachDown));
@@ -83,7 +85,7 @@ function finish(node, view, kind, figs, done, reachDown) {
   const f = figureFor(node, view, kind, figs);
   const st = f?.data_status?.state;
   if (f && node.dataset.live === "1") {
-    if (st === "unreachable" && !node.classList.contains("q")) flag(node, "can't reach", "f-dim");
+    if (st === "unreachable" && !node.classList.contains("q")) flag(node, WAITING.pill, "f-dim");
     if (kind === "tile" && f.note) {
       const foot = node.querySelector(".v");
       if (foot && !foot.textContent.replace(/ /g, "").trim()) foot.textContent = f.note;
@@ -108,13 +110,13 @@ function finish(node, view, kind, figs, done, reachDown) {
   const val = node.querySelector(kind === "card" ? ".val" : ".n");
   if (val) val.textContent = "—";
   const foot = node.querySelector(kind === "card" ? ".delta" : ".v");
-  if (foot) foot.textContent = reachDown ? "can't reach ERPNext just now" : "could not be read just now";
+  if (foot) foot.textContent = reachDown ? WAITING.foot : "could not be read just now";
   const designed = node.querySelector(".khead > .flag:not([data-prov])");
   if (designed) {
     designed.className = "flag f-dim";
-    designed.textContent = reachDown ? "Can't reach" : "Not read";
+    designed.textContent = reachDown ? "Updating" : "Not read";
   } else {
-    flag(node, reachDown ? "can't reach" : "not read", "f-dim");
+    flag(node, reachDown ? WAITING.pill : "not read", "f-dim");
   }
   if (!/(^|[^\w.])go\(/.test(node.getAttribute("onclick") || "")) {
     // Nothing to open: not drawn as something that opens (no arrow, shell.py).
