@@ -28,6 +28,7 @@ import { renderLoads } from "../legacy/loads.js";
 import { PEOPLE_VIEWS, renderPeople } from "../legacy/people.js";
 import { REC_VIEWS, recsFailed, renderRecs } from "../legacy/recommend.js";
 import { STATEMENT_VIEWS, mountStatements } from "../legacy/statements.js";
+import { watchTables } from "../legacy/tables.js";
 
 /**
  * A designed screen, with live figures put into it.
@@ -574,6 +575,9 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
   useEffect(() => {
     wireActions(ref.current);
   }, [viewKey, html]);
+
+  // Every data table scrolls sideways in its own box; figures and dates stay on one line.
+  useEffect(() => watchTables(ref.current), [viewKey, html]);
 
   // Tabs inside the generated markup are plain DOM, so they are wired here
   // rather than reimplemented.

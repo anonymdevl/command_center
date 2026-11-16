@@ -281,7 +281,10 @@ function pl(target, res) {
   target.textContent = "";
   target.append(el("h4", null, "Profit and Loss"));
   target.append(el("div", "fs-sub", `${res.period.label}: ${p.columns[0]}, against ${res.comparison.label.toLowerCase()} (${p.columns[1]})`));
-  target.append(table(["", res.period.label, res.comparison.label, "Change"], p.summary, { change: true }));
+  target.append(table(["", res.period.label, res.comparison.label, "Change"], p.summary,
+    { change: true, cmp: true, bars: true }));
+  const says = plSays(p, res);
+  if (says) target.append(el("p", "fs-says", says));
   notes(target, p.notes);
   const g = p.glance;
   if (g) {
@@ -294,7 +297,8 @@ function pl(target, res) {
       p.trend.map((t) => ({ name: t.label, values: [t.revenue, t.gross_profit, t.net_profit, t.net_margin],
         kinds: ["money", "money", "money", "pct"] }))));
   }
-  tree(target, "Profit and Loss by Account", ["Account", res.period.label, res.comparison.label], p.rows);
+  tree(target, "Profit and Loss by Account", ["Account", res.period.label, res.comparison.label], p.rows,
+    { cmp: true });
 }
 
 function bs(target, res) {
@@ -329,10 +333,11 @@ function cf(target, res) {
   target.textContent = "";
   target.append(el("h4", null, "Cash Flow"));
   target.append(el("div", "fs-sub", `${res.period.label}: ${c.columns[0]}, against ${res.comparison.label.toLowerCase()} (${c.columns[1]})`));
-  target.append(table(["", res.period.label, res.comparison.label, "Change"], c.summary, { change: true }));
+  target.append(table(["", res.period.label, res.comparison.label, "Change"], c.summary,
+    { change: true, cmp: true }));
   notes(target, c.notes);
   target.append(el("h4", null, "Cash Flow in Detail"));
-  target.append(table(["", res.period.label, res.comparison.label], c.rows));
+  target.append(table(["", res.period.label, res.comparison.label], c.rows, { cmp: true }));
 }
 
 function ratios(target, res) {
@@ -370,11 +375,11 @@ function notes(target, list) {
 }
 
 /** An account tree: the main groups first, every account a click away. */
-function tree(target, title, heads, rows, { tall = false } = {}) {
+function tree(target, title, heads, rows, { tall = false, cmp = false } = {}) {
   if (title) target.append(el("h4", null, title));
   const deep = rows.some((r) => (r.indent || 0) > 1);
   const holder = el("div");
-  holder.append(table(heads, rows, { tall, fold: true }));
+  holder.append(table(heads, rows, { tall, fold: true, cmp }));
   target.append(holder);
   if (deep) {
     const b = el("button", "btn fs-more", "Show Every Account");
@@ -388,13 +393,23 @@ function tree(target, title, heads, rows, { tall = false } = {}) {
   }
 }
 
-function table(heads, rows, { change = false, tall = false, fold = false } = {}) {
-  const t = el("table", "dt fs-t");
+/**
+ * One statement table. `cmp` marks the comparison column (the second figure) so it reads
+ * as the quieter one, as on printed management accounts. `bars` adds a slim bar per money
+ * line, its length that line's share of the largest line in the same table -- drawn from
+ * the figures already in the row, never a new one.
+ */
+function table(heads, rows, { change = false, tall = false, fold = false, cmp = false, bars = false } = {}) {
+  const t = el("table", `dt fs-t${bars ? " fs-barred" : ""}`);
   const head = el("thead");
   const hr = el("tr");
-  heads.forEach((h, i) => hr.append(el("th", i ? "n" : null, h)));
+  heads.forEach((h, i) => hr.append(el("th", [i ? "n" : null, cmp && i === 2 ? "cmp" : null]
+    .filter(Boolean).join(" ") || null, h)));
+  if (bars) hr.append(el("th", "fs-bar-h"));
   head.append(hr);
   const body = el("tbody");
+  const isMoney = (r) => r.kind !== "pct" && r.kind !== "heading" && typeof r.values?.[0] === "number";
+  const top = bars ? Math.max(0, ...rows.filter(isMoney).map((r) => Math.abs(r.values[0]))) : 0;
   rows.forEach((r) => {
     const tr = el("tr");
     const kind = r.kind;
@@ -420,15 +435,59 @@ function table(heads, rows, { change = false, tall = false, fold = false } = {})
       const k = r.kinds?.[i] || (kind === "pct" ? "pct" : "money");
       const td = el("td", "n", kind === "heading" && (v === null || v === undefined) ? "" : fmt(v, k));
       if (r.tone === "bad" && i === 0 && v) td.classList.add("neg");
+      if (cmp && i === 1) td.classList.add("cmp");
       tr.append(td);
     });
     if (change) tr.append(changeCell(r));
+    if (bars) tr.append(barCell(r, isMoney(r) && top ? Math.abs(r.values[0]) / top : null));
     body.append(tr);
   });
   t.append(head, body);
   const wrap = el("div", `fs-wrap${tall ? " tall" : ""}`);
   wrap.append(t);
   return wrap;
+}
+
+function barCell(r, share) {
+  const td = el("td", "fs-bar-c");
+  td.setAttribute("aria-hidden", "true");
+  if (share === null) return td;
+  const costly = /cost|expense/i.test(r.label || "");
+  const bar = el("span", `fs-bar${costly ? " cost" : ""}${r.values[0] < 0 ? " neg" : ""}`);
+  bar.style.width = `${Math.max(share * 100, share > 0 ? 1.5 : 0).toFixed(1)}%`;
+  td.append(bar);
+  return td;
+}
+
+/**
+ * One plain sentence under the profit and loss, worked out from the statement's own
+ * lines only: how revenue and the other expenses moved against the comparison, and the
+ * net result with its margin. Every figure in it is one the table above shows, written
+ * the same way (the changes to one decimal, the result in full); nothing is estimated.
+ * No sentence when revenue or the net result is missing.
+ */
+function plSays(p, res) {
+  const by = Object.fromEntries((p.summary || []).map((r) => [r.key, r]));
+  const rev = by.income?.values?.[0];
+  const net = by.net_profit?.values?.[0];
+  if (typeof rev !== "number" || typeof net !== "number") return "";
+  // "Same Period Last Year" / "Year Before", as the comparison column is headed.
+  const cmp = `the ${(res.comparison?.label || "comparison").toLowerCase()}`;
+  const pct = (x) => `${Math.abs(x * 100).toFixed(1)}%`;
+  const moved = (r, noun) => {
+    const c = r?.change_pct;
+    if (c === null || c === undefined) return "";
+    if (Math.abs(c) < 0.0005) return `${noun} was unchanged`;
+    return `${noun} ${c > 0 ? "rose" : "fell"} ${pct(c)}`;
+  };
+  const parts = [moved(by.income, "Revenue"), moved(by.other_expenses, "operating and other expenses")]
+    .filter(Boolean);
+  const margin = by.net_margin?.values?.[0];
+  const cur = res.currency || "";
+  const result = net === 0 ? "breaks even"
+    : `closes with a net ${net < 0 ? "loss" : "profit"} of ${`${cur} ${exact(Math.abs(net))}`.trim()}`
+      + (typeof margin === "number" ? `, ${pct(margin)} of revenue` : "");
+  return parts.length ? `${parts.join(" and ")} on ${cmp}; the period ${result}.` : `The period ${result}.`;
 }
 
 function changeCell(r) {

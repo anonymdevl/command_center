@@ -6,7 +6,7 @@ exec(_src('statements.py'))
 V_FIN=f'''<div class="topbar"><div><h3>Finances</h3>
 <div class="when">Full ledger</div></div></div>
 {fs_block()}
-<div class="kpis six">
+<div class="kpis six ribbon">
 {kpi("Owed to us","—","","","flat","","ar")}
 {kpi("Unpaid invoices","—","","","flat","","ar")}
 {kpi("Last full month","—","","","flat","","rev")}
