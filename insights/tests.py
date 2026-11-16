@@ -6496,6 +6496,254 @@ class Delegation(TransactionTestCase):
         self.assertEqual(got["figures"]["work_open"]["value"], 3)
 
 
+class _OrgChartERPNext(_AssignERPNext):
+    """The same ERPNext with an org chart: Employees with User ID and Reports To, and
+    documents carrying their Assigned To (_assign). Every read is recorded, so a test can
+    show which records were asked for, and either refusal Frappe makes can be switched
+    on: a 403 on Employee, or Reports To dropped from the row (a field-level refusal,
+    which Frappe makes silently)."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.users.update({
+            "kwame@test": {"name": "kwame@test", "full_name": "Kwame Boateng",
+                           "allowed_in_mentions": 1},
+            "yaw@test": {"name": "yaw@test", "full_name": "Yaw Darko", "allowed_in_mentions": 1},
+            "efua@test": {"name": "efua@test", "full_name": "Efua Asante",
+                          "allowed_in_mentions": 1}})
+        self.employees = [
+            {"name": "HR-EMP-0001", "employee_name": "Ama Owusu", "user_id": "ama@test",
+             "reports_to": "HR-EMP-0002", "status": "Active"},
+            {"name": "HR-EMP-0002", "employee_name": "Kwame Boateng", "user_id": "kwame@test",
+             "reports_to": None, "status": "Active"},
+            {"name": "HR-EMP-0003", "employee_name": "Yaw Darko", "user_id": "yaw@test",
+             "reports_to": None, "status": "Active"},
+            {"name": "HR-EMP-0004", "employee_name": "Kofi Mensah", "user_id": "kofi@test",
+             "reports_to": "HR-EMP-0005", "status": "Active"},
+            {"name": "HR-EMP-0005", "employee_name": "Abena Sarpong", "user_id": None,
+             "reports_to": None, "status": "Active"}]
+        self.docs = {"Sales Invoice": [{"name": "ACC-SINV-0001",
+                                        "_assign": json.dumps(["ama@test"])}]}
+        self.reads = []
+        self.refuse_employee = False
+        self.hide_reports_to = False
+
+    def get_list(self, doctype, filters=None, fields=None, limit=20, order_by=None, **kw):
+        from command_center.connectors.base import RemotePermissionDenied
+        self.reads.append((doctype, dict(filters or {}), list(fields or [])))
+        if doctype == "Employee":
+            if self.refuse_employee:
+                raise RemotePermissionDenied("Test Medical Ltd refused this.",
+                                             doctype="Employee", status=403)
+            rows = [r for r in self.employees if self._match(r, filters)]
+            out = [{f: r.get(f) for f in fields} for r in rows][:limit]
+            if self.hide_reports_to:
+                for r in out:
+                    r.pop("reports_to", None)
+            return out
+        if doctype in self.docs:
+            rows = [r for r in self.docs[doctype] if self._match(r, filters)]
+            return [{f: r.get(f) for f in fields} for r in rows][:limit]
+        return super().get_list(doctype, filters=filters, fields=fields, limit=limit,
+                                order_by=order_by, **kw)
+
+
+class Escalation(TransactionTestCase):
+    """Escalate goes up the line (16 Nov 2026): whose work it is, their manager from
+    ERPNext's Reports To (read as the acting manager), the manager given it by the same
+    paths as any assignment, and the person whose work it was told -- never unassigned.
+    When ERPNext names no manager, each reason is said with its fix."""
+
+    databases = {"default", "aux"}
+    setUp_settings = SettingsPage.setUp
+    tearDown = SettingsPage.tearDown
+    _task = Delegation._task
+
+    def setUp(self):
+        Delegation.setUp(self)
+        self.erp = _OrgChartERPNext(self.code)
+        self.has_key = True
+        for p in (mock.patch("command_center.api.actions.connector_for",
+                             lambda code, acting_user=None: self.erp.conn),
+                  mock.patch("command_center.api.credentials.credential_for",
+                             lambda code, user=None: {"api_key": "k", "api_secret": "s"}
+                             if self.has_key and user == "manager@test.com" else None)):
+            p.start()
+            self.patches.append(p)
+
+    def _as_manager(self, fn, *a, **kw):
+        from insights.compat import run_as
+        with run_as("manager@test.com"):
+            return fn(*a, **kw)
+
+    def _manager_of(self, user):
+        from command_center.api import actions
+        return self._as_manager(actions.manager_of, self.code, user)
+
+    def _escalate(self, of, to, **kw):
+        return self._task(subject="Escalated: Chase the payment", allocated_to=to,
+                          escalate_of=of, due_date=str(TODAY + dt.timedelta(days=1)), **kw)
+
+    def test_the_manager_is_found_through_reports_to(self):
+        got = self._manager_of("ama@test")
+        self.assertTrue(got["found"])
+        self.assertEqual((got["manager_user"], got["manager_name"], got["employee"],
+                          got["manager_employee"], got["via"]),
+                         ("kwame@test", "Kwame Boateng", "HR-EMP-0001", "HR-EMP-0002",
+                          "Reports To"))
+        self.assertIsNone(got["reason"])
+        emp = [r for r in self.erp.reads if r[0] == "Employee"]
+        self.assertEqual([r[1] for r in emp], [{"user_id": "ama@test"}, {"name": "HR-EMP-0002"}],
+                         "the Employee by User ID, then the one it reports to")
+        self.assertIn("reports_to", emp[0][2])
+        self.assertIn("user_id", emp[1][2])
+
+    def test_each_reason_there_is_no_manager(self):
+        cases = {"efua@test": ("no_employee", "User ID"),
+                 "yaw@test": ("no_reports_to", "set Reports To"),
+                 "kofi@test": ("no_manager_user", "Abena Sarpong’s Employee record")}
+        for user, (code, fix) in cases.items():
+            got = self._manager_of(user)
+            self.assertFalse(got["found"], user)
+            self.assertEqual(got["code"], code, user)
+            self.assertIsNone(got["manager_user"], user)
+            self.assertTrue(got["reason"], user)
+            self.assertIn(fix, got["fix"], user)
+        self.assertIn("HR-EMP-0003", self._manager_of("yaw@test")["reason"])
+        # Employee refused outright (403), or Reports To dropped from the row
+        self.erp.refuse_employee = True
+        got = self._manager_of("ama@test")
+        self.assertEqual((got["found"], got["code"]), (False, "no_permission"))
+        self.assertIn("read access to Employee", got["fix"])
+        self.erp.refuse_employee, self.erp.hide_reports_to = False, True
+        got = self._manager_of("ama@test")
+        self.assertEqual(got["code"], "no_permission")
+        self.assertIn("not its Reports To", got["reason"])
+        self.erp.hide_reports_to = False
+        # no key of their own: never asked under the platform's service account
+        self.has_key = False
+        self.erp.reads.clear()
+        got = self._manager_of("ama@test")
+        self.assertEqual(got["code"], "no_key")
+        self.assertFalse([r for r in self.erp.reads if r[0] == "Employee"])
+
+    def test_an_escalation_on_a_document_assigns_the_manager_and_tells_the_person(self):
+        from command_center.api import actions, work
+        # Ama has the invoice, from this manager; Escalate pre-fills her
+        self.erp.assign("Sales Invoice", "ACC-SINV-0001", ["ama@test"], description="Chase it")
+        hers = self.erp.todos[0]["name"]
+        whose = self._as_manager(actions.whose_work, self.code, "Sales Invoice", "ACC-SINV-0001")
+        self.assertEqual((whose["user"], whose["name"]), ("ama@test", "Ama Owusu"))
+        self.assertIn("Assigned To", whose["via"])
+        self.erp.assigned.clear()
+
+        res = self._escalate("ama@test", "kwame@test", reference_type="Sales Invoice",
+                             reference_name="ACC-SINV-0001", description="Agree a date.")
+        [a] = self.erp.assigned
+        self.assertEqual((a["doctype"], a["name"], a["users"], a["priority"]),
+                         ("Sales Invoice", "ACC-SINV-0001", ["kwame@test"], "High"))
+        self.assertEqual(a["date"], str(TODAY + dt.timedelta(days=1)))
+        self.assertTrue(a["description"].startswith(
+            "Escalated: Chase the payment\n\nAma Owusu’s work, escalated by "))
+        self.assertIn("to Kwame Boateng, their manager in ERPNext (Reports To).", a["description"])
+        self.assertTrue(a["description"].endswith("Agree a date."))
+        # the comment that tells Ama, on the document
+        [(dt_, name, html)] = self.erp.comments
+        self.assertEqual((dt_, name), ("Sales Invoice", "ACC-SINV-0001"))
+        self.assertIn('class="mention" data-id="ama@test"', html)
+        self.assertIn("has escalated this to Kwame Boateng, your manager in ERPNext", html)
+        self.assertTrue(res["notified"], "Kwame was notified by the assignment")
+        esc = res["escalation"]
+        self.assertEqual((esc["of"], esc["to_manager"], esc["told"]), ("ama@test", True, True))
+        self.assertIn("told Ama Owusu", esc["told_notice"])
+        self.assertIn("Ama Owusu stays on it.", res["said"])
+        # Ama is not unassigned: her To-Do is open, and nothing removed an assignment
+        self.assertEqual(next(t for t in self.erp.todos if t["name"] == hers)["status"], "Open")
+        self.assertFalse(any("remove" in str(c) for c in self.erp.inserted))
+        # Outstanding Tasks lists the escalation: the manager is its assigned_by
+        got = self._as_manager(work._summary, work._Remote(self.erp.conn), self.code)
+        mine = [t for t in got["open"] if t["to"] == "kwame@test"]
+        self.assertEqual([t["title"] for t in mine], ["Escalated: Chase the payment"])
+        self.assertEqual(mine[0]["priority"], "High")
+        # escalating it to the same manager again sends nothing new, and says so
+        again = self._escalate("ama@test", "kwame@test", reference_type="Sales Invoice",
+                               reference_name="ACC-SINV-0001")
+        self.assertTrue(again["already"])
+        self.assertIs(again["escalation"]["told"], False)
+        self.assertEqual(len(self.erp.comments), 1)
+
+    def test_a_no_document_escalation_todos_the_manager_and_mentions(self):
+        from command_center.api import actions
+        # work handed out as a To-Do of its own: escalated from Outstanding Tasks
+        hers = self.erp._todo(allocated_to="ama@test", assigned_by=_AssignERPNext.ME,
+                              description="Count the stock")["name"]
+        whose = self._as_manager(actions.whose_work, self.code, todo=hers)
+        self.assertEqual((whose["user"], whose["todo"]), ("ama@test", hers))
+        res = self._escalate("ama@test", "kwame@test", escalate_todo=hers)
+        self.assertFalse(self.erp.assigned)
+        todo = self.erp.inserted[-1]
+        self.assertEqual((todo["doctype"], todo["allocated_to"], todo["assigned_by"],
+                          todo["priority"]), ("ToDo", "kwame@test", _AssignERPNext.ME, "High"))
+        self.assertNotIn("reference_type", todo)
+        self.assertTrue(todo["description"].startswith("Escalated: Chase the payment\n\n"
+                                                       "Ama Owusu’s work, escalated by "))
+        # Kwame mentioned on his new To-Do; Ama on her own
+        self.assertEqual([(c[0], c[1]) for c in self.erp.comments],
+                         [("ToDo", res["name"]), ("ToDo", hers)])
+        self.assertIn('data-id="kwame@test"', self.erp.comments[0][2])
+        self.assertIn('data-id="ama@test"', self.erp.comments[1][2])
+        self.assertIs(res["notified"], True)
+        self.assertIs(res["escalation"]["told"], True)
+        self.assertIn(f"their To-Do {hers}", res["escalation"]["told_notice"])
+
+        # no To-Do of hers: she is mentioned on the manager's new one
+        self.erp.comments.clear()
+        res = self._escalate("ama@test", "kwame@test")
+        self.assertEqual([(c[0], c[1]) for c in self.erp.comments],
+                         [("ToDo", res["name"]), ("ToDo", res["name"])])
+        self.assertIs(res["escalation"]["told"], True)
+
+        # ERPNext names no manager: chosen by hand, and the description says so
+        res = self._escalate("yaw@test", "kwame@test")
+        self.assertFalse(res["escalation"]["to_manager"])
+        self.assertEqual(res["escalation"]["manager"]["code"], "no_reports_to")
+        self.assertIn("chosen by hand: ERPNext names no manager for them.",
+                      self.erp.inserted[-1]["description"])
+        # someone ERPNext will not mention: the comment is left, and the answer says so
+        res = self._escalate("kofi@test", "kwame@test")
+        self.assertIs(res["escalation"]["told"], False)
+        self.assertIn("Allowed In Mentions", res["escalation"]["told_notice"])
+        # never to the person whose work it is
+        with self.assertRaises(Exception):
+            self._escalate("ama@test", "ama@test")
+
+    def test_assign_and_evidence_are_unchanged(self):
+        for subject in ("Chase the payment", "Please send the evidence for: Chase the payment"):
+            self.erp.inserted.clear()
+            self.erp.comments.clear()
+            res = self._task(subject=subject)
+            self.assertNotIn("escalation", res)
+            todo = self.erp.inserted[-1]
+            self.assertEqual(todo["description"], f"{subject}\n\nAgree a date this week.")
+            self.assertNotIn("priority", todo, "no priority is made up for them")
+            self.assertEqual(len(self.erp.comments), 1, "only the mention that tells Ama")
+        self.assertFalse([r for r in self.erp.reads if r[0] == "Employee"],
+                         "Assign and Request Evidence never look for a manager")
+        res = self._task(reference_type="Sales Invoice", reference_name="ACC-SINV-0001")
+        self.assertNotIn("escalation", res)
+        self.assertEqual(self.erp.assigned[-1]["users"], ["ama@test"])
+        self.assertIsNone(self.erp.assigned[-1]["priority"])
+        # and the dialog still sends them as before
+        import os
+        from django.conf import settings
+        src = open(os.path.join(settings.BASE_DIR, "frontend", "src", "components",
+                                "ActionDialog.jsx")).read()
+        self.assertIn('assign: { title: "Assign this", verb: "Assign", lead: "", days: 3 },', src)
+        self.assertIn('evidence: { title: "Request evidence", verb: "Send the request", '
+                      'lead: "Please send the evidence for: ", days: 3 },', src)
+        self.assertIn('escalate_of: escalating ? whose : null', src)
+
+
 # --------------------------------------------------------------------------- Business Health
 SIX = ("score_deliver", "score_paid", "score_paperwork", "score_approvals", "score_records",
        "score_access")

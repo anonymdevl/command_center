@@ -163,7 +163,8 @@ def create_task(business_code: str, subject: str, description: str = "",
                 allocated_to: str | None = None, due_date: str | None = None,
                 project: str | None = None, priority: str | None = None,
                 reference_type: str | None = None, reference_name: str | None = None,
-                alert: str | None = None):
+                alert: str | None = None, escalate_of: str | None = None,
+                escalate_todo: str | None = None):
     """Hand a piece of work to a colleague in the business's ERPNext, as the manager.
 
     `reference_type`/`reference_name` name the ERPNext document it concerns, if any;
@@ -171,14 +172,39 @@ def create_task(business_code: str, subject: str, description: str = "",
     when they are exactly one (facts.single_document). Work in a project becomes a Task
     there. Each case and what ERPNext does is set out above.
 
+    `escalate_of` makes it an escalation of that person's work to `allocated_to` -- their
+    manager in ERPNext (manager_of), or whoever the sender chose instead -- by the same
+    paths, High unless said otherwise; the description says whose work it is and who
+    escalated it; and the person whose work it is is told, by a mention in a comment on
+    the document, else on their own To-Do (`escalate_todo`), else on the new one. They
+    are never unassigned. See "Escalation" below.
+
     Returns the To-Do (`name`, `url`), the document or Task, and in plain words what was
     done (`said`) and whether the person was notified (`notified`: True; False, with the
     reason in `notice`; None when they are the sender). A refused notification is
-    reported, never raised: the To-Do stands either way.
+    reported, never raised: the To-Do stands either way. An escalation also returns
+    `escalation`: whose work it was, whether it went to their manager in ERPNext, and
+    whether they were told (`told`, `told_notice`: the same three values).
     """
     if not allocated_to and not project:
         frappe.throw("Choose who this goes to.")
     conn = _conn(business_code)
+    esc = None
+    if escalate_of:
+        esc = _escalation(conn, escalate_of, allocated_to)
+        if not subject.startswith(ESCALATED):
+            subject = ESCALATED + subject
+        priority = priority or "High"
+        description = esc["line"] + (f"\n\n{description}" if description else "")
+    out = _hand_out(conn, subject, description, allocated_to, due_date, project, priority,
+                    reference_type, reference_name, alert)
+    if esc:
+        _tell_escalated(conn, out, esc, subject, escalate_todo)
+    return out
+
+
+def _hand_out(conn, subject, description, allocated_to, due_date, project, priority,
+              reference_type, reference_name, alert):
     body = subject if not description else f"{subject}\n\n{description}"
     if _platform_doctype(reference_type):
         # An older screen passed the alert as the reference; it is the source, not a link.
@@ -283,6 +309,277 @@ def _todo(conn, user, subject, body, due_date, priority):
             "notice": f"ERPNext has notified {who} by mentioning them on the To-Do: under "
                       f"the bell in ERPNext, and by email if their notification settings "
                       f"allow."}
+
+
+# ---------------------------------------------------------------------------
+# Escalation: up the line, to the manager ERPNext names
+# ---------------------------------------------------------------------------
+#
+# Escalate asks whose work it is (whose_work pre-fills it: the To-Do's allocated_to, else
+# the document's Assigned To), then reads that person's manager from ERPNext's own org
+# chart: the Employee whose User ID is them, its Reports To (an Employee), and that
+# Employee's User ID and name (manager_of). Every read goes through the acting manager's
+# connector -- on another site under their OWN key, never the platform's service account
+# -- so their ERPNext permissions decide what can be seen. When ERPNext names no manager,
+# the answer says why and how to fix it there, and the sender picks someone by hand; the
+# escalation then says it was chosen by hand. Nothing is ever sent to a guess.
+#
+# Sending is create_task(escalate_of=...): the manager gets it by the same paths as any
+# assignment (document -> assign_to.add, else a To-Do and a mention), and the person whose
+# work it is is told by a mention in a comment: on the document, else on their own To-Do,
+# else on the manager's new one. They stay assigned.
+
+ESCALATED = "Escalated: "
+
+
+@frappe.whitelist()
+def whose_work(business_code: str, doctype: str | None = None, name: str | None = None,
+               todo: str | None = None, alert: str | None = None):
+    """Who the work is with now, to pre-fill Escalate's "Whose work is this?".
+
+    In order: the To-Do it was handed out as (`todo`, or the alert's), its allocated_to;
+    else the document's Assigned To (`doctype`/`name`, or the alert's one document), the
+    latest assignee who is not the sender. Read as the manager, so a To-Do they cannot
+    see pre-fills nothing. Returns {user, name, via, todo}; user None when not known,
+    which leaves the choice to the sender rather than guessing.
+    """
+    conn = _conn(business_code)
+    if _platform_doctype(doctype):
+        alert, doctype, name = alert or name, None, None
+    if alert:
+        todo = todo or _alert_todo(alert, conn.code)
+        source = _alert_source(alert, conn.code)
+        if source and source["document"] and not (doctype and name):
+            doctype, name = source["document"]["doctype"], source["document"]["name"]
+    if todo:
+        user = _todo_of(conn, todo)
+        if user:
+            return {"user": user, "name": _person(conn, user)[0], "todo": todo,
+                    "via": "the To-Do it was given out as"}
+    if doctype and name:
+        try:
+            rows = conn.get_list(doctype, filters={"name": name}, fields=["name", "_assign"],
+                                 limit=1)
+        except Exception:
+            rows = []
+        assigned = _users(rows[0].get("_assign")) if rows else []
+        me = conn.whoami()
+        others = [u for u in assigned if u != me] or assigned
+        if others:
+            user = others[-1]
+            return {"user": user, "name": _person(conn, user)[0], "todo": None,
+                    "via": f"Assigned To on {doctype} {name}"}
+    return {"user": None, "name": None, "via": None, "todo": None}
+
+
+@frappe.whitelist()
+def manager_of(business_code: str, user: str):
+    """The person's manager in ERPNext: Employee (User ID = them) -> Reports To -> that
+    Employee's User ID and name. Read as the acting manager.
+
+    Found: {found: True, manager_user, manager_name, employee, manager_employee, via}.
+    Not: {found: False, code, reason, fix}, code one of no_key (their own ERPNext key is
+    not linked, so ERPNext cannot be asked as them), no_permission (Employee, its Reports
+    To, or the manager's record is not readable by them), no_employee, no_reports_to,
+    no_manager_user, unreadable (ERPNext did not answer). Both carry user and user_name.
+    """
+    if not user:
+        frappe.throw("Choose whose work this is.")
+    return _manager_of(_conn(business_code), user)
+
+
+def _manager_of(conn, user):
+    from command_center.connectors.base import BusinessUnreachable, RemotePermissionDenied
+
+    who = _person(conn, user)[0]
+    first = _first(who)
+    out = {"found": False, "user": user, "user_name": who, "manager_user": None,
+           "manager_name": None, "employee": None, "manager_employee": None,
+           "via": None, "code": None, "reason": None, "fix": None}
+
+    def no(code, reason, fix, **kw):
+        return {**out, "code": code, "reason": reason, "fix": fix, **kw}
+
+    def cannot(reason=None):
+        return no("no_permission",
+                  reason or f"You may not read Employee records in ERPNext, so {first}’s "
+                            f"manager cannot be looked up as you.",
+                  "Ask your ERPNext administrator to give your user read access to Employee "
+                  "(the HR User role has it), or choose who it goes to yourself.")
+
+    if not conn.is_local:
+        from command_center.api.credentials import credential_for
+        if not credential_for(conn.code, user=conn.acting_user):
+            return no("no_key",
+                      f"Your own ERPNext key is not linked, so ERPNext cannot be asked who "
+                      f"{first}’s manager is as you.",
+                      "Link your ERPNext key under Settings → Personal ERPNext Keys, or "
+                      "choose who it goes to yourself.")
+    try:
+        rows = conn.get_list("Employee", filters={"user_id": user},
+                             fields=["name", "employee_name", "reports_to", "status"],
+                             order_by="modified desc", limit=5)
+        if not rows:
+            return no("no_employee",
+                      f"No Employee record in ERPNext has {who}’s user ({user}) as its User "
+                      f"ID, or none that you may see.",
+                      f"In ERPNext, open {first}’s Employee record and set User ID to {user}, "
+                      f"then set Reports To. Or choose who it goes to yourself.")
+        row = next((r for r in rows if r.get("status") == "Active"), rows[0])
+        out["employee"] = row.get("name")
+        if "reports_to" not in row:
+            # Frappe drops a field the acting roles may not read rather than refusing.
+            return cannot(f"ERPNext lets you see {first}’s Employee record ({row.get('name')}) "
+                          f"but not its Reports To.")
+        if not row.get("reports_to"):
+            return no("no_reports_to",
+                      f"{first}’s Employee record ({row['name']}) has no Reports To.",
+                      f"Open {first}’s Employee record ({row['name']}) in ERPNext and set "
+                      f"Reports To. Or choose who it goes to yourself.")
+        boss = conn.get_list("Employee", filters={"name": row["reports_to"]},
+                             fields=["name", "employee_name", "user_id"], limit=1)
+    except (frappe.PermissionError, RemotePermissionDenied):
+        return cannot()
+    except BusinessUnreachable as e:
+        return no("unreadable",
+                  f"ERPNext did not answer who {first}’s manager is ({_plain_error(e)}).",
+                  "Try again in a moment, or choose who it goes to yourself.")
+    if not boss or "user_id" not in boss[0]:
+        return cannot(f"{first} reports to {row['reports_to']}, an Employee record you may "
+                      f"not read in ERPNext.")
+    boss = boss[0]
+    name = boss.get("employee_name") or boss["name"]
+    out.update(manager_employee=boss["name"], manager_name=name)
+    if not boss.get("user_id"):
+        return no("no_manager_user",
+                  f"{first} reports to {name} ({boss['name']}), who has no user account in "
+                  f"ERPNext: their Employee record has no User ID.",
+                  f"Open {name}’s Employee record ({boss['name']}) in ERPNext and set User ID "
+                  f"to their ERPNext user. Or choose who it goes to yourself.")
+    return {**out, "found": True, "manager_user": boss["user_id"], "via": "Reports To"}
+
+
+def _escalation(conn, of, to):
+    """Whose work it is, who it goes to, and whether that is their manager in ERPNext."""
+    if not to:
+        frappe.throw("Choose who this is escalated to.")
+    if of == to:
+        frappe.throw("That is the person whose work it is. An escalation goes to someone "
+                     "else: their manager.")
+    of_name, mentionable = _person(conn, of)
+    to_name = _person(conn, to)[0]
+    found = _manager_of(conn, of)
+    to_manager = bool(found["found"]) and found["manager_user"] == to
+    sender = frappe.utils.get_fullname(frappe.session.user) or frappe.session.user
+    if to_manager:
+        tail = f"to {to_name}, their manager in ERPNext (Reports To)."
+    elif found["found"]:
+        tail = (f"to {to_name}, chosen by hand (ERPNext names {found['manager_name']} as "
+                f"their manager).")
+    else:
+        tail = f"to {to_name}, chosen by hand: ERPNext names no manager for them."
+    return {"of": of, "of_name": of_name, "mentionable": mentionable, "to": to,
+            "to_name": to_name, "to_manager": to_manager, "sender": sender,
+            "manager": {k: found[k] for k in ("found", "manager_user", "manager_name",
+                                              "code", "reason")},
+            "line": f"{of_name}’s work, escalated by {sender} {tail}"}
+
+
+def _tell_escalated(conn, out, esc, subject, escalate_todo):
+    """Tell the person whose work it was, by a mention in a comment; say whether it went."""
+    of, of_name = esc["of"], esc["of_name"]
+    info = {"of": of, "of_name": of_name, "to_manager": esc["to_manager"],
+            "manager": esc["manager"], "comment_on": None}
+    out["escalation"] = info
+    if out.get("already"):
+        info.update(told=False, told_notice=f"Nothing new was sent, so {of_name} was not "
+                                            f"told again.")
+        return
+    if of == conn.whoami():
+        info.update(told=None, told_notice="It was your own work, so there was no one else "
+                                           "to tell.")
+        return
+    where, label = out.get("document"), None
+    if where:
+        label = f"{where['doctype']} {where['name']}"
+    elif escalate_todo and _todo_of(conn, escalate_todo) == of:
+        where, label = _doc(conn, "ToDo", escalate_todo), f"their To-Do {escalate_todo}"
+    elif out.get("name"):
+        where = _doc(conn, "ToDo", out["name"])
+        label = f"{esc['to_name']}’s new To-Do {out['name']}"
+    if not where:
+        info.update(told=False, told_notice=f"There was no record to tell {of_name} on. "
+                                            f"Tell them yourself.")
+        return
+    try:
+        conn.comment(where["doctype"], where["name"], _escalation_note(esc, subject))
+    except Exception as e:
+        info.update(told=False,
+                    told_notice=f"{of_name} could not be told: ERPNext refused the comment on "
+                                f"{label} ({_plain_error(e)}). They are still on it; tell "
+                                f"them yourself.")
+        return
+    info["comment_on"] = where
+    out["said"] = f"{out.get('said') or ''} {of_name} stays on it.".strip()
+    if esc["mentionable"] is False:
+        info.update(told=False,
+                    told_notice=f"A comment on {label} says it was escalated, but {of_name}’s "
+                                f"ERPNext user has Allowed In Mentions switched off, so "
+                                f"ERPNext did not notify them. Tell them yourself.")
+        return
+    info.update(told=True,
+                told_notice=f"ERPNext has told {of_name} it was escalated, by mentioning them "
+                            f"in a comment on {label}: under the bell in ERPNext, and by "
+                            f"email if their notification settings allow.")
+
+
+def _escalation_note(esc, subject):
+    """The comment that tells them: a mention, as the desk writes one."""
+    from html import escape
+
+    what = subject[len(ESCALATED):] if subject.startswith(ESCALATED) else subject
+    whom = (f"{esc['to_name']}, your manager in ERPNext" if esc["to_manager"]
+            else esc["to_name"])
+    return (f'<p><span class="mention" data-id="{escape(esc["of"])}" '
+            f'data-value="{escape(esc["of_name"])}" data-denotation-char="@">'
+            f'@{escape(esc["of_name"])}</span> {escape(esc["sender"])} has escalated this to '
+            f'{escape(whom)}: {escape(what)}. It is still on your list.</p>')
+
+
+def _todo_of(conn, todo):
+    """Who a To-Do is allocated to, if the manager may read it."""
+    try:
+        rows = conn.get_list("ToDo", filters={"name": todo}, fields=["name", "allocated_to"],
+                             limit=1)
+    except Exception:
+        return None
+    return (rows[0].get("allocated_to") or None) if rows else None
+
+
+def _alert_todo(alert, code):
+    """The To-Do a platform alert was handed out as, if it belongs to this business."""
+    from command_center.alerts.engine import DOCTYPE
+    try:
+        doc = frappe.get_doc(DOCTYPE, alert)
+    except frappe.DoesNotExistError:
+        return None
+    return doc.todo if doc.business_code == code else None
+
+
+def _users(value) -> list:
+    """A document's _assign: the logins it is assigned to, as a JSON list."""
+    if isinstance(value, list):
+        return [u for u in value if u]
+    try:
+        import json
+        got = json.loads(value or "[]")
+    except (TypeError, ValueError):
+        return []
+    return [u for u in got if u] if isinstance(got, list) else []
+
+
+def _first(name: str) -> str:
+    return name.split()[0] if (name or "").strip() else (name or "")
 
 
 def _todo_from(conn, me, user, doctype, name):

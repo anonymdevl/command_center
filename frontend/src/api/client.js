@@ -204,10 +204,15 @@ export const api = {
   /* Assigned on the ERPNext document when there is one, else a To-Do; either way the
      person is notified in ERPNext, and the answer says whether they were. */
   createTask: ({ business_code, subject, description, allocated_to, due_date, priority,
-                 reference_type, reference_name, alert }) =>
+                 reference_type, reference_name, alert, escalate_of, escalate_todo }) =>
     call("command_center.api.actions.create_task",
       { business_code, subject, description, allocated_to, due_date, priority,
-        reference_type, reference_name, alert }),
+        reference_type, reference_name, alert, escalate_of, escalate_todo }),
+  /* Escalate: who the work is with now, and their manager in ERPNext (Reports To). */
+  whoseWork: ({ business_code, doctype, name, todo, alert }) =>
+    call("command_center.api.actions.whose_work", { business_code, doctype, name, todo, alert }),
+  managerOf: ({ business_code, user }) =>
+    call("command_center.api.actions.manager_of", { business_code, user }),
 
   /* Conversations with the AI, kept per person on the server (api/conversations.py). */
   convRecent: (business_code) => call("command_center.api.conversations.recent", { business_code }),

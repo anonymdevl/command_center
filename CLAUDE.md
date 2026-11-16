@@ -480,8 +480,15 @@ To-Do, Assigned To, comment, Assignment notification; in a project, a Task assig
 way; about no single document, a To-Do (`assigned_by`, no reference: a platform doctype is
 not a valid link there) and a mention on it through `frappe.desk.form.utils.add_comment`
 (no role may create a Notification Log). The dialog says which before sending and whether
-they were notified after; a refused notification is reported, never raised. The assistant
-never calls it. Approve/Reject/Accept/Send back on the sample requests say they are samples.
+they were notified after; a refused notification is reported, never raised. Escalate goes up
+the line (16 Nov 2026): "Whose work is this?" (pre-filled by `actions.whose_work`: the To-Do's
+allocated_to, else the document's `_assign`), then `actions.manager_of` reads Employee (User ID)
+-> Reports To -> that Employee's User ID, as the manager (own key only: `no_key` otherwise);
+no manager is a stated reason with its fix, and the sender picks someone by hand.
+`create_task(escalate_of=...)` sends it by the same paths, High, "Escalated: ..." naming whose
+work and who escalated, and tells the person by a mention comment on the document (else their
+To-Do, else the new one) -- never unassigned. Open delegated tasks carry an Escalate button.
+The assistant never calls it. Approve/Reject/Accept/Send back on the sample requests say they are samples.
 Defer, Dismiss and Approve inside an alert's menu are removed until an alert engine can
 remember a decision. A new button label needs a handler there, or preflight fails.
 
