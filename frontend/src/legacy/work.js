@@ -14,7 +14,8 @@
  * the cards look like every other alert. The markup carries no sample request or task:
  * until the queue is read the lists say so, and when it cannot be read as this person
  * they show how to link their own ERPNext key, or that ERPNext is not answering. The decisions -- approve, reject, accept, send
- * back -- open the action dialog, which asks before anything changes.
+ * back -- open the action dialog, which asks before anything changes. Escalate on open
+ * work handed out sends it to the manager of the person it was given to (ActionDialog).
  */
 
 import { count, exact, shortDate } from "../format.js";
@@ -264,7 +265,11 @@ function tasksTable(rows, { withPriority = false, empty: none } = {}) {
     open.target = "_blank";
     open.rel = "noreferrer";
     const last = el("td");
-    last.append(open);
+    // Up the line: to the manager ERPNext names for the person it was given to.
+    last.append(btn("Escalate", "btn", () => fire("cc-action", {
+      kind: "escalate", title: t.title, detail: t.detail, todo: t.name,
+      assignee: t.to, assignee_name: t.to_name,
+      doctype: t.reference?.doctype, docname: t.reference?.name })), open);
     tr.append(el("td", null, t.title), el("td", null, t.to_name || t.to || "—"),
       el("td", null, t.date ? shortDate(t.date) : "—"), late,
       ...(withPriority ? [el("td", null, t.priority)] : []), last);

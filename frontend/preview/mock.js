@@ -370,6 +370,17 @@ const HANDLERS = {
     { user: "kwame@gigmann.example", name: "Kwame Mensah" },
     { user: "efua@gigmann.example", name: "Efua Owusu" },
   ],
+  // Escalate: who has the work, and their manager. Sample people, as above.
+  "command_center.api.actions.whose_work": () => ({
+    user: "efua@gigmann.example", name: "Efua Owusu", via: "the To-Do it was given out as", todo: null,
+  }),
+  "command_center.api.actions.manager_of": ({ user }) => (user === "efua@gigmann.example"
+    ? { found: true, user, user_name: "Efua Owusu", manager_user: "kwame@gigmann.example",
+        manager_name: "Kwame Mensah", employee: "HR-EMP-00003", manager_employee: "HR-EMP-00001",
+        via: "Reports To" }
+    : { found: false, user, user_name: user, code: "no_reports_to",
+        reason: "Their Employee record has no Reports To, so ERPNext names no manager for them.",
+        fix: "Open their Employee record in ERPNext and set Reports To. Or choose who it goes to yourself." }),
   "command_center.api.actions.create_task": ({ subject, reference_type, reference_name }) => ({
     name: "preview-only", subject, url: null, notified: false,
     document: reference_type ? { doctype: reference_type, name: reference_name, url: null } : null,

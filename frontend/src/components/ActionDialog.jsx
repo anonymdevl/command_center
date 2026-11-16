@@ -15,6 +15,13 @@ import { brand } from "../api/boot.js";
  * them. The dialog says which before sending, and afterwards whether they were notified.
  * The assistant never reaches this; only a person pressing the button does.
  *
+ * Escalate goes up the line. It asks whose work it is (pre-filled from the To-Do it was
+ * given out as, or the document's Assigned To: api/actions.whose_work), reads their
+ * manager from ERPNext's Reports To (actions.manager_of, as this manager), and says
+ * before sending exactly who it goes to and why. When ERPNext names no manager it says
+ * why and how to fix that there, and the sender chooses someone themselves -- never
+ * silently. The person whose work it is stays on it and is told it was escalated.
+ *
  * Two decisions come through here too (legacy/work.js): "decide" applies a workflow
  * action to a document waiting on this person, and "review" accepts or sends back work
  * they handed out. Both ask first and say exactly what will change; after either, a
@@ -29,6 +36,23 @@ const KINDS = {
 };
 
 let peopleCache = {};
+
+const firstName = (name) => (name || "").trim().split(/\s+/)[0] || name || "";
+
+/** Who an escalation goes to and why, before it is sent. */
+function escalationPlan(mgr, ofName, toUser, toName) {
+  const of = firstName(ofName);
+  const stays = `${of} stays on it and is told it was escalated.`;
+  if (!toUser) return mgr?.found ? "" : "Choose who it goes to.";
+  if (mgr?.found && mgr.manager_user === toUser) {
+    return `Escalates to ${mgr.manager_name}, ${of}’s manager in ERPNext (Reports To). ${stays}`;
+  }
+  if (mgr?.found) {
+    return `Escalates to ${toName}, chosen by you. ERPNext names ${mgr.manager_name} as ${of}’s `
+      + `manager (Reports To). ${stays}`;
+  }
+  return `Escalates to ${toName}, chosen by you, because ERPNext names no manager for ${of}. ${stays}`;
+}
 
 /** What sending will do, in plain words, before it is sent. */
 function plan(req, name) {
@@ -58,6 +82,11 @@ export default function ActionDialog({ scope }) {
   const [state, setState] = useState("idle"); // idle | saving | done | failed
   const [done, setDone] = useState(null);
   const [error, setError] = useState("");
+  // Escalate only: whose work it is, where that came from, and their manager in ERPNext.
+  const [whose, setWhose] = useState("");
+  const [prefill, setPrefill] = useState(null); // {user, name, via, todo}
+  const [mgr, setMgr] = useState(null);
+  const [mgrState, setMgrState] = useState("idle"); // idle | loading | done | failed
   const first = useRef(null);
 
   useEffect(() => {
@@ -72,6 +101,14 @@ export default function ActionDialog({ scope }) {
       setState("idle");
       setError("");
       setDone(null);
+      setMgr(null);
+      setMgrState("idle");
+      // A delegated task says who it was given to; otherwise ERPNext is asked (below).
+      const given = r.kind === "escalate" && r.assignee
+        ? { user: r.assignee, name: r.assignee_name || "", via: "the person the task was given to", todo: r.todo || null }
+        : null;
+      setPrefill(given);
+      setWhose(given ? given.user : "");
     };
     window.addEventListener("cc-action", open);
     return () => window.removeEventListener("cc-action", open);
@@ -91,9 +128,47 @@ export default function ActionDialog({ scope }) {
         setPeople(peopleCache[key]);
       }).catch(() => setPeople([]));
     }
+    let stale = false;
+    if (req.kind === "escalate" && !req.assignee) {
+      api.whoseWork({ business_code: scope, doctype: req.doctype || null, name: req.docname || null,
+                      todo: req.todo || null, alert: req.alert || null })
+        .then((w) => {
+          if (stale || !w?.user) return;
+          setPrefill(w);
+          setWhose((cur) => cur || w.user);
+        }).catch(() => {});
+    }
     setTimeout(() => first.current?.focus(), 30);
-    return () => document.removeEventListener("keydown", esc);
+    return () => {
+      stale = true;
+      document.removeEventListener("keydown", esc);
+    };
   }, [req, scope]);
+
+  // Escalate: whenever whose work it is changes, ask ERPNext who their manager is.
+  const escalating = req?.kind === "escalate";
+  useEffect(() => {
+    if (!escalating || !whose) {
+      setMgr(null);
+      setMgrState("idle");
+      return undefined;
+    }
+    let stale = false;
+    setMgrState("loading");
+    setMgr(null);
+    api.managerOf({ business_code: scope, user: whose }).then((m) => {
+      if (stale) return;
+      setMgr(m || null);
+      setMgrState("done");
+      setWho(m?.found && m.manager_user !== whose ? m.manager_user : "");
+    }).catch((err) => {
+      if (stale) return;
+      setMgr({ found: false, reason: err?.message || "ERPNext could not be asked.", fix: "Choose who it goes to yourself." });
+      setMgrState("failed");
+      setWho("");
+    });
+    return () => { stale = true; };
+  }, [escalating, whose, scope]);
 
   if (!req) return null;
   if (!KINDS[req.kind]) {
@@ -101,11 +176,26 @@ export default function ActionDialog({ scope }) {
   }
   const k = KINDS[req.kind];
   const person = people.find((p) => p.user === who);
+  const owner = people.find((p) => p.user === whose);
+  const ownerName = owner?.name || (prefill?.user === whose ? prefill?.name : "") || mgr?.user_name || whose;
+  const toName = person?.name || (mgr?.manager_user === who ? mgr?.manager_name : "") || who;
+  // The manager ERPNext names may not be on the people list (a disabled account, say):
+  // they are still offered, by name, so the pre-filled choice is visible.
+  const extra = (user, name) => (user && !people.some((p) => p.user === user)
+    ? <option value={user}>{name || user}</option> : null);
 
   const submit = async (e) => {
     e.preventDefault();
+    if (escalating && !whose) {
+      setError("Choose whose work this is.");
+      return;
+    }
     if (!who) {
-      setError("Choose who this goes to.");
+      setError(escalating ? "Choose who it is escalated to." : "Choose who this goes to.");
+      return;
+    }
+    if (escalating && who === whose) {
+      setError("That is the person whose work it is. An escalation goes to someone else: their manager.");
       return;
     }
     setState("saving");
@@ -122,6 +212,8 @@ export default function ActionDialog({ scope }) {
         reference_type: req.doctype || null,
         reference_name: req.docname || null,
         alert: req.alert || null,
+        escalate_of: escalating ? whose : null,
+        escalate_todo: escalating && prefill?.user === whose ? prefill?.todo || null : null,
       });
       // An alert that has become someone's To-Do says so, and says which.
       if (req.alert && res?.name) {
@@ -129,7 +221,7 @@ export default function ActionDialog({ scope }) {
         window.dispatchEvent(new CustomEvent("cc-alerts-changed"));
       }
       window.dispatchEvent(new CustomEvent("cc-work-changed"));
-      setDone({ ...(res || {}), person: res?.to_name || person?.name || who });
+      setDone({ ...(res || {}), person: res?.to_name || toName || who });
       setState("done");
     } catch (err) {
       setError(err?.message || "ERPNext did not accept it.");
@@ -143,11 +235,18 @@ export default function ActionDialog({ scope }) {
         {state === "done" ? (
           <>
             <div className="dlg-ok" aria-hidden="true">✓</div>
-            <h3 id="dlg-t">{done.document && !done.already ? `Assigned to ${done.person}` : `On ${done.person}’s list`}</h3>
+            <h3 id="dlg-t">{done.escalation && !done.already ? `Escalated to ${done.person}`
+              : done.document && !done.already ? `Assigned to ${done.person}` : `On ${done.person}’s list`}</h3>
             <p className="dlg-sub">{done.said || "It is in ERPNext, from you."}</p>
             {done.notice ? (
               <p className={done.notified === false ? "dlg-err" : "dlg-hint"} role={done.notified === false ? "alert" : undefined}>
                 {done.notice}
+              </p>
+            ) : null}
+            {done.escalation?.told_notice ? (
+              <p className={done.escalation.told === false ? "dlg-err" : "dlg-hint"}
+                 role={done.escalation.told === false ? "alert" : undefined}>
+                {done.escalation.told_notice}
               </p>
             ) : null}
             <div className="dlg-acts">
@@ -170,13 +269,52 @@ export default function ActionDialog({ scope }) {
             <p className="dlg-sub">{req.title}</p>
             {req.owner ? <p className="dlg-hint">Suggested owner: {req.owner}</p> : null}
 
-            <label htmlFor="dlg-who">To</label>
-            <select id="dlg-who" ref={first} value={who} onChange={(e) => setWho(e.target.value)}>
-              <option value="">{people.length ? "Choose a person" : "Loading people…"}</option>
-              {people.map((p) => (
-                <option key={p.user} value={p.user}>{p.name}</option>
-              ))}
-            </select>
+            {escalating ? (
+              <>
+                <label htmlFor="dlg-whose">Whose work is this?</label>
+                <select id="dlg-whose" ref={first} value={whose} onChange={(e) => setWhose(e.target.value)}>
+                  <option value="">{people.length ? "Choose a person" : "Loading people…"}</option>
+                  {extra(whose, ownerName)}
+                  {people.map((p) => (
+                    <option key={p.user} value={p.user}>{p.name}</option>
+                  ))}
+                </select>
+                {prefill?.user && prefill.user === whose ? (
+                  <p className="dlg-hint">Filled in from {prefill.via}.</p>
+                ) : null}
+                {mgrState === "loading" ? (
+                  <p className="dlg-hint">Looking up {firstName(ownerName)}’s manager in ERPNext…</p>
+                ) : null}
+                {mgr && !mgr.found && mgrState !== "loading" ? (
+                  <div className="dlg-err" role="status">
+                    <b>No manager found in ERPNext.</b> {mgr.reason}
+                    {mgr.fix ? <span className="dlg-fix">{mgr.fix}</span> : null}
+                  </div>
+                ) : null}
+
+                <label htmlFor="dlg-who">Escalate to</label>
+                <select id="dlg-who" value={who} onChange={(e) => setWho(e.target.value)}>
+                  <option value="">{mgr && !mgr.found ? "Choose someone yourself" : "Choose a person"}</option>
+                  {mgr?.found ? extra(mgr.manager_user, mgr.manager_name) : null}
+                  {people.filter((p) => p.user !== whose).map((p) => (
+                    <option key={p.user} value={p.user}>{p.name}</option>
+                  ))}
+                </select>
+                {whose && mgrState !== "loading" && escalationPlan(mgr, ownerName, who, toName) ? (
+                  <p className="dlg-plan">{escalationPlan(mgr, ownerName, who, toName)}</p>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <label htmlFor="dlg-who">To</label>
+                <select id="dlg-who" ref={first} value={who} onChange={(e) => setWho(e.target.value)}>
+                  <option value="">{people.length ? "Choose a person" : "Loading people…"}</option>
+                  {people.map((p) => (
+                    <option key={p.user} value={p.user}>{p.name}</option>
+                  ))}
+                </select>
+              </>
+            )}
 
             <label htmlFor="dlg-due">By</label>
             <input id="dlg-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
@@ -191,7 +329,7 @@ export default function ActionDialog({ scope }) {
                 {state === "saving" ? "Sending…" : k.verb}
               </button>
             </div>
-            <p className="dlg-foot">{plan(req, person?.name)}</p>
+            <p className="dlg-foot">{plan(req, who ? toName : "")}</p>
           </form>
         )}
       </div>
