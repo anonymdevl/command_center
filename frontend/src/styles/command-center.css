@@ -1019,6 +1019,11 @@ div.work-table table.dt{min-width:560px}
  box-shadow:0 0 0 3px var(--accent-bg2)}
 .dlg-err{margin-top:14px;font-size:var(--fs-sm);color:var(--crit);background:var(--crit-bg);
  border-radius:var(--r-sm);padding:10px 12px}
+/* Escalate: who it goes to and why, before sending; why no manager was found, and the fix */
+.dlg-plan{margin:10px 0 0;font-size:var(--fs-sm);color:var(--ink2);background:var(--raised);
+ border-radius:var(--r-sm);padding:10px 12px;line-height:1.5}
+.dlg-err b{font-weight:var(--fw-semibold)}
+.dlg-fix{display:block;margin-top:6px;color:var(--ink2)}
 .dlg-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;flex-wrap:wrap}
 .dlg-acts a{text-decoration:none}
 .dlg-foot{font-size:var(--fs-xs);color:var(--dim);margin:14px 0 0;text-align:right}
