@@ -254,5 +254,67 @@ check(feed and set(feed[0]) == {"business_code", "source_doctype", "source_name"
 meta = conn.get_meta("Sales Invoice")
 check(meta["fields"][0]["fieldname"] == "customer", "fields come from the peer's own definition")
 
+# 9. Handing out work. ERPNext's own assignment (frappe.desk.form.assign_to.add) with
+#    top-level arguments -- v14's add(args=None) and v15/v16's add(args: dict | None) both
+#    read them from the request -- assign_to as a JSON list, under the person's own key,
+#    by POST and never retried; what is not given is left out (ERPNext's own defaults).
+frappe.utils = types.SimpleNamespace(get_fullname=lambda user: "Boss Manager")
+creds.user_cred = {"api_key": "mine", "api_secret": "s"}
+reset()
+conn.assign("Sales Invoice", "ACC-SINV-0001", ["ama@example.com"], description="Chase it",
+            date="2026-11-20", priority="High")
+check(len(calls) == 1 and calls[0]["url"].endswith("/api/method/frappe.desk.form.assign_to.add"),
+      f"one call to assign_to.add: {[c['url'] for c in calls]}")
+_p = calls[0]["params"]
+check(calls[0]["method"] == "POST" and calls[0]["auth"] == "token mine:s",
+      "an assignment is a write, by POST, under the person's own key")
+check(json.loads(_p.get("assign_to", "null")) == ["ama@example.com"] and "args" not in _p
+      and (_p["doctype"], _p["name"], _p["description"], _p["date"], _p["priority"])
+      == ("Sales Invoice", "ACC-SINV-0001", "Chase it", "2026-11-20", "High"),
+      f"top-level arguments, assign_to a JSON list: {_p}")
+reset()
+conn.assign("Task", "TASK-0001", ["ama@example.com"])
+check("date" not in calls[0]["params"] and "priority" not in calls[0]["params"],
+      f"a date or priority not given is left to ERPNext: {calls[0]['params']}")
+reset()
+script.extend([503])
+try:
+    conn.assign("Task", "TASK-0001", ["ama@example.com"])
+except Exception:
+    pass
+check(len(calls) == 1, f"an assignment is never retried: {len(calls)} calls")
+# The comment that mentions someone goes through the form's own endpoint, which any
+# reader of the record may use; v14/v15 need comment_email and comment_by.
+reset()
+conn._me = None
+_ans = _answer
+
+
+def _logged(method, url, headers, params, body=None):
+    if url.endswith("frappe.auth.get_logged_user"):
+        calls.append({"method": method, "url": url, "auth": headers["Authorization"],
+                      "params": params, "body": body})
+        return _R(200, {"message": "boss@erp.example.com"})
+    return _ans(method, url, headers, params, body)
+
+
+requests.get = lambda url, headers=None, params=None, timeout=None: _logged("GET", url, headers, params or {})
+requests.post = lambda url, headers=None, data=None, json=None, timeout=None: _logged("POST", url, headers, json if json is not None else (data or {}), body="json")
+conn.comment("ToDo", "TD-1", '<p><span class="mention" data-id="ama@example.com">@Ama</span> hi</p>')
+_c = calls[-1]
+check(_c["url"].endswith("/api/method/frappe.desk.form.utils.add_comment") and _c["method"] == "POST",
+      f"a comment goes through add_comment: {_c['url']}")
+check((_c["params"]["reference_doctype"], _c["params"]["reference_name"], _c["params"]["comment_email"],
+       _c["params"]["comment_by"]) == ("ToDo", "TD-1", "boss@erp.example.com", "Boss Manager")
+      and 'data-id="ama@example.com"' in _c["params"]["content"],
+      f"as the person's own login there, with the mention intact: {_c['params']}")
+check(conn.whoami() == "boss@erp.example.com"
+      and sum(c["url"].endswith("get_logged_user") for c in calls) == 1,
+      "whoami is the login the key belongs to there, asked once")
+check(conn.desk_url("Sales Invoice", "ACC-SINV-0001")
+      == "https://erp.example.com/app/sales-invoice/ACC-SINV-0001",
+      f"a record opens on the business's own ERPNext: {conn.desk_url('Sales Invoice', 'ACC-SINV-0001')}")
+creds.user_cred = None
+
 print(f"remote: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

@@ -7,8 +7,11 @@
            kept so the rules can be tuned (AL-06)
 
 Only the alert itself changes here. Assigning, requesting evidence and escalating are
-To-Dos created by api/actions.create_task as the manager; act("actioned") just records
-which To-Do it became. The assistant reaches neither.
+handed out in the business's ERPNext by api/actions.create_task, as the manager: assigned
+on the one document behind the alert when its records are exactly one (`document` below),
+otherwise a To-Do of its own with a mention that notifies the person. act("actioned")
+just records which To-Do it became, and `todo_url` opens it in that ERPNext. The
+assistant reaches neither.
 """
 
 from __future__ import annotations
@@ -39,16 +42,26 @@ def open_alerts(business_code: str | None = None):
                                             "resolved_on": ["is", "not set"]},
                           fields=FIELDS, limit=200)
     now = getdate(today())
+    from command_center.api.facts import _site_urls, single_document
+    from command_center.connectors.base import desk_path
+    sites = _site_urls()
     out = []
     for r in rows:
         if r.status == "Deferred" and r.deferred_until and getdate(r.deferred_until) > now:
             continue
+        filters = json.loads(r.drill_filters or "{}")
         out.append({
             **{k: r.get(k) for k in FIELDS if k not in ("drill_filters",)},
-            "drill_filters": json.loads(r.drill_filters or "{}"),
+            "drill_filters": filters,
             "elapsed": elapsed(r.elapsed_from, r.measured_to),
             "first_raised": str(r.first_raised)[:16] if r.first_raised else None,
             "url": f"/app/command-center-alert/{r.name}",
+            # The To-Do it became, in the business's own ERPNext (not this platform).
+            "todo_url": (sites.get(r.business_code) or "") + desk_path("ToDo", r.todo)
+            if r.todo else None,
+            # The one ERPNext document behind it, when there is exactly one: Assign
+            # assigns that document (api/actions.create_task), and the dialog says so.
+            "document": single_document(r.drill_fact, filters, r.business_code),
         })
     from command_center.alerts.notify import recorded
     mailed = recorded([a["name"] for a in out])

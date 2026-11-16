@@ -7,10 +7,13 @@ import { brand } from "../api/boot.js";
  *
  * Opened by the buttons on alerts, findings and the like (legacy/actions.js) through a
  * "cc-action" event. Whatever the kind -- assign, request evidence, escalate, raise a
- * finding -- the result is the same honest thing: a real ERPNext To-Do on that
- * person's list, created as the manager who sent it (api/actions.create_task), so
- * ERPNext's own notifications, permissions and history apply. The assistant never
- * reaches this; only a person pressing the button does.
+ * finding -- the work is handed out in the business's ERPNext as the manager who sent it
+ * (api/actions.create_task), and the person is told there. When it concerns one ERPNext
+ * document (req.doctype / req.docname: an alert whose records are exactly one), ERPNext
+ * assigns that document to them: their To-Do, the document's Assigned To, and ERPNext's
+ * own notification. Otherwise it is a To-Do of its own, with a mention that notifies
+ * them. The dialog says which before sending, and afterwards whether they were notified.
+ * The assistant never reaches this; only a person pressing the button does.
  *
  * Two decisions come through here too (legacy/work.js): "decide" applies a workflow
  * action to a document waiting on this person, and "review" accepts or sends back work
@@ -26,6 +29,17 @@ const KINDS = {
 };
 
 let peopleCache = {};
+
+/** What sending will do, in plain words, before it is sent. */
+function plan(req, name) {
+  const them = name || "the person you choose";
+  if (req.doctype && req.docname) {
+    return `Assigns ${req.doctype} ${req.docname} to ${them} in ERPNext, as you: it goes on their To-Do list, `
+      + "the document shows them under Assigned To, and ERPNext notifies them.";
+  }
+  return `Puts this on ${them}’s To-Do list in ERPNext, from you, and mentions them on it so ERPNext `
+    + "notifies them. It concerns no single ERPNext document, so no document changes.";
+}
 
 function addDays(n) {
   const d = new Date();
@@ -105,8 +119,9 @@ export default function ActionDialog({ scope }) {
         allocated_to: who,
         due_date: due || null,
         priority: k.priority || null,
-        reference_type: req.alert ? "Command Center Alert" : null,
-        reference_name: req.alert || null,
+        reference_type: req.doctype || null,
+        reference_name: req.docname || null,
+        alert: req.alert || null,
       });
       // An alert that has become someone's To-Do says so, and says which.
       if (req.alert && res?.name) {
@@ -114,7 +129,7 @@ export default function ActionDialog({ scope }) {
         window.dispatchEvent(new CustomEvent("cc-alerts-changed"));
       }
       window.dispatchEvent(new CustomEvent("cc-work-changed"));
-      setDone({ name: res?.name, person: person?.name || who, due });
+      setDone({ ...(res || {}), person: res?.to_name || person?.name || who });
       setState("done");
     } catch (err) {
       setError(err?.message || "ERPNext did not accept it.");
@@ -128,14 +143,21 @@ export default function ActionDialog({ scope }) {
         {state === "done" ? (
           <>
             <div className="dlg-ok" aria-hidden="true">✓</div>
-            <h3 id="dlg-t">On {done.person}’s list</h3>
-            <p className="dlg-sub">
-              It is a To-Do in ERPNext{done.due ? `, due ${new Date(`${done.due}T00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""},
-              from you. ERPNext tells them in the usual way.
-            </p>
+            <h3 id="dlg-t">{done.document && !done.already ? `Assigned to ${done.person}` : `On ${done.person}’s list`}</h3>
+            <p className="dlg-sub">{done.said || "It is in ERPNext, from you."}</p>
+            {done.notice ? (
+              <p className={done.notified === false ? "dlg-err" : "dlg-hint"} role={done.notified === false ? "alert" : undefined}>
+                {done.notice}
+              </p>
+            ) : null}
             <div className="dlg-acts">
-              {done.name ? (
-                <a className="ap-act" href={`/app/todo/${encodeURIComponent(done.name)}`} target="_blank" rel="noreferrer">
+              {done.document?.url ? (
+                <a className="ap-act" href={done.document.url} target="_blank" rel="noreferrer">
+                  Open {done.document.doctype} ↗
+                </a>
+              ) : null}
+              {done.url ? (
+                <a className="ap-act" href={done.url} target="_blank" rel="noreferrer">
                   Open the To-Do ↗
                 </a>
               ) : null}
@@ -169,7 +191,7 @@ export default function ActionDialog({ scope }) {
                 {state === "saving" ? "Sending…" : k.verb}
               </button>
             </div>
-            <p className="dlg-foot">Creates a To-Do in ERPNext, as you. Nothing else changes.</p>
+            <p className="dlg-foot">{plan(req, person?.name)}</p>
           </form>
         )}
       </div>

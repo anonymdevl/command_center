@@ -446,8 +446,15 @@ scored until their data exists; never fill them with a number.
 (the "⋯" menus called a `moreMenu()` that only the first prototype defined, so Assign and
 every menu item did nothing until 18 Oct 2026). Assign, Request evidence, Escalate, Raise
 it, Give it an owner, Pass to someone else and Ask for more open `ActionDialog.jsx`, which
-creates a real ERPNext To-Do as the manager (`api/actions.create_task`); the assistant never
-calls it. Approve/Reject/Accept/Send back on the sample requests say they are samples.
+hands the work out in the business's ERPNext as the manager (`api/actions.create_task`) and
+tells the person there (16 Nov 2026): about one ERPNext document (an alert whose records are
+exactly one, `facts.single_document`), ERPNext's own `frappe.desk.form.assign_to.add` --
+To-Do, Assigned To, comment, Assignment notification; in a project, a Task assigned the same
+way; about no single document, a To-Do (`assigned_by`, no reference: a platform doctype is
+not a valid link there) and a mention on it through `frappe.desk.form.utils.add_comment`
+(no role may create a Notification Log). The dialog says which before sending and whether
+they were notified after; a refused notification is reported, never raised. The assistant
+never calls it. Approve/Reject/Accept/Send back on the sample requests say they are samples.
 Defer, Dismiss and Approve inside an alert's menu are removed until an alert engine can
 remember a decision. A new button label needs a handler there, or preflight fails.
 
@@ -539,7 +546,7 @@ Order of work:
     raised/acknowledged/actioned/deferred/dismissed/false positive/resolved (AL-06).
     Evaluated hourly and on read when stale (no worker needed). `legacy/alerts.js` puts
     them in Home and the Executive Summary; the bell lists them. Assign/evidence/escalate
-    make a To-Do referencing the alert; defer/dismiss/not-a-problem need a reason. The
+    hand the work out as above, naming the alert in the description; defer/dismiss/not-a-problem need a reason. The
     two doctypes need `bench migrate` on deploy. Not yet: per-record alerts (one per
     invoice), Business Health's and Risk's own alerts, the other six §9 types.
 13. **Blueprint §8.5**, plus Gemini and the ten facts.

@@ -8,10 +8,11 @@ holds both halves.
                      asked of ERPNext's own workflow engine (get_transitions), so the
                      roles, the self-approval rule and any transition conditions are
                      the site's, not a copy of them here.
-    Handed out       the To-Dos this person assigned (assigned_by), which is what the
-                     Assign button on every alert creates. Open ones are the work in
-                     flight; ones the assignee has closed in the last fortnight are
-                     the evidence to check.
+    Handed out       the To-Dos this person assigned (assigned_by): what the Assign
+                     button on every alert leaves, by ERPNext's own assignment on the
+                     document it concerns, or as a To-Do of its own (api/actions).
+                     Open ones are the work in flight; ones the assignee has closed in
+                     the last fortnight are the evidence to check.
 
 Reading is all this module does, apart from review(): the manager's verdict on work
 they handed out, which tags the To-Do Accepted or reopens it with their reason. The
@@ -200,8 +201,8 @@ def _review_remote(src, todo, verdict, note):
     else:
         conn.set_value("ToDo", todo, "status", "Open")
         text, status = f"Sent back by {who}: {note.strip()}", "Open"
-    conn.insert({"doctype": "Comment", "comment_type": "Comment", "reference_doctype": "ToDo",
-                 "reference_name": todo, "content": text})
+    # Through the form's own comment endpoint: inserting a Comment needs System Manager.
+    conn.comment("ToDo", todo, text)
     return {"ok": True, "status": status}
 
 
@@ -357,7 +358,8 @@ class _Local:
         return frappe.utils.get_fullname(user)
 
     def url(self, doctype, name):
-        return f"/app/{frappe.scrub(doctype).replace('_', '-')}/{name}"
+        from command_center.connectors.base import desk_path
+        return desk_path(doctype, name)
 
 
 class _Remote:
@@ -371,7 +373,7 @@ class _Remote:
         return self.conn.base_url
 
     def me(self):
-        return self.conn._call("frappe.auth.get_logged_user")
+        return self.conn.whoami()
 
     def roles(self, user):
         # The person's roles there, when that site lets them read their own; None means
@@ -432,7 +434,7 @@ class _Remote:
         return self._names[user]
 
     def url(self, doctype, name):
-        return f"{self.conn.base_url}/app/{frappe.scrub(doctype).replace('_', '-')}/{name}"
+        return self.conn.desk_url(doctype, name)
 
 
 def _fig(key, label, value, note, href):
