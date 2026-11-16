@@ -622,6 +622,14 @@ def normalise_cards(html: str) -> str:
         classes, attrs = m.group(1), m.group(2)
         if "clickable" in classes:
             return m.group(0)
+        # Two kinds of tile get no placeholder, so they are not drawn as something that
+        # opens until they do (signature_tiles' arrow shows only on .clickable):
+        #   class "q"            Business Health's six questions -- home.js scores them
+        #                        and gives one a click only when it has a guide to open
+        #   data-opens="figure"  a tile that opens its own figure's link once its figure
+        #                        arrives (hydrate.js wireOpen), e.g. Today's "Due today"
+        if " q" in f" {classes}" or 'data-opens="figure"' in attrs:
+            return m.group(0)
         # A tile with no drill target still opens: every figure in this platform
         # answers "which records?", and a tile that did not would look like a
         # different component as well as breaking the promise.
@@ -646,6 +654,11 @@ def signature_tiles(html: str) -> str:
     exactly where hydration expects them, and the tile still opens with its own
     onclick. Every screen, every .kpi card and .bk tile (Michael, 18 Oct 2026): one
     screen in the new form and eighteen in the old read as a bait and switch.
+
+    The arrow and the cut corner are drawn only on a tile that opens something
+    (.clickable, shell.py): a tile with no action has the same card without them
+    (Michael, 16 Nov 2026). The spans are on every tile because a tile can become
+    clickable after it is drawn (hydrate.js wireOpen, guide.js guideCard, home.js).
     """
     import re as _re
     arrow = ('<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '

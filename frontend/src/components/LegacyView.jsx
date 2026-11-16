@@ -218,9 +218,11 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     // suggestion buttons, and expects the answer in its own #sout2. So it is wired
     // rather than replaced: same markup, same ids, real answers.
     // The Ask AI screen is a conversation: each question is a turn -- the person's
-    // question, then the analyst's answer under it -- kept in order, newest last, and
-    // redrawn from askHistory.js whenever the screen opens, so a conversation started
-    // in the bar carries on here.
+    // question, then the analyst's answer under it -- redrawn from askHistory.js whenever
+    // the screen opens, so a conversation started in the bar carries on here. The box is
+    // at the top, so the newest turn is drawn first, right under it, and the earlier
+    // ones below (16 Nov 2026); askHistory.js keeps them oldest first, as the analyst
+    // reads them.
     const answerOpts = (q) => ({
       inThread: true,
       onFollowup: (next) => window.runSearch && window.runSearch(next),
@@ -253,7 +255,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       const a = document.createElement("div");
       a.className = "turn-a";
       turn.append(qb, a);
-      thread.append(turn);
+      thread.prepend(turn);
       return a;
     };
 
@@ -342,6 +344,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       const thread = document.getElementById("sout2");
       if (!thread) return;
       thread.textContent = "";
+      // Oldest first through newTurn, which puts each above the last: newest on top.
       turnsFor(scopeRef.current).forEach((t) => {
         renderAnswer(newTurn(thread, t.q), t.payload, answerOpts(t.q));
       });

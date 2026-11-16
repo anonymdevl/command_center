@@ -508,7 +508,7 @@ def understand(key: str, business_code: str | None = None) -> dict:
     # Nothing behind it: say what to record, not a blank.
     state = (figure.get("data_status") or {}).get("state")
     rows = _rows_in(k, code)
-    if state == "needs_setup" and (figure.get("data_status") or {}).get("guide"):
+    if state in ("needs_setup", "no_access") and (figure.get("data_status") or {}).get("guide"):
         section["guide"] = figure["data_status"]["guide"]
     elif rows == 0:
         text, steps, path = (spec.empty if spec and spec.empty else (

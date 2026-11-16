@@ -91,8 +91,9 @@ def _brand() -> dict:
     except Exception:
         frappe.log_error(title="Command Center branding", message=frappe.get_traceback())
         return {**branding.DEFAULTS, "product": branding.DEFAULTS["product_name"],
-                "logo_light_url": None, "logo_dark_url": None,
-                "favicon_url": "/assets/command_center/images/command-center.svg"}
+                "logo_light_url": None, "logo_dark_url": None, "logo_signin_url": None,
+                "favicon_url": branding.DEFAULT_FAVICON,
+                "built_by": branding.DEFAULTS["company"], "contacts": []}
 
 
 def _payload(value) -> str:

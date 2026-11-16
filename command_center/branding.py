@@ -31,9 +31,10 @@ cached for ever.
                               also be a wide strip); never SVG
     store_image(kind, raw)    the file written, named after its content
 
-The screens' logos (light and dark backgrounds, favicon) and the PDFs' Report Logo are
-separate: a PDF uses the Report Logo, else the light-background logo, else the
-product's name. A business's letterhead images print on every page of its PDFs
+The screens' logos (light and dark backgrounds, favicon), the PDFs' Report Logo and the
+Sign-In Logo are separate: a PDF uses the Report Logo, else the light-background logo,
+else the product's name; the sign-in page uses the Sign-In Logo, else the platform's
+built-in mark -- never a logo chosen for another place. A business's letterhead images print on every page of its PDFs
 (export.page_options writes them into the PDF engine's header and footer).
 
 Nothing here names a person: the vendor's person, email, phone and website are free
@@ -67,7 +68,19 @@ MAX_LEN = {"product_name": 60, "tagline": 80, "company": 80, "person": 80, "emai
            "phone": 40, "website": 120}
 LOGO_KINDS = ("logo_light", "logo_dark", "favicon")  # the screens'
 REPORT_KIND = "logo_report"  # the PDFs' own logo, instead of the light-background one
-PLATFORM_KINDS = LOGO_KINDS + (REPORT_KIND,)
+# The sign-in page's own logo. Independent of every other: unset, the sign-in page shows
+# the platform's built-in mark (the .auth-mark drawn by interface/auth.py, the mark it has
+# shown since the first sign-in page), never the screens' logos or the Report Logo.
+SIGNIN_KIND = "logo_signin"
+PLATFORM_KINDS = LOGO_KINDS + (REPORT_KIND, SIGNIN_KIND)
+# What each place shows while its own logo is unset (branding() applies it):
+#   logo_light / logo_dark  the other one of the pair (one set serves both backgrounds),
+#                           else the built-in mark (Sidebar.jsx .logo)
+#   favicon                 the built-in icon, DEFAULT_FAVICON
+#   logo_report             the light-background logo, else the dark, else the product's
+#                           name (a report carries the screens' logo when only that is set)
+#   logo_signin             the built-in mark (.auth-mark), nothing else
+DEFAULT_FAVICON = "/assets/command_center/images/command-center.svg"
 CLIENT_KIND = "client"
 # A business's letterhead: the strip printed at the top of every page, and the optional
 # one at the foot.
@@ -88,7 +101,8 @@ TYPES = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}
 PRINT_TYPES = ("png", "jpg")
 # A stored file's name: its kind, the first 16 hex characters of its SHA-256, the type
 # its content proved to be. Anything else is never served.
-FILE_RE = re.compile(r"^(logo_light|logo_dark|favicon|logo_report|client|letterhead|letterfoot)"
+FILE_RE = re.compile(r"^(logo_light|logo_dark|favicon|logo_report|logo_signin|client|letterhead|"
+                     r"letterfoot)"
                      r"-[0-9a-f]{16}\.(png|jpg|webp)$")
 
 # The upload rules by kind. A letterhead strip is printed across the full width of an
@@ -189,7 +203,11 @@ def branding(business_code: str | None = None) -> dict:
         # One logo set serves both backgrounds.
         "logo_light": light or dark, "logo_dark": dark or light,
         "logo_light_url": url_for(light or dark), "logo_dark_url": url_for(dark or light),
-        "favicon_url": url_for(s.get("favicon")) or "/assets/command_center/images/command-center.svg",
+        "favicon_url": url_for(s.get("favicon")) or DEFAULT_FAVICON,
+        # The sign-in page's: its own logo or nothing (the page then draws the built-in
+        # mark). Never the screens' logos: a logo chosen for the sidebar is not one chosen
+        # for the sign-in page.
+        "logo_signin_url": url_for(s.get(SIGNIN_KIND)),
         "client_name": client.get("display_name") or "",
         "client_logo": client.get("logo"),
         "client_logo_url": url_for(client.get("logo")),
@@ -203,6 +221,10 @@ def branding(business_code: str | None = None) -> dict:
     }
     b["footer"] = footer_line(b)
     b["prepared"] = prepared_line(b)
+    # The sign-in page's footer, in parts it lays out itself: "Built by <who>", then each
+    # contact item on its own (they wrap as whole items, never inside one).
+    b["built_by"] = _who(b)
+    b["contacts"] = _contacts(b)
     return b
 
 
@@ -244,7 +266,8 @@ def public() -> dict:
     b = branding()
     return {k: b[k] for k in ("product", "tagline", "company", "person", "email", "phone",
                               "website", "logo_light_url", "logo_dark_url", "favicon_url",
-                              "footer", "prepared")}
+                              "logo_signin_url", "footer", "prepared", "built_by",
+                              "contacts")}
 
 
 def clients() -> dict:
@@ -261,11 +284,14 @@ def _contacts(b: dict) -> list:
     return [b[k] for k in ("email", "phone", "website") if b.get(k)]
 
 
+def _who(b: dict) -> str:
+    return b["company"] + (f" — {b['person']}" if b.get("person") else "")
+
+
 def footer_line(b: dict) -> str:
     """Every PDF page's footer: "<product> · built by <company> — <person> · <email> ·
     <phone> · <website>", leaving out what is blank."""
-    who = b["company"] + (f" — {b['person']}" if b.get("person") else "")
-    return " · ".join([b["product"], f"built by {who}"] + _contacts(b))
+    return " · ".join([b["product"], f"built by {_who(b)}"] + _contacts(b))
 
 
 def prepared_line(b: dict) -> str:

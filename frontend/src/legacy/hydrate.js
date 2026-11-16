@@ -19,7 +19,7 @@
  * behind.
  */
 
-import { guideCard } from "./guide.js";
+import { guideCard, guideWords, hasGuide } from "./guide.js";
 import { money, count, exact } from "../format.js";
 
 /**
@@ -295,9 +295,10 @@ export function hydrateCards(root, viewKey, figures, { onOpen, openDrawer } = {}
       if (!key || figures) notMeasured(card);
       return;
     }
-    // Nothing recorded in ERPNext yet: the card says how to set it up (guides.py).
-    if (figure.data_status?.state === "needs_setup" && figure.data_status.guide) {
-      guideCard(card, figure.data_status.guide, openDrawer);
+    // Nothing recorded in ERPNext yet, or ERPNext refused the read: the card says how to
+    // set it up, or which record type to give access to (guides.py).
+    if (hasGuide(figure)) {
+      guideCard(card, figure.data_status.guide, openDrawer, figure.data_status.state);
       live += 1;
       return;
     }
@@ -333,9 +334,9 @@ export function hydrateTiles(root, viewKey, figures, { onOpen, openDrawer } = {}
       if (!spec || figures) notMeasured(tile);
       return;
     }
-    if (figure.data_status?.state === "needs_setup" && figure.data_status.guide) {
+    if (hasGuide(figure)) {
       if (!navigates(tile)) {
-        guideCard(tile, figure.data_status.guide, openDrawer);
+        guideCard(tile, figure.data_status.guide, openDrawer, figure.data_status.state);
         // A tile's figure is .n and its footnote .v (a card's are .val and .delta).
         const n = tile.querySelector(".n");
         if (n) {
@@ -343,7 +344,7 @@ export function hydrateTiles(root, viewKey, figures, { onOpen, openDrawer } = {}
           n.textContent = "—";
         }
         const v = tile.querySelector(".v");
-        if (v) v.textContent = "Not recorded yet · how to set it up";
+        if (v) v.textContent = guideWords(figure.data_status.state).foot;
       }
       live += 1;
       return;

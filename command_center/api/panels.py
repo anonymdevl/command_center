@@ -81,9 +81,18 @@ def compute(view: str, business_code: str | None = None) -> dict:
     panels = {}
     failed = down = False
     out = {"view": view, "currency": ctx.cur, "as_of": str(ctx.as_of), "panels": panels}
+    from command_center.kpi.live import _refused
     for (title, _), (ok, got) in zip(jobs[:len(builders)], answers[:len(builders)]):
         if not ok:
-            failed = True
+            failed = True  # asked again next time, a refusal too (access may be granted)
+            if _refused(got):
+                # Refused by the business's ERPNext: the record type and how to give the
+                # platform's API user read access to it, drawn as the panel's guide.
+                from command_center.guides import no_access
+                st = no_access(ctx.code, got)
+                panels[title] = {"kind": "guide", "guide": st["guide"], "no_access": True,
+                                 "doctype": st.get("doctype")}
+                continue
             if is_down(got):
                 # The business did not answer: the panel says so, calmly, and is asked
                 # again next time.

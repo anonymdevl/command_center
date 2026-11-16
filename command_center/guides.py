@@ -52,6 +52,58 @@ def needs_setup(business_code, text, steps=None, path=None) -> dict:
             "guide": guide(business_code, text, steps, path)}
 
 
+# A figure or panel the business's ERPNext refused to let the platform read (16 Nov 2026):
+# not a failure of the platform and not missing data, but an access to grant there. The
+# standard ERPNext role that reads each record type the screens most often need; any
+# other is named on its own and given by Role Permission.
+READ_ROLES = {
+    "Issue": "Support Team", "Issue Type": "Support Team", "Issue Priority": "Support Team",
+    "Service Level Agreement": "Support Team", "Warranty Claim": "Maintenance User",
+    "Maintenance Visit": "Maintenance User",
+    "Project": "Projects User", "Task": "Projects User", "Timesheet": "Projects User",
+    "Employee": "HR User", "Leave Application": "HR User", "Attendance": "HR User",
+    "Sales Order": "Sales User", "Quotation": "Sales User", "Customer": "Sales User",
+    "Purchase Order": "Purchase User", "Supplier": "Purchase User",
+    "Material Request": "Purchase User",
+    "Sales Invoice": "Accounts User", "Purchase Invoice": "Accounts User",
+    "Payment Entry": "Accounts User", "Journal Entry": "Accounts User",
+    "GL Entry": "Accounts User",
+    "Delivery Note": "Stock User", "Purchase Receipt": "Stock User",
+    "Stock Entry": "Stock User", "Bin": "Stock User", "Item": "Stock User",
+}
+
+
+def no_access(business_code, error=None, doctype: str | None = None) -> dict:
+    """A figure's data_status when the business's ERPNext refused the read: the record
+    type refused and how to give the platform's API user read access to it there.
+    `error` is the connector's RemotePermissionDenied (its .doctype and .status)."""
+    doctype = doctype or getattr(error, "doctype", None)
+    if getattr(error, "status", None) == 401:
+        text = ("The business's ERPNext refused the API key this platform reads with: it "
+                "may have been revoked or changed there.")
+        steps = ["On that ERPNext, open the platform's API user and generate a new API key "
+                 "and secret under API Access.",
+                 "Enter them under Settings → Businesses → Manage, then reload this screen."]
+        return {"state": "no_access", "message": text, "doctype": doctype,
+                "guide": guide(business_code, text, steps, "/app/user", "Open Users in ERPNext")}
+    what = doctype or "this record type"
+    role = READ_ROLES.get(doctype or "")
+    text = (f"The business's ERPNext does not let this platform read {what}, so this "
+            f"figure cannot be worked out.")
+    give = (f"Give that user read access to {what}: add the {role} role, which reads it, "
+            f"or add a Role Permission for {what} with Read ticked for one of its roles."
+            if role else
+            f"Give that user read access to {what}: add a role that reads it, or add a Role "
+            f"Permission for {what} with Read ticked for one of its roles.")
+    steps = ["On that ERPNext, open User and find the API user this platform reads with "
+             "(the one whose API key is entered under Settings → Businesses, or your own "
+             "if you linked your own key).",
+             give,
+             "Reload this screen: the figure is read again."]
+    return {"state": "no_access", "message": text, "doctype": doctype,
+            "guide": guide(business_code, text, steps, "/app/user", "Open Users in ERPNext")}
+
+
 # Matching payments to the invoices they pay (15 Nov 2026). Where they are not matched the
 # invoices overstate what is owed; this is the fix at source, in ERPNext's own tool.
 RECONCILE_STEPS = [

@@ -1976,6 +1976,115 @@ class RefusedIsNotUnreachable(TransactionTestCase):
             self.assertEqual(ConnectedBusiness.objects.get().status, expect, f"after HTTP {status}")
 
 
+class RefusingERPNext(FakeERPNext):
+    """An ERPNext whose API user may not read some record types (Gigmann's refuses Issue
+    and Issue Type): HTTP 403 with Frappe's PermissionError, or 401 for a revoked key."""
+
+    def __init__(self, refuse=(), status=403):
+        super().__init__()
+        self.refuse, self.status = set(refuse), status
+
+    def answer(self, m, p):
+        if p.get("doctype") in self.refuse:
+            return _R(self.status, {"exception": f"frappe.exceptions.PermissionError: No permission "
+                                                 f"for {p.get('doctype')}"})
+        return super().answer(m, p)
+
+
+class NoAccessIsNotFailed(TransactionTestCase):
+    """A figure the business's ERPNext refuses by permission is not "Failed": its state is
+    no_access, naming the record type refused, with a guide to giving the platform's API
+    user read access to it (Customer Service -> Equipment Down on Gigmann); a panel
+    refused so shows the same guide."""
+
+    databases = {"default", "aux"}
+
+    def _business(self):
+        from cryptography.fernet import Fernet
+        from django.conf import settings
+        settings.CONFIG.setdefault("encryption_key", Fernet.generate_key().decode())
+        from command_center import install
+        from insights.compat import run_as
+        fake = FakeERPNext()
+        with mock.patch("requests.get", fake("GET")), mock.patch("requests.post", fake("POST")), \
+                mock.patch("time.sleep", lambda s: None):
+            with run_as("Administrator"):
+                return install.register_business("Test Medical Ltd", "https://erp.test", "key",
+                                                 "s3cret")["code"]
+
+    def _with(self, fake, fn):
+        from insights.compat import run_as
+        with mock.patch("requests.get", fake("GET")), mock.patch("requests.post", fake("POST")), \
+                mock.patch("time.sleep", lambda s: None):
+            with run_as("Administrator"):
+                return fn()
+
+    def test_the_exception_names_the_record_type(self):
+        from command_center.connectors.base import RemotePermissionDenied
+        from command_center.connectors.registry import connector_for
+        code = self._business()
+
+        def read():
+            with self.assertRaises(RemotePermissionDenied) as caught:
+                connector_for(code).get_list("Issue Type", fields=["name"], limit=5)
+            return caught.exception
+        e = self._with(RefusingERPNext({"Issue Type"}), read)
+        self.assertEqual((e.doctype, e.status), ("Issue Type", 403))
+        e = self._with(RefusingERPNext({"Issue Type"}, status=401), read)
+        self.assertEqual(e.status, 401)
+        # a request that names no doctype: the site's own words name it
+        from command_center.connectors.remote import _refused_doctype
+        self.assertEqual(_refused_doctype(" (Insufficient Permission for <strong>Issue</strong>)"), "Issue")
+        self.assertIsNone(_refused_doctype(" (frappe.exceptions.PermissionError)"))
+
+    def test_live_figure(self):
+        from command_center.kpi import live
+        from insights.core.models import ConnectedBusiness
+        code = self._business()
+        out = self._with(RefusingERPNext({"Issue Type"}),
+                         lambda: live.compute(["cases_equipment_down"], code, side_by_side=False))
+        fig = out["cases_equipment_down"]
+        st = fig["data_status"]
+        self.assertEqual(st["state"], "no_access", st)
+        self.assertEqual(st["doctype"], "Issue Type")
+        self.assertIsNone(fig["value"])
+        self.assertEqual(fig["note"], "no access to Issue Type")
+        self.assertIn("read Issue Type", st["message"])
+        steps = " ".join(st["guide"]["steps"])
+        self.assertIn("Support Team", steps, "Issue Type is read with the Support Team role")
+        self.assertIn("read access to Issue Type", steps)
+        self.assertEqual(st["guide"]["href"], "https://erp.test/app/user")
+        self.assertNotIn("could not be read", json.dumps(fig))
+        self.assertFalse(live.complete(out), "asked again next time: access may be granted")
+        self.assertEqual(ConnectedBusiness.objects.get().status, "Active", "refused is not down")
+        # a revoked key: the key, not a record type, is what to fix
+        out = self._with(RefusingERPNext({"Issue Type"}, status=401),
+                         lambda: live.compute(["cases_equipment_down"], code, side_by_side=False))
+        st = out["cases_equipment_down"]["data_status"]
+        self.assertEqual(st["state"], "no_access")
+        self.assertIn("refused the API key", st["message"])
+        # a record type with no role on the list is still named, with Role Permission
+        from command_center.guides import no_access
+        from command_center.connectors.base import RemotePermissionDenied
+        st = no_access(code, RemotePermissionDenied("x", doctype="Contract", status=403))
+        self.assertIn("read access to Contract", " ".join(st["guide"]["steps"]))
+        self.assertIn("Role Permission for Contract", " ".join(st["guide"]["steps"]))
+
+    def test_panel(self):
+        from command_center.api import panels
+        from command_center.connectors.base import RemotePermissionDenied
+        code = self._business()
+
+        def refused(ctx):
+            raise RemotePermissionDenied("refused", doctype="Issue", status=403)
+        with mock.patch.dict(panels.SCREENS, {"cx_test": {"Open cases": refused}}):
+            out = self._with(RefusingERPNext(), lambda: panels.compute("cx_test", code))
+        p = out["panels"]["Open cases"]
+        self.assertEqual((p["kind"], p["no_access"], p["doctype"]), ("guide", True, "Issue"))
+        self.assertIn("Support Team", " ".join(p["guide"]["steps"]))
+        self.assertTrue(out["_failed"], "a refused panel is asked again next time")
+
+
 class KnownDownFailsFast(TransactionTestCase):
     """A business already marked Unreachable costs a screen no network wait: its live
     reads give up at once (the banner says why), while loaded-data panels still answer."""
@@ -3160,7 +3269,12 @@ class Branding(TransactionTestCase):
         login = Client().get("/command-center-login").content.decode()
         self.assertIn("<title>Sign in · Acme Insight</title>", login)
         self.assertIn("<b>Acme Insight</b>", login)
-        self.assertIn("Acme Insight · built by Acme Systems", login)
+        # the vendor's footer: the product and "Built by", then each contact item whole
+        self.assertIn("<span>Acme Insight</span><span>Built by Acme Systems — A. Person, Director</span>",
+                      login)
+        self.assertIn("<span>hello@acme.test</span><span>+233 20 000 0000</span>"
+                      "<span>www.acme.test</span>", login)
+        self.assertNotIn("Acme Insight · built by Acme Systems", login, "no longer one crowded line")
         self.assertNotIn("AI Business Intelligence", login)
         app = self.admin.get("/command-center").content.decode()
         self.assertIn("<title>Acme Insight</title>", app)
@@ -3211,6 +3325,51 @@ class Branding(TransactionTestCase):
         self.assertEqual(Client().get(url).status_code, 404, "the replaced logo is deleted")
         self._ok("remove_brand_logo", kind="logo_light")
         self.assertIsNone(self._boot(self.manager)["brand"]["logo_light_url"])
+
+    def test_sign_in_logo(self):
+        """The sign-in page's own logo: unset, the built-in mark -- never the screens' logo,
+        and the screens and the PDFs never take the sign-in page's."""
+        from command_center import branding
+
+        def login():
+            return Client().get("/command-center-login").content.decode()
+        page = login()
+        self.assertIn('<div class="auth-mark"><i></i></div>', page, "nothing set: the built-in mark")
+        self.assertNotIn("/branding/", page)
+        self.assertIsNone(self._ok("brand")["logo_signin_url"])
+        # a screens' logo is not the sign-in page's
+        light = self._ok("upload_brand_logo", kind="logo_light", data=_data_url(_png(6, 2)))["logo_light_url"]
+        page = login()
+        self.assertIn('<div class="auth-mark"><i></i></div>', page, "the light logo is not used")
+        self.assertNotIn(light, page)
+        # the Sign-In Logo: on the sign-in page only
+        sign = self._ok("upload_brand_logo", kind="logo_signin", data=_data_url(_png(8, 2)))["logo_signin_url"]
+        self.assertRegex(sign, r"^/branding/logo_signin-[0-9a-f]{16}\.png$")
+        self.assertEqual(Client().get(sign).status_code, 200)
+        page = login()
+        self.assertIn(f'<img class="auth-logo" src="{sign}" alt="">', page)
+        self.assertNotIn("auth-mark", page.split("<body", 1)[1].split("<script", 1)[0])
+        self.assertNotIn(light, page)
+        brand = self._boot(self.manager)["brand"]
+        self.assertEqual((brand["logo_light_url"], brand["logo_dark_url"]), (light, light),
+                         "the screens keep their own logo")
+        self.assertEqual(branding.branding()["report_logo"], light.rsplit("/", 1)[1],
+                         "a report carries the screens' logo, never the sign-in page's")
+        # only the Sign-In Logo set: the screens and the PDFs take nothing from it
+        self._ok("remove_brand_logo", kind="logo_light")
+        self.assertEqual(self._ok("brand")["report_uses"], "name")
+        brand = self._boot(self.manager)["brand"]
+        self.assertIsNone(brand["logo_light_url"], "the sidebar falls back to its built-in mark")
+        self.assertIsNone(branding.branding()["report_logo"])
+        self.assertTrue(branding.branding()["favicon_url"].endswith("/images/command-center.svg"))
+        self.assertIn(sign, login())
+        # removed: the built-in mark again, and its file is deleted
+        self._ok("remove_brand_logo", kind="logo_signin")
+        self.assertIn('<div class="auth-mark"><i></i></div>', login())
+        self.assertEqual(Client().get(sign).status_code, 404)
+        # administrator only, like every other logo
+        self.assertEqual(self._call(self.manager, "upload_brand_logo", kind="logo_signin",
+                                    data=_data_url(_png())).status_code, 403)
 
     def test_outputs_carry_the_brand(self):
         import io

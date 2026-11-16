@@ -466,4 +466,28 @@ table.dt th[aria-sort="ascending"]::after{border-bottom:5px solid currentColor;o
 .guide-drawer h3{margin:0 0 12px;font-size:var(--fs-lg)}
 /* ---- Drawer history: Back to the previous panel (App.jsx, Drawer.jsx) ---- */
 .drawer-back{position:sticky;top:0;z-index:2;margin:12px 0 0 16px;display:inline-flex;align-items:center;gap:6px}
+/* ---- The sign-in page's vendor footer (command-center-login.html) ---- */
+/* Under the card, quiet: the product and "Built by", then the contact items. Each item
+   is one unit (nowrap) and the items wrap only as whole units, centred. The dots sit in
+   the gap and take no room, and an item that starts a line has none (the page's script
+   marks it .ls), so no line begins or ends with a stray separator. */
+/* Content-sized rows, centred while they fit and from the top when they do not (a phone):
+   centring an overflowing page pushes its top out of reach. */
+body.cc-auth{height:auto;grid-template-rows:auto auto;align-content:safe center;gap:18px}
+.auth-by{width:min(960px,100%);text-align:center;font-size:var(--fs-2xs);color:var(--dim);line-height:1.6}
+.auth-by-l{display:flex;flex-wrap:wrap;justify-content:center;column-gap:18px;row-gap:2px;margin:0}
+.auth-by-l > span{position:relative;white-space:nowrap}
+.auth-by-l > span::before{content:"·";position:absolute;left:-12px;width:6px;text-align:center}
+.auth-by-l > span:first-child::before,.auth-by-l > span.ls::before{content:none}
+@media (max-width:480px){
+ .auth-by-c{flex-direction:column;align-items:center}
+ .auth-by-c > span::before{content:none}
+}
+/* ---- The signature card's arrow only where the card opens something (build.py) ---- */
+/* A tile with no action (Business Health's six questions, a figure not read) keeps the
+   tinted card but has no cut corner, no arrow and no lift: only .clickable opens. */
+:is(.kpi,.bk).sig:not(.clickable) > :is(.sig-cut,.sig-go){display:none}
+:is(.kpi,.bk).sig:not(.clickable){cursor:default}
+:is(.kpi,.bk).sig:not(.clickable):hover{box-shadow:none;transform:none}
+:is(.kpi,.bk).sig:not(.clickable) :is(.v,.delta,.bar){max-width:none}
 """

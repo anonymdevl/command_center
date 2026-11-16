@@ -73,7 +73,7 @@ def alert(sev, what, why, sowhat, fig, cur, srcdt, srcnm, owner, elapsed, drawer
     if drawer:
         handler = drawer if '(' in drawer else f'openDrawer({SQ}{drawer}{SQ})'
         od = f' onclick="{handler}"'
-    return f'<div class="alert {sev}"><div class="arow"><div>\n<div class="awhat">{what}</div><div class="awhy">{why}</div><div class="asw">→ {sowhat}</div></div>\n<div class="afig">{_afig(fig, cur)}</div></div>\n<div class="ameta"><span class="chip src"{od}>{srcdt} · <b>{srcnm}</b></span>\n<span class="chip">Owner <b>{owner}</b></span><span class="chip">Elapsed <b>{elapsed}</b></span></div>\n<div class="acts">{ab}</div></div>'
+    return f'<div class="alert {sev}"><div class="arow"><div>\n<div class="awhat">{what}</div><div class="awhy">{why}</div><div class="asw">→ {sowhat}</div></div>\n<div class="afig">{_afig(fig, cur)}</div></div>\n<div class="ameta"><span class="chip src"{od}>{srcdt} · <b>{srcnm}</b></span>\n<span class="chip">Owner <b>{owner}</b></span><span class="chip">Age <b>{elapsed}</b></span></div>\n<div class="acts">{ab}</div></div>'
 
 # ---------------- V: COMMAND ----------------
 # Home, in the approved mockup's layout (gigmann-redesign/home.html, 18 Oct 2026): three

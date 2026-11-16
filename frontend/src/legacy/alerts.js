@@ -96,7 +96,10 @@ function card(a, onOpen) {
     src.onclick = records;
     meta.append(src);
   }
-  meta.append(chip("Owner", a.owner_label), chip("Elapsed", a.elapsed));
+  // The age is the oldest item's ("oldest over 2 years"), worded so by the server, the
+  // same words as the bell.
+  meta.append(chip("Owner", a.owner_label));
+  if (a.elapsed) meta.append(chip("Age", a.elapsed));
   if (a.emailed) {
     const m = chip("Email", a.emailed.replace(/^Emailed to /, "sent to ").replace(/^Not emailed: /, "not sent: "));
     m.title = a.emailed;

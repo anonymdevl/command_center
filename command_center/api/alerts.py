@@ -22,8 +22,11 @@ import frappe
 from frappe.utils import getdate, now_datetime, today
 
 from command_center.alerts.engine import DOCTYPE, OPEN, elapsed, ensure_fresh
-from command_center.alerts.rules import SEVERITY_RANK
+from command_center.alerts.rules import RULES, SEVERITY_RANK
 from command_center.api.businesses import require_manager
+
+# The rules that know when their condition began (Rule.since): only their alerts have an age.
+AGED = {r.rule_id for r in RULES if r.since}
 
 FIELDS = ["name", "rule", "business_code", "severity", "status", "title", "why",
           "next_step", "figure", "figure_unit", "currency", "owner_label", "source_label",
@@ -53,7 +56,9 @@ def open_alerts(business_code: str | None = None):
         out.append({
             **{k: r.get(k) for k in FIELDS if k not in ("drill_filters",)},
             "drill_filters": filters,
-            "elapsed": elapsed(r.elapsed_from, r.measured_to),
+            # How old the oldest item behind it is ("oldest over 2 years"); blank for a
+            # rule that measures no start date (it would read as "new today").
+            "elapsed": elapsed(r.elapsed_from, r.measured_to) if r.rule in AGED else "",
             "first_raised": str(r.first_raised)[:16] if r.first_raised else None,
             "url": f"/app/command-center-alert/{r.name}",
             # The To-Do it became, in the business's own ERPNext (not this platform).

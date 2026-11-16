@@ -579,9 +579,17 @@ def evaluate(keys, business_code=None) -> dict:
 
 
 def complete(out) -> bool:
-    """Only an answer whose every figure was read is kept."""
-    return all((f.get("data_status") or {}).get("state") not in ("failed", "unreachable")
+    """Only an answer whose every figure was read is kept. A refused read is asked again
+    too, so access granted in ERPNext shows at the next look."""
+    return all((f.get("data_status") or {}).get("state") not in ("failed", "unreachable",
+                                                                 "no_access")
                for f in (out or {}).values())
+
+
+def _refused(error) -> bool:
+    """A read the business's ERPNext refused by permission (connectors' RemotePermissionDenied)."""
+    from command_center.connectors.base import RemotePermissionDenied
+    return isinstance(error, RemotePermissionDenied)
 
 
 def compute(keys, business_code=None, side_by_side: bool = True) -> dict:
@@ -623,6 +631,13 @@ def compute(keys, business_code=None, side_by_side: bool = True) -> dict:
             state = (got[3] if len(got) > 3 and got[3] else {"state": "live", "message": None})
         elif isinstance(got, NeedsSetup):
             value, note, state = None, got.status.get("message"), got.status
+        elif _refused(got):
+            # The business's ERPNext refused the read (HTTP 401/403): not a failure but an
+            # access to grant there, named with the record type refused (guides.no_access).
+            from command_center.guides import no_access
+            state = no_access(reader.code if reader else business_code, got)
+            value, note = None, f"no access to {state['doctype']}" if state.get("doctype") \
+                else "no access in ERPNext"
         else:
             from command_center.kpi.live_departments import is_down, unreachable_status
             if is_down(got):

@@ -30,17 +30,36 @@ export function guideBox(guide, { compact = false } = {}) {
   return box;
 }
 
-/** A card (.kpi) or tile (.bk) with nothing behind it yet. */
-export function guideCard(node, guide, openDrawer) {
+/** The states a figure carries a guide in, drawn alike: needs_setup (nothing recorded
+ *  in ERPNext yet) and no_access (ERPNext refused the platform's read of a record type:
+ *  the guide says which and how to give access). Neither is a failure. */
+export const GUIDE_STATES = new Set(["needs_setup", "no_access"]);
+
+/** A figure that is drawn as its guide. */
+export function hasGuide(figure) {
+  return GUIDE_STATES.has(figure?.data_status?.state) && !!figure.data_status.guide;
+}
+
+/** The pill, footnote and flag for a guide's state. */
+export function guideWords(state) {
+  return state === "no_access"
+    ? { pill: "no access", foot: "No access in ERPNext · how to give it", flag: "No access" }
+    : { pill: "set up", foot: "Not recorded yet · how to set it up", flag: "Set up" };
+}
+
+/** A card (.kpi) or tile (.bk) with nothing behind it yet, or that ERPNext would not let
+ *  the platform read (state no_access). */
+export function guideCard(node, guide, openDrawer, state = "needs_setup") {
   if (!node || !guide) return;
+  const words = guideWords(state);
   delete node.dataset.illustrative;
   node.dataset.live = "1";
   node.dataset.setup = "1";
   const val = node.querySelector(".val, .v");
   if (val) val.textContent = "—";
   const foot = node.querySelector(".delta, .foot, .s");
-  if (foot) foot.textContent = "Not recorded yet · how to set it up";
-  setPill(node, "set up");
+  if (foot) foot.textContent = words.foot;
+  setPill(node, words.pill);
   node.removeAttribute("onclick");
   node.classList.add("clickable");
   const open = () => openDrawer && openDrawer(drawerContent(node, guide));

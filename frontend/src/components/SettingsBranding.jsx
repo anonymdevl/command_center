@@ -17,7 +17,9 @@ const FIELDS = [
 const LOGOS = [
   ["logo_light", "Logo on light backgrounds", "Used in the light theme, and on PDFs when no Report Logo is set."],
   ["logo_dark", "Logo on dark backgrounds", "Used in the dark theme. Leave empty to use the other one."],
-  ["favicon", "Browser tab icon", "A small square image, at least 32 by 32 pixels."],
+  ["favicon", "Browser tab icon", "A small square image, at least 32 by 32 pixels.", "Built-in icon"],
+  ["logo_signin", "Sign-In Logo",
+    "Shown on the sign-in page only, on light and dark. Leave empty to keep the built-in mark.", "Built-in mark"],
 ];
 
 const REPORT_USES = {
@@ -100,14 +102,15 @@ function BrandLogos({ data, onSaved }) {
         <div>
           <b>Platform Logos</b>
           <span>
-            The screens' logos. PNG, JPEG or WebP, at most {data.max_kb} KB. SVG is not accepted, because it can carry scripts.
+            The screens' logos and the sign-in page's own. PNG, JPEG or WebP, at most {data.max_kb} KB. SVG is not
+            accepted, because it can carry scripts. Each is used only where its note says.
             PDFs have their own Report Logo, below.
           </span>
         </div>
       </div>
       <div className="st-logos">
-        {LOGOS.map(([kind, label, hint]) => (
-          <LogoSlot key={kind} label={label} hint={hint} url={data[`${kind}_url`]} maxKb={data.max_kb}
+        {LOGOS.map(([kind, label, hint, empty]) => (
+          <LogoSlot key={kind} label={label} hint={hint} url={data[`${kind}_url`]} maxKb={data.max_kb} empty={empty}
             dark={kind === "logo_dark"}
             onUpload={(dataUrl) => settingsApi.uploadBrandLogo(kind, dataUrl)}
             onRemove={() => settingsApi.removeBrandLogo(kind)}
@@ -190,7 +193,7 @@ export function ReportPreview({ run, label = "Preview" }) {
 
 /** One logo: what is set now, Choose File, Remove. Shared with Businesses → Manage. */
 export function LogoSlot({ label, hint, url, maxKb = 1024, dark = false, wide = false, types = IMAGE_TYPES,
-  onUpload, onRemove, onSaved }) {
+  empty = "None", onUpload, onRemove, onSaved }) {
   const [st, setSt] = useState({});
   const choose = async (e) => {
     const file = e.target.files?.[0];
@@ -209,7 +212,7 @@ export function LogoSlot({ label, hint, url, maxKb = 1024, dark = false, wide = 
       <b>{label}</b>
       <span className="st-sub">{hint}</span>
       <div className={`st-logo-box${dark ? " dark" : ""}${wide ? " wide" : ""}`}>
-        {url ? <img src={url} alt={label} /> : <span className="st-dim">None</span>}
+        {url ? <img src={url} alt={label} /> : <span className="st-dim">{empty || "None"}</span>}
       </div>
       <div className="st-acts" style={{ justifyContent: "flex-start" }}>
         <label className="btn st-file">

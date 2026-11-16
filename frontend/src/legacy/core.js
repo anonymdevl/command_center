@@ -14,6 +14,7 @@
  * Built as DOM, never HTML from the server.
  */
 
+import { GUIDE_STATES, guideWords } from "./guide.js";
 import { CARD_KPIS, TILE_KPIS } from "./hydrate.js";
 import { HEALTH_QUESTIONS } from "./home.js";
 import { WORK_TILES } from "./work.js";
@@ -81,14 +82,14 @@ function finish(node, view, kind, figs, done, reachDown) {
     }
     return;
   }
-  if (f && st === "needs_setup" && node.dataset.live !== "1") {
+  if (f && GUIDE_STATES.has(st) && node.dataset.live !== "1") {
     // A tile that opens another screen keeps doing so; it says what is missing, and the
     // screen it opens carries the guide.
     const v = node.querySelector(kind === "card" ? ".val" : ".n");
     if (v) v.textContent = "—";
     const foot = node.querySelector(kind === "card" ? ".delta" : ".v");
-    if (foot) foot.textContent = f.note || "not recorded yet";
-    flag(node, "set up", "f-dim");
+    if (foot) foot.textContent = f.note || (st === "no_access" ? "no access in ERPNext" : "not recorded yet");
+    flag(node, guideWords(st).pill, "f-dim");
     delete node.dataset.loading;
     node.dataset.live = "1";
     return;
@@ -107,7 +108,11 @@ function finish(node, view, kind, figs, done, reachDown) {
   } else {
     flag(node, reachDown ? "can't reach" : "not read", "f-dim");
   }
-  if (!/(^|[^\w.])go\(/.test(node.getAttribute("onclick") || "")) node.removeAttribute("onclick");
+  if (!/(^|[^\w.])go\(/.test(node.getAttribute("onclick") || "")) {
+    // Nothing to open: not drawn as something that opens (no arrow, shell.py).
+    node.removeAttribute("onclick");
+    node.classList.remove("clickable");
+  }
 }
 
 function flag(node, text, tone) {
