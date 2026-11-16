@@ -152,7 +152,7 @@ function stoppedHere(question, steps) {
     question,
     answer: `**${STOPPED_NOTE}**\n\n`
       + (done.length
-        ? "It was still waiting on the AI model, so no figures had come back yet. "
+        ? "It was still working out its answer, so no figures had come back yet. "
           + "The lookups it had started are listed under what it checked."
         : "It had not looked anything up yet."),
     checked: done.length ? done : ["nothing -- it was stopped before the first lookup"],

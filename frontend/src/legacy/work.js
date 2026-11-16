@@ -28,8 +28,8 @@ export const WORK_TILES = {
   myday: {
     "Awaiting you": { key: "work_awaiting" },
     "Due today": { key: "work_due_today" },
-    "Evidence to check": { key: "work_to_check" },
-    "Promises unkept": { key: "work_unkept" },
+    "Delegated Tasks Done": { key: "work_to_check" },
+    "Overdue Delegated Tasks": { key: "work_unkept" },
   },
   delegation: {
     "Still open": { key: "work_open" },

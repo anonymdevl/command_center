@@ -12,7 +12,6 @@ import Records from "./Records.jsx";
 import { boot } from "../api/boot.js";
 
 // The model answering on this site (www/command_center.py _ai), named while it works.
-const AI = { name: boot.ai?.name || "Gemini", provider: boot.ai?.provider || "gemini" };
 
 /**
  * The question bar, answering in place.
@@ -305,9 +304,9 @@ export default function AskBar({ scope, openDrawer }) {
                 <span>
                   {stopping ? "Stopping — keeping what it has found so far"
                     : steps.length ? "Working through it"
-                    : elapsed >= 12 ? `Waiting for ${AI.name}, the AI model, to reply` : "Reading the question"}
+                    : elapsed >= 12 ? "Thinking it through — gathering the figures it needs" : "Reading the question"}
                   {elapsed >= 3 ? ` · ${elapsed}s` : ""}
-                  {elapsed >= 40 ? (AI.provider === "claude" ? " — big questions take longer; a fuller look carries on if needed" : " — Google is replying slowly; a model that stalls is swapped for another") : ""}
+                  {elapsed >= 40 ? " — big questions take a little longer; a fuller look carries on if needed" : ""}
                 </span>
                 <StepList steps={steps} />
               </div>

@@ -227,7 +227,7 @@ function Decision({ req, scope, note, setNote, close }) {
     ? `This applies “${req.action}” to ${req.doctype} ${req.name} in ERPNext, as you. ERPNext checks that your role may take this step, and records it in the document's history.`
     : back
       ? "The To-Do reopens on their list, with your note as a comment they will see."
-      : "The To-Do is tagged Accepted and leaves your list of evidence to check.";
+      : "The To-Do is tagged Accepted and leaves your Delegated Tasks Done.";
 
   const submit = async (e) => {
     e.preventDefault();

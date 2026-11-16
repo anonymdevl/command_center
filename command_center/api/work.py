@@ -12,7 +12,7 @@ holds both halves.
                      button on every alert leaves, by ERPNext's own assignment on the
                      document it concerns, or as a To-Do of its own (api/actions).
                      Open ones are the work in flight; ones the assignee has closed in
-                     the last fortnight are the evidence to check.
+                     the last fortnight are the delegated tasks done, awaiting review.
 
 Reading is all this module does, apart from review(): the manager's verdict on work
 they handed out, which tags the To-Do Accepted or reopens it with their reason. The
@@ -121,11 +121,12 @@ def _summary(src, business_code):
         "work_due_today": _fig("work_due_today", "Due today", len(due_today),
                                "on your own list, today or earlier",
                                f"{site}/app/todo?status=Open&allocated_to={user}"),
-        "work_to_check": _fig("work_to_check", "Evidence to check", len(check),
-                              f"marked done in the last {CHECK_DAYS} days",
+        "work_to_check": _fig("work_to_check", "Delegated Tasks Done", len(check),
+                              f"awaiting your review · done in the last {CHECK_DAYS} days",
                               f"{site}/app/todo?status=Closed&assigned_by={user}"),
-        "work_unkept": _fig("work_unkept", "Promises unkept", len(late),
-                            f"oldest is {_age(oldest)} late" if late else "none past its date",
+        "work_unkept": _fig("work_unkept", "Overdue Delegated Tasks", len(late),
+                            f"assigned by you · oldest {_age(oldest)} late" if late
+                            else "assigned by you · none past its date",
                             f"{site}/app/todo?status=Open&assigned_by={user}"),
         "work_open": _fig("work_open", "Still open", len(open_), "work you handed out",
                           f"{site}/app/todo?status=Open&assigned_by={user}"),
@@ -151,7 +152,7 @@ def _summary(src, business_code):
 def review(todo: str, verdict: str, note: str = "", business_code: str | None = None):
     """The manager's verdict on work they handed out and the assignee closed.
 
-    accept   tags the To-Do Accepted, so it leaves "Evidence to check", and records a
+    accept   tags the To-Do Accepted, so it leaves "Delegated Tasks Done", and records a
              comment saying so.
     return   reopens it, with the manager's reason as a comment the assignee sees.
 

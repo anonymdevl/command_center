@@ -405,8 +405,8 @@ const HANDLERS = {
       figures: {
         work_awaiting: fig("work_awaiting", "Awaiting you", 2, "GHS 59,200 involved"),
         work_due_today: fig("work_due_today", "Due today", 0, "on your own list, today or earlier"),
-        work_to_check: fig("work_to_check", "Evidence to check", 1, "marked done in the last 14 days"),
-        work_unkept: fig("work_unkept", "Promises unkept", 1, "oldest is 22 days late"),
+        work_to_check: fig("work_to_check", "Delegated Tasks Done", 1, "awaiting your review · done in the last 14 days"),
+        work_unkept: fig("work_unkept", "Overdue Delegated Tasks", 1, "assigned by you · oldest 22 days late"),
         work_open: fig("work_open", "Still open", 2, "work you handed out"),
         work_late: fig("work_late", "Late", 1, "past the date you set"),
         work_high: fig("work_high", "High risk", 1, "marked high priority"),
