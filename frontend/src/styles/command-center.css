@@ -2310,7 +2310,7 @@ body.cc-signin .auth-by{position:relative;z-index:1;justify-self:center;width:mi
    TABLES, EVERY SCREEN (16 Nov 2026): headers never wrap ("On Open Invoices / GHS" was
    two lines on Sales and Payments), nor do figures and dates; a table wider than its
    panel scrolls sideways in its own box (legacy/tables.js puts each in a .dt-x), never
-   the page. Text cells keep wrapping, so a long name or reason stays readable -- unless
+   the page. Text cells keep wrapping at a readable measure (TABLE TEXT, below) -- unless
    the cell carries its full text in a title, when it may end in an ellipsis.
    ====================================================================== */
 table.dt th,[data-theme="light"] table.dt th{white-space:nowrap}
@@ -2624,4 +2624,152 @@ table.dt.fs-t :is(.fs-bar-h,.fs-bar-c){width:20%;min-width:96px;padding-left:var
  .ov .ov-as-row > .khead > .flag{order:5}
  .ov .ov-as-row > .flag[data-prov]{order:6}
  .ov .ov-as-row > .ov-note{order:7;flex:1 1 12ch;min-width:0}
+}
+
+/* ======================================================================
+   TABLE TEXT, EVERY SCREEN (16 Nov 2026): a text cell never collapses to a word a line.
+   Headers, dates and figures do not wrap (TABLES, above), so beside ten figure columns
+   Finances' "Why" column was squeezed to one word wide and one row filled the page.
+   legacy/tables.js gives each text cell a band by the length of its text, and its plain
+   words one block (.dt-tx) that holds the width: a floor, so it wraps at a readable
+   measure, and a ceiling, so it does not run on; an explanation stops at three lines,
+   its whole text in the title (and where the row opens, there). A table then wider
+   than its panel scrolls sideways in its own box (.dt-x, .dt-scroll), never the page.
+   ====================================================================== */
+table.dt td:is(.dt-w1,.dt-w2,.dt-w3){white-space:normal}
+table.dt td.dt-w1{min-width:12ch}
+table.dt td.dt-w2{min-width:18ch}
+table.dt td.dt-w3{min-width:26ch}
+table.dt td > .dt-tx{display:block;overflow-wrap:break-word}
+table.dt td.dt-w1 > .dt-tx{min-width:12ch;max-width:28ch}
+table.dt td.dt-w2 > .dt-tx{min-width:18ch;max-width:34ch}
+table.dt td.dt-w3 > .dt-tx{min-width:26ch;max-width:44ch;display:-webkit-box;-webkit-box-orient:vertical;
+ -webkit-line-clamp:3;line-clamp:3;overflow:hidden}
+@container panel (max-width:560px){
+ table.dt td.dt-w3{min-width:24ch}
+ table.dt td.dt-w3 > .dt-tx{min-width:24ch;max-width:34ch}
+}
+
+/* ======================================================================
+   EXECUTIVE SUMMARY -- the memo (16 Nov 2026, the approved mockup-exec-summary.html).
+   A board memo with vital signs, above the screen as it was: the heading is its title,
+   a heavy rule under it, the week and who it is for, the five vital signs in one ruled
+   band, the short version set large, then decisions and risks beside what is going
+   well and what is waiting on you. Type, figures and hairlines; no tinted boxes, no
+   cards inside the sheet. legacy/summary.js draws it; tokens only.
+   ====================================================================== */
+.xm{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:26px 30px 18px;
+ margin:0 0 var(--sp-8)}
+.xm > .topbar{margin:0;padding-bottom:var(--sp-3);border-bottom:1.5px solid var(--ink);align-items:flex-end;
+ flex-wrap:wrap;gap:var(--sp-2) var(--sp-6)}
+.xm > .topbar h3{font-size:var(--fs-3xl);font-weight:var(--fw-semibold);letter-spacing:-.026em;line-height:1.15}
+.xm > .topbar .when{font-size:var(--fs-xs);margin-top:var(--sp-1);color:var(--dim)}
+.xm-date{flex:0 1 auto;font-size:var(--fs-xs);color:var(--mut);text-align:right;line-height:1.45;
+ font-variant-numeric:tabular-nums;max-width:64ch}
+.xm-date:empty,.xm-for:empty{display:none}
+.xm-for{margin-top:var(--sp-3);font-size:var(--fs-sm);color:var(--ink2);line-height:1.5}
+
+/* ---- the vital signs: one ruled band, hairlines between ---- */
+.xm-vitals{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-top:var(--sp-5);
+ border-top:1px solid var(--ink2);border-bottom:1px solid var(--line2)}
+.xm-v{appearance:none;background:none;border:0;border-left:1px solid var(--line);border-radius:0;margin:0;
+ font:inherit;color:inherit;text-align:left;display:flex;flex-direction:column;gap:var(--sp-1);min-width:0;
+ padding:var(--sp-4) var(--sp-3) var(--sp-4) var(--sp-4);cursor:pointer}
+.xm-v:nth-child(5n+1){border-left:0;padding-left:0}
+.xm-v:disabled{cursor:default}
+.xm-v:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:var(--r-xs)}
+.xm-vl{font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--mut);line-height:1.35;transition:color .15s}
+.xm-v:not(:disabled):hover .xm-vl{color:var(--accent-ink)}
+.xm-vn{font-size:var(--fs-2xl);font-weight:var(--fw-semibold);letter-spacing:-.025em;line-height:1.15;color:var(--ink);
+ font-variant-numeric:tabular-nums;white-space:nowrap}
+.xm-vn .xm-cx{font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--mut);letter-spacing:0;margin-right:5px;
+ vertical-align:.3em}
+.xm-vn .xm-mag,.xm-vn small{font-size:.62em;font-weight:var(--fw-semibold);color:var(--mut);margin-left:1px;letter-spacing:0}
+.xm-vn.none{color:var(--dim)}
+.xm-vd{font-size:var(--fs-2xs);font-weight:var(--fw-semibold);color:var(--mut);line-height:1.4;
+ font-variant-numeric:tabular-nums}
+.xm-vd.good{color:var(--ok)}
+.xm-vd.bad{color:var(--crit)}
+.xm-vd.wait{font-weight:var(--fw-medium);color:var(--dim)}
+
+/* ---- the sections ---- */
+.xm-h{margin:var(--sp-6) 0 var(--sp-3);padding-bottom:6px;border-bottom:1px solid var(--line2);font-size:var(--fs-3xs);
+ font-weight:var(--fw-bold);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.xm-short{margin:0;max-width:74ch;font-size:var(--fs-lg);font-weight:var(--fw-medium);line-height:1.62;
+ letter-spacing:-.008em;color:var(--ink);text-wrap:pretty}
+.xm-by{margin:var(--sp-2) 0 0;font-size:var(--fs-2xs);line-height:1.5;color:var(--dim)}
+.xm-cols{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);column-gap:var(--sp-10)}
+.xm-cols > *{min-width:0}
+/* numbered by a counter in a column of its own, so the number sits on the first line */
+.xm-ol{list-style:none;margin:0;padding:0;counter-reset:xm;font-size:var(--fs-sm);line-height:1.5;color:var(--ink)}
+.xm-ol li{counter-increment:xm;display:grid;grid-template-columns:22px minmax(0,1fr);padding:5px 0}
+.xm-ol li::before{content:counter(xm) ".";color:var(--dim);font-weight:var(--fw-semibold);
+ font-variant-numeric:tabular-nums}
+.xm-item{appearance:none;background:none;border:0;padding:0;margin:0;font:inherit;color:var(--ink);
+ display:inline;
+ font-weight:var(--fw-medium);text-align:left;cursor:pointer;text-decoration:underline;
+ text-decoration-color:transparent;text-decoration-thickness:1px;text-underline-offset:.2em;
+ transition:text-decoration-color .15s}
+.xm-item:hover,.xm-item:focus-visible{text-decoration-color:var(--line2);outline:0}
+.xm-k{margin-left:var(--sp-2);font-size:var(--fs-2xs);color:var(--mut);white-space:nowrap}
+.xm-k::before{content:"· "}
+.xm-sev{margin-left:var(--sp-2);vertical-align:1px}
+.xm-well{list-style:none;margin:0;padding:0;font-size:var(--fs-sm);line-height:1.5;color:var(--ink2)}
+.xm-well li{display:flex;gap:10px;padding:5px 0}
+.xm-well b{color:var(--ink);font-weight:var(--fw-semibold)}
+.xm-well li.xm-none{display:block}
+/* the tick of a ruled report, drawn with borders so it follows the theme */
+.xm-tick{flex:none;position:relative;width:15px;height:15px;margin-top:2px;border-radius:50%;border:1.5px solid var(--ok)}
+.xm-tick::after{content:"";position:absolute;left:4px;top:1.5px;width:4px;height:7px;border:solid var(--ok);
+ border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+.xm-none{margin:0;font-size:var(--fs-sm);line-height:1.5;color:var(--mut)}
+.xm-counts{list-style:none;margin:0;padding:0}
+.xm-count{appearance:none;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;margin:0;
+ font:inherit;color:inherit;width:100%;display:grid;grid-template-columns:44px minmax(0,1fr);align-items:baseline;
+ column-gap:var(--sp-2);padding:6px 0;text-align:left;cursor:pointer}
+.xm-counts li:last-child .xm-count{border-bottom:0}
+.xm-count b{font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em;color:var(--ink);
+ font-variant-numeric:tabular-nums;line-height:1.2}
+.xm-count span{font-size:var(--fs-sm);color:var(--ink2);transition:color .15s}
+.xm-count.zero b{color:var(--dim)}
+.xm-count:hover span,.xm-count:focus-visible span{color:var(--accent-ink)}
+.xm-count:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-xs)}
+.xm-link{appearance:none;background:none;border:0;padding:0;margin:var(--sp-2) 0 0;font:inherit;font-size:var(--fs-xs);
+ font-weight:var(--fw-semibold);color:var(--accent-ink);cursor:pointer}
+.xm-below{margin-top:var(--sp-6);padding-top:var(--sp-2);border-top:1px solid var(--line);font-size:var(--fs-2xs);
+ color:var(--dim)}
+.xm-below::after{content:" ↓"}
+/* the card a decision or a risk scrolls to, marked for a moment */
+.alert.xm-reached{box-shadow:0 0 0 2px var(--accent);transition:box-shadow .3s}
+
+/* ---- narrower: the panel, not the window ---- */
+@container panel (max-width:1080px){
+ .xm-vn{font-size:var(--fs-xl)}
+}
+@container panel (max-width:860px){
+ .xm-vitals{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .xm-v,.xm-v:nth-child(5n+1){border-left:1px solid var(--line);padding-left:var(--sp-4)}
+ .xm-v:nth-child(3n+1){border-left:0;padding-left:0}
+ .xm-v:nth-child(n+4){border-top:1px solid var(--line)}
+ .xm-cols{grid-template-columns:minmax(0,1fr)}
+}
+@container panel (max-width:560px){
+ /* a phone: one vital sign to a line, the label left and the figure right */
+ .xm{padding:20px 16px 14px;border-radius:var(--r-sm)}
+ .xm > .topbar h3{font-size:var(--fs-2xl)}
+ .xm-date{text-align:left}
+ .xm-vitals{grid-template-columns:minmax(0,1fr)}
+ .xm-v,.xm-v:nth-child(5n+1),.xm-v:nth-child(3n+1){display:grid;grid-template-columns:minmax(0,1fr) auto;
+  column-gap:var(--sp-3);align-items:baseline;border-left:0;padding:var(--sp-3) 0}
+ .xm-v:nth-child(n+2){border-top:1px solid var(--line)}
+ .xm-vl{grid-column:1;grid-row:1}
+ .xm-vn{grid-column:2;grid-row:1 / span 2;align-self:center;text-align:right}
+ .xm-vd{grid-column:1;grid-row:2}
+ .xm-short{font-size:var(--fs-md)}
+}
+
+/* ---- paper: the memo prints first, whole, on the light page ---- */
+@media print{
+ .xm{border:0;border-radius:0;padding:0;margin-bottom:var(--sp-6);break-inside:avoid}
+ .xm-below{display:none}
 }
