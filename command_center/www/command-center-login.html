@@ -14,31 +14,43 @@ d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
 </script>
 {% if assets.css %}<link rel="stylesheet" href="{{ assets.css }}">{% endif %}
 </head>
-<body class="cc-auth">
-<main class="auth">
-  <section class="auth-brand" aria-hidden="true">
+<body class="cc-auth cc-signin">
+{# The Signal Line (16 Nov 2026): the ground is paper (light) or ink (dark) with a faint
+   ruling; one abstract line runs across the page behind the card, drawn once on load, and
+   a faint baseline sits under it. Decoration only: no axes, no values, no data. #}
+<svg class="sg-paper" aria-hidden="true" focusable="false">
+  <defs><pattern id="sg-ruled" width="8" height="32" patternUnits="userSpaceOnUse">
+    <line x1="0" y1="31.5" x2="8" y2="31.5"/></pattern></defs>
+  <rect width="100%" height="100%" fill="url(#sg-ruled)"/>
+</svg>
+
+<header class="sg-top">
+  <div class="sg-brand">
     {# The Sign-In Logo (Settings -> Branding), else the platform's built-in mark. #}
     {% if brand.logo_signin_url %}
-    <div><img class="auth-logo" src="{{ brand.logo_signin_url }}" alt=""></div>
+    <img class="auth-logo" src="{{ brand.logo_signin_url }}" alt="">
     {% else %}<div class="auth-mark"><i></i></div>{% endif %}
-    <div>
+    <div class="sg-name">
       <b>{{ brand.product }}</b>
       {% if brand.tagline %}<span class="auth-tag">{{ brand.tagline }}</span>{% endif %}
-      <p>The whole business in one place, for the management team.</p>
     </div>
-    <ul>
-      <li>Sales, money owed, stock, projects and people, read live from ERPNext</li>
-      <li>Ask anything, in your own words</li>
-      <li>The AI only reads &mdash; it never creates, changes or deletes a record</li>
-    </ul>
-  </section>
+  </div>
+  <p class="sg-date" id="sgdate"></p>
+</header>
 
-  <section class="auth-card">
-    <h1>Sign in</h1>
+<main class="sg-stage">
+  <svg class="sg-line" viewBox="0 0 1200 600" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+    <polyline class="sg-sig" points="0,468 56,461 104,474 160,446 216,455 266,424 322,433 376,438 434,402
+      490,411 546,381 608,391 664,358 720,367 776,371 834,332 888,341 948,306 1004,315 1066,276
+      1122,285 1200,248"/>
+  </svg>
+
+  <section class="sg-card">
+    <h1>Sign In</h1>
     <p class="auth-sub">Use your ERPNext account.</p>
 
     <form id="auth" novalidate>
-      <label for="usr">Email or username</label>
+      <label for="usr">Email or Username</label>
       <input id="usr" name="usr" type="text" autocomplete="username" autocapitalize="off"
              spellcheck="false" required autofocus>
 
@@ -50,7 +62,7 @@ d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
 
       <div id="msg" class="auth-msg" role="alert" aria-live="polite"></div>
 
-      <button type="submit" id="go" class="auth-go">Sign in</button>
+      <button type="submit" id="go" class="auth-go">Sign In</button>
     </form>
 
     <div class="auth-foot">
@@ -59,6 +71,16 @@ d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
     </div>
   </section>
 </main>
+
+{# Under the baseline: what the product is, in the page's smallest type. #}
+<section class="sg-notes" aria-label="About {{ brand.product }}">
+  <p class="sg-lede">The whole business in one place, for the management team.</p>
+  <ul>
+    <li>Sales, money owed, stock, projects and people, read live from ERPNext</li>
+    <li>Ask anything, in your own words</li>
+    <li>The AI only reads &mdash; it never creates, changes or deletes a record</li>
+  </ul>
+</section>
 
 {# Who built it, quietly, under the card: the product and "Built by", then the contact
    items. Each item is one unit that never breaks inside itself; they wrap as whole items. #}
@@ -87,6 +109,14 @@ window.csrf_token = {{ csrf_token | safe }};
   window.addEventListener("resize", mark);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(mark);
 })();
+/* The dateline, top right: today's date, as a briefing carries it. */
+(function () {
+  var el = document.getElementById("sgdate");
+  try {
+    el.textContent = new Date().toLocaleDateString("en-GB",
+      { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  } catch (e) { /* no date is better than a wrong one */ }
+})();
 (function () {
   var form = document.getElementById("auth"), msg = document.getElementById("msg"),
       go = document.getElementById("go"), pwd = document.getElementById("pwd"),
@@ -109,7 +139,7 @@ window.csrf_token = {{ csrf_token | safe }};
     if (!usr || !pw) { say("Enter your email or username and your password."); return; }
     say("");
     go.disabled = true;
-    go.textContent = "Signing in…";
+    go.textContent = "Signing In…";
     fetch("/api/method/login", {
       method: "POST",
       credentials: "same-origin",
@@ -132,12 +162,12 @@ window.csrf_token = {{ csrf_token | safe }};
            "Could not sign in. Try again in a moment.");
       say(text);
       go.disabled = false;
-      go.textContent = "Sign in";
+      go.textContent = "Sign In";
       pwd.select();
     }).catch(function () {
       say("The server could not be reached. Check your connection and try again.");
       go.disabled = false;
-      go.textContent = "Sign in";
+      go.textContent = "Sign In";
     });
   };
 })();
