@@ -954,8 +954,6 @@ div.work-table table.dt{min-width:560px}
  .rec-spark{width:110px}}
 
 /* ---- Business Health: the data behind the figures (legacy/loads.js) ---- */
-.hh-head>*{min-width:0}
-@container panel (max-width:560px){.hh-head{grid-template-columns:minmax(0,1fr)!important}}
 .panel.loads{margin-top:16px}
 .loads-h{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:10px}
 .loads-h h4{font-size:var(--fs-lg);font-weight:var(--fw-semibold);margin:0}
@@ -2066,4 +2064,559 @@ table.dt.dw-t tfoot td{position:sticky;bottom:0;z-index:1;padding:10px 12px;back
  .dw-bar-v small{display:block;margin-left:0}
  .dw-clip{max-width:180px}
  .dw-search{width:100%}
+}
+/* ======================================================================
+   The sign-in page: "The Signal Line" (command-center-login.html), 16 Nov 2026, from
+   the approved option C. A paper ground (light) or an ink one (dark) with a faint
+   ruling; one quiet line drawn across the page behind a compact, solid card; a faint
+   baseline under it with the three points beneath. Scoped to body.cc-signin, so the
+   access pages (.auth.single) keep their own look. Tokens only: the page's few colours
+   are mixed from the palette, in both themes.
+   ====================================================================== */
+body.cc-signin{
+ --sg-ground:color-mix(in srgb,var(--t3) 38%,var(--bg));
+ --sg-rule:color-mix(in srgb,var(--line) 50%,transparent);
+ --sg-signal:color-mix(in srgb,var(--ink2) 40%,transparent);
+ --sg-base:var(--line2);
+ --sg-card:var(--raised);
+ --sg-card-line:var(--line2);
+ --sg-field:var(--surface);
+}
+[data-theme="light"] body.cc-signin{
+ --sg-ground:color-mix(in srgb,var(--t2) 34%,var(--surface));
+ --sg-rule:color-mix(in srgb,var(--t2) 62%,var(--surface));
+ --sg-signal:color-mix(in srgb,var(--ink2) 48%,transparent);
+ --sg-base:color-mix(in srgb,var(--t2) 40%,var(--line2));
+ --sg-card:var(--surface);
+ --sg-card-line:color-mix(in srgb,var(--t2) 45%,var(--line2));
+ --sg-field:var(--surface);
+}
+body.cc-auth.cc-signin{position:relative;display:grid;grid-template-columns:minmax(0,1fr);
+ grid-template-rows:auto minmax(0,1fr) auto auto;place-items:stretch;align-content:stretch;gap:0;padding:0;
+ height:auto;min-height:100vh;min-height:100dvh;overflow-x:hidden;background:var(--sg-ground)}
+.sg-paper{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.sg-paper line{stroke:var(--sg-rule);stroke-width:1}
+/* ---- top left: the logo, the product's name and tagline; the dateline right ---- */
+.sg-top{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;
+ gap:var(--sp-4);padding:var(--sp-8) var(--sp-10) 0}
+.sg-brand{display:flex;align-items:center;gap:14px;min-width:0}
+.sg-brand .auth-mark{flex:none}
+.sg-brand .auth-logo{height:40px;max-width:200px}
+.sg-name{min-width:0}
+.sg-name b{display:block;font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.015em;
+ line-height:1.25;color:var(--ink)}
+.sg-name .auth-tag{font-size:var(--fs-xs);line-height:1.4;margin-top:2px}
+.sg-date{margin:0;font-size:var(--fs-xs);color:var(--mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+/* ---- the stage: the line runs across it, the card sits on the line ---- */
+.sg-stage{position:relative;z-index:1;display:grid;place-items:center;padding:var(--sp-10) var(--sp-4);min-height:0}
+.sg-line{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;overflow:visible}
+.sg-sig{fill:none;stroke:var(--sg-signal);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round;
+ vector-effect:non-scaling-stroke}
+.sg-card{position:relative;z-index:1;width:min(392px,100%);padding:36px 34px 26px;background:var(--sg-card);
+ border:1px solid var(--sg-card-line);border-radius:var(--r-sm);box-shadow:var(--shadow)}
+/* A short accent rule at the card's head, the way a page marks its section. */
+.sg-card::before{content:"";position:absolute;left:34px;top:-1px;width:28px;height:2px;background:var(--accent)}
+.sg-card h1{margin:0;font-size:var(--fs-2xl);font-weight:var(--fw-semibold);letter-spacing:-.025em;line-height:1.2;
+ color:var(--ink)}
+.sg-card .auth-sub{margin-top:6px;font-size:var(--fs-sm)}
+.sg-card form{display:flex;flex-direction:column;margin-top:var(--sp-6)}
+.sg-card label{margin:0 0 6px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--ink2)}
+.sg-card label:not(:first-child){margin-top:var(--sp-4)}
+.sg-card input{width:100%;height:44px;padding:0 14px;border:1px solid var(--line2);border-radius:var(--r-xs);
+ background:var(--sg-field);color:var(--ink);font:var(--fw-regular) var(--fs-md) var(--sans);
+ transition:border-color .15s,box-shadow .15s}
+.sg-card input:hover{border-color:color-mix(in srgb,var(--line2) 55%,var(--mut))}
+.sg-card input:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg2)}
+/* The browser's own autofill tint would paint the field another colour. */
+.sg-card input:-webkit-autofill{-webkit-text-fill-color:var(--ink);caret-color:var(--ink);
+ box-shadow:0 0 0 40px var(--sg-field) inset}
+.sg-card input:-webkit-autofill:focus{box-shadow:0 0 0 40px var(--sg-field) inset,0 0 0 3px var(--accent-bg2)}
+.sg-card .auth-pw input{padding-right:66px}
+.sg-card .auth-pw button{top:5px;right:5px;height:34px;padding:0 10px;background:transparent;color:var(--mut);
+ border-radius:var(--r-xs);transition:color .15s,background .15s}
+.sg-card .auth-pw button:hover{color:var(--ink);background:var(--hover)}
+.sg-card .auth-msg{margin-top:var(--sp-4);border:1px solid var(--crit-line);line-height:1.5}
+.sg-card .auth-go{width:100%;height:46px;margin-top:22px;padding:0 var(--sp-6);border-radius:var(--r-xs);
+ background:var(--ink);color:var(--surface);transition:background .15s,transform .1s}
+.sg-card .auth-go:hover{filter:none;background:color-mix(in srgb,var(--ink) 84%,var(--accent))}
+.sg-card .auth-go:active{transform:translateY(1px)}
+.sg-card .auth-go:disabled{background:var(--ink);opacity:.6;transform:none}
+.sg-card .auth-foot{gap:4px;margin-top:22px;padding-top:var(--sp-4);border-top:1px solid var(--line);line-height:1.5}
+.sg-card .auth-foot a{justify-self:start;align-self:flex-start}
+.sg-card .auth-foot a:hover{text-decoration:underline;text-underline-offset:3px}
+/* ---- the baseline, and the three points under it ---- */
+.sg-notes{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,240px) minmax(0,820px);
+ gap:var(--sp-10);align-items:baseline;margin:0;padding:18px var(--sp-10) 0}
+.sg-notes::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:var(--sg-base);
+ transform-origin:left center}
+.sg-lede{margin:0;max-width:260px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);line-height:1.55;color:var(--ink2)}
+.sg-notes ul{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-8);margin:0;padding:0;list-style:none}
+.sg-notes li{position:relative;padding-left:14px;font-size:var(--fs-xs);line-height:1.55;color:var(--mut)}
+.sg-notes li::before{content:"";position:absolute;left:0;top:.6em;width:5px;height:5px;border-radius:50%;
+ background:var(--accent)}
+body.cc-signin .auth-by{position:relative;z-index:1;justify-self:center;width:min(960px,100%);
+ padding:var(--sp-8) var(--sp-4) 26px}
+/* Drawn once on load: the baseline first, then the line, left to right. */
+@media (prefers-reduced-motion:no-preference){
+ .sg-line{animation:sg-draw 1.9s cubic-bezier(.3,0,.1,1) .25s both}
+ .sg-notes::before{animation:sg-rule 1.1s cubic-bezier(.3,0,.1,1) both}
+}
+@keyframes sg-draw{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes sg-rule{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@media(max-width:980px){
+ .sg-notes{grid-template-columns:minmax(0,1fr);gap:10px}
+}
+/* The phone: the line crosses the band above the card and meets it at the left; the card
+   fills the width less the gutter; the points stack. */
+@media(max-width:640px){
+ .sg-top{padding:20px var(--sp-4) 0;align-items:flex-start}
+ .sg-brand{flex-wrap:wrap;row-gap:10px}
+ .sg-brand .auth-logo{height:32px;max-width:140px}
+ .sg-name{flex:1 1 180px}
+ .sg-date{display:none}
+ .sg-stage{place-items:start center;padding:112px var(--sp-4) var(--sp-8)}
+ .sg-line{top:var(--sp-4);bottom:auto;height:140px}
+ .sg-card{padding:30px 22px 22px}
+ .sg-card::before{left:22px}
+ .sg-notes{padding:16px var(--sp-4) 0}
+ .sg-notes ul{grid-template-columns:minmax(0,1fr);gap:8px}
+ body.cc-signin .auth-by{padding:var(--sp-6) var(--sp-4) 22px}
+}
+
+/* ======================================================================
+   Business Health as a check-up report (16 Nov 2026, approved mockup-health.html):
+   the verdict, then six ruled findings, worst first, each with what it was counted
+   from, its last eight weeks, the score now and a status (legacy/home.js
+   renderHealthTiles). One sheet: the verdict block and the findings block are drawn
+   as one. Tokens only; the statuses use the platform's pills (.flag f-*), so the
+   Quiet signal level holds here too.
+   ====================================================================== */
+.hh-report,.hh-findings{background:var(--surface);border:1px solid var(--line);margin:0}
+.hh-report{border-bottom:0;border-radius:var(--r) var(--r) 0 0;padding:26px 30px 0}
+.hh-findings{border-top:0;border-radius:0 0 var(--r) var(--r);padding:6px 30px 20px;margin-bottom:8px}
+.hh-verdict{display:grid;grid-template-columns:136px minmax(0,1fr);gap:var(--sp-8);align-items:center;
+ padding-bottom:22px}
+.hh-verdict>*{min-width:0}
+.hh-gauge{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.hh-ring{position:relative;width:120px;height:120px}
+.hh-ring svg{display:block;width:100%;height:100%}
+.hh-ring .hh-track{stroke:var(--line2)}
+.hh-ring .hh-arc{stroke:var(--ink);transition:stroke-dasharray .5s ease-out}
+.hh-ring-n{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+ font-size:var(--fs-3xl);font-weight:var(--fw-semibold);letter-spacing:-.03em;color:var(--ink);
+ font-variant-numeric:tabular-nums;line-height:1}
+.hh-ring-n small{font-size:var(--fs-md);font-weight:var(--fw-medium);color:var(--mut);margin-left:1px;
+ position:relative;top:-.5em;letter-spacing:0}
+.hh-cap{font-size:var(--fs-3xs);font-weight:var(--fw-bold);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.hh-delta{font-size:var(--fs-2xs);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;
+ padding:2px 9px;border-radius:var(--r-pill);background:var(--raised);color:var(--ink2);white-space:nowrap}
+.hh-delta.up{color:var(--ok)}
+.hh-delta.dn{color:var(--crit)}
+.hh-delta[hidden]{display:none}
+.hh-say{margin:0;font-size:var(--fs-xl);line-height:1.42;font-weight:var(--fw-medium);letter-spacing:-.018em;
+ color:var(--ink);text-wrap:pretty}
+.hh-say b{font-weight:var(--fw-bold)}
+.hh-say .hh-since{color:var(--mut);font-weight:var(--fw-regular)}
+.hh-note{margin:12px 0 0;font-size:var(--fs-sm);line-height:1.55;color:var(--mut);max-width:68ch}
+.hh-tally{display:flex;flex-wrap:wrap;gap:6px 0;margin-top:14px;font-size:var(--fs-xs);color:var(--mut)}
+.hh-tally:empty{display:none}
+.hh-tally span{padding:0 14px;border-left:1px solid var(--line2);white-space:nowrap}
+.hh-tally span:first-child{padding-left:0;border-left:0}
+.hh-tally b{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--ink);font-variant-numeric:tabular-nums}
+.hh-trend{margin:8px 0 0;font-size:var(--fs-2xs);line-height:1.5;color:var(--dim)}
+.hh-assure{display:flex;align-items:center;gap:10px;margin:0;padding:12px 0;border-top:1px solid var(--line);
+ font-size:var(--fs-xs);line-height:1.5;color:var(--ink2);font-weight:var(--fw-medium)}
+/* A small seal: a ring with a tick, drawn with borders so it follows the theme. */
+.hh-seal{flex:none;position:relative;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--ok)}
+.hh-seal::after{content:"";position:absolute;left:4.5px;top:2px;width:4px;height:7px;
+ border:solid var(--ok);border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+
+/* ---- the findings ---- */
+.hh-row{display:grid;grid-template-columns:14px minmax(0,1fr) auto 64px 92px;gap:var(--sp-4);align-items:center;
+ padding:15px 0;border-top:1px solid var(--line)}
+.hh-row>*{min-width:0}
+.hh-cols{padding:10px 0 9px;border-top:1.5px solid var(--ink);font-size:var(--fs-3xs);font-weight:var(--fw-bold);
+ letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.hh-cols span:nth-child(4){text-align:right}
+.hh-cols span:nth-child(3){width:148px}
+.hh-list .hh-row:first-child{border-top-color:var(--line2)}
+.hh-sq{width:12px;height:12px;border-radius:calc(var(--r-xs) / 2);background:var(--line2)}
+.hh-sq.b-none{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line2)}
+.hh-q .l{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--ink);line-height:1.35}
+.hh-n{margin-top:3px;font-size:var(--fs-sm);line-height:1.45;color:var(--ink2)}
+.hh-src{margin-top:3px;font-size:var(--fs-2xs);line-height:1.45;color:var(--dim)}
+.hh-src:empty{display:none}
+.hh-row[data-state="wait"] .hh-q .l,.hh-row[data-state="access"] .hh-q .l{color:var(--ink2)}
+.hh-strip{display:flex;gap:4px;width:148px}
+.hh-wk{width:14px;height:14px;flex:none;border-radius:calc(var(--r-xs) / 2);background:transparent;
+ box-shadow:inset 0 0 0 1px var(--line2);background-image:none}
+.hh-wk:not([class*=" b-"]){box-shadow:none;border:1px dashed var(--line2)}
+.hh-now{text-align:right;font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em;
+ color:var(--ink);font-variant-numeric:tabular-nums;line-height:1}
+.hh-now small{font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--mut);margin-left:1px}
+.hh-row[data-state="wait"] .hh-now,.hh-row[data-state="access"] .hh-now{color:var(--dim);font-size:var(--fs-md)}
+.hh-status{justify-self:end;white-space:nowrap}
+/* bands: the square now is solid; earlier weeks are the same hue, lighter */
+.hh-sq.b-crit,.hh-wk.b-crit.now{background:var(--crit-solid);box-shadow:none}
+.hh-sq.b-med,.hh-wk.b-med.now{background:var(--med-solid);box-shadow:none}
+.hh-sq.b-ok,.hh-wk.b-ok.now{background:var(--ok-solid);box-shadow:none}
+.hh-wk.b-crit{background:var(--crit-solid);box-shadow:none;opacity:.42}
+.hh-wk.b-med{background:var(--med-solid);box-shadow:none;opacity:.42}
+.hh-wk.b-ok{background:var(--ok-solid);box-shadow:none;opacity:.42}
+.hh-wk.now{opacity:1}
+/* only a row with a guide to open is drawn as something to press */
+.hh-row.clickable{cursor:pointer;border-radius:var(--r-xs);margin:0 -12px;padding-left:12px;padding-right:12px;
+ transition:background .15s}
+.hh-row.clickable:hover{background:var(--hover)}
+.hh-row.clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.hh-row.clickable .hh-src::after{content:" ›";color:var(--accent-ink);font-weight:var(--fw-semibold)}
+.hh-legend{margin:0;padding:12px 0 0;border-top:1px solid var(--line);font-size:var(--fs-2xs);line-height:1.5;color:var(--dim)}
+/* Overview's sheet and Detail's panels keep their own spacing below the tab bar. */
+.tabpane .hh-report{margin-top:2px}
+
+/* ---- narrower: the panel, not the window (container panel, above) ---- */
+@container panel (max-width:760px){
+ .hh-report{padding:22px 20px 0}
+ .hh-findings{padding:4px 20px 16px}
+ .hh-row{grid-template-columns:12px minmax(0,1fr) auto;grid-template-areas:"sq q pill" ". strip now";
+  row-gap:10px;column-gap:12px}
+ .hh-row>.hh-sq{grid-area:sq;align-self:start;margin-top:4px}
+ .hh-row>.hh-q{grid-area:q}
+ .hh-row>.hh-strip{grid-area:strip;width:auto}
+ .hh-row>.hh-now{grid-area:now}
+ .hh-row>.hh-status{grid-area:pill;align-self:start}
+ .hh-cols{grid-template-columns:minmax(0,1fr);grid-template-areas:none}
+ .hh-cols span:not(:nth-child(2)){display:none}
+ .hh-row.clickable{margin:0 -10px;padding-left:10px;padding-right:10px}
+}
+@container panel (max-width:520px){
+ .hh-verdict{grid-template-columns:minmax(0,1fr);gap:var(--sp-4);justify-items:center;text-align:center}
+ .hh-word{text-align:left}
+ .hh-say{font-size:var(--fs-lg)}
+ .hh-ring{width:108px;height:108px}
+ .hh-report{padding:18px 16px 0}
+ .hh-findings{padding:2px 16px 14px}
+ .hh-tally span{padding:0 10px}
+ .hh-wk{width:13px;height:13px}
+ .hh-strip{gap:3px}
+}
+
+/* ======================================================================
+   TABLES, EVERY SCREEN (16 Nov 2026): headers never wrap ("On Open Invoices / GHS" was
+   two lines on Sales and Payments), nor do figures and dates; a table wider than its
+   panel scrolls sideways in its own box (legacy/tables.js puts each in a .dt-x), never
+   the page. Text cells keep wrapping, so a long name or reason stays readable -- unless
+   the cell carries its full text in a title, when it may end in an ellipsis.
+   ====================================================================== */
+table.dt th,[data-theme="light"] table.dt th{white-space:nowrap}
+table.dt td.num,table.dt td.n,table.dt td.dt-nw{white-space:nowrap}
+table.dt td[title]:not(:has(*)){max-width:28ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dt-x{overflow-x:auto;max-width:100%;overscroll-behavior-x:contain}
+.dt-x > table.dt{width:100%}
+.dt-x + .thin{margin-top:14px}
+.dt-x + .warn{margin-top:16px}
+@container panel (max-width:560px){
+ /* In its box the table keeps its own layout; the phone rule that made a bare table
+    scroll itself is for tables outside one (Settings). */
+ :is(.dt-x,.dt-scroll,.fs-wrap) > table.dt{display:table}
+}
+
+/* ======================================================================
+   FINANCES -- "Management Accounts" (option A, approved 16 Nov 2026)
+   Appearance only: every figure, statement, tab, chart and panel is the one the screen
+   had. The figures sit in a ruled ribbon instead of tinted cards, the statements are set
+   like printed management accounts, and the panels lose their weight. Scoped to the
+   screen by its statements block (.view:has(> #fs)) and the rows' .ribbon class.
+   ====================================================================== */
+
+/* ---- the figure ribbon: one ruled band, hairlines between the figures ---- */
+.kpis.ribbon{gap:0;grid-template-columns:repeat(6,minmax(0,1fr));border-top:1px solid var(--ink2);
+ border-bottom:1px solid var(--line2);overflow:hidden;margin:0 0 var(--sp-6);background:none}
+.kpis.fs-cards.ribbon{grid-template-columns:repeat(5,minmax(0,1fr));margin:0 0 var(--sp-5)}
+.kpis.fs-cards.ribbon:empty{display:none}
+.kpis.ribbon > .kpi,.kpis.ribbon > .kpi.sig,
+.kpis.ribbon > .kpi.sig:nth-child(n){background:none;border:0;border-radius:0;box-shadow:none;transform:none;
+ border-left:1px solid var(--line);border-top:1px solid var(--line);margin:-1px 0 0 -1px;min-height:0;
+ padding:var(--sp-4) 30px var(--sp-4) var(--sp-4);text-align:left;align-items:stretch;justify-content:flex-start;
+ transition:background .15s}
+.kpis.ribbon > .kpi.sig.clickable:hover,[data-theme="light"] .kpis.ribbon > .kpi.sig:hover,
+.kpis.ribbon > .kpi.sig:hover{background:var(--hover);border:0;border-left:1px solid var(--line);
+ border-top:1px solid var(--line);box-shadow:none;transform:none}
+.kpis.ribbon > .kpi:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+.kpis.ribbon .sig-cut{display:none}
+.kpis.ribbon .sig-go{top:var(--sp-4);right:var(--sp-3);bottom:auto;width:18px;height:18px;background:none;
+ color:var(--dim);transition:color .15s,transform .2s}
+.kpis.ribbon .sig-go svg{width:14px;height:14px}
+.kpis.ribbon > .kpi.sig:hover .sig-go{color:var(--ink);transform:rotate(45deg)}
+/* The label is read whole: it wraps, and the "as at" pill drops under it when there is no room. */
+.kpis.ribbon .khead{justify-content:flex-start;flex-wrap:wrap;gap:4px 6px;min-height:18px;width:100%}
+.kpis.ribbon .kpi .lab,.kpis.ribbon .kpi.sig .lab{font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--mut);
+ letter-spacing:0;text-transform:none;white-space:normal;overflow:visible;line-height:1.35}
+.kpis.ribbon .flag{font-size:var(--fs-3xs);padding:2px 7px}
+.kpis.ribbon > .kpi.sig .val{font-size:var(--fs-2xl);font-weight:var(--fw-semibold);letter-spacing:-.025em;
+ line-height:1.15;margin:var(--sp-2) 0 0;padding:0;flex:none;justify-content:flex-start;color:var(--ink);
+ font-variant-numeric:tabular-nums}
+.kpis.ribbon .val .cx{font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--mut);vertical-align:.3em;
+ margin-right:5px;letter-spacing:0}
+.kpis.ribbon .val .mag,.kpis.ribbon .val .cur{font-size:.62em;color:var(--mut);font-weight:var(--fw-semibold)}
+.kpis.ribbon > .kpi.sig .delta{font-size:var(--fs-xs);color:var(--mut);margin:var(--sp-1) 0 0;padding:0;border:0;
+ max-width:none;white-space:normal;overflow:visible;line-height:1.4;min-height:0;text-align:left}
+.kpis.ribbon > .kpi.sig .delta.up{color:var(--ok)}
+.kpis.ribbon > .kpi.sig .delta.down{color:var(--crit)}
+/* A figure that is wrong or needs attention says so in its colour: a statement figure
+   the statements mark down (a loss, a current ratio under 1), a figure that failed to
+   load. One needing setup is quiet: there is no figure to colour. */
+.kpis.ribbon > .kpi.sig:has(> .delta.down) .val,
+.kpis.ribbon > .kpi.sig:has(.flag.f-crit) .val{color:var(--crit)}
+.kpis.ribbon > .kpi.sig[data-setup] .val{color:var(--dim)}
+.kpis.ribbon > .kpi[data-loading] .val{opacity:.5}
+/* Six across (five for the statements) while each figure has room, then two rows of three
+   on a narrower laptop. The rows answer to the panel (container: panel), like every card row. */
+@container panel (max-width:1199px){
+ .kpis.ribbon{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+ .kpis.fs-cards.ribbon{grid-template-columns:repeat(5,minmax(0,1fr))!important}
+ .kpis.ribbon > .kpi.sig .val{font-size:var(--fs-xl)}}
+@container panel (max-width:979px){
+ .kpis.ribbon,.kpis.fs-cards.ribbon{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+ .kpis.ribbon > .kpi.sig .val{font-size:var(--fs-2xl)}}
+@container panel (max-width:560px){
+ /* A phone: one figure to a line, the label on the left and the figure on the right. */
+ .kpis.ribbon,.kpis.fs-cards.ribbon{grid-template-columns:minmax(0,1fr)!important}
+ .kpis.ribbon > .kpi,.kpis.ribbon > .kpi.sig,.kpis.ribbon > .kpi.sig:nth-child(n){display:grid;
+  grid-template-columns:minmax(0,1fr) auto;column-gap:var(--sp-3);align-items:baseline;border-left:0;margin-left:0;
+  padding:var(--sp-3) 26px var(--sp-3) 0}
+ .kpis.ribbon > .kpi.sig:hover{border-left:0}
+ .kpis.ribbon > .kpi.sig > .khead{grid-column:1;grid-row:1;min-width:0}
+ .kpis.ribbon > .kpi.sig > .val{grid-column:2;grid-row:1 / span 2;margin:0;font-size:var(--fs-xl);align-self:center}
+ .kpis.ribbon > .kpi.sig > .delta{grid-column:1;grid-row:2}
+ .kpis.ribbon .sig-go{top:50%;right:0;margin-top:-9px}
+ .kpis.ribbon > .kpi.sig:hover .sig-go{transform:none}
+}
+
+/* ---- the statements, set like printed management accounts ---- */
+.fs{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--sp-6) 28px 28px;
+ box-shadow:none}
+.fs-head{margin-bottom:var(--sp-5);align-items:flex-end}
+.fs-title b{font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em}
+.fs-title span{margin-top:4px;font-size:var(--fs-xs);color:var(--mut);line-height:1.5}
+.fs-periods{background:none;border:0;border-radius:0;padding:0;gap:2px var(--sp-1)}
+.fs-p{border-radius:0;padding:6px 6px 5px;color:var(--mut);font-weight:var(--fw-medium);
+ border-bottom:2px solid transparent}
+.fs-p:hover{color:var(--ink)}
+.fs-p.on{background:none;box-shadow:none;color:var(--ink);font-weight:var(--fw-semibold);border-bottom-color:var(--ink)}
+.fs-p:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.fs-exports{padding-left:var(--sp-3);margin-left:var(--sp-1);border-left:1px solid var(--line2)}
+.fs-exports .btn{padding:5px 12px;font-size:var(--fs-xs)}
+/* The statement tabs and the screen's own Overview / Detail tabs: a ruled line with the
+   chosen one underlined, as a printed report's contents would be marked. */
+.fs .tabbar,.view:has(> #fs) > .tabbar{display:flex;gap:var(--sp-6);border:0;border-bottom:1px solid var(--line2);
+ border-radius:0;padding:0;margin:var(--sp-2) 0 var(--sp-6);overflow-x:auto;scrollbar-width:none;max-width:100%}
+.fs .tabbar::-webkit-scrollbar,.view:has(> #fs) > .tabbar::-webkit-scrollbar{display:none}
+.fs .tab,.view:has(> #fs) > .tabbar .tab{border:0;border-radius:0;background:none;box-shadow:none;padding:10px 0 11px;
+ margin:0 0 -1px;border-bottom:2px solid transparent;color:var(--mut);font-weight:var(--fw-medium)}
+.fs .tab:hover,.view:has(> #fs) > .tabbar .tab:hover{color:var(--ink)}
+.fs .tab.on,.view:has(> #fs) > .tabbar .tab.on{background:none;box-shadow:none;color:var(--ink);
+ font-weight:var(--fw-semibold);border:0;border-bottom:2px solid var(--ink)}
+.view:has(> #fs) > .tabbar{margin-top:var(--sp-2)}
+.fs-body h4{font-size:var(--fs-md);font-weight:var(--fw-semibold);letter-spacing:-.01em;margin:var(--sp-8) 0 var(--sp-1)}
+.fs-body h4:first-child{margin-top:0}
+.fs-sub{margin:0 0 var(--sp-3);color:var(--mut)}
+.fs-wrap.tall{border-radius:var(--r-xs)}
+table.dt.fs-t{border-collapse:collapse;font-size:var(--fs-sm)}
+table.dt.fs-t th,[data-theme="light"] table.dt.fs-t th{white-space:nowrap;font-size:var(--fs-2xs);
+ font-weight:var(--fw-semibold);color:var(--mut);letter-spacing:.01em;padding:0 12px var(--sp-2);
+ border-bottom:1px solid var(--ink2);background:none;vertical-align:bottom}
+.fs-wrap.tall table.dt.fs-t th{padding-top:var(--sp-2);background:var(--surface)}
+table.dt.fs-t td{padding:7px 12px;border-bottom:1px solid var(--line);background:none}
+table.dt.fs-t tbody tr:last-child td{border-bottom:1px solid var(--line)}
+table.dt.fs-t tr:hover td{background:var(--hover)}
+table.dt.fs-t td.n{color:var(--ink);font-variant-numeric:tabular-nums}
+table.dt.fs-t :is(td,th).cmp{color:var(--mut)}
+table.dt.fs-t tr.fs-group td,table.dt.fs-t tr.fs-heading td{font-weight:var(--fw-semibold)}
+table.dt.fs-t tr.fs-heading td{color:var(--mut);font-size:var(--fs-xs)}
+/* A heavier rule above every total, and a double rule under the last line of a statement. */
+table.dt.fs-t tr.fs-total td{border-top:1px solid var(--ink2);font-weight:var(--fw-semibold);color:var(--ink)}
+table.dt.fs-t tr.fs-total td.cmp{color:var(--ink2)}
+table.dt.fs-t tbody tr.fs-total:last-child td{border-bottom:3px double var(--ink2)}
+table.dt.fs-t td.neg{color:var(--crit)}
+table.dt.fs-t td.pos{color:var(--ok)}
+table.dt.fs-t a.fs-acc{border-bottom-color:var(--line2)}
+/* The slim bar beside each line of the profit and loss: that line's share of the largest. */
+table.dt.fs-t :is(.fs-bar-h,.fs-bar-c){width:20%;min-width:96px;padding-left:var(--sp-5)}
+.fs-bar{display:block;height:6px;border-radius:2px;background:var(--ink2);opacity:.7}
+.fs-bar.cost{opacity:.3}
+.fs-bar.neg{background:var(--crit);opacity:.85}
+.fs-says{margin:var(--sp-4) 0 0;max-width:76ch;font-size:var(--fs-md);line-height:1.6;color:var(--ink2)}
+.fs-check,.fs-check.ok,.fs-check.bad{background:none;padding:0;border-radius:0;margin-top:var(--sp-3)}
+.fs-check::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.fs-notes{max-width:96ch}
+.fs-mean{margin-top:2px}
+@container panel (max-width:760px){
+ table.dt.fs-t :is(.fs-bar-h,.fs-bar-c){display:none}}
+@container panel (max-width:560px){
+ .fs{padding:var(--sp-4) var(--sp-4) var(--sp-5)}
+ /* The six periods wrap to a second line rather than run off under the edge. */
+ .fs-periods{flex-wrap:wrap;overflow:visible}
+ .fs-exports{border-left:0;padding-left:0;margin-left:0}
+ .fs .tabbar,.view:has(> #fs) > .tabbar{gap:var(--sp-5)}
+ table.dt.fs-t td,table.dt.fs-t th{padding-left:8px;padding-right:8px}
+ /* An account's name keeps a readable width; the figures scroll beside it instead. */
+ table.dt.fs-t td:first-child{min-width:10em}
+ table.dt.fs-t th{padding-bottom:var(--sp-2)}}
+
+/* ---- the panels and charts: quieter frames, no tinted boxes ---- */
+.view:has(> #fs) .panel{border-radius:var(--r-sm);box-shadow:none;padding:var(--sp-5) var(--sp-6)}
+.view:has(> #fs) .panel .ph{padding-bottom:var(--sp-3);margin-bottom:var(--sp-4);border-bottom:1px solid var(--line)}
+.view:has(> #fs) .panel .ph b{font-size:var(--fs-md);letter-spacing:-.01em}
+.view:has(> #fs) .pmore{color:var(--mut);font-weight:var(--fw-medium)}
+.view:has(> #fs) .ph.clickable:hover .pmore{color:var(--accent-ink)}
+.view:has(> #fs) .chartwrap,[data-theme="light"] .view:has(> #fs) .chartwrap{background:none;border:0;box-shadow:none;
+ padding:0}
+.view:has(> #fs) .thin{background:none;border:0;border-left:2px solid var(--line2);border-radius:0;
+ padding:2px 0 2px var(--sp-3);color:var(--mut);font-size:var(--fs-sm);line-height:1.6}
+.view:has(> #fs) .thin b{color:var(--ink2);font-weight:var(--fw-semibold)}
+.view:has(> #fs) .bartrack{border-radius:2px;height:12px}
+.view:has(> #fs) .barfill{border-radius:2px}
+.view:has(> #fs) .vz-seg{border-color:var(--line)}
+.view:has(> #fs) .vz-dl{background:none}
+.view:has(> #fs) .warn{border-radius:var(--r-sm)}
+@container panel (max-width:560px){
+ .view:has(> #fs) .panel{padding:var(--sp-4)}}
+/* ======================================================================
+   Business Overview as a front page (16 Nov 2026, the approved mockup: B over A).
+   The lead story on the left, three areas beside it, the rest a ruled register.
+   The nine tiles are the designed .bk tiles, moved into place by
+   legacy/overview.js and restyled here by role (ov-as-lead / ov-as-sec /
+   ov-as-row): no card, no tint, no grid of boxes -- type, figures and hairlines.
+   The arrow stays only where a tile opens something (the rule above); the cut
+   corner belongs to the tinted card, which this screen no longer draws.
+   ====================================================================== */
+.ov{border-top:1px solid var(--ink);margin-top:var(--sp-2)}
+.ov-front{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);padding:var(--sp-6) 0 var(--sp-8)}
+.ov-lead{min-width:0;padding-right:var(--sp-8);border-right:1px solid var(--line)}
+.ov-sec{min-width:0;padding-left:var(--sp-8);display:flex;flex-direction:column}
+
+/* every tile on this screen sheds the card */
+.ov .bk.sig{background:none;border:0;border-radius:0;box-shadow:none;min-height:0;padding:0;margin:0;
+ text-align:left;align-items:stretch;justify-content:flex-start;container-type:normal;transform:none;
+ transition:color .15s}
+.ov .bk.sig:hover{background:none;border:0;box-shadow:none;transform:none}
+.ov .bk.sig > .sig-cut{display:none}
+.ov .bk.sig .n{flex:none;display:block;width:auto;margin:0;padding:0;text-align:left;color:var(--ink);
+ font-weight:var(--fw-semibold);line-height:1.05}
+.ov .bk.sig .v{border:0;padding:0;max-width:none;width:auto;min-height:0;white-space:normal;color:var(--mut);
+ font-size:var(--fs-xs);line-height:1.45}
+.ov .bk.sig .l{white-space:normal;overflow:visible;max-width:none;order:0}
+.ov .bk.sig .flag{margin:0;align-self:auto}
+.ov .bk.clickable:focus-visible{outline:2px solid var(--accent);outline-offset:6px;border-radius:var(--r-xs)}
+.ov .bk.clickable:hover > .sig-go,.ov .bk.clickable:focus-visible > .sig-go{transform:rotate(45deg)}
+
+/* ---- the lead story ---- */
+.ov .bk.ov-as-lead{display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:var(--sp-10);
+ grid-template-areas:"head head" "say say" "dek dek" "n figs" "v figs" "prov prov";align-content:start;
+ position:relative}
+.ov .ov-as-lead > .khead{grid-area:head;display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;
+ padding-right:60px;min-height:44px}
+.ov-kick{font-size:var(--fs-3xs);font-weight:var(--fw-bold);letter-spacing:.16em;text-transform:uppercase;
+ color:var(--accent-ink);white-space:nowrap}
+.ov-kick::after{content:"·";margin-left:10px;color:var(--dim)}
+.ov .bk.ov-as-lead .l{font-size:var(--fs-3xs);font-weight:var(--fw-bold);letter-spacing:.16em;
+ text-transform:uppercase;color:var(--ink2)}
+.ov-say{grid-area:say;margin:var(--sp-3) 0 0;max-width:30ch;font-size:var(--fs-3xl);font-weight:var(--fw-medium);
+ line-height:1.22;letter-spacing:-.022em;color:var(--ink);text-wrap:balance;text-decoration:underline;
+ text-decoration-color:transparent;text-decoration-thickness:1px;text-underline-offset:.16em;
+ transition:text-decoration-color .15s}
+.ov .ov-as-lead.clickable:hover .ov-say,.ov .ov-as-lead.clickable:focus-visible .ov-say{
+ text-decoration-color:var(--line2)}
+.ov-dek{grid-area:dek;margin:var(--sp-3) 0 0;max-width:58ch;font-size:var(--fs-md);line-height:1.55;
+ color:var(--ink2)}
+.ov .bk.ov-as-lead .n{grid-area:n;margin-top:var(--sp-8);font-size:var(--fs-5xl);letter-spacing:-.035em}
+.ov .bk.ov-as-lead .n .cx{font-size:var(--fs-md)}
+.ov .bk.ov-as-lead .n .mag{font-size:var(--fs-2xl)}
+.ov .bk.ov-as-lead .n small{font-size:var(--fs-md)}
+.ov .bk.ov-as-lead .v{grid-area:v;margin-top:var(--sp-2)}
+.ov-figs{grid-area:figs;align-self:end;display:flex;flex-wrap:wrap;gap:var(--sp-4) var(--sp-8);
+ padding-left:var(--sp-8);border-left:1px solid var(--line)}
+.ov-fig b{display:block;font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em;
+ line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ov-fig span{display:block;margin-top:6px;font-size:var(--fs-xs);color:var(--mut)}
+.ov .ov-as-lead > .flag[data-prov]{grid-area:prov;justify-self:start;margin-top:var(--sp-4)}
+.ov .ov-as-lead.clickable > .sig-go{top:0;right:0;bottom:auto;width:44px;height:44px}
+
+/* ---- the column beside it ---- */
+.ov .bk.ov-as-sec{display:grid;grid-template-columns:minmax(0,1fr) auto;
+ grid-template-areas:"head go" "n go" "v v" "note note" "prov prov";align-items:start;position:relative;
+ padding:var(--sp-4) 0;border-top:1px solid var(--line)}
+.ov .bk.ov-as-sec:first-child{padding-top:0;border-top:0}
+.ov .bk.ov-as-sec:last-child{padding-bottom:0}
+.ov .ov-as-sec > .khead{grid-area:head;display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px}
+.ov .bk.ov-as-sec .l{font-size:var(--fs-3xs);font-weight:var(--fw-bold);letter-spacing:.14em;
+ text-transform:uppercase;color:var(--ink2)}
+.ov .bk.ov-as-sec .n{grid-area:n;margin-top:var(--sp-2);font-size:var(--fs-2xl);letter-spacing:-.025em}
+.ov .bk.ov-as-sec .n .cx{font-size:var(--fs-xs)}
+.ov .bk.ov-as-sec .n .mag{font-size:var(--fs-lg)}
+.ov .bk.ov-as-sec .n small{font-size:var(--fs-xs)}
+.ov .bk.ov-as-sec .v{grid-area:v;margin-top:var(--sp-1)}
+.ov-note{font-size:var(--fs-sm);line-height:1.45;color:var(--ink2)}
+.ov .ov-as-sec > .ov-note{grid-area:note;margin-top:var(--sp-1)}
+.ov .ov-as-sec > .flag[data-prov]{grid-area:prov;justify-self:start;margin-top:var(--sp-2)}
+
+/* the small arrow of a column line and a register line */
+.ov :is(.ov-as-sec,.ov-as-row).clickable > .sig-go{position:static;width:28px;height:28px;background:none;
+ color:var(--mut);box-shadow:inset 0 0 0 1px var(--line2);transition:transform .2s,background .15s,color .15s}
+.ov :is(.ov-as-sec,.ov-as-row).clickable > .sig-go svg{width:14px;height:14px}
+.ov .ov-as-sec.clickable > .sig-go{grid-area:go;align-self:start}
+.ov :is(.ov-as-sec,.ov-as-row).clickable:is(:hover,:focus-visible) > .sig-go{background:var(--ink);
+ color:var(--surface);box-shadow:none}
+.ov :is(.ov-as-sec,.ov-as-row).clickable:is(:hover,:focus-visible) .l{color:var(--accent-ink)}
+
+/* ---- the register ---- */
+.ov-reg{border-top:1px solid var(--ink)}
+.ov-rows{display:grid;column-gap:var(--sp-5);
+ grid-template-columns:minmax(150px,1.15fr) minmax(110px,max-content) max-content max-content minmax(0,2.6fr) 28px}
+.ov-rh{grid-column:1 / -1;display:grid;grid-template-columns:subgrid;padding:10px 0 9px;
+ border-bottom:1px solid var(--line2);font-size:var(--fs-3xs);font-weight:var(--fw-bold);letter-spacing:.14em;
+ text-transform:uppercase;color:var(--dim)}
+.ov-rh > span:nth-child(2){text-align:right}
+.ov-rh > span:nth-child(3){grid-column:3 / 5}
+.ov-rh > span:nth-child(4){grid-column:5}
+.ov .bk.ov-as-row{grid-column:1 / -1;display:grid;grid-template-columns:subgrid;align-items:center;
+ padding:14px 0;border-bottom:1px solid var(--line)}
+.ov .bk.ov-as-row.clickable:is(:hover,:focus-visible){background:var(--hover);
+ box-shadow:-10px 0 0 var(--hover),10px 0 0 var(--hover)}
+.ov .ov-as-row > .khead{display:contents}
+.ov .bk.ov-as-row .l{grid-column:1;grid-row:1 / 3;font-size:var(--fs-sm);font-weight:var(--fw-semibold);
+ color:var(--ink);letter-spacing:-.005em;text-transform:none;line-height:1.35}
+.ov .bk.ov-as-row .n{grid-column:2;grid-row:1;justify-self:end;text-align:right;font-size:var(--fs-lg);
+ letter-spacing:-.01em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ov .bk.ov-as-row .n .cx,.ov .bk.ov-as-row .n small{font-size:var(--fs-2xs)}
+.ov .bk.ov-as-row .n .mag{font-size:inherit;color:var(--ink)}
+.ov .bk.ov-as-row .v{grid-column:2;grid-row:2;justify-self:end;text-align:right;margin-top:2px;
+ font-size:var(--fs-2xs)}
+.ov .ov-as-row > .khead > .flag{grid-column:3;grid-row:1 / 3;justify-self:start}
+.ov .ov-as-row > .flag[data-prov]{grid-column:4;grid-row:1 / 3;justify-self:start}
+.ov .ov-as-row > .ov-note{grid-column:5;grid-row:1 / 3}
+.ov .ov-as-row.clickable > .sig-go{grid-column:6;grid-row:1 / 3;justify-self:end}
+
+/* ---- narrower: the columns stack, a register line wraps ---- */
+@container panel (max-width:760px){
+ .ov-front{grid-template-columns:minmax(0,1fr);padding:var(--sp-5) 0 var(--sp-6)}
+ .ov-lead{padding:0 0 var(--sp-6);border-right:0;border-bottom:1px solid var(--line)}
+ .ov-sec{padding:var(--sp-5) 0 0}
+ .ov .bk.ov-as-lead{grid-template-columns:minmax(0,1fr);grid-template-areas:"head" "say" "dek" "n" "v" "figs" "prov"}
+ .ov-say{font-size:var(--fs-xl);line-height:1.3}
+ .ov .bk.ov-as-lead .n{margin-top:var(--sp-5);font-size:var(--fs-4xl)}
+ .ov-figs{align-self:start;margin-top:var(--sp-4);padding:var(--sp-4) 0 0;border-left:0;border-top:1px solid var(--line)}
+ .ov-dek{font-size:var(--fs-sm)}
+ .ov-rows{display:block}
+ .ov-rh{display:none}
+ .ov .bk.ov-as-row{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:14px 0}
+ .ov .bk.ov-as-row.clickable:is(:hover,:focus-visible){box-shadow:none}
+ .ov .bk.ov-as-row .l{order:1;flex:1 1 0;min-width:0}
+ .ov .bk.ov-as-row .n{order:2}
+ .ov .ov-as-row.clickable > .sig-go{order:3;align-self:center}
+ .ov .bk.ov-as-row .v{order:4;flex:1 0 100%;margin:0;text-align:right}
+ .ov .ov-as-row > .khead > .flag{order:5}
+ .ov .ov-as-row > .flag[data-prov]{order:6}
+ .ov .ov-as-row > .ov-note{order:7;flex:1 1 12ch;min-width:0}
 }
