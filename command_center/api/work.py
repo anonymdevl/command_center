@@ -213,8 +213,14 @@ def _approvals(user, src):
     roles = src.roles(user)
     for wf in src.workflows():
         field = wf.get("workflow_state_field") or "workflow_state"
+        # A document waits on this person only where they can move it forward. A step
+        # whose only way on is Cancel (an approved, submitted document: "Approved by
+        # CEO" -> Cancelled) is finished, not waiting -- every approver who may cancel
+        # would otherwise see every approved document as theirs to decide.
+        ends = _cancel_states(src.states(wf["name"]))
         states = {t["state"] for t in src.transitions(wf["name"])
-                  if roles is None or t["allowed"] in roles}
+                  if (roles is None or t["allowed"] in roles)
+                  and not _cancels(t.get("action"), t.get("next_state"), ends)}
         if not states:
             continue
         has, title_field = src.fields(wf["document_type"])
@@ -229,7 +235,8 @@ def _approvals(user, src):
         except Exception:
             continue  # not readable by this person
         for d in docs:
-            actions = src.actions(wf["document_type"], d)
+            actions = [a for a, nxt in src.actions(wf["document_type"], d)
+                       if not _cancels(a, nxt, ends)]
             if not actions:
                 continue
             out.append({
@@ -246,6 +253,19 @@ def _approvals(user, src):
             })
     out.sort(key=lambda a: -(a["waiting_days"] or 0))
     return out
+
+
+def _cancel_states(states):
+    """The workflow's states that cancel the document (Document Status 2)."""
+    return {name for name, ds in (states or {}).items() if str(ds) == "2"}
+
+
+def _cancels(action, next_state, ends):
+    """A transition that only cancels the document: it leads to a cancelled state, or
+    (when the states could not be read) is the action named Cancel."""
+    if next_state and next_state in ends:
+        return True
+    return not ends and (action or "").strip().lower() == "cancel"
 
 
 def _sent_back_twice(open_, src):
@@ -339,7 +359,12 @@ class _Local:
 
     def transitions(self, workflow):
         return frappe.get_all("Workflow Transition", filters={"parent": workflow},
-                              fields=["state", "allowed"])
+                              fields=["state", "allowed", "action", "next_state"])
+
+    def states(self, workflow):
+        rows = frappe.get_all("Workflow Document State", filters={"parent": workflow},
+                              fields=["state", "doc_status"])
+        return {r["state"]: r["doc_status"] for r in rows}
 
     def fields(self, doctype):
         meta = frappe.get_meta(doctype)
@@ -351,7 +376,8 @@ class _Local:
     def actions(self, doctype, row):
         from frappe.model.workflow import get_transitions
         try:
-            return [t.action for t in get_transitions(frappe.get_doc(doctype, row["name"]))]
+            return [(t.action, t.next_state)
+                    for t in get_transitions(frappe.get_doc(doctype, row["name"]))]
         except Exception:
             return []
 
@@ -401,10 +427,19 @@ class _Remote:
     def transitions(self, workflow):
         try:
             return self.conn.get_list("Workflow Transition", filters={"parent": workflow},
-                                      fields=["state", "allowed"], limit=500,
-                                      parent_doctype="Workflow")
+                                      fields=["state", "allowed", "action", "next_state"],
+                                      limit=500, parent_doctype="Workflow")
         except Exception:
             return []
+
+    def states(self, workflow):
+        try:
+            rows = self.conn.get_list("Workflow Document State", filters={"parent": workflow},
+                                      fields=["state", "doc_status"], limit=500,
+                                      parent_doctype="Workflow")
+            return {r.get("state"): r.get("doc_status") for r in rows}
+        except Exception:
+            return {}
 
     def fields(self, doctype):
         meta = self.conn.get_meta(doctype)
@@ -418,7 +453,7 @@ class _Remote:
         try:
             res = self.conn._call("frappe.model.workflow.get_transitions",
                                   {"doc": {**row, "doctype": doctype}})
-            return [t.get("action") for t in res or [] if t.get("action")]
+            return [(t.get("action"), t.get("next_state")) for t in res or [] if t.get("action")]
         except Exception:
             return []
 

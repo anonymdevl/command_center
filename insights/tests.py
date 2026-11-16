@@ -22,7 +22,7 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.test import Client, TransactionTestCase
+from django.test import Client, SimpleTestCase, TransactionTestCase
 
 TODAY = dt.date.today()
 N = 60
@@ -6779,3 +6779,67 @@ def health_parity(read) -> list:
         if text not in src:
             out.append(f"{name}: {text!r} is gone ({what})")
     return out
+
+
+class ApprovalsSkipFinishedDocuments(SimpleTestCase):
+    """A document whose only step left is Cancel is finished, not waiting on anyone.
+
+    Gigmann, 16 Nov 2026: Payment Entry ACC-PAY-2024-00051 was Approved and submitted,
+    and its workflow's only way on from Approved is Cancel -> Cancelled. Samuel holds a
+    role that may cancel, so it sat in his "Awaiting you" as if a decision were due.
+    """
+
+    WF = {"name": "PE WF", "document_type": "Payment Entry", "workflow_state_field": "workflow_state"}
+    TRANSITIONS = [
+        {"state": "Pending DIR Approval", "allowed": "DIR", "action": "Approve",
+         "next_state": "Approved"},
+        {"state": "Pending DIR Approval", "allowed": "DIR", "action": "Reject",
+         "next_state": "Rejected"},
+        {"state": "Approved", "allowed": "DIR", "action": "Cancel", "next_state": "Cancelled"},
+    ]
+    STATES = {"Pending DIR Approval": "0", "Approved": "1", "Rejected": "0", "Cancelled": "2"}
+    DOCS = [
+        {"name": "ACC-PAY-2024-00051", "owner": "a@x", "creation": "2024-04-16",
+         "modified": "2024-04-16", "docstatus": 1, "workflow_state": "Approved"},
+        {"name": "ACC-PAY-2026-00010", "owner": "a@x", "creation": "2026-11-10",
+         "modified": "2026-11-10", "docstatus": 0, "workflow_state": "Pending DIR Approval"},
+    ]
+
+    def _src(self, states=STATES):
+        case = self
+
+        class Src:
+            listed = []
+
+            def roles(self, user): return {"DIR"}
+            def workflows(self): return [case.WF]
+            def transitions(self, wf): return case.TRANSITIONS
+            def states(self, wf): return states
+            def fields(self, doctype): return {"paid_amount"}, None
+
+            def list(self, doctype, filters=None, **kw):
+                Src.listed.append(filters)
+                wanted = set(filters["workflow_state"][1])
+                return [d for d in case.DOCS if d["workflow_state"] in wanted]
+
+            def actions(self, doctype, row):
+                return [(t["action"], t["next_state"]) for t in case.TRANSITIONS
+                        if t["state"] == row["workflow_state"]]
+
+            def fullname(self, user): return user
+            def url(self, doctype, name): return f"/app/payment-entry/{name}"
+        return Src()
+
+    def test_approved_document_with_only_cancel_left_is_not_waiting(self):
+        from command_center.api import work
+        src = self._src()
+        got = work._approvals("samuel@x", src)
+        self.assertEqual([a["name"] for a in got], ["ACC-PAY-2026-00010"])
+        self.assertEqual(got[0]["actions"], ["Approve", "Reject"])
+        # The finished state is not even asked for.
+        self.assertNotIn("Approved", src.listed[0]["workflow_state"][1])
+
+    def test_without_the_states_cancel_is_still_recognised_by_name(self):
+        from command_center.api import work
+        got = work._approvals("samuel@x", self._src(states={}))
+        self.assertEqual([a["name"] for a in got], ["ACC-PAY-2026-00010"])
