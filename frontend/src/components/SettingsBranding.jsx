@@ -3,6 +3,7 @@ import { IMAGE_TYPES, PRINT_TYPES, readImage, settingsApi } from "../api/client.
 import { useApi } from "../useApi.js";
 import { Failed, Loading } from "./States.jsx";
 import { Msg, act } from "./SettingsParts.jsx";
+import LensMark from "./LensMark.jsx";
 
 const FIELDS = [
   ["product_name", "Product name", "Shown in the sidebar, on the sign-in page, and on every PDF, workbook and email."],
@@ -17,10 +18,26 @@ const FIELDS = [
 const LOGOS = [
   ["logo_light", "Logo on light backgrounds", "Used in the light theme, and on PDFs when no Report Logo is set."],
   ["logo_dark", "Logo on dark backgrounds", "Used in the dark theme. Leave empty to use the other one."],
-  ["favicon", "Browser tab icon", "A small square image, at least 32 by 32 pixels.", "Built-in icon"],
+  ["favicon", "Browser tab icon", "A small square image, at least 32 by 32 pixels.", "icon"],
   ["logo_signin", "Sign-In Logo",
-    "Shown on the sign-in page only, on light and dark. Leave empty to keep the built-in mark.", "Built-in mark"],
+    "Shown on the sign-in page only, on light and dark. Leave empty to keep the built-in mark.", "mark"],
 ];
+
+/** What an empty slot shows: the built-in mark or icon itself, as the page will show it.
+ *  The icon is the file the browser tab gets (branding.DEFAULT_FAVICON, which the
+ *  preview's favicon_url is while none is uploaded). */
+function BuiltIn({ kind, data }) {
+  if (kind === "icon") {
+    const src = data.preview?.favicon_url;
+    return src ? <img src={src} alt="Built-in icon" title="Built-in icon" />
+      : <span className="st-dim">Built-in icon</span>;
+  }
+  return (
+    <span className="logo" role="img" aria-label="Built-in mark" title="Built-in mark">
+      <LensMark />
+    </span>
+  );
+}
 
 const REPORT_USES = {
   report: "PDFs print the Report Logo.",
@@ -110,7 +127,8 @@ function BrandLogos({ data, onSaved }) {
       </div>
       <div className="st-logos">
         {LOGOS.map(([kind, label, hint, empty]) => (
-          <LogoSlot key={kind} label={label} hint={hint} url={data[`${kind}_url`]} maxKb={data.max_kb} empty={empty}
+          <LogoSlot key={kind} label={label} hint={hint} url={data[`${kind}_url`]} maxKb={data.max_kb}
+            empty={empty ? <BuiltIn kind={empty} data={data} /> : undefined}
             dark={kind === "logo_dark"}
             onUpload={(dataUrl) => settingsApi.uploadBrandLogo(kind, dataUrl)}
             onRemove={() => settingsApi.removeBrandLogo(kind)}
@@ -212,7 +230,8 @@ export function LogoSlot({ label, hint, url, maxKb = 1024, dark = false, wide = 
       <b>{label}</b>
       <span className="st-sub">{hint}</span>
       <div className={`st-logo-box${dark ? " dark" : ""}${wide ? " wide" : ""}`}>
-        {url ? <img src={url} alt={label} /> : <span className="st-dim">{empty || "None"}</span>}
+        {url ? <img src={url} alt={label} />
+          : typeof empty === "string" ? <span className="st-dim">{empty || "None"}</span> : empty}
       </div>
       <div className="st-acts" style={{ justifyContent: "flex-start" }}>
         <label className="btn st-file">

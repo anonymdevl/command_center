@@ -4,6 +4,7 @@ import { boot, brand } from "../api/boot.js";
 import Icon, { VIEW_ICON } from "./Icon.jsx";
 import { canOpenSettings, settingsSections } from "./Settings.jsx";
 import PlanBadge from "./PlanBadge.jsx";
+import LensMark from "./LensMark.jsx";
 
 /**
  * Brand, the nineteen screens, and the business being looked at.
@@ -24,7 +25,7 @@ export default function Sidebar({ nav, current, onGo, scope, onScope }) {
           </span>
         ) : (
           <div className="logo" aria-hidden="true">
-            <i />
+            <LensMark />
           </div>
         )}
         <div className="brand-t">

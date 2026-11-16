@@ -69,17 +69,22 @@ MAX_LEN = {"product_name": 60, "tagline": 80, "company": 80, "person": 80, "emai
 LOGO_KINDS = ("logo_light", "logo_dark", "favicon")  # the screens'
 REPORT_KIND = "logo_report"  # the PDFs' own logo, instead of the light-background one
 # The sign-in page's own logo. Independent of every other: unset, the sign-in page shows
-# the platform's built-in mark (the .auth-mark drawn by interface/auth.py, the mark it has
-# shown since the first sign-in page), never the screens' logos or the Report Logo.
+# the platform's built-in mark (its .auth-mark), never the screens' logos or the Report Logo.
+# The built-in mark (16 Nov 2026) is the lens-and-chart mark: a lens over four bars and a
+# line of four ring nodes, drawn inline in currentColor on a rounded tile (an ink tile with
+# a light mark on a light ground, the inverse on a dark one; interface/shell.py). The same
+# drawing is in frontend/src/components/LensMark.jsx, command-center-login.html and the
+# DEFAULT_FAVICON file; insights/tests.py holds the three to one geometry.
 SIGNIN_KIND = "logo_signin"
 PLATFORM_KINDS = LOGO_KINDS + (REPORT_KIND, SIGNIN_KIND)
 # What each place shows while its own logo is unset (branding() applies it):
 #   logo_light / logo_dark  the other one of the pair (one set serves both backgrounds),
-#                           else the built-in mark (Sidebar.jsx .logo)
-#   favicon                 the built-in icon, DEFAULT_FAVICON
+#                           else the built-in mark (Sidebar.jsx .logo, LensMark.jsx)
+#   favicon                 the built-in icon, DEFAULT_FAVICON (the mark on a grey tile)
 #   logo_report             the light-background logo, else the dark, else the product's
 #                           name (a report carries the screens' logo when only that is set)
-#   logo_signin             the built-in mark (.auth-mark), nothing else
+#   logo_signin             the built-in mark (.auth-mark, command-center-login.html),
+#                           nothing else
 DEFAULT_FAVICON = "/assets/command_center/images/command-center.svg"
 CLIENT_KIND = "client"
 # A business's letterhead: the strip printed at the top of every page, and the optional

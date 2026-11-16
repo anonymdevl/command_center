@@ -1,30 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
-     role="img" aria-label="AI Business Intelligence">
-  <defs>
-    <linearGradient id="ccBg" x1="0" y1="0" x2="0.6" y2="1">
-      <stop offset="0" stop-color="#1b222e"/>
-      <stop offset="1" stop-color="#0b0e13"/>
-    </linearGradient>
-    <linearGradient id="ccBar" x1="0" y1="1" x2="0" y2="0">
-      <stop offset="0" stop-color="#9a7429"/>
-      <stop offset="1" stop-color="#e0ad44"/>
-    </linearGradient>
-  </defs>
-
-  <rect width="64" height="64" rx="15" fill="url(#ccBg)"/>
-  <rect x=".75" y=".75" width="62.5" height="62.5" rx="14.25"
-        fill="none" stroke="#ffffff" stroke-opacity=".07"/>
-
-  <!-- the business, as its own numbers -->
-  <g fill="url(#ccBar)">
-    <rect x="17" y="36" width="6.5" height="11" rx="3.25" opacity=".55"/>
-    <rect x="28.75" y="30" width="6.5" height="17" rx="3.25" opacity=".8"/>
-    <rect x="40.5" y="24" width="6.5" height="23" rx="3.25"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- The platform's built-in icon (branding.DEFAULT_FAVICON): the lens-and-chart mark,
+       white on a grey tile, so it reads on a light or a dark browser tab. The same
+       drawing as LensMark.jsx and the sign-in page's .auth-mark. -->
+  <rect width="512" height="512" rx="112" fill="#4d4d4d"/>
+  <g transform="translate(44.44 44.44) scale(.86)">
+    <g fill="none" stroke="#ffffff">
+      <circle cx="222" cy="222" r="158" stroke-width="44"/>
+      <path d="M335 335L378 378" stroke-width="34"/>
+      <path d="M392 392L462 462" stroke-width="70" stroke-linecap="round"/>
+      <path d="M174.6 205.2L188.4 212.8M217.5 207.7L239.5 182.3M267.2 156.6L284.8 143.4" stroke-width="10"/>
+      <circle cx="158" cy="196" r="13" stroke-width="10"/>
+      <circle cx="205" cy="222" r="13" stroke-width="10"/>
+      <circle cx="252" cy="168" r="13" stroke-width="10"/>
+      <circle cx="300" cy="132" r="13" stroke-width="10"/>
+    </g>
+    <g fill="#ffffff">
+      <rect x="138" y="232" width="40" height="78"/>
+      <rect x="186" y="262" width="40" height="48"/>
+      <rect x="234" y="212" width="40" height="98"/>
+      <rect x="282" y="170" width="40" height="140"/>
+    </g>
   </g>
-
-  <!-- the layer that watches over it -->
-  <path d="M14 26.5Q32 11.5 50 26.5" fill="none" stroke="#e0ad44"
-        stroke-width="2.6" stroke-linecap="round"/>
-  <circle cx="50" cy="26.5" r="3.4" fill="#e0ad44"/>
-  <circle cx="50" cy="26.5" r="6.4" fill="none" stroke="#e0ad44" stroke-opacity=".28"/>
 </svg>
