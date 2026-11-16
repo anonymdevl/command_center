@@ -378,8 +378,6 @@ div.work-table table.dt{min-width:560px}
  .rec-spark{width:110px}}
 
 /* ---- Business Health: the data behind the figures (legacy/loads.js) ---- */
-.hh-head>*{min-width:0}
-@container panel (max-width:560px){.hh-head{grid-template-columns:minmax(0,1fr)!important}}
 .panel.loads{margin-top:16px}
 .loads-h{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:10px}
 .loads-h h4{font-size:var(--fs-lg);font-weight:var(--fw-semibold);margin:0}

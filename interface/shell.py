@@ -655,4 +655,122 @@ table.dt.dw-t tfoot td{position:sticky;bottom:0;z-index:1;padding:10px 12px;back
  .dw-clip{max-width:180px}
  .dw-search{width:100%}
 }
+
+/* ======================================================================
+   Business Health as a check-up report (16 Nov 2026, approved mockup-health.html):
+   the verdict, then six ruled findings, worst first, each with what it was counted
+   from, its last eight weeks, the score now and a status (legacy/home.js
+   renderHealthTiles). One sheet: the verdict block and the findings block are drawn
+   as one. Tokens only; the statuses use the platform's pills (.flag f-*), so the
+   Quiet signal level holds here too.
+   ====================================================================== */
+.hh-report,.hh-findings{background:var(--surface);border:1px solid var(--line);margin:0}
+.hh-report{border-bottom:0;border-radius:var(--r) var(--r) 0 0;padding:26px 30px 0}
+.hh-findings{border-top:0;border-radius:0 0 var(--r) var(--r);padding:6px 30px 20px;margin-bottom:8px}
+.hh-verdict{display:grid;grid-template-columns:136px minmax(0,1fr);gap:var(--sp-8);align-items:center;
+ padding-bottom:22px}
+.hh-verdict>*{min-width:0}
+.hh-gauge{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.hh-ring{position:relative;width:120px;height:120px}
+.hh-ring svg{display:block;width:100%;height:100%}
+.hh-ring .hh-track{stroke:var(--line2)}
+.hh-ring .hh-arc{stroke:var(--ink);transition:stroke-dasharray .5s ease-out}
+.hh-ring-n{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+ font-size:var(--fs-3xl);font-weight:var(--fw-semibold);letter-spacing:-.03em;color:var(--ink);
+ font-variant-numeric:tabular-nums;line-height:1}
+.hh-ring-n small{font-size:var(--fs-md);font-weight:var(--fw-medium);color:var(--mut);margin-left:1px;
+ position:relative;top:-.5em;letter-spacing:0}
+.hh-cap{font-size:var(--fs-3xs);font-weight:var(--fw-bold);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.hh-delta{font-size:var(--fs-2xs);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;
+ padding:2px 9px;border-radius:var(--r-pill);background:var(--raised);color:var(--ink2);white-space:nowrap}
+.hh-delta.up{color:var(--ok)}
+.hh-delta.dn{color:var(--crit)}
+.hh-delta[hidden]{display:none}
+.hh-say{margin:0;font-size:var(--fs-xl);line-height:1.42;font-weight:var(--fw-medium);letter-spacing:-.018em;
+ color:var(--ink);text-wrap:pretty}
+.hh-say b{font-weight:var(--fw-bold)}
+.hh-say .hh-since{color:var(--mut);font-weight:var(--fw-regular)}
+.hh-note{margin:12px 0 0;font-size:var(--fs-sm);line-height:1.55;color:var(--mut);max-width:68ch}
+.hh-tally{display:flex;flex-wrap:wrap;gap:6px 0;margin-top:14px;font-size:var(--fs-xs);color:var(--mut)}
+.hh-tally:empty{display:none}
+.hh-tally span{padding:0 14px;border-left:1px solid var(--line2);white-space:nowrap}
+.hh-tally span:first-child{padding-left:0;border-left:0}
+.hh-tally b{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--ink);font-variant-numeric:tabular-nums}
+.hh-trend{margin:8px 0 0;font-size:var(--fs-2xs);line-height:1.5;color:var(--dim)}
+.hh-assure{display:flex;align-items:center;gap:10px;margin:0;padding:12px 0;border-top:1px solid var(--line);
+ font-size:var(--fs-xs);line-height:1.5;color:var(--ink2);font-weight:var(--fw-medium)}
+/* A small seal: a ring with a tick, drawn with borders so it follows the theme. */
+.hh-seal{flex:none;position:relative;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--ok)}
+.hh-seal::after{content:"";position:absolute;left:4.5px;top:2px;width:4px;height:7px;
+ border:solid var(--ok);border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+
+/* ---- the findings ---- */
+.hh-row{display:grid;grid-template-columns:14px minmax(0,1fr) auto 64px 92px;gap:var(--sp-4);align-items:center;
+ padding:15px 0;border-top:1px solid var(--line)}
+.hh-row>*{min-width:0}
+.hh-cols{padding:10px 0 9px;border-top:1.5px solid var(--ink);font-size:var(--fs-3xs);font-weight:var(--fw-bold);
+ letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.hh-cols span:nth-child(4){text-align:right}
+.hh-cols span:nth-child(3){width:148px}
+.hh-list .hh-row:first-child{border-top-color:var(--line2)}
+.hh-sq{width:12px;height:12px;border-radius:calc(var(--r-xs) / 2);background:var(--line2)}
+.hh-sq.b-none{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line2)}
+.hh-q .l{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--ink);line-height:1.35}
+.hh-n{margin-top:3px;font-size:var(--fs-sm);line-height:1.45;color:var(--ink2)}
+.hh-src{margin-top:3px;font-size:var(--fs-2xs);line-height:1.45;color:var(--dim)}
+.hh-src:empty{display:none}
+.hh-row[data-state="wait"] .hh-q .l,.hh-row[data-state="access"] .hh-q .l{color:var(--ink2)}
+.hh-strip{display:flex;gap:4px;width:148px}
+.hh-wk{width:14px;height:14px;flex:none;border-radius:calc(var(--r-xs) / 2);background:transparent;
+ box-shadow:inset 0 0 0 1px var(--line2);background-image:none}
+.hh-wk:not([class*=" b-"]){box-shadow:none;border:1px dashed var(--line2)}
+.hh-now{text-align:right;font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em;
+ color:var(--ink);font-variant-numeric:tabular-nums;line-height:1}
+.hh-now small{font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--mut);margin-left:1px}
+.hh-row[data-state="wait"] .hh-now,.hh-row[data-state="access"] .hh-now{color:var(--dim);font-size:var(--fs-md)}
+.hh-status{justify-self:end;white-space:nowrap}
+/* bands: the square now is solid; earlier weeks are the same hue, lighter */
+.hh-sq.b-crit,.hh-wk.b-crit.now{background:var(--crit-solid);box-shadow:none}
+.hh-sq.b-med,.hh-wk.b-med.now{background:var(--med-solid);box-shadow:none}
+.hh-sq.b-ok,.hh-wk.b-ok.now{background:var(--ok-solid);box-shadow:none}
+.hh-wk.b-crit{background:var(--crit-solid);box-shadow:none;opacity:.42}
+.hh-wk.b-med{background:var(--med-solid);box-shadow:none;opacity:.42}
+.hh-wk.b-ok{background:var(--ok-solid);box-shadow:none;opacity:.42}
+.hh-wk.now{opacity:1}
+/* only a row with a guide to open is drawn as something to press */
+.hh-row.clickable{cursor:pointer;border-radius:var(--r-xs);margin:0 -12px;padding-left:12px;padding-right:12px;
+ transition:background .15s}
+.hh-row.clickable:hover{background:var(--hover)}
+.hh-row.clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.hh-row.clickable .hh-src::after{content:" ›";color:var(--accent-ink);font-weight:var(--fw-semibold)}
+.hh-legend{margin:0;padding:12px 0 0;border-top:1px solid var(--line);font-size:var(--fs-2xs);line-height:1.5;color:var(--dim)}
+/* Overview's sheet and Detail's panels keep their own spacing below the tab bar. */
+.tabpane .hh-report{margin-top:2px}
+
+/* ---- narrower: the panel, not the window (container panel, above) ---- */
+@container panel (max-width:760px){
+ .hh-report{padding:22px 20px 0}
+ .hh-findings{padding:4px 20px 16px}
+ .hh-row{grid-template-columns:12px minmax(0,1fr) auto;grid-template-areas:"sq q pill" ". strip now";
+  row-gap:10px;column-gap:12px}
+ .hh-row>.hh-sq{grid-area:sq;align-self:start;margin-top:4px}
+ .hh-row>.hh-q{grid-area:q}
+ .hh-row>.hh-strip{grid-area:strip;width:auto}
+ .hh-row>.hh-now{grid-area:now}
+ .hh-row>.hh-status{grid-area:pill;align-self:start}
+ .hh-cols{grid-template-columns:minmax(0,1fr);grid-template-areas:none}
+ .hh-cols span:not(:nth-child(2)){display:none}
+ .hh-row.clickable{margin:0 -10px;padding-left:10px;padding-right:10px}
+}
+@container panel (max-width:520px){
+ .hh-verdict{grid-template-columns:minmax(0,1fr);gap:var(--sp-4);justify-items:center;text-align:center}
+ .hh-word{text-align:left}
+ .hh-say{font-size:var(--fs-lg)}
+ .hh-ring{width:108px;height:108px}
+ .hh-report{padding:18px 16px 0}
+ .hh-findings{padding:2px 16px 14px}
+ .hh-tally span{padding:0 10px}
+ .hh-wk{width:13px;height:13px}
+ .hh-strip{gap:3px}
+}
 """

@@ -20,24 +20,40 @@ def get(keys, business_code: str | None = None):
     require_manager()
     keys = frappe.parse_json(keys) if isinstance(keys, str) else list(keys)
 
-    from command_center.kpi.live import LIVE, evaluate as evaluate_live
+    from command_center.kpi.live import LIVE
 
     known = load_all()
     unknown = [k for k in keys if k not in known and k not in LIVE]
     if unknown:
         frappe.throw(f"Unknown KPI(s): {', '.join(unknown)}. "
                      f"Known: {', '.join(sorted(known) + sorted(LIVE))}")
+    result = figures(keys, business_code)
+    # Business Health, whenever it is worked out (here for Home and Business Health, and
+    # daily by health.record_all): one snapshot per business per day, for its history.
+    from command_center import health
+    health.observe(business_code, result)
+    return {k: result[k] for k in keys if k in result}
 
-    # Figures from the facts, and the few read straight from ERPNext (kpi/live.py).
-    # Those from the facts are kept until a load changes the facts (speed.py), so a
-    # screen opened again, or refreshed, does not work them out again.
-    from command_center import speed
-    facts_keys = sorted(k for k in keys if k in known)
+
+def figures(keys, business_code=None) -> dict:
+    """The figures asked for, worked out (or kept, speed.py) -- no permission check: the
+    callers are get() above, after require_manager(), and the scheduler.
+
+    Figures from the facts, and the few read straight from ERPNext (kpi/live.py). Those
+    from the facts are kept until a load changes the facts (speed.py), so a screen opened
+    again, or refreshed, does not work them out again. Business Health's questions also
+    say what they were counted from (health.annotate), which may need a figure the screen
+    did not ask for: it is worked out with the rest and left for the caller to drop."""
+    from command_center import health, speed
+    from command_center.kpi.live import LIVE, evaluate as evaluate_live
+
+    known = load_all()
+    facts_keys = sorted({k for k in keys if k in known} | (health.parts(keys) & set(known)))
     result = (speed.cached("engine", business_code, {"keys": facts_keys}, engine,
                            {"keys": facts_keys, "business_code": business_code})
               if facts_keys else {})
     result.update(evaluate_live([k for k in keys if k in LIVE], business_code))
-    return {k: result[k] for k in keys if k in result}
+    return health.annotate(result)
 
 
 def engine(keys, business_code=None) -> dict:

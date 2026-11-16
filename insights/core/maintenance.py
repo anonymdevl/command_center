@@ -9,6 +9,7 @@ Run every night by the scheduler (manage.py scheduler), or by hand:
 - expired sign-in sessions are cleared (Django never clears them by itself);
 - the Reports screen's runs keep the latest `report_runs_keep` (default 10) of each
   report for each business;
+- Business Health's daily snapshots keep `health_snapshot_days` (default 400) days;
 - the platform's database is backed up to `backup_dir` (default ~/insights-backups),
   with a copy of insights.json and the uploaded logos, keeping `backup_days` (default 14)
   days of them. A backup is skipped, and the reason logged, when the disk has less
@@ -159,6 +160,13 @@ def prune_report_runs() -> int:
     return reports.prune_runs(int(_conf("report_runs_keep", reports.KEEP_RUNS)))
 
 
+def prune_health_snapshots() -> int:
+    """Business Health's daily snapshots (command_center/health.py): `health_snapshot_days`
+    (default 400) days kept, enough for its eight weeks and a year's comparison."""
+    from command_center import health
+    return health.prune(int(_conf("health_snapshot_days", health.KEEP_DAYS)))
+
+
 def daily() -> dict:
     import frappe  # insights.compat
     done = {"error_log_pruned": prune_error_log(),
@@ -168,6 +176,11 @@ def daily() -> dict:
     except Exception as e:  # recorded, and the rest of the upkeep still runs
         frappe.log_error(title="Platform upkeep: report runs", message=frappe.get_traceback())
         done["report_runs_pruned"] = f"failed: {e}"
+    try:
+        done["health_snapshots_pruned"] = prune_health_snapshots()
+    except Exception as e:  # recorded, and the rest of the upkeep still runs
+        frappe.log_error(title="Platform upkeep: health snapshots", message=frappe.get_traceback())
+        done["health_snapshots_pruned"] = f"failed: {e}"
     clear_sessions()
     done["sessions"] = "cleared expired"
     try:

@@ -95,7 +95,7 @@ def score_approvals(r):
     ok = got["decided"] - got["alone"]
     return (round(100 * ok / got["decided"], 4),
             f"of {got['decided']:,} approved purchase orders and payments had someone other "
-            f"than the raiser approve them", {"href": "/app/version"})
+            f"than the raiser approve them", {"href": "/app/version"}, None, got["decided"])
 
 
 # --------------------------------------------------------------------------- records
@@ -120,7 +120,8 @@ def score_records(r):
     return (round(100 * (costed + valued) / total, 4),
             f"of {total:,} invoice and stock lines carry a cost or valuation; "
             f"{missing:,} do not",
-            {"fact": "fact_stock_balance", "filters": {"actual_qty": [">", 0], "has_valuation": 0}})
+            {"fact": "fact_stock_balance", "filters": {"actual_qty": [">", 0], "has_valuation": 0}},
+            None, total)
 
 
 # --------------------------------------------------------------------------- access
@@ -143,7 +144,7 @@ def score_access(r):
                 if any(roles & set(a) and roles & set(b) for a, b, _ in CONFLICTS))
     return (round(100 * (len(held) - clash) / len(held), 4),
             f"of {len(held):,} active accounts hold no conflicting pair of duties; "
-            f"{clash:,} do")
+            f"{clash:,} do", None, None, len(held))
 
 
 # --------------------------------------------------------------------------- the score

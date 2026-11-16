@@ -6494,3 +6494,288 @@ class Delegation(TransactionTestCase):
         self.assertEqual(titles["Fix the pump"]["reference"]["doctype"], "Task")
         self.assertTrue(all(t["to"] == "ama@test" for t in got["open"]))
         self.assertEqual(got["figures"]["work_open"]["value"], 3)
+
+
+# --------------------------------------------------------------------------- Business Health
+SIX = ("score_deliver", "score_paid", "score_paperwork", "score_approvals", "score_records",
+       "score_access")
+
+
+def _health_figs(control=80, **scores):
+    """The seven figures as kpi.get returns them: value, note and state."""
+    out = {"control_score": {"value": control, "note": "out of 100: the average",
+                             "data_status": {"state": "live"}}}
+    for k in SIX:
+        v = scores.get(k, 75.0)
+        state = "live" if v is not None else scores.get(f"{k}_state", "needs_setup")
+        out[k] = {"value": v, "note": "of 10 things", "data_status": {"state": state}}
+    return out
+
+
+class BusinessHealthHistory(TransactionTestCase):
+    """The snapshot store behind the eight-week strips and "on last week"
+    (command_center/health.py): one per business per day, the latest complete read wins,
+    the last one in each ISO week, and the change in whole points."""
+
+    databases = {"default", "aux"}
+
+    def setUp(self):
+        from insights.compat import run_as
+        self._as = run_as("Administrator")
+        self._as.__enter__()
+        self.addCleanup(lambda: self._as.__exit__(None, None, None))
+
+    def _rows(self, code="biz"):
+        import frappe
+
+        from command_center import health
+        return frappe.get_all(health.DOCTYPE, filters={"business_code": code},
+                              fields=["name", "day", "control_score", "questions"], order_by="day asc")
+
+    def test_one_snapshot_a_day_and_the_latest_wins(self):
+        from command_center import health
+        day = dt.date(2026, 11, 16)
+        self.assertTrue(health.snapshot("biz", _health_figs(80), today=day))
+        self.assertFalse(health.snapshot("biz", _health_figs(80), today=day), "same read: nothing written")
+        self.assertTrue(health.snapshot("biz", _health_figs(62, score_deliver=40.0), today=day))
+        [row] = self._rows()
+        self.assertEqual(row.name, "biz::2026-11-16")
+        self.assertEqual(float(row.control_score), 62)
+        q = json.loads(row.questions)
+        self.assertEqual(set(q), set(SIX))
+        self.assertEqual(q["score_deliver"], {"value": 40.0, "state": "live"})
+        # a read that found ERPNext away does not replace the day's complete one
+        away = _health_figs(70, score_access=None, score_access_state="unreachable")
+        self.assertFalse(health.snapshot("biz", away, today=day))
+        self.assertEqual(float(self._rows()[0].control_score), 62)
+        # a needs-setup question is a real state, kept as it is
+        setup = _health_figs(75, score_approvals=None)
+        self.assertTrue(health.snapshot("biz", setup, today=day))
+        self.assertEqual(json.loads(self._rows()[0].questions)["score_approvals"],
+                         {"value": None, "state": "needs_setup"})
+        # the next day is its own row; all businesses together are never stored
+        health.snapshot("biz", _health_figs(90), today=day + dt.timedelta(days=1))
+        self.assertEqual(len(self._rows()), 2)
+        self.assertFalse(health.snapshot("__all__", _health_figs(90), today=day))
+        self.assertFalse(health.snapshot(None, _health_figs(90), today=day))
+        # a screen that showed Control Health alone does not overwrite the day's questions
+        health.observe("biz", {"control_score": {"value": 10, "data_status": {"state": "live"}}})
+        self.assertNotIn(10.0, [float(r.control_score) for r in self._rows()])
+
+    def test_the_eight_week_series(self):
+        from command_center import health
+        today = dt.date(2026, 11, 18)                 # a Wednesday, ISO week 47
+        for day, score in ((dt.date(2026, 9, 1), 11),  # before the eight weeks: left out
+                           (dt.date(2026, 9, 28), 50),  # Monday of week 40, the first shown
+                           (dt.date(2026, 10, 12), 55), (dt.date(2026, 10, 17), 58),  # week 42: Saturday's
+                           (dt.date(2026, 11, 9), 70),  # last week (46)
+                           (dt.date(2026, 11, 16), 80), (dt.date(2026, 11, 18), 85)):  # this week
+            health.snapshot("biz", _health_figs(score, score_deliver=float(score)), today=day)
+        weeks = health.weeks("biz", today=today)
+        self.assertEqual(len(weeks), 8)
+        self.assertEqual([w["week"] for w in weeks],
+                         [f"2026-W{n}" for n in range(40, 48)])
+        self.assertEqual(weeks[0]["start"], "2026-09-28")
+        self.assertEqual([w["control_score"] for w in weeks],
+                         [50, None, 58, None, None, None, 70, 85])
+        self.assertEqual(weeks[2]["day"], "2026-10-17", "the last snapshot of the week")
+        self.assertIsNone(weeks[1]["day"], "a week with no snapshot is empty, not filled in")
+        self.assertEqual(weeks[1]["questions"], {})
+        self.assertEqual(weeks[-1]["questions"]["score_deliver"]["value"], 85.0)
+        # pruning by age keeps the weeks shown
+        self.assertEqual(health.prune(days=60), 1)  # only 1 Sep is older than 60 days
+
+    def test_last_week_delta(self):
+        from command_center import health
+        today = dt.date(2026, 11, 18)
+        health.snapshot("biz", _health_figs(70), today=dt.date(2026, 11, 13))
+        health.snapshot("biz", _health_figs(82), today=dt.date(2026, 11, 15))   # Sunday: last week's
+        health.snapshot("biz", _health_figs(85), today=dt.date(2026, 11, 17))
+        got = health.history("biz", today=today)
+        self.assertEqual(got["last_week"], {"week": "2026-W46", "day": "2026-11-15", "control_score": 82})
+        self.assertEqual(got["delta"], 3)
+        health.snapshot("biz", _health_figs(79), today=today)
+        self.assertEqual(health.history("biz", today=today)["delta"], -3)
+        # no score stored last week: no delta, and no last week to show
+        fresh = health.history("other", today=today)
+        self.assertIsNone(fresh["last_week"])
+        self.assertIsNone(fresh["delta"])
+        self.assertEqual(len(fresh["weeks"]), 8)
+        self.assertIsNone(health.delta([{"control_score": 80}, {"control_score": None}]))
+
+
+class BusinessHealthScreen(TransactionTestCase):
+    """The screen's figures say what they were counted from, with the counts the figures
+    carry, and each read of them keeps today's snapshot; scores show as percentages."""
+
+    databases = {"default", "aux"}
+
+    def _legacy(self, name):
+        from pathlib import Path
+        return (Path(__file__).resolve().parent.parent / "frontend" / "src" / "legacy" / name).read_text()
+
+    def test_counted_from_uses_the_real_counts_and_the_read_is_kept(self):
+        from command_center import health, install
+        from command_center.api import ingest
+        from insights.compat import run_as
+
+        Group.objects.get_or_create(name="Insights Dashboard Manager")
+        fake = FakeERPNext()
+        from django.conf import settings
+        from cryptography.fernet import Fernet
+        settings.CONFIG.setdefault("encryption_key", Fernet.generate_key().decode())
+        up = [mock.patch("requests.get", fake("GET")), mock.patch("requests.post", fake("POST")),
+              mock.patch("time.sleep", lambda s: None)]
+        for p in up:
+            p.start()
+        self.addCleanup(lambda: [p.stop() for p in up])
+        with run_as("Administrator"):
+            install.register_business("Test Medical Ltd", "https://erp.test", "key", "s3cret")
+            ingest.run_all(full=True)
+        U = get_user_model()
+        m = U.objects.create_user("boss@test.com", "boss@test.com", "a-long-test-pass-9")
+        m.groups.add(Group.objects.get(name="Insights Dashboard Manager"))
+        c = Client()
+        self.assertTrue(c.login(username="boss@test.com", password="a-long-test-pass-9"))
+
+        def post(method, **args):
+            r = c.post(f"/api/method/{method}", json.dumps(args), content_type="application/json")
+            self.assertEqual(r.status_code, 200, f"{method}: {r.content[:300]!r}")
+            return r.json()["message"]
+
+        code = "test_medical_ltd"
+        keys = list(SIX) + ["control_score"]
+        got = post("command_center.api.kpi.get", keys=keys, business_code=code)
+        self.assertEqual(set(got), set(keys), "the parts the counts need are not handed back")
+        parts = post("command_center.api.kpi.get", keys=["stock_lines_promised", "invoices_written"],
+                     business_code=code)
+        expect = {"score_deliver": parts["stock_lines_promised"]["value"],
+                  "score_paperwork": parts["invoices_written"]["value"],
+                  "score_records": got["score_records"].get("counted")}
+        scored = 0
+        for key in SIX:
+            fig, text = got[key], got[key].get("counted_from")
+            self.assertTrue(text and text.endswith("in ERPNext"), f"{key}: {text!r}")
+            if fig["value"] is None or key == "score_paid":
+                # nothing to count over, or an amount rather than a count: no number at all
+                self.assertTrue(text.startswith("read from "), f"{key}: {text!r}")
+                self.assertNotRegex(text, r"\d", f"{key} invents a count: {text!r}")
+                continue
+            scored += 1
+            n = expect.get(key, fig.get("counted"))
+            self.assertTrue(n, f"{key} carries no count")
+            self.assertIn(f"counted from {int(n):,} ", text)
+            # the same count the figure's own note states
+            self.assertIn(f"{int(n):,}", fig["note"], f"{key}: {text!r} vs {fig['note']!r}")
+        self.assertGreaterEqual(scored, 3, "the fake business scores the facts' questions")
+        self.assertEqual(got["score_access"]["note"], "no active accounts")
+        self.assertEqual(got["score_access"]["counted_from"],
+                         "read from the user accounts and their roles in ERPNext")
+        # the read just shown is today's snapshot, and the screen's history has it
+        with run_as("Administrator"):
+            rows = frappe_rows(health.DOCTYPE, code)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(float(rows[0]["control_score"]), got["control_score"]["value"])
+        post("command_center.api.kpi.get", keys=keys, business_code=code)
+        with run_as("Administrator"):
+            self.assertEqual(len(frappe_rows(health.DOCTYPE, code)), 1, "one snapshot a day")
+        h = post("command_center.api.health.history", business_code=code)
+        self.assertEqual(len(h["weeks"]), 8)
+        self.assertEqual(h["weeks"][-1]["control_score"], got["control_score"]["value"])
+        self.assertIsNone(h["last_week"])
+        for key in SIX:
+            self.assertIn(key, h["weeks"][-1]["questions"])
+
+    def test_scores_show_as_percentages(self):
+        home = self._legacy("home.js")
+        page = json.loads(self._legacy("views.json"))["health"]
+        self.assertNotIn("/100", home, "a score is shown as a bare number out of 100")
+        self.assertNotIn("/100", page)
+        # Business Health's ring and each finding's "now", and Home's gauge, carry a % sign
+        self.assertRegex(home, r'head\.append\(el\("span", null, String\(score\)\), el\("small", null, "%"\)\)')
+        self.assertRegex(home, r'now\.append\(el\("span", null, String\(s\.score\)\), el\("small", null, "%"\)\)')
+        self.assertRegex(home, r'mid\.append\(el\("b", null, String\(score\)\), el\("small", null, "%"\)\)')
+        self.assertIn(r'replace(/^out of 100:\s*/i, "")', home, "the control note's 'out of 100' is dropped")
+        # the check can fail
+        self.assertRegex('<small>/100</small>', r"/100")
+
+    def test_parity_nothing_lost(self):
+        """Everything Business Health had before the redesign (f59597c) is still there."""
+        failures = health_parity(self._legacy)
+        self.assertEqual(failures, [], "\n".join(failures))
+        # the check can fail: the page without its loads panel is caught
+        broken = lambda name: (self._legacy(name).replace('id=\\"loads-refresh\\"', 'id=\\"x\\"')
+                               if name == "views.json" else self._legacy(name))
+        self.assertTrue(any("loads-refresh" in f for f in health_parity(broken)))
+
+
+def frappe_rows(doctype, code):
+    import frappe
+    return frappe.get_all(doctype, filters={"business_code": code}, fields=["name", "control_score"])
+
+
+# The inventory of Business Health before the redesign, each with where it must still be.
+HEALTH_INVENTORY = (
+    ("views.json", "<h3>Business Health</h3>", "the heading, as the sidebar says it"),
+    ("views.json", "Six questions, asked of the business every morning", "the line under the heading"),
+    ("views.json", 'id="hh-score"', "Control Health's figure"),
+    ("views.json", 'id="hh-trend"', "Control Health's note"),
+    ("views.json", 'id="hh-say"', "the sentence: what is going badly"),
+    ("views.json", "This is not a score about the software.", "the note on what the score is"),
+    ("views.json", "It measures whether the records the business runs on can be trusted this week.",
+     "the note on what the score is"),
+    ("views.json", "Can we deliver what we sold?", "question 1"),
+    ("views.json", "Are we getting paid?", "question 2"),
+    ("views.json", "Is the paperwork finished?", "question 3"),
+    ("views.json", "Were the right people asked?", "question 4"),
+    ("views.json", "Are our records clean?", "question 5"),
+    ("views.json", "Who can see what?", "question 6"),
+    ("views.json", ">Overview</button>", "the Overview tab"),
+    ("views.json", ">Detail</button>", "the Detail tab"),
+    ("views.json", 'id="loads"', "the loads panel"),
+    ("views.json", "The data behind these figures", "the loads panel's heading"),
+    ("views.json", 'id="loads-refresh"', "Refresh Now"),
+    ("views.json", 'id="loads-facts"', "when each kind of record was last read"),
+    ("views.json", 'id="loads-more"', "Show the load history"),
+    ("views.json", 'id="loads-hist"', "the load history"),
+    ("views.json", "What is going wrong, largest first", "the alerts' heading"),
+    ("views.json", 'class="alert-live-list"', "the alert list"),
+    ("views.json", 'id="hh-ask"', "What you would be asked first"),
+    ("views.json", "What you would be asked first", "its heading"),
+    ("home.js", 'score_deliver", "Delivering what we sold", "Can we deliver what we sold?"',
+     "the six questions' figures, unchanged"),
+    ("home.js", "export function renderHealthTiles", "the renderer"),
+    ("home.js", "GUIDE_STATES.has(state) ? guideWords(state)", "needs setup and no access"),
+    ("home.js", "Can't reach ERPNext just now", "can't reach"),
+    ("home.js", "Could not be read just now", "not read"),
+    ("home.js", "Nothing to score yet", "not scored"),
+    ("home.js", "hasGuide(f) && openDrawer", "a row opens only its guide"),
+    ("home.js", "guideDrawer(q, f.data_status.guide)", "the guide a question opens"),
+    ("home.js", "Not enough is recorded yet to score any of the six questions.", "nothing scored"),
+    ("home.js", "going badly", "the sentence"),
+    ("home.js", "Number(r.f.value) < 60", "going badly is under 60, as before"),
+    ("home.js", 'if (score >= 80) return { key: "ok", word: "Healthy"', "the bands, as the tones"),
+    ("home.js", 'if (score >= 60) return { key: "med", word: "Watch"', "the bands, as the tones"),
+    ("home.js", "One stated ratio: ", "each question's ratio, stated"),
+    ("home.js", "How it is scored", "Home's gauge explains itself"),
+    ("core.js", "function askFirst(root, alerts)", "What you would be asked first, filled"),
+    ("core.js", 'root.querySelector("#hh-ask")', "What you would be asked first, filled"),
+    ("loads.js", 'panel.querySelector("#loads-facts")', "the loads panel, filled"),
+    ("hydrate.js", 'health: ["score_paid", "score_deliver", "score_paperwork", "score_approvals", '
+                   '"score_records",\n           "score_access", "control_score"]',
+     "the seven figures Business Health asks for"),
+)
+
+
+def health_parity(read) -> list:
+    """What of HEALTH_INVENTORY is missing: '<file>: <text> (<what>)' for each."""
+    views = json.loads(read("views.json"))
+    texts = {"views.json": json.dumps(views["health"]) + views["health"]}
+    out = []
+    for name, text, what in HEALTH_INVENTORY:
+        src = texts.get(name)
+        if src is None:
+            src = texts[name] = read(name)
+        if text not in src:
+            out.append(f"{name}: {text!r} is gone ({what})")
+    return out

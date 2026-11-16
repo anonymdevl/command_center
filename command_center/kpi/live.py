@@ -60,7 +60,7 @@ class Live:
     key: str
     label: str
     unit: str
-    fn: Callable          # (reader) -> (value, note) or (value, note, drill)
+    fn: Callable          # (reader) -> (value, note) or (value, note, drill[, status[, counted]])
     href: str
     # What a figure over a ranked or limited set is a subset of, as on a Kpi.
     subset_of: str | None = None
@@ -623,12 +623,16 @@ def compute(keys, business_code=None, side_by_side: bool = True) -> dict:
     for key, (ok, got) in zip(wanted, answers):
         spec = LIVE[key]
         drill = None
+        counted = None
         if ok:
             value, note = got[0], got[1]
             drill = got[2] if len(got) > 2 else None
             # A fourth element is the figure's own status: needs_setup (guides.py) when
             # nothing behind it is recorded in ERPNext yet.
             state = (got[3] if len(got) > 3 and got[3] else {"state": "live", "message": None})
+            # A fifth is how many records a share was counted over (Business Health's
+            # "counted from", command_center/health.py).
+            counted = got[4] if len(got) > 4 else None
         elif isinstance(got, NeedsSetup):
             value, note, state = None, got.status.get("message"), got.status
         elif _refused(got):
@@ -677,6 +681,8 @@ def compute(keys, business_code=None, side_by_side: bool = True) -> dict:
             "as_of": as_of, "basis": spec.subset_of, "note": note,
             "drill": drill, "data_status": state, "period": None, "group": None,
         }
+        if counted is not None:
+            out[key]["counted"] = counted
     return out
 
 

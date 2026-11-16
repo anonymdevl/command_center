@@ -48,6 +48,8 @@ EXTRA_INDEXES = {
     "Command Center Recommendation Feedback": [["business_code", "rule", "acted_on"]],
     # The Reports screen's "Last run": the latest run per business and report (api/reports.py).
     "Command Center Report Run": [["business_code", "report", "started"]],
+    # Business Health's eight-week strip: one business's days, newest first (health.py).
+    "Command Center Health Snapshot": [["business_code", "day"]],
 }
 
 NO_COLUMN = {"Section Break", "Column Break", "Tab Break", "HTML", "Button", "Heading",
