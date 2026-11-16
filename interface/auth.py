@@ -20,8 +20,6 @@ body.cc-auth{overflow:auto;min-height:100vh;background:var(--bg);display:grid;pl
 .auth-brand li::before{content:"";position:absolute;left:2px;top:5px;width:12px;height:12px;border-radius:50%;
  background:var(--accent);box-shadow:inset 0 0 0 3px var(--t3)}
 .auth-mark{width:44px;height:44px;border-radius:13px;background:var(--ink);display:grid;place-items:center}
-.auth-mark i{width:18px;height:18px;border-radius:50%;border:3.5px solid var(--accent);display:block;
- box-shadow:7px 0 0 -1px var(--t3)}
 /* The product's own logo (Settings -> Branding), one for each background. */
 .auth-logo{display:block;height:44px;width:auto;max-width:240px;object-fit:contain}
 .auth-logo.dk{display:none}

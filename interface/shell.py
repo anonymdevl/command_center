@@ -20,8 +20,6 @@ SHELL_CSS = """
 .brand{display:flex;align-items:center;gap:9px;padding:6px 6px 18px;margin:0 6px;
  border-bottom:1px solid var(--line2)}
 .logo{width:34px;height:34px;border-radius:11px;background:var(--ink);display:grid;place-items:center;flex:none}
-.logo i{width:14px;height:14px;border-radius:50%;border:3px solid var(--accent);display:block;
- box-shadow:6px 0 0 -1px var(--bg)}
 .brand-t{min-width:0}
 /* The product's own logo (Settings -> Branding) in place of the mark, one for each
    background. The name is set by the administrator, so a long one is cut, not wrapped. */
@@ -1358,4 +1356,19 @@ table.dt td.dt-w3 > .dt-tx{min-width:26ch;max-width:44ch;display:-webkit-box;-we
  .xm{border:0;border-radius:0;padding:0;margin-bottom:var(--sp-6);break-inside:avoid}
  .xm-below{display:none}
 }
+
+/* ======================================================================
+   The built-in mark (16 Nov 2026): the lens over four bars and a line of ring nodes,
+   wherever no logo is uploaded -- the sidebar's .logo (Sidebar.jsx, LensMark.jsx), the
+   sign-in page's .auth-mark (command-center-login.html) and the Settings -> Branding
+   slots that preview it. Drawn in currentColor on a rounded tile: an ink tile with a
+   light mark on a light ground, and the inverse on a dark one (the tokens swap). An
+   uploaded logo replaces the tile whole.
+   ====================================================================== */
+.logo,.auth-mark{color:var(--surface)}
+.cc-lens{display:block;width:72%;height:72%;overflow:visible}
+/* The Settings slots are always a light ground, whatever the theme: show the mark as it
+   sits on one. */
+.st-logo-box .logo{width:44px;height:44px;border-radius:13px}
+[data-theme="dark"] .st-logo-box .logo{background:var(--surface);color:var(--ink)}
 """

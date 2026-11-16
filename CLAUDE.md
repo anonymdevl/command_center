@@ -414,9 +414,13 @@ and a Report Style (15 Nov 2026): Platform Branding / Client Branding / Client L
 header/footer HTML files of our own to a temp folder and removes them), vendor credit
 Show / Small / Hide (Hide: administrator only). PDFs use the Report Logo (`logo_report`),
 not the screens' logos. The sign-in page uses the Sign-In Logo (`logo_signin`, 16 Nov
-2026), else the built-in `.auth-mark` (interface/auth.py) -- never another logo; its
+2026), else the built-in `.auth-mark` -- never another logo; its
 vendor footer is two quiet lines under the card, each item whole (`branding.public()`
-`built_by`, `contacts`). `branding.document(code, own=...)` resolves it; the platform's own
+`built_by`, `contacts`). The built-in mark, wherever no logo is uploaded (sidebar, sign-in,
+favicon, the Settings slots' previews), is the lens-and-chart mark (16 Nov 2026): inline
+SVG in currentColor on a rounded tile (`LensMark.jsx`, the sign-in page, the favicon file
+`public/images/command-center.svg`; one geometry, held by `insights/tests.py`). PDFs fall
+back to the product's name, never the mark. `branding.document(code, own=...)` resolves it; the platform's own
 documents (usage statements, incident reports) pass own=True.
 `command_center/branding.py` is the one source: every page, the boot payload, every PDF
 (`export.brand_header`, `export.pdf_options` -- the vendor's line and "Page X of Y" on

@@ -3349,6 +3349,23 @@ def _data_url(raw: bytes, mime="image/png") -> str:
     return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
 
 
+# The sign-in page's built-in mark, as it opens: the tile, then the lens drawn inline.
+_MARK_TILE = '<div class="auth-mark"><svg class="cc-lens"'
+
+
+def _mark_geometry(svg: str) -> list:
+    """The lens mark's drawing, whatever its markup (JSX or SVG, any colour): each circle,
+    path and bar as its coordinates, in order. The tile of the favicon is left out."""
+    shapes = []
+    for tag, attrs in re.findall(r"<(circle|path|rect)\b([^>]*)/?>", svg):
+        a = dict(re.findall(r'([\w-]+)="([^"]*)"', attrs))
+        if tag == "rect" and "rx" in a:
+            continue  # the favicon's tile
+        keys = {"circle": ("cx", "cy", "r"), "path": ("d",), "rect": ("x", "y", "width", "height")}[tag]
+        shapes.append((tag,) + tuple(a.get(k) for k in keys))
+    return shapes
+
+
 class Branding(TransactionTestCase):
     """Settings -> Branding (command_center/branding.py, platform_settings): the product's
     name, tagline, logos and the vendor's footer are the administrator's alone; uploads
@@ -3480,13 +3497,13 @@ class Branding(TransactionTestCase):
         def login():
             return Client().get("/command-center-login").content.decode()
         page = login()
-        self.assertIn('<div class="auth-mark"><i></i></div>', page, "nothing set: the built-in mark")
+        self.assertIn(_MARK_TILE, page, "nothing set: the built-in mark")
         self.assertNotIn("/branding/", page)
         self.assertIsNone(self._ok("brand")["logo_signin_url"])
         # a screens' logo is not the sign-in page's
         light = self._ok("upload_brand_logo", kind="logo_light", data=_data_url(_png(6, 2)))["logo_light_url"]
         page = login()
-        self.assertIn('<div class="auth-mark"><i></i></div>', page, "the light logo is not used")
+        self.assertIn(_MARK_TILE, page, "the light logo is not used")
         self.assertNotIn(light, page)
         # the Sign-In Logo: on the sign-in page only
         sign = self._ok("upload_brand_logo", kind="logo_signin", data=_data_url(_png(8, 2)))["logo_signin_url"]
@@ -3511,11 +3528,57 @@ class Branding(TransactionTestCase):
         self.assertIn(sign, login())
         # removed: the built-in mark again, and its file is deleted
         self._ok("remove_brand_logo", kind="logo_signin")
-        self.assertIn('<div class="auth-mark"><i></i></div>', login())
+        self.assertIn(_MARK_TILE, login())
         self.assertEqual(Client().get(sign).status_code, 404)
         # administrator only, like every other logo
         self.assertEqual(self._call(self.manager, "upload_brand_logo", kind="logo_signin",
                                     data=_data_url(_png())).status_code, 403)
+
+    def test_built_in_mark(self):
+        """Nothing uploaded: the lens-and-chart mark on the sign-in page, in the sidebar and
+        as the favicon -- one drawing in three places -- and never the old ring mark.
+        Uploaded logos replace it everywhere it stands in."""
+        from django.conf import settings
+
+        from command_center import branding
+        login = Client().get("/command-center-login").content.decode()
+        tile = re.search(r'<div class="auth-mark">(<svg class="cc-lens".*?</svg>)</div>', login, re.S)
+        self.assertIsNotNone(tile, "the sign-in page draws the lens mark in its tile")
+        self.assertIn('stroke="currentColor"', tile.group(1), "drawn in the theme's colour")
+        self.assertNotIn("<i></i>", login, "the old ring mark is gone")
+        components = settings.BASE_DIR / "frontend" / "src" / "components"
+        jsx = (components / "LensMark.jsx").read_text()
+        icon = (settings.APP_PUBLIC / branding.DEFAULT_FAVICON.split("/assets/command_center/", 1)[1]).read_text()
+        self.assertEqual(_mark_geometry(tile.group(1)), _mark_geometry(jsx),
+                         "the sign-in page and LensMark.jsx draw the same mark")
+        self.assertEqual(_mark_geometry(icon), _mark_geometry(jsx), "the favicon is the same mark")
+        self.assertEqual(len(_mark_geometry(jsx)), 12, "ring, neck, grip, line, four nodes, four bars")
+        self.assertNotIn("#e0ad44", icon, "the old gold-on-black icon is gone")
+        sidebar = (components / "Sidebar.jsx").read_text()
+        self.assertRegex(sidebar, r'<div className="logo" aria-hidden="true">\s*<LensMark />',
+                         "the sidebar's fallback is the lens mark")
+        brand = self._boot(self.manager)["brand"]
+        self.assertIsNone(brand["logo_light_url"], "nothing uploaded: the sidebar shows the mark")
+        self.assertEqual(brand["favicon_url"], branding.DEFAULT_FAVICON)
+        self.assertIn(f'<link rel="icon" href="{branding.DEFAULT_FAVICON}">', login)
+        self.assertEqual(Client().get(branding.DEFAULT_FAVICON).status_code, 200)
+        # uploaded: each logo replaces the mark where it stands in
+        light = self._ok("upload_brand_logo", kind="logo_light", data=_data_url(_png(6, 2)))["logo_light_url"]
+        fav = self._ok("upload_brand_logo", kind="favicon", data=_data_url(_png(4, 4)))["favicon_url"]
+        sign = self._ok("upload_brand_logo", kind="logo_signin", data=_data_url(_png(8, 2)))["logo_signin_url"]
+        brand = self._boot(self.manager)["brand"]
+        self.assertEqual((brand["logo_light_url"], brand["logo_dark_url"], brand["favicon_url"]),
+                         (light, light, fav))
+        login = Client().get("/command-center-login").content.decode()
+        self.assertNotIn("cc-lens", login, "the Sign-In Logo replaces the mark")
+        self.assertIn(f'<img class="auth-logo" src="{sign}" alt="">', login)
+        self.assertIn(f'<link rel="icon" href="{fav}">', login, "the uploaded favicon")
+        # removed: the mark again
+        for kind in ("logo_light", "favicon", "logo_signin"):
+            self._ok("remove_brand_logo", kind=kind)
+        login = Client().get("/command-center-login").content.decode()
+        self.assertIn(_MARK_TILE, login)
+        self.assertIn(f'<link rel="icon" href="{branding.DEFAULT_FAVICON}">', login)
 
     def test_outputs_carry_the_brand(self):
         import io
@@ -3660,6 +3723,7 @@ class ReportBranding(TransactionTestCase):
         code = b["business_code"]
         html, _, _ = self._pdf(code)
         self.assertIn('<div class="brand">Ultrasoft Insights</div>', html, "no logo: the product's name")
+        self.assertNotIn("cc-lens", html, "a PDF falls back to the name, never the built-in mark")
         self.assertEqual(self._ok("brand")["report_uses"], "name")
         light, report = _png(6, 2), _png(8, 2)
         self._ok("upload_brand_logo", kind="logo_light", data=_data_url(light))
