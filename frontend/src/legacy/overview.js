@@ -94,7 +94,11 @@ export function planOverview(areas, alerts) {
     const fromAlerts = mine.filter((x) => x.figure_unit === "currency")
       .reduce((s, x) => s + (Number(x.figure) || 0), 0);
     const headline = a.figure?.unit === "currency" ? Number(a.figure.value) || 0 : 0;
-    return { ...a, tier: Math.min(alertTier, stateTier), atStake: fromAlerts || headline };
+    // The alert that put it here, worst first: the lead story says why it leads.
+    const worst = [...mine].sort((x, y) => (SEVERITY[x.severity] ?? NONE)
+      - (SEVERITY[y.severity] ?? NONE) || (Number(y.figure) || 0) - (Number(x.figure) || 0))[0];
+    return { ...a, tier: Math.min(alertTier, stateTier), atStake: fromAlerts || headline,
+      worst: worst && (SEVERITY[worst.severity] ?? NONE) < NONE ? worst : null };
   });
   const urgent = [...scored].sort((x, y) => x.tier - y.tier || y.atStake - x.atStake
     || x.index - y.index);
@@ -200,11 +204,15 @@ export function renderOverview(root, { figures, alerts, specs, done } = {}) {
     head.prepend(kick);
   }
   const sentence = done ? leadSentence(figure, unit) : null;
+  // Why it leads: the open alert's own title (the alert rules' words, from the records),
+  // then the area's figure sentence under it. Never a sentence of its own making.
+  const why = !plan.quiet && plan.lead.worst?.title ? plan.lead.worst.title : null;
   const say = plan.quiet
     ? add("p", "ov-say", "Nothing needs you today.")
+    : why ? add("p", "ov-say", why)
     : sentence ? add("p", "ov-say", sentence) : null;
   if (say) (head || tile.firstChild)?.after(say);
-  if (plan.quiet && sentence) say.after(add("p", "ov-dek", sentence));
+  if ((plan.quiet || why) && sentence) say.after(add("p", "ov-dek", sentence));
   const figs = (LEAD_FIGURES[dept] || [])
     .map((k) => figures?.[k])
     .filter((f) => f && figureText(f) !== null && !GUIDED.has(f.data_status?.state)
