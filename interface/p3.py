@@ -56,29 +56,36 @@ against today it would all fall into the oldest band, which would say nothing ab
 collect.</div>'''
 
 # ---------------- V: HEALTH ----------------
-# The six questions, each one stated ratio read when the screen opens (legacy/home.js
-# renderHealthTiles; kpi score_* and live_governance score_*).
-fams=["Can we deliver what we sold?","Are we getting paid?","Is the paperwork finished?",
- "Were the right people asked?","Are our records clean?","Who can see what?"]
-fh=""
-for nm in fams:
-    fh+=f'''<div class="bk q">
-<div class="khead"><div class="l">{nm}</div><span class="flag f-dim">Reading</span></div>
-<div class="n"><span style="color:var(--dim)">—</span></div><div class="bar"></div><div class="v">&nbsp;</div></div>'''
+# A check-up report (16 Nov 2026, approved mockup-health.html): the verdict, then the six
+# questions as ruled findings, worst first, each with what it was counted from and its
+# last eight weeks. Every figure is the one the screen always showed (legacy/home.js
+# renderHealthTiles; kpi score_* and live_governance score_*); the weeks are the stored
+# snapshots (command_center/health.py). Nothing here is drawn as a sample: each row says
+# "Reading" until its figure arrives. Styled in shell.py (.hh-*).
+fams=[("score_deliver","Can we deliver what we sold?"),("score_paid","Are we getting paid?"),
+ ("score_paperwork","Is the paperwork finished?"),("score_approvals","Were the right people asked?"),
+ ("score_records","Are our records clean?"),("score_access","Who can see what?")]
+_sq='<span class="hh-wk"></span>'*8
+fh="".join(f'''<div class="hh-row" data-q="{k}"><span class="hh-sq" aria-hidden="true"></span>
+<div class="hh-q"><div class="l">{nm}</div><div class="hh-n">Reading&hellip;</div><div class="hh-src"></div></div>
+<div class="hh-strip" role="img" aria-label="Last eight weeks: reading">{_sq}</div>
+<div class="hh-now">&mdash;</div><span class="flag f-dim hh-status">Reading</span></div>''' for k,nm in fams)
 
 V_HEALTH=f'''<div class="topbar"><div><h3>Business Health</h3>
 <div class="when">Six questions, asked of the business every morning</div></div></div>
-<div class="hh-head" style="display:grid;grid-template-columns:190px 1fr;gap:16px;align-items:center;
-background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--line2);
-border-radius:var(--r);padding:18px 20px;margin-bottom:16px">
-<div style="text-align:center"><div id="hh-score" style="font-size:var(--fs-5xl);font-weight:var(--fw-bold);color:var(--dim);line-height:1">—</div>
-<div style="font-size:var(--fs-2xs);color:var(--dim); font-weight:var(--fw-semibold);margin-top:2px">Control health</div>
-<div id="hh-trend" style="font-size:var(--fs-2xs);color:var(--mut);margin-top:5px">&nbsp;</div></div>
-<div><div id="hh-say" style="font-size:var(--fs-md);line-height:1.6">Working it out&hellip;</div>
-<div style="font-size:var(--fs-xs);color:var(--mut);margin-top:9px">This is not a score about the software.
-It measures whether the records the business runs on can be trusted this week.</div></div></div>
-<div class="sect">The six questions</div>
-<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:10px">{fh}</div>
+<div class="hh-report"><div class="hh-verdict">
+<div class="hh-gauge"><div class="hh-ring" id="hh-ring"><div class="hh-ring-n" id="hh-score">&mdash;</div></div>
+<div class="hh-cap">Control Health</div><div class="hh-delta" id="hh-delta" hidden></div></div>
+<div class="hh-word"><p class="hh-say" id="hh-say">Working it out&hellip;</p>
+<p class="hh-note">This is not a score about the software.
+It measures whether the records the business runs on can be trusted this week.</p>
+<div class="hh-tally" id="hh-count"></div>
+<p class="hh-trend" id="hh-trend">&nbsp;</p></div></div>
+<p class="hh-assure"><span class="hh-seal" aria-hidden="true"></span>Every figure here is counted from your own ERPNext records &mdash; nothing is estimated or made up.</p></div>
+<div class="hh-findings"><div class="hh-row hh-cols" aria-hidden="true"><span></span><span>The six questions, worst first</span>
+<span>Last 8 weeks</span><span>Now</span><span></span></div>
+<div class="hh-list" id="hh-rows">{fh}</div>
+<p class="hh-legend" id="hh-legend">Each square is one week, the last reading that week, oldest on the left; an outlined square is a week with nothing stored yet.</p></div>
 <div class="panel loads" id="loads"><div class="loads-h"><div><h4>The data behind these figures</h4>
 <p id="loads-sub">When each kind of record was last read from ERPNext</p></div>
 <button type="button" class="btn pri" id="loads-refresh">Refresh now</button></div>

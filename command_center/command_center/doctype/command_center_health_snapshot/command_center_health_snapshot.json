@@ -1,0 +1,85 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-16 00:00:00.000000",
+ "description": "Business Health on one day for one business: Control Health and each of the six questions' score and state, as the screen worked them out (command_center.health). The latest of the day replaces the earlier one; kept about 400 days.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "business_code",
+  "day",
+  "control_score",
+  "questions",
+  "captured_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "business_code",
+   "fieldtype": "Data",
+   "label": "Business",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "day",
+   "fieldtype": "Date",
+   "label": "Day",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "control_score",
+   "fieldtype": "Float",
+   "label": "Control Health",
+   "in_list_view": 1,
+   "read_only": 1,
+   "description": "The plain average of the questions scored that day, as a percentage; empty when none could be scored."
+  },
+  {
+   "fieldname": "questions",
+   "fieldtype": "Long Text",
+   "label": "Questions",
+   "read_only": 1,
+   "description": "JSON: for each question's figure (score_deliver, score_paid, ...), its score that day and its state (live, needs_setup, no_access, unreachable, failed)."
+  },
+  {
+   "fieldname": "captured_at",
+   "fieldtype": "Datetime",
+   "label": "Captured",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-16 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Command Center",
+ "name": "Command Center Health Snapshot",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Insights Dashboard Manager",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "autoname": "hash",
+ "in_create": 1
+}

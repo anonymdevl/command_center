@@ -490,6 +490,17 @@ const HANDLERS = {
         status: "OK", rows_loaded: i ? 0 : rows, mode: "Incremental", trigger: "Schedule" })),
     };
   },
+  // Business Health's weeks: nothing stored before this week, as on a new business.
+  "command_center.api.health.history": ({ business_code }) => {
+    const monday = new Date();
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const weeks = Array.from({ length: 8 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(d.getDate() - 7 * (7 - i));
+      return { week: `W${i + 1}`, start: d.toISOString().slice(0, 10), day: null, control_score: null, questions: {} };
+    });
+    return { business_code, kept: true, weeks, last_week: null, delta: null, watch: 60 };
+  },
   "command_center.api.ingest.refresh": () => ({ as_of: "2025-08-19", loaded: [{ fact: "fact_sales_invoice", rows: 3 }] }),
   // Conversations, kept in this browser tab's memory so the preview behaves like the
   // site: ask, refresh the screen (not the page), reopen. One sample is there to start.

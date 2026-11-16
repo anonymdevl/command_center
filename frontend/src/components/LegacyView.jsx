@@ -533,7 +533,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     if (viewKey === "command") {
       renderHome(root, { figures: figures.data, alerts: alerts.data, scope, onOpen: opts.onOpen });
     }
-    if (viewKey === "health") renderHealthTiles(root, figures.data, { openDrawer });
+    if (viewKey === "health") renderHealthTiles(root, figures.data, { openDrawer, scope });
     if (hasAlerts && alerts.error) alertsFailed(root, viewKey, alerts.error);
     if (hasRecs) renderRecs(root, viewKey, recs.data, opts);
     if (hasRecs && recs.error) recsFailed(root, viewKey, recs.error);

@@ -8,8 +8,8 @@
  *   Counts              cases_open, tasks_overdue
  *   Business health     control_score: the plain average of the six Business Health
  *                       questions that can be scored (kpi score_* and live_governance
- *                       score_*). "How it is scored" lists each with its note, so 47/100
- *                       is never a number nobody can explain.
+ *                       score_*), as a percentage. "How it is scored" lists each with
+ *                       its note, so 47% is never a number nobody can explain.
  *   Top customers       api/home.top_customers -- share of the last twelve full months
  *
  * Built as DOM, never HTML from the server. Each part fills its own slot and leaves the
@@ -44,101 +44,272 @@ export function renderHome(root, { figures, alerts, scope, onOpen }) {
   customers(root, scope, onOpen);
 }
 
-/** Business Health's six questions, and its headline: the same figures as Home's gauge.
- *  A question not scored yet says why on its tile -- a guide to set it up, "can't reach
- *  ERPNext", or "could not be read" -- never a sample score. */
-export function renderHealthTiles(root, figures, { openDrawer } = {}) {
+/** Business Health, as a check-up report: the verdict (Control Health, the change on last
+ *  week, one plain sentence), then the six questions as ruled findings, worst first --
+ *  each with what it was counted from in ERPNext, its last eight weeks and a status.
+ *  The figures are the same as Home's gauge; the weeks are the stored daily snapshots
+ *  (api/health.history; the last one in each ISO week). A question not scored yet says
+ *  why on its row -- a guide to set it up or to give access, "can't reach ERPNext", or
+ *  "could not be read" -- never a sample score. A row opens its guide, and only that. */
+export function renderHealthTiles(root, figures, { openDrawer, scope } = {}) {
   if (!root || !figures) return 0;
-  let live = 0;
-  const head = root.querySelector("#hh-score");
-  const total = figures.control_score;
-  if (head && total && total.value !== null && total.value !== undefined) {
-    const avg = Math.round(Number(total.value));
-    head.textContent = String(avg);
-    head.style.color = `var(--${toneOf(avg).color})`;
-    const trend = root.querySelector("#hh-trend");
-    if (trend) {
-      trend.textContent = total.note || "";
-      trend.style.color = "var(--mut)";
-    }
-  } else if (head) {
-    head.textContent = "—";
+  if (hist.scope !== scope) Object.assign(hist, { scope, data: null, failed: false, figures: null });
+  const live = drawHealth(root, figures, openDrawer);
+  // Each read of the figures has just stored today's snapshot (api/kpi.get), so the
+  // weeks are asked for after it, once per read.
+  if (hist.figures !== figures) {
+    hist.figures = figures;
+    const seq = ++hist.seq;
+    api.healthHistory(scope)
+      .then((d) => {
+        if (seq !== hist.seq) return;
+        Object.assign(hist, { data: d, failed: false });
+        if (document.body.contains(root)) drawHealth(root, figures, openDrawer);
+      })
+      .catch(() => {
+        if (seq !== hist.seq) return;
+        Object.assign(hist, { data: null, failed: true });
+        if (document.body.contains(root)) drawHealth(root, figures, openDrawer);
+      });
   }
-  root.querySelectorAll(".bk.q").forEach((tile) => {
-    const label = tile.querySelector(".l")?.textContent?.trim();
-    const key = HEALTH_QUESTIONS[label];
-    const f = key && figures[key];
-    tile.querySelector(":scope > .flag[data-prov]")?.remove();
-    delete tile.dataset.illustrative;
-    // A question opens nothing unless it has a guide to show (below): no arrow, no click.
-    tile.classList.remove("clickable");
-    tile.onclick = null;
-    const flag = tile.querySelector(".khead .flag");
-    const foot = tile.querySelector(".v");
-    const state = f?.data_status?.state;
-    if (!f || f.value === null || f.value === undefined) {
-      if (flag) {
-        flag.className = "flag f-dim";
-        flag.textContent = GUIDE_STATES.has(state) ? guideWords(state).flag : state === "unreachable"
-          ? "Can't reach" : state === "failed" ? "Not read" : "Not scored";
-      }
-      if (foot) foot.textContent = f?.note || (f ? "nothing to score yet" : "could not be read just now");
-      tile.removeAttribute("onclick");
-      if (hasGuide(f) && openDrawer) {
-        tile.classList.add("clickable");
-        tile.onclick = () => openDrawer({ node: guideDrawer(label, f.data_status.guide) });
-      }
-      tile.dataset.live = "1";
-      return;
-    }
-    const score = Math.round(Number(f.value));
-    const tone = toneOf(score);
-    const n = tile.querySelector(".n");
-    if (n) {
-      n.textContent = "";
-      const v = el("span", null, String(score));
-      v.style.color = `var(--${tone.color})`;
-      n.append(v, el("small", null, "/100"));
-    }
-    const bar = tile.querySelector(".bar i") || tile.querySelector(".bar")?.appendChild(el("i"));
-    if (bar) {
-      bar.style.width = `${Math.max(0, Math.min(100, score))}%`;
-      bar.style.background = `var(--${tone.color})`;
-    }
-    if (flag) {
-      flag.className = `flag ${tone.flag}`;
-      flag.textContent = tone.word;
-    }
-    if (foot && f.note) foot.textContent = `${score}% ${f.note}`;
-    tile.dataset.live = "1";
-    tile.removeAttribute("onclick");
-    tile.title = "One stated ratio: " + (f.note ? `${score}% ${f.note}.` : "");
-    live += 1;
-  });
-  say(root, figures);
   return live;
 }
 
-/** "Three things are going badly": the questions scoring under 60, worst first. */
-function say(root, figures) {
+const hist = { scope: undefined, data: null, failed: false, figures: null, seq: 0 };
+const ORDER = Object.fromEntries(SCORES.map(([k], i) => [k, i]));
+const WORDS_N = ["no", "one", "two", "three", "four", "five", "six"];
+
+/** Act / Watch / Healthy: the tiles' tones (toneOf), High and Critical both being Act. */
+function band(score) {
+  if (score >= 80) return { key: "ok", word: "Healthy", flag: "f-ok" };
+  if (score >= 60) return { key: "med", word: "Watch", flag: "f-med" };
+  return { key: "crit", word: "Act", flag: "f-crit" };
+}
+
+/** What a question's figure says: scored, or why not (the states the tiles had). */
+function standing(f) {
+  if (f && f.value !== null && f.value !== undefined) {
+    const score = Math.round(Number(f.value));
+    return { scored: true, score, band: band(score) };
+  }
+  const state = f?.data_status?.state;
+  const why = GUIDE_STATES.has(state) ? guideWords(state).foot
+    : state === "unreachable" ? "Can't reach ERPNext just now"
+      : state === "failed" || !f ? "Could not be read just now" : "Nothing to score yet";
+  return state === "no_access"
+    ? { scored: false, access: true, pill: "No Access", flag: "f-high", why }
+    : { scored: false, access: false, pill: "Waiting", flag: "f-dim", why };
+}
+
+function pct(v) {
+  return `${Math.round(Number(v))}%`;
+}
+
+function cap(text) {
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
+}
+
+function drawHealth(root, figures, openDrawer) {
+  const data = hist.data;
+  const series = data?.weeks || [];
+  const lastWeek = series.length > 1 ? series[series.length - 2] : null;
+  const rows = SCORES.map(([key, , q]) => ({ key, q, f: figures[key], s: standing(figures[key]) }));
+  verdict(root, figures, rows, lastWeek, data);
+  let live = 0;
+  const list = root.querySelector("#hh-rows");
+  const nodes = {};
+  root.querySelectorAll(".hh-row[data-q]").forEach((row) => {
+    nodes[row.dataset.q] = row;
+  });
+  rows.forEach((r) => {
+    const row = nodes[r.key];
+    if (!row) return;
+    if (r.s.scored) live += 1;
+    finding(row, r, series, openDrawer);
+  });
+  // Worst first: the lowest scores, then those needing access, then those waiting.
+  const rank = (r) => (r.s.scored ? r.s.score : r.s.access ? 1000 : 2000) * 10 + ORDER[r.key];
+  if (list) [...rows].sort((a, b) => rank(a) - rank(b)).forEach((r) => nodes[r.key] && list.append(nodes[r.key]));
+  const legend = root.querySelector("#hh-legend");
+  if (legend) {
+    legend.textContent = hist.failed
+      ? "The weekly history could not be read just now; this week's square is the reading above."
+      : !data?.kept && data
+        ? "The weekly history is kept for each business; choose one business to see its weeks."
+        : "Each square is one week, the last reading that week, oldest on the left; an outlined "
+          + "square is a week with nothing stored yet.";
+  }
+  return live;
+}
+
+/** The ring, the change on last week, the sentence and the count of questions answered. */
+function verdict(root, figures, rows, lastWeek, data) {
+  const total = figures.control_score;
+  const has = total && total.value !== null && total.value !== undefined;
+  const score = has ? Math.round(Number(total.value)) : null;
+  ring(root.querySelector("#hh-ring"), score);
+  const head = root.querySelector("#hh-score");
+  if (head) {
+    head.textContent = "";
+    if (has) head.append(el("span", null, String(score)), el("small", null, "%"));
+    else head.textContent = "—";
+  }
+  const delta = root.querySelector("#hh-delta");
+  const before = lastWeek?.control_score;
+  if (delta) {
+    if (has && before !== null && before !== undefined) {
+      const d = score - Math.round(Number(before));
+      delta.hidden = false;
+      delta.className = `hh-delta ${d > 0 ? "up" : d < 0 ? "dn" : "eq"}`;
+      delta.textContent = d > 0 ? `▲ ${d} on last week` : d < 0 ? `▼ ${-d} on last week` : "No change on last week";
+      delta.title = `Last week's Control Health was ${pct(before)} (stored ${shortDate(lastWeek.day)}).`;
+    } else {
+      delta.hidden = true;
+      delta.textContent = "";
+    }
+  }
+  const trend = root.querySelector("#hh-trend");
+  if (trend) {
+    const note = (total?.note || "").replace(/^out of 100:\s*/i, "").trim();
+    trend.textContent = note ? `Control Health is ${note}.`.replace(/\.\.$/, ".") : " ";
+  }
+  const tally = root.querySelector("#hh-count");
+  if (tally) {
+    tally.textContent = "";
+    const answered = rows.filter((r) => r.s.scored).length;
+    const access = rows.filter((r) => !r.s.scored && r.s.access).length;
+    const waiting = rows.length - answered - access;
+    const part = (n, rest) => {
+      const p = el("span");
+      p.append(el("b", null, String(n)), document.createTextNode(` ${rest}`));
+      tally.append(p);
+    };
+    part(answered, `of ${rows.length} answered`);
+    if (waiting) part(waiting, "waiting");
+    if (access) part(access, access === 1 ? "needs access" : "need access");
+  }
+  say(root, rows, lastWeek, !!data);
+}
+
+/** "One thing is going badly, and it is getting worse: ..." -- the questions scoring
+ *  under 60, worst first, and whether each is lower than the score stored last week. */
+function say(root, rows, lastWeek, historyRead) {
   const box = root.querySelector("#hh-say");
   if (!box) return;
-  const scored = SCORES.map(([k, , q]) => ({ q, f: figures[k] }))
-    .filter((p) => p.f && p.f.value !== null && p.f.value !== undefined);
+  const scored = rows.filter((r) => r.s.scored);
   box.textContent = "";
   if (!scored.length) {
     box.textContent = "Not enough is recorded yet to score any of the six questions.";
     return;
   }
-  const bad = scored.filter((p) => Number(p.f.value) < 60).sort((a, b) => a.f.value - b.f.value);
+  const bad = scored.filter((r) => Number(r.f.value) < 60).sort((a, b) => a.f.value - b.f.value);
   const words = ["Nothing is", "One thing is", "Two things are", "Three things are", "Four things are",
     "Five things are", "Six things are"];
-  box.append(document.createTextNode(`${words[bad.length]} going badly`
-    + (bad.length ? ". " : ` among the ${scored.length} questions scored.`)));
-  bad.forEach((p, i) => {
-    box.append(el("b", null, p.q), document.createTextNode(
-      ` — ${Math.round(p.f.value)}% ${p.f.note || ""}${i < bad.length - 1 ? ". " : "."}`));
+  if (!bad.length) {
+    box.textContent = `${words[0]} going badly among the ${scored.length} questions scored.`;
+    return;
+  }
+  const one = bad.length === 1;
+  let trend = "";
+  let since = "";
+  if (historyRead) {
+    const prev = lastWeek?.questions || {};
+    const known = bad.filter((r) => prev[r.key]?.value !== null && prev[r.key]?.value !== undefined);
+    const worse = known.filter((r) => r.s.score < Math.round(Number(prev[r.key].value)));
+    if (!known.length) {
+      since = ` No earlier week is stored yet to say whether ${one ? "it is" : "they are"} getting worse.`;
+    } else if (!worse.length) {
+      trend = one ? ", and it is not getting worse" : ", and none is lower than last week";
+    } else if (worse.length === bad.length) {
+      trend = one ? ", and it is getting worse" : `, and ${bad.length === 2 ? "both" : "all of them"} are getting worse`;
+    } else {
+      trend = `, and ${WORDS_N[worse.length]} of them ${worse.length === 1 ? "is" : "are"} getting worse`;
+    }
+  }
+  box.append(document.createTextNode(`${words[bad.length]} going badly${trend}: `));
+  bad.forEach((r, i) => {
+    box.append(el("b", null, r.q), document.createTextNode(
+      ` — ${r.s.score}% ${r.f.note || ""}`.trimEnd() + (i < bad.length - 1 ? ". " : ".")));
   });
+  if (since) box.append(el("span", "hh-since", since));
+}
+
+/** One ruled finding: status square, the question, what it found and what it was
+ *  counted from, its eight weeks, the score now and its status. */
+function finding(row, r, series, openDrawer) {
+  const { f, s, q } = r;
+  row.dataset.live = "1";
+  row.dataset.state = s.scored ? s.band.key : s.access ? "access" : "wait";
+  row.querySelector(".hh-sq").className = `hh-sq ${s.scored ? `b-${s.band.key}` : "b-none"}`;
+  const n = row.querySelector(".hh-n");
+  const src = row.querySelector(".hh-src");
+  const now = row.querySelector(".hh-now");
+  const pill = row.querySelector(".hh-status");
+  if (s.scored) {
+    n.textContent = f.note ? `${s.score}% ${f.note}` : `${s.score}%`;
+    src.textContent = cap(f.counted_from || "");
+    now.textContent = "";
+    now.append(el("span", null, String(s.score)), el("small", null, "%"));
+    pill.className = `flag ${s.band.flag} hh-status`;
+    pill.textContent = s.band.word;
+    row.title = "One stated ratio: " + (f.note ? `${s.score}% ${f.note}.` : `${s.score}%.`);
+  } else {
+    n.textContent = f?.note || (f ? "nothing to score yet" : "could not be read just now");
+    src.textContent = [s.why, cap(f?.counted_from || "")].filter(Boolean).join(" · ");
+    now.textContent = "—";
+    pill.className = `flag ${s.flag} hh-status`;
+    pill.textContent = s.pill;
+    row.removeAttribute("title");
+  }
+  strip(row.querySelector(".hh-strip"), r, series);
+  // A question opens nothing unless it has a guide to show: no click, no hover.
+  row.classList.remove("clickable");
+  row.onclick = null;
+  row.onkeydown = null;
+  row.removeAttribute("role");
+  row.removeAttribute("tabindex");
+  if (!s.scored && hasGuide(f) && openDrawer) {
+    const open = () => openDrawer({ node: guideDrawer(q, f.data_status.guide) });
+    row.classList.add("clickable");
+    row.setAttribute("role", "button");
+    row.setAttribute("tabindex", "0");
+    row.onclick = open;
+    row.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        open();
+      }
+    };
+  }
+}
+
+/** Eight squares, oldest first, each tinted by that week's band; this week's is the
+ *  reading on screen. A week with nothing stored is an outlined, empty square. */
+function strip(box, r, series) {
+  if (!box) return;
+  const squares = [...box.querySelectorAll(".hh-wk")];
+  const n = squares.length;
+  const weeks = series.length === n ? series : Array.from({ length: n }, (_, i) => series[i - (n - series.length)] || null);
+  let stored = 0;
+  squares.forEach((sq, i) => {
+    const wk = weeks[i];
+    const mine = i === n - 1;
+    let v = wk?.questions?.[r.key]?.value;
+    if (mine && r.s.scored) v = r.s.score;
+    const when = wk?.start ? `Week of ${shortDate(wk.start)}` : mine ? "This week" : "An earlier week";
+    if (v === null || v === undefined) {
+      sq.className = "hh-wk";
+      sq.title = wk?.day ? `${when}: not scored` : `${when}: nothing stored`;
+      return;
+    }
+    stored += 1;
+    const b = band(Math.round(Number(v)));
+    sq.className = `hh-wk b-${b.key}${mine ? " now" : ""}`;
+    sq.title = `${when}: ${pct(v)} · ${b.word}`;
+  });
+  box.setAttribute("aria-label", stored
+    ? `Last eight weeks: ${stored} with a score, ${n - stored} with nothing stored`
+    : "Last eight weeks: nothing stored yet");
 }
 
 function guideDrawer(title, guide) {
@@ -321,7 +492,7 @@ function gauge(root, figures) {
   const tone = toneOf(score);
   box.append(dial(score, tone.color));
   const mid = el("div", "gauge-mid");
-  mid.append(el("b", null, String(score)), el("small", null, "/100"));
+  mid.append(el("b", null, String(score)), el("small", null, "%"));
   box.append(mid);
   box.append(el("div", "gauge-say", `${tone.say} — ${worst.label.toLowerCase()} is the drag`));
 
@@ -331,7 +502,7 @@ function gauge(root, figures) {
     list.textContent = "";
     parts.forEach((p) => {
       const li = el("li");
-      li.append(el("b", null, `${Math.round(p.f.value)}`), el("span", null, `${p.label}: ${Math.round(p.f.value)}% ${p.f.note || ""}`));
+      li.append(el("b", null, `${Math.round(p.f.value)}%`), el("span", null, `${p.label}: ${Math.round(p.f.value)}% ${p.f.note || ""}`));
       list.append(li);
     });
     const missing = SCORES.length - parts.length;
@@ -347,6 +518,42 @@ function gauge(root, figures) {
       how.textContent = open ? "Hide how it is scored" : "How it is scored";
     };
   }
+}
+
+/** Business Health's ring: Control Health as a share of a full circle. Drawn once, then
+ *  only its arc changes; with no score it is the empty track. */
+function ring(box, score) {
+  if (!box) return;
+  const NS = "http://www.w3.org/2000/svg";
+  const R = 52;
+  const len = 2 * Math.PI * R;
+  let svg = box.querySelector("svg");
+  if (!svg) {
+    svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 120 120");
+    svg.setAttribute("aria-hidden", "true");
+    [["hh-track", 0], ["hh-arc", 1]].forEach(([cls]) => {
+      const c = document.createElementNS(NS, "circle");
+      c.setAttribute("class", cls);
+      c.setAttribute("cx", "60");
+      c.setAttribute("cy", "60");
+      c.setAttribute("r", String(R));
+      c.setAttribute("fill", "none");
+      c.setAttribute("stroke-width", "7");
+      if (cls === "hh-arc") {
+        c.setAttribute("stroke-linecap", "round");
+        c.setAttribute("transform", "rotate(-90 60 60)");
+      }
+      svg.append(c);
+    });
+    box.prepend(svg);
+  }
+  const arc = svg.querySelector(".hh-arc");
+  const on = score === null ? 0 : Math.max(0, Math.min(100, score)) / 100 * len;
+  arc.setAttribute("stroke-dasharray", `${on.toFixed(1)} ${len.toFixed(1)}`);
+  arc.style.display = on > 0 ? "" : "none";
+  box.setAttribute("role", "img");
+  box.setAttribute("aria-label", score === null ? "Control Health: not scored yet" : `Control Health ${score}%`);
 }
 
 function dial(score, color) {

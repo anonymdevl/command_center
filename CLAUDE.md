@@ -452,6 +452,21 @@ issued / written) -- and "How it is scored" lists each with its note. The same t
 draw Business Health's first three tiles. Approvals, record quality and access are not
 scored until their data exists; never fill them with a number.
 
+Business Health is a check-up report (16 Nov 2026, `mockup-health.html`): the verdict (a
+ring with Control Health as a percentage, "▲/▼ N on last week", one sentence), then the six
+questions as ruled findings, worst first, each with what it was counted from, an
+eight-week strip, the score now and Act / Watch / Healthy / Waiting / No Access. Every
+score shows as a percentage, never "/100". `command_center/health.py` owns the history:
+`Command Center Health Snapshot`, one row per business per day (named
+`<business>::<day>`; the latest complete read of the day wins, a read where ERPNext was away
+never replaces it), written by `api/kpi.get` whenever all seven figures are read and by the
+daily `health.record_all`; `api/health.history` gives the last eight ISO weeks (the last
+snapshot in each; an empty week stays empty) and the delta; pruned at 400 days
+(`health_snapshot_days`, insights/core/maintenance.py). "Counted from" uses the count the
+figure divides by (`health.COUNTED`: the engine denominator, or a live score's fifth
+element), else what it was read from, never a number made up. `insights/tests.py`
+`HEALTH_INVENTORY` is the parity check: everything the screen had before must stay.
+
 ## Buttons on the designed screens
 
 `frontend/src/legacy/actions.js` gives every designed button a handler after each render

@@ -135,6 +135,9 @@ scheduler_events = {
         # Every figure, once a day, so a drawer can compare a balance with a month ago
         # (insight/build.py history; a balance has no history in the facts).
         "command_center.insight.build.record_all",
+        # Business Health on the day, for its eight-week history (health.py), so a day
+        # nobody opened the screen is not missing.
+        "command_center.health.record_all",
     ],
     # On the long queue: a peer is read over its API, page by page, and the default
     # queue's five-minute limit is not enough for a first load or a rebuild.

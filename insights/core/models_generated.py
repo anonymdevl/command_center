@@ -444,6 +444,20 @@ class CommandCenterFactTask(DocModel):
         indexes = [models.Index(fields=['business_code', 'is_open'], name="ix_CenterFactTask_busine_is_op")]
 
 
+class CommandCenterHealthSnapshot(DocModel):
+    business_code = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    day = models.DateField(null=True, blank=True, db_index=True)
+    control_score = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    questions = models.TextField(null=True, blank=True)
+    captured_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "tabCommand Center Health Snapshot"
+        verbose_name = "Command Center Health Snapshot"
+        verbose_name_plural = "Command Center Health Snapshot"
+        indexes = [models.Index(fields=['business_code', 'day'], name="ix_HealthSnapshot_busine_day")]
+
+
 class CommandCenterIngestState(DocModel):
     fact = models.CharField(max_length=140, null=True, blank=True, db_index=True)
     business_code = models.CharField(max_length=140, null=True, blank=True, db_index=True)
@@ -645,6 +659,7 @@ DOCTYPE_MODELS = {
     "Command Center Fact Sales Order": CommandCenterFactSalesOrder,
     "Command Center Fact Stock Balance": CommandCenterFactStockBalance,
     "Command Center Fact Task": CommandCenterFactTask,
+    "Command Center Health Snapshot": CommandCenterHealthSnapshot,
     "Command Center Ingest State": CommandCenterIngestState,
     "Command Center Load Log": CommandCenterLoadLog,
     "Command Center Metric Point": CommandCenterMetricPoint,
