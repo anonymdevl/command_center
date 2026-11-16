@@ -272,6 +272,11 @@ export const api = {
   ingestHistory: (business_code) => call("command_center.api.ingest.history", { business_code }),
   /* Business Health's last eight weeks of stored snapshots (api/health.py). */
   healthHistory: (business_code) => call("command_center.api.health.history", { business_code }),
+  /* The Executive Summary's memo (api/summary.py): the memo, Waiting On You read on its own
+     so the memo never waits on ERPNext, and today's AI paragraph, written when it is not. */
+  summaryMemo: (business_code) => call("command_center.api.summary.memo", { business_code }),
+  summaryWaiting: (business_code) => call("command_center.api.summary.waiting", { business_code }),
+  summaryWrite: (business_code) => call("command_center.api.summary.write", { business_code }),
   ingestRefresh: (business_code) => call("command_center.api.ingest.refresh", { business_code }),
   reconcile: (business_code) =>
     call("command_center.api.ingest.reconcile", { business_code }),

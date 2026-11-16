@@ -467,6 +467,29 @@ figure divides by (`health.COUNTED`: the engine denominator, or a live score's f
 element), else what it was read from, never a number made up. `insights/tests.py`
 `HEALTH_INVENTORY` is the parity check: everything the screen had before must stay.
 
+## The Executive Summary's memo (16 Nov 2026)
+
+A board memo above the screen as it was (approved `mockup-exec-summary.html`);
+`scripts/test_brief_parity.py` (in preflight, and `insights/tests.py` ExecutiveSummary) fails
+if anything below it -- the recommendations and every action, What Worked, the alerts, the
+PDF/Excel buttons -- is lost or moved into it. `command_center/summary.py` (`api/summary.py`
+memo / waiting / write, `legacy/summary.js`): the five vital signs are the cards' own figures
+and drawers; a change only where it is real -- Money In against the month before through
+`ask/tools.compare_periods`, shown only when its current side is the very figure shown;
+Owed to Us / We Owe / Stock Held against the reading kept about seven days ago (5-9 days,
+nearest seven) in the Health Snapshot's `vitals` JSON (`health.record_vitals`, written by
+`api/kpi.get`, the memo and the daily `health.record_all`; a vitals-only day never empties a
+Business Health week); Overall Business Health against last week (`health.history`). Otherwise
+"Change from next week", never a number. Decisions are `recommend.current`'s first three (its
+rank), risks `alerts.open_alerts`' first three, Going Well the questions at or over
+`live_governance.HEALTHY` (80, as home.js's bands) in their notes' words, Waiting On You
+`work.summary`'s counts, read separately so the memo never waits on ERPNext. The short version:
+the paragraph worked out from the figures (`fallback`) shows at once; the AI's (06:45
+`summary.write_all`, or on demand) replaces it when every number in it is one it was given
+(`review.allowed_numbers`), kept per business per day (`__cc_exec_summary`), re-checked on
+every read. Metered as `ai_review` with `count=False`: tokens and cost on the ledger, counted
+as no review, question or report. All businesses: no AI paragraph and no week-on-week.
+
 ## Buttons on the designed screens
 
 `frontend/src/legacy/actions.js` gives every designed button a handler after each render

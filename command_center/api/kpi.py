@@ -32,6 +32,9 @@ def get(keys, business_code: str | None = None):
     # daily by health.record_all): one snapshot per business per day, for its history.
     from command_center import health
     health.observe(business_code, result)
+    # ... and the Executive Summary's vital signs, whenever a screen shows them, so its
+    # "on last week" has a reading to compare with (health.record_vitals).
+    health.observe_vitals(business_code, result)
     return {k: result[k] for k in keys if k in result}
 
 

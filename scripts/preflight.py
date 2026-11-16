@@ -1491,6 +1491,14 @@ _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_overview_parit
 check(_t.returncode == 0,
       "scripts/test_overview_parity.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
 
+# The Executive Summary keeps everything it had below its new memo (16 Nov 2026: "everything
+# currently on the screen stays below it, unchanged"): the lists, every action, the exports.
+_t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_brief_parity.py")],
+             capture_output=True, text=True, timeout=120)
+check(_t.returncode == 0,
+      "scripts/test_brief_parity.py failed -- the Executive Summary lost something it had:\n"
+      + (_t.stdout + _t.stderr)[-1500:])
+
 # --------------------------------------------------------------------------
 print(f"preflight: {checks} checks")
 if problems:

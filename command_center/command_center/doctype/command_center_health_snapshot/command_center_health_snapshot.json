@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 0,
  "creation": "2026-11-16 00:00:00.000000",
- "description": "Business Health on one day for one business: Control Health and each of the six questions' score and state, as the screen worked them out (command_center.health). The latest of the day replaces the earlier one; kept about 400 days.",
+ "description": "Business Health on one day for one business: Control Health and each of the six questions' score and state, as the screen worked them out (command_center.health), and the Executive Summary's vital signs that day (vitals). The latest of the day replaces the earlier one; kept about 400 days.",
  "doctype": "DocType",
  "editable_grid": 0,
  "engine": "InnoDB",
@@ -11,6 +11,7 @@
   "day",
   "control_score",
   "questions",
+  "vitals",
   "captured_at"
  ],
  "fields": [
@@ -46,6 +47,13 @@
    "label": "Questions",
    "read_only": 1,
    "description": "JSON: for each question's figure (score_deliver, score_paid, ...), its score that day and its state (live, needs_setup, no_access, unreachable, failed)."
+  },
+  {
+   "fieldname": "vitals",
+   "fieldtype": "Long Text",
+   "label": "Vital Signs",
+   "read_only": 1,
+   "description": "JSON: the Executive Summary's daily vital signs -- for each of ar_total, ap_total and stock_value, its value that day and its state -- so the summary can say what changed on last week (command_center.health.record_vitals). Empty on a day they were not read."
   },
   {
    "fieldname": "captured_at",

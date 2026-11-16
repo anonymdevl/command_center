@@ -7091,3 +7091,392 @@ class ApprovalsSkipFinishedDocuments(SimpleTestCase):
         from command_center.api import work
         got = work._approvals("samuel@x", self._src(states={}))
         self.assertEqual([a["name"] for a in got], ["ACC-PAY-2026-00010"])
+
+
+# --------------------------------------------------------------------------- Executive Summary
+class _WorkSrc:
+    """A business's ERPNext as api/work.py reads it, for Waiting On You: one document
+    waiting at a workflow step this person may take, and the To-Dos they handed out --
+    one open and past its date, one done and not yet reviewed, one done and accepted."""
+
+    ME = "boss@erp.test"
+
+    def __init__(self):
+        late = str(TODAY - dt.timedelta(days=4))
+        self.todos = [
+            {"name": "TD-1", "status": "Open", "date": late, "allocated_to": "ama@test",
+             "assigned_by": self.ME, "description": "Chase the payment", "_user_tags": "",
+             "modified": str(TODAY), "creation": str(TODAY)},
+            {"name": "TD-2", "status": "Closed", "date": None, "allocated_to": "kofi@test",
+             "assigned_by": self.ME, "description": "Count the stock", "_user_tags": "",
+             "modified": str(TODAY), "creation": str(TODAY)},
+            {"name": "TD-3", "status": "Closed", "date": None, "allocated_to": "kofi@test",
+             "assigned_by": self.ME, "description": "Done and accepted", "_user_tags": ",Accepted",
+             "modified": str(TODAY), "creation": str(TODAY)},
+        ]
+
+    def me(self): return self.ME
+    def site(self): return "https://erp.test"
+    def roles(self, user): return {"DIR"}
+    def currency(self, code): return "GHS"
+    def workflows(self): return [{"name": "PO WF", "document_type": "Purchase Order",
+                                  "workflow_state_field": "workflow_state"}]
+    def transitions(self, wf): return [{"state": "Pending", "allowed": "DIR", "action": "Approve",
+                                        "next_state": "Approved"}]
+    def states(self, wf): return {"Pending": "0", "Approved": "1"}
+    def fields(self, doctype): return {"base_grand_total"}, None
+    def actions(self, doctype, row): return [("Approve", "Approved")]
+    def fullname(self, user): return user
+    def url(self, doctype, name): return f"https://erp.test/app/{doctype}/{name}"
+
+    def list(self, doctype, filters=None, fields=None, **kw):
+        if doctype == "Purchase Order":
+            return [{"name": "PO-9", "owner": "a@test", "creation": str(TODAY), "modified": str(TODAY),
+                     "docstatus": 0, "workflow_state": "Pending", "base_grand_total": 1200}]
+        if doctype == "Comment":
+            return []
+        rows = []
+        for t in self.todos:
+            ok = True
+            for k, rule in (filters or {}).items():
+                v = t.get(k)
+                if isinstance(rule, list):
+                    op, val = rule
+                    ok = ok and {"!=": v != val, ">=": str(v or "") >= str(val)}.get(op, True)
+                else:
+                    ok = ok and v == rule
+            if ok:
+                rows.append(t)
+        return rows
+
+
+class ExecutiveSummary(TransactionTestCase):
+    """The memo at the top of the Executive Summary (command_center/summary.py): changes
+    only where the history exists; the short version checked figure by figure against what
+    it was given, with the worked-out paragraph in its place when it fails, written once a
+    day per business and metered as the daily AI review's tokens (not counted as a review,
+    a question or a report); Going Well and Waiting On You from the business's own data;
+    and nothing the screen had before is lost."""
+
+    databases = {"default", "aux"}
+    setUp_settings = SettingsPage.setUp
+    setUp_recs = Recommendations.setUp
+    tearDown = SettingsPage.tearDown
+    _fact = Recommendations._fact
+    _rich = Recommendations._rich
+    _live = Recommendations._live
+    _claude = AdaptiveRecommendations._claude
+
+    def setUp(self):
+        self.setUp_recs()
+        # the crafted facts are loaded, as a load would leave them (a figure from facts
+        # never loaded is not shown as one)
+        import uuid
+        from command_center.facts.schema import FACTS
+        from insights.core.models import CommandCenterIngestState as S
+        for fact in FACTS:
+            S.objects.create(name=uuid.uuid4().hex, fact=fact, business_code=REC_CODE, status="OK",
+                             as_of_date=TODAY, last_run=dt.datetime.now().replace(microsecond=0))
+
+    def _memo(self, code=REC_CODE):
+        from command_center import summary
+        from insights.compat import run_as
+        with run_as("Administrator"):
+            return summary.memo(code)
+
+    def _write(self, code=REC_CODE):
+        from command_center import summary
+        from insights.compat import run_as
+        with run_as("Administrator"):
+            return summary.write(code)
+
+    @staticmethod
+    def _vital(memo, key):
+        return next(v for v in memo["vitals"] if v["key"] == key)
+
+    # ------------------------------------------------------------------ the vital signs
+    def test_changes_appear_only_when_the_history_exists(self):
+        from command_center import health, summary
+        from insights.compat import run_as
+        first = self._memo()
+        self.assertEqual([v["key"] for v in first["vitals"]],
+                         ["cash_in_month", "ar_total", "ap_total", "stock_value", "control_score"])
+        self.assertEqual(self._vital(first, "ar_total")["label"], "Owed to Us")
+        ar = self._vital(first, "ar_total")
+        self.assertTrue(ar["shown"])
+        self.assertEqual(ar["figure"]["value"], 150000)          # the card's own figure
+        self.assertEqual(ar["change"], {"kind": "pending", "text": "Change from next week"})
+        self.assertEqual(self._vital(first, "ap_total")["change"]["text"], "Change from next week")
+        ctrl = self._vital(first, "control_score")
+        if ctrl["shown"]:
+            self.assertEqual(ctrl["change"]["text"], "Change from next week")
+        # reading the memo kept today's vital signs, and nothing from a week ago is made up
+        with run_as("Administrator"):
+            self.assertEqual(health.week_ago(REC_CODE)["readings"], {})
+            got = frappe_vitals(REC_CODE, TODAY)
+        self.assertEqual(got["ar_total"]["value"], 150000)
+        # a reading about a week ago: the change is real, worked out from it
+        with run_as("Administrator"):
+            health.record_vitals(REC_CODE, {"ar_total": {"value": 100000, "data_status": {"state": "live"}},
+                                            "stock_value": {"value": None, "data_status": {"state": "live"}},
+                                            "ap_total": {"value": 9, "data_status": {"state": "not_loaded"}}},
+                                 today=TODAY - dt.timedelta(days=7))
+            # only one older than nine days for stock: not last week's
+            health.record_vitals(REC_CODE, {"stock_value": {"value": 5, "data_status": {"state": "live"}}},
+                                 today=TODAY - dt.timedelta(days=20))
+        again = self._memo()
+        ch = self._vital(again, "ar_total")["change"]
+        self.assertEqual((ch["kind"], ch["dir"], ch["amount"]), ("week", "up", 50000.0))
+        self.assertEqual(ch["text"], "▲ GHS 50.00k on last week")
+        self.assertEqual(ch["tone"], "bad", "more owed to us is not good news")
+        self.assertEqual(ch["base_day"], str(TODAY - dt.timedelta(days=7)))
+        self.assertEqual(self._vital(again, "ap_total")["change"]["text"], "No reading kept from last week",
+                         "a figure not read that day is not kept")
+        if self._vital(again, "stock_value")["shown"]:
+            self.assertEqual(self._vital(again, "stock_value")["change"]["text"],
+                             "No reading kept from last week")
+        # the nearest to seven days wins, between five and nine
+        with run_as("Administrator"):
+            health.record_vitals(REC_CODE, {"ar_total": {"value": 140000, "data_status": {"state": "live"}}},
+                                 today=TODAY - dt.timedelta(days=6))
+            self.assertEqual(health.week_ago(REC_CODE)["readings"]["ar_total"]["value"], 100000)
+        # Overall Business Health: against last week's stored score, in whole points
+        figs = {"control_score": {"value": 85, "data_status": {"state": "live"}}}
+        self.assertEqual(summary.health_change(REC_CODE, figs["control_score"], {"kept": True, "delta": 3}),
+                         {"kind": "week", "dir": "up", "points": 3, "base_day": None,
+                          "text": "▲ 3 on last week"})
+        self.assertEqual(summary.health_change(REC_CODE, figs["control_score"], {"kept": True, "delta": None})["text"],
+                         "Change from next week")
+        self.assertIsNone(summary.health_change(REC_CODE, {"value": None}, {"kept": True, "delta": 3}))
+        # all businesses together: nothing is kept for them, so nothing is compared
+        self.assertEqual(summary.week_change("__all__", "ar_total", ar["figure"], {"readings": {}})["text"],
+                         "Week on week is kept for each business")
+
+    def test_a_day_of_vital_signs_never_empties_a_week_of_business_health(self):
+        from command_center import health
+        from insights.compat import run_as
+        monday = TODAY - dt.timedelta(days=TODAY.weekday())
+        with run_as("Administrator"):
+            health.snapshot("biz", _health_figs(64), today=monday)
+            # later the same week only the vital signs were read
+            health.record_vitals("biz", {"ar_total": {"value": 10, "data_status": {"state": "live"}}},
+                                 today=monday + dt.timedelta(days=1))
+            self.assertEqual(health.weeks("biz", today=monday + dt.timedelta(days=1))[-1]["control_score"], 64)
+            # a vitals-only day still takes the day's Business Health when it comes, even a
+            # read with a question away (there is no complete read of that day to protect)
+            away = _health_figs(70, score_access=None, score_access_state="unreachable")
+            self.assertTrue(health.snapshot("biz", away, today=monday + dt.timedelta(days=1)))
+            self.assertEqual(health.weeks("biz", today=monday + dt.timedelta(days=1))[-1]["control_score"], 70)
+            self.assertEqual(frappe_vitals("biz", monday + dt.timedelta(days=1))["ar_total"]["value"], 10)
+
+    def test_money_in_compares_only_the_same_figure(self):
+        from command_center import summary
+        from command_center.ask import tools
+        fig = {"key": "cash_in_month", "value": 15100.0, "unit": "currency", "currency": "GHS",
+               "period": {"label": "October 2026"}, "data_status": {"state": "live"}}
+        same = {"current": {"period": "October 2026", "value": 15100.0},
+                "earlier": {"period": "September 2026", "value": 39737.0}, "change_pct": -62.0}
+        with mock.patch.object(tools, "compare_periods", lambda **kw: same):
+            ch = summary.money_change("biz", fig)
+        self.assertEqual((ch["kind"], ch["dir"], ch["text"]), ("month", "down", "▼ 62% on Sep"))
+        for other in ({**same, "current": {"period": "September 2026", "value": 15100.0}},
+                      {**same, "current": {"period": "October 2026", "value": 999.0}},
+                      {**same, "change_pct": None}):
+            with mock.patch.object(tools, "compare_periods", lambda **kw: other):
+                self.assertIsNone(summary.money_change("biz", fig), other)
+
+        def refuse(**kw):
+            raise tools.ToolError("no dated records")
+        with mock.patch.object(tools, "compare_periods", refuse):
+            self.assertIsNone(summary.money_change("biz", fig))
+
+    # ------------------------------------------------------------------ the short version
+    def _good_paragraph(self, memo):
+        from command_center import summary
+        from insights.compat import run_as
+        with run_as("Administrator"):
+            comp = summary._compose(REC_CODE)
+        text, data = comp["_given"]
+        ar = next(x for x in data["figures"] if x["key"] == "ar_total")
+        para = (f"Customers owe {ar['text']} by the ledger, so collecting it is the week's work. "
+                f"The first decision is the one at the top of the list below.")
+        self.assertIsNone(summary.check(para, text, data), "a paragraph from the figures passes")
+        return para, text, data
+
+    def test_a_paragraph_with_a_number_not_given_is_rejected_and_the_fallback_used(self):
+        from command_center import summary
+        from insights.core.models import UsageEvent
+        fake = self._claude([])
+        para, text, data = self._good_paragraph(self._memo())
+        # the check itself: a number not among the figures is caught, rounding is not
+        self.assertIn("999999", summary.check(para + " Write off GHS 999,999.", text, data))
+        ar = next(x for x in data["figures"] if x["key"] == "ar_total")["value"]
+        self.assertIsNone(summary.check(f"Customers owe GHS {ar / 1000:.0f}k.", text, data))
+        self.assertIsNotNone(summary.check("- a list\n- of points", text, data))
+        # the fallback is built from the same figures and passes the same check
+        fb = summary.fallback(data)
+        self.assertIsNone(summary.check(fb, text, data), fb)
+        self.assertIn(next(x for x in data["figures"] if x["key"] == "ar_total")["text"], fb)
+        first = self._memo()["short"]
+        self.assertEqual((first["source"], first["pending"]), ("fallback", True),
+                         "the page shows the fallback at once and asks for the AI's")
+        # the AI invents a figure: not used; the fallback stays, the reason is said
+        fake.replies.append(_Reply(text=para + " That is GHS 4,444,444 at risk.", usage=(900, 120, 0, 0)))
+        got = self._write()
+        self.assertEqual(got["source"], "fallback")
+        self.assertEqual(got["text"], fb)
+        self.assertIn("figure check", got["why"])
+        self.assertEqual(len(fake.sent), 1)
+        body = fake.sent[0]
+        self.assertIn("cache_control", body["system"][0])
+        self.assertIn("Use only the numbers given below", body["system"][0]["text"])
+        self.assertNotIn(str(TODAY.year), body["system"][0]["text"])  # the fixed part never changes
+        # metered as the AI review's tokens, with its cost, counted as nothing
+        [ev] = UsageEvent.objects.filter(note="Executive Summary")
+        self.assertEqual((ev.meter, ev.quantity, ev.input_tokens, ev.output_tokens, ev.outcome),
+                         ("ai_review", 0, 900, 120, "failed"))
+        self.assertFalse(UsageEvent.objects.filter(meter__in=["ai_questions", "ai_reports",
+                                                              "daily_briefs"]).exists())
+        # not asked again at once: the next try waits an hour
+        self.assertFalse(self._memo()["short"]["pending"])
+        self.assertEqual(self._write()["source"], "fallback")
+        self.assertEqual(len(fake.sent), 1)
+        # an hour on, a paragraph that keeps to the figures is used
+        st = summary._get(REC_CODE)
+        st["last_try"] = str(dt.datetime.now() - dt.timedelta(hours=2))[:19]
+        summary._put(REC_CODE, st)
+        fake.replies.append(_Reply(text=para, usage=(800, 90, 0, 0)))
+        got = self._write()
+        self.assertEqual((got["source"], got["text"]), ("ai", para))
+        ok = UsageEvent.objects.filter(note="Executive Summary").order_by("id").last()
+        self.assertEqual((ok.meter, ok.quantity, ok.outcome, ok.input_tokens), ("ai_review", 0, "ok", 800))
+
+    def test_one_paragraph_a_day_per_business(self):
+        from command_center import summary
+        fake = self._claude([])
+        para, _t, _d = self._good_paragraph(self._memo())
+        fake.replies.append(_Reply(text=para))
+        self.assertEqual(self._write()["source"], "ai")
+        self.assertEqual(self._write()["text"], para)
+        self.assertEqual(self._memo()["short"], {"text": para, "source": "ai", "model": summary._get(REC_CODE)["model"],
+                                                 "at": summary._get(REC_CODE)["at"], "pending": False})
+        self.assertEqual(len(fake.sent), 1, "kept for the day: asked once")
+        # kept for this business only: another business is its own
+        self.assertEqual(summary._get("another"), {})
+        # the next day it is written again
+        with mock.patch("command_center.summary.today", lambda: str(TODAY + dt.timedelta(days=1))):
+            nxt = self._memo()["short"]
+            self.assertEqual((nxt["source"], nxt["pending"]), ("fallback", True))
+            fake.replies.append(_Reply(text=para))
+            self.assertEqual(self._write()["source"], "ai")
+        self.assertEqual(len(fake.sent), 2)
+        # a kept paragraph the figures no longer bear out is not shown
+        st = summary._get(REC_CODE)
+        st.update(date=str(TODAY), text="Customers owe GHS 7,777,777.")
+        summary._put(REC_CODE, st)
+        shown = self._memo()["short"]
+        self.assertEqual(shown["source"], "fallback")
+        self.assertIn("figures have changed", shown["why"])
+        # no AI set up: the fallback, nothing asked, and it says why
+        import frappe
+        frappe.conf.pop("command_center_anthropic_key", None)
+        with mock.patch("command_center.ask.llm.provider", lambda: "gemini"):
+            summary._put(REC_CODE, {})
+            off = self._memo()["short"]
+            self.assertEqual((off["source"], off["pending"]), ("fallback", False))
+            self.assertIn("not set up", off["why"])
+            self.assertEqual(self._write()["source"], "fallback")
+        self.assertEqual(len(fake.sent), 2)
+        # all businesses together: the AI writes one business at a time
+        self.assertIn("one business at a time", self._memo("__all__")["short"]["why"])
+
+    # ------------------------------------------------------------------ the lists
+    def test_going_well_and_waiting_on_you_come_from_real_data(self):
+        from command_center import health, summary
+        from command_center.api import alerts, kpi, recommend, work
+        from command_center.kpi.live_governance import QUESTIONS
+        from insights.compat import run_as
+        memo = self._memo()
+        with run_as("Administrator"):
+            figs = kpi.figures(list(summary.FIGURE_KEYS), REC_CODE)
+            recs = recommend.current(REC_CODE)["recommendations"]
+            open_ = alerts.open_alerts(REC_CODE)["alerts"]
+        expect = [{"key": k, "question": q, "score": round(figs[k]["value"]),
+                   "text": f"{round(figs[k]['value'])}% {figs[k]['note']}"}
+                  for k, q in QUESTIONS if summary._shown(figs.get(k)) and figs[k]["value"] >= 80]
+        self.assertTrue(expect, "the crafted business has questions scoring Healthy")
+        self.assertEqual(memo["going_well"], expect)
+        self.assertEqual(memo["nothing_well"], "Nothing to report as going well yet")
+        for w in memo["going_well"]:
+            self.assertTrue(w["text"].endswith(figs[w["key"]]["note"]), "worded from its own note")
+        # below 80 is not going well, whatever the note says
+        low = {k: {"value": 79.9, "note": "of 5 things", "data_status": {"state": "live"}} for k, _q in QUESTIONS}
+        self.assertEqual(summary.going_well(low, {"delta": None}), [])
+        # Overall Business Health's rise on last week, when it rose
+        rose = summary.going_well({**low, "control_score": {"value": 80, "data_status": {"state": "live"}}},
+                                  {"delta": 4})
+        self.assertEqual(rose, [{"key": "control_score", "question": "Overall Business Health",
+                                 "text": "Overall Business Health up 4 on last week"}])
+        self.assertEqual(summary.going_well(low, {"delta": -2}), [])
+        # decisions and risks are the lists below, in their order
+        self.assertEqual([d["name"] for d in memo["decisions"]], [r["name"] for r in recs[:3]])
+        self.assertEqual([d["owner"] for d in memo["decisions"]], [r["owner_role"] for r in recs[:3]])
+        self.assertEqual([r["name"] for r in memo["risks"]], [a["name"] for a in open_[:3]])
+        self.assertTrue(all(r["severity_word"] for r in memo["risks"]))
+        self.assertIn("Test Medical Ltd", memo["header"]["for"])
+        self.assertTrue(memo["header"]["dateline"].startswith(f"Week to {TODAY.strftime('%A')} {TODAY.day} "))
+        self.assertEqual(self._memo("__all__")["header"]["for"].split(" · ")[0],
+                         "For Administrator, all businesses (Test Medical Ltd)")
+        # Waiting On You, through the endpoint: no key of their own linked, the guide's words
+        r = self.manager.post("/api/method/command_center.api.summary.waiting",
+                              json.dumps({"business_code": REC_CODE}), content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        w = r.json()["message"]
+        with run_as("Administrator"):
+            guide_text = work._key_guide(REC_CODE, "Test Medical Ltd")["text"]
+        self.assertEqual((w["available"], w["reason"]), (False, guide_text))
+        # their own queue: the counts are what work.summary reads, each opening its screen
+        with mock.patch.object(work, "_source", lambda code: (_WorkSrc(), None)):
+            r = self.manager.post("/api/method/command_center.api.summary.waiting",
+                                  json.dumps({"business_code": REC_CODE}), content_type="application/json")
+            with run_as("manager@test.com"):
+                queue = work.summary(REC_CODE)
+        w = r.json()["message"]
+        self.assertTrue(w["available"])
+        self.assertEqual([(i["key"], i["count"], i["label"], i["opens"]) for i in w["items"]],
+                         [("approvals", 1, "Approvals Awaiting You", "approvals"),
+                          ("to_review", 1, "Delegated Tasks Done", "delegation"),
+                          ("overdue", 1, "Overdue Delegated Tasks", "delegation")])
+        self.assertEqual([i["count"] for i in w["items"]],
+                         [len(queue["approvals"]), len(queue["check"]), len(queue["late"])])
+        self.assertEqual((queue["figures"]["work_awaiting"]["value"], queue["figures"]["work_to_check"]["value"],
+                          queue["figures"]["work_unkept"]["value"]), (1, 1, 1), "the tiles say the same")
+        # the memo through its endpoint, for a manager
+        r = self.manager.post("/api/method/command_center.api.summary.memo",
+                              json.dumps({"business_code": REC_CODE}), content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        self.assertEqual(len(r.json()["message"]["vitals"]), 5)
+
+    def test_parity_nothing_lost(self):
+        """Everything the Executive Summary had before the memo (d44a652) is still there."""
+        import importlib.util
+        from pathlib import Path
+        path = Path(__file__).resolve().parent.parent / "scripts" / "test_brief_parity.py"
+        spec = importlib.util.spec_from_file_location("brief_parity", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        src = mod.sources()
+        self.assertEqual(mod.compare(src), [])
+        # the check can fail: the alerts' line dropped, the lists put inside the memo
+        broken = {**src, "views": src["views"].replace("Every one links to the record behind it.", "")}
+        self.assertTrue(any("what every alert states" in p for p in mod.compare(broken)))
+        inside = {**src, "views": src["views"].replace('<div class="xm-below">',
+                                                       '<div class="rec-live-list"></div><div class="xm-below">')}
+        self.assertTrue(any("inside the memo" in p for p in mod.compare(inside)))
+
+
+def frappe_vitals(code, day) -> dict:
+    import frappe
+    row = frappe.get_all("Command Center Health Snapshot", filters={"name": f"{code}::{day}"},
+                         fields=["vitals"], limit=1)
+    return json.loads(row[0].vitals) if row and row[0].vitals else {}
