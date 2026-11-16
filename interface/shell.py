@@ -655,4 +655,121 @@ table.dt.dw-t tfoot td{position:sticky;bottom:0;z-index:1;padding:10px 12px;back
  .dw-clip{max-width:180px}
  .dw-search{width:100%}
 }
+/* ======================================================================
+   The sign-in page: "The Signal Line" (command-center-login.html), 16 Nov 2026, from
+   the approved option C. A paper ground (light) or an ink one (dark) with a faint
+   ruling; one quiet line drawn across the page behind a compact, solid card; a faint
+   baseline under it with the three points beneath. Scoped to body.cc-signin, so the
+   access pages (.auth.single) keep their own look. Tokens only: the page's few colours
+   are mixed from the palette, in both themes.
+   ====================================================================== */
+body.cc-signin{
+ --sg-ground:color-mix(in srgb,var(--t3) 38%,var(--bg));
+ --sg-rule:color-mix(in srgb,var(--line) 50%,transparent);
+ --sg-signal:color-mix(in srgb,var(--ink2) 40%,transparent);
+ --sg-base:var(--line2);
+ --sg-card:var(--raised);
+ --sg-card-line:var(--line2);
+ --sg-field:var(--surface);
+}
+[data-theme="light"] body.cc-signin{
+ --sg-ground:color-mix(in srgb,var(--t2) 34%,var(--surface));
+ --sg-rule:color-mix(in srgb,var(--t2) 62%,var(--surface));
+ --sg-signal:color-mix(in srgb,var(--ink2) 48%,transparent);
+ --sg-base:color-mix(in srgb,var(--t2) 40%,var(--line2));
+ --sg-card:var(--surface);
+ --sg-card-line:color-mix(in srgb,var(--t2) 45%,var(--line2));
+ --sg-field:var(--surface);
+}
+body.cc-auth.cc-signin{position:relative;display:grid;grid-template-columns:minmax(0,1fr);
+ grid-template-rows:auto minmax(0,1fr) auto auto;place-items:stretch;align-content:stretch;gap:0;padding:0;
+ height:auto;min-height:100vh;min-height:100dvh;overflow-x:hidden;background:var(--sg-ground)}
+.sg-paper{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.sg-paper line{stroke:var(--sg-rule);stroke-width:1}
+/* ---- top left: the logo, the product's name and tagline; the dateline right ---- */
+.sg-top{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;
+ gap:var(--sp-4);padding:var(--sp-8) var(--sp-10) 0}
+.sg-brand{display:flex;align-items:center;gap:14px;min-width:0}
+.sg-brand .auth-mark{flex:none}
+.sg-brand .auth-logo{height:40px;max-width:200px}
+.sg-name{min-width:0}
+.sg-name b{display:block;font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.015em;
+ line-height:1.25;color:var(--ink)}
+.sg-name .auth-tag{font-size:var(--fs-xs);line-height:1.4;margin-top:2px}
+.sg-date{margin:0;font-size:var(--fs-xs);color:var(--mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+/* ---- the stage: the line runs across it, the card sits on the line ---- */
+.sg-stage{position:relative;z-index:1;display:grid;place-items:center;padding:var(--sp-10) var(--sp-4);min-height:0}
+.sg-line{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;overflow:visible}
+.sg-sig{fill:none;stroke:var(--sg-signal);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round;
+ vector-effect:non-scaling-stroke}
+.sg-card{position:relative;z-index:1;width:min(392px,100%);padding:36px 34px 26px;background:var(--sg-card);
+ border:1px solid var(--sg-card-line);border-radius:var(--r-sm);box-shadow:var(--shadow)}
+/* A short accent rule at the card's head, the way a page marks its section. */
+.sg-card::before{content:"";position:absolute;left:34px;top:-1px;width:28px;height:2px;background:var(--accent)}
+.sg-card h1{margin:0;font-size:var(--fs-2xl);font-weight:var(--fw-semibold);letter-spacing:-.025em;line-height:1.2;
+ color:var(--ink)}
+.sg-card .auth-sub{margin-top:6px;font-size:var(--fs-sm)}
+.sg-card form{display:flex;flex-direction:column;margin-top:var(--sp-6)}
+.sg-card label{margin:0 0 6px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--ink2)}
+.sg-card label:not(:first-child){margin-top:var(--sp-4)}
+.sg-card input{width:100%;height:44px;padding:0 14px;border:1px solid var(--line2);border-radius:var(--r-xs);
+ background:var(--sg-field);color:var(--ink);font:var(--fw-regular) var(--fs-md) var(--sans);
+ transition:border-color .15s,box-shadow .15s}
+.sg-card input:hover{border-color:color-mix(in srgb,var(--line2) 55%,var(--mut))}
+.sg-card input:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg2)}
+/* The browser's own autofill tint would paint the field another colour. */
+.sg-card input:-webkit-autofill{-webkit-text-fill-color:var(--ink);caret-color:var(--ink);
+ box-shadow:0 0 0 40px var(--sg-field) inset}
+.sg-card input:-webkit-autofill:focus{box-shadow:0 0 0 40px var(--sg-field) inset,0 0 0 3px var(--accent-bg2)}
+.sg-card .auth-pw input{padding-right:66px}
+.sg-card .auth-pw button{top:5px;right:5px;height:34px;padding:0 10px;background:transparent;color:var(--mut);
+ border-radius:var(--r-xs);transition:color .15s,background .15s}
+.sg-card .auth-pw button:hover{color:var(--ink);background:var(--hover)}
+.sg-card .auth-msg{margin-top:var(--sp-4);border:1px solid var(--crit-line);line-height:1.5}
+.sg-card .auth-go{width:100%;height:46px;margin-top:22px;padding:0 var(--sp-6);border-radius:var(--r-xs);
+ background:var(--ink);color:var(--surface);transition:background .15s,transform .1s}
+.sg-card .auth-go:hover{filter:none;background:color-mix(in srgb,var(--ink) 84%,var(--accent))}
+.sg-card .auth-go:active{transform:translateY(1px)}
+.sg-card .auth-go:disabled{background:var(--ink);opacity:.6;transform:none}
+.sg-card .auth-foot{gap:4px;margin-top:22px;padding-top:var(--sp-4);border-top:1px solid var(--line);line-height:1.5}
+.sg-card .auth-foot a{justify-self:start;align-self:flex-start}
+.sg-card .auth-foot a:hover{text-decoration:underline;text-underline-offset:3px}
+/* ---- the baseline, and the three points under it ---- */
+.sg-notes{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,240px) minmax(0,820px);
+ gap:var(--sp-10);align-items:baseline;margin:0;padding:18px var(--sp-10) 0}
+.sg-notes::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:var(--sg-base);
+ transform-origin:left center}
+.sg-lede{margin:0;max-width:260px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);line-height:1.55;color:var(--ink2)}
+.sg-notes ul{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-8);margin:0;padding:0;list-style:none}
+.sg-notes li{position:relative;padding-left:14px;font-size:var(--fs-xs);line-height:1.55;color:var(--mut)}
+.sg-notes li::before{content:"";position:absolute;left:0;top:.6em;width:5px;height:5px;border-radius:50%;
+ background:var(--accent)}
+body.cc-signin .auth-by{position:relative;z-index:1;justify-self:center;width:min(960px,100%);
+ padding:var(--sp-8) var(--sp-4) 26px}
+/* Drawn once on load: the baseline first, then the line, left to right. */
+@media (prefers-reduced-motion:no-preference){
+ .sg-line{animation:sg-draw 1.9s cubic-bezier(.3,0,.1,1) .25s both}
+ .sg-notes::before{animation:sg-rule 1.1s cubic-bezier(.3,0,.1,1) both}
+}
+@keyframes sg-draw{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes sg-rule{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@media(max-width:980px){
+ .sg-notes{grid-template-columns:minmax(0,1fr);gap:10px}
+}
+/* The phone: the line crosses the band above the card and meets it at the left; the card
+   fills the width less the gutter; the points stack. */
+@media(max-width:640px){
+ .sg-top{padding:20px var(--sp-4) 0;align-items:flex-start}
+ .sg-brand{flex-wrap:wrap;row-gap:10px}
+ .sg-brand .auth-logo{height:32px;max-width:140px}
+ .sg-name{flex:1 1 180px}
+ .sg-date{display:none}
+ .sg-stage{place-items:start center;padding:112px var(--sp-4) var(--sp-8)}
+ .sg-line{top:var(--sp-4);bottom:auto;height:140px}
+ .sg-card{padding:30px 22px 22px}
+ .sg-card::before{left:22px}
+ .sg-notes{padding:16px var(--sp-4) 0}
+ .sg-notes ul{grid-template-columns:minmax(0,1fr);gap:8px}
+ body.cc-signin .auth-by{padding:var(--sp-6) var(--sp-4) 22px}
+}
 """
