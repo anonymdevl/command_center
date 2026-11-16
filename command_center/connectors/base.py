@@ -123,6 +123,12 @@ class BusinessConnector:
     def service_credential_configured(self) -> bool:
         return False
 
+    def whoami(self) -> str:
+        """The acting person's login on the business's ERPNext: on this site, the
+        acting user; on another, whoever that person's own key belongs to there, which
+        need not be spelt like their login here."""
+        return self.acting_user
+
     # -- reads -------------------------------------------------------------
     # Deliberately mirrors frappe.client so the local implementation is thin and
     # the remote one maps onto endpoints that already exist on every Frappe site.
@@ -180,6 +186,34 @@ class BusinessConnector:
         """
         raise NotImplementedError
 
+    def assign(self, doctype, name, users, description=None, date=None,
+               priority=None) -> list:
+        """Assign a document to people the way the desk's "Assign To" does:
+        `frappe.desk.form.assign_to.add`, called the same way on v14, v15 and v16.
+
+        Unlike inserting a ToDo, it tells the assignee. ERPNext creates their To-Do
+        (assigned_by = the acting user), sets the document's Assigned To, writes the
+        "assigned" comment on it, shares the document with them if they could not read
+        it, and sends them an Assignment notification -- the bell, and an email if
+        their Notification Settings allow. It runs as the acting user, who must be able
+        to read the document. Returns ERPNext's answer: the document's open
+        assignments, as [{"owner": user, "name": todo}] (at most five).
+        """
+        raise NotImplementedError
+
+    def comment(self, doctype, name, content) -> dict:
+        """A comment on a record through the form's own endpoint
+        (`frappe.desk.form.utils.add_comment`): anyone who may read the record may
+        comment on it, where inserting a Comment needs System Manager. A mention in the
+        content (`<span class="mention" data-id="user">`) notifies that person, exactly
+        as a mention typed in the desk does."""
+        raise NotImplementedError
+
+    def desk_url(self, doctype, name) -> str:
+        """Where the record opens in this business's ERPNext."""
+        site = "" if self.is_local else (self.business.site_url or "").rstrip("/")
+        return site + desk_path(doctype, name)
+
     # -- change feed -------------------------------------------------------
     def fetch_changes(self, since=None, limit: int = 500) -> list[dict]:
         """What has changed in this business since we last looked.
@@ -197,3 +231,11 @@ class BusinessConnector:
     def __repr__(self):
         kind = "local" if self.is_local else "remote"
         return f"<{type(self).__name__} {self.code} ({kind})>"
+
+
+def desk_path(doctype: str, name: str) -> str:
+    """A record's path in the desk, the same on every Frappe: /app/<doctype-slug>/<name>."""
+    from urllib.parse import quote
+
+    slug = doctype.lower().replace(" ", "-").replace("_", "-")
+    return f"/app/{slug}/{quote(str(name), safe='')}"

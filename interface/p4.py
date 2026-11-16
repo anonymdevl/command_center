@@ -64,5 +64,5 @@ V_DELEG=f'''<div class="topbar"><div><h3>Outstanding Tasks</h3>
 <div class="bk"><div class="n">—</div><div class="l">High risk</div><div class="v">marked high priority</div></div></div>
 <div class="note"><h4>Where the work actually happens</h4><ul>
 <li>This platform is for management. <b>The people you hand work to do not need a login here.</b></li>
-<li>Each task is a To-Do in ERPNext, where they already work, and they mark it done there.
+<li>Each task is a To-Do in ERPNext, where they already work: ERPNext notifies them, and they mark it done there.
 Only the decision to accept or reject it happens on this screen.</li></ul></div>'''

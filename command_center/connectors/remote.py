@@ -375,6 +375,32 @@ class RemoteConnector(BusinessConnector):
             "doc": self.get_doc(doctype, name), "action": action,
         }, write=True)
 
+    def assign(self, doctype, name, users, description=None, date=None, priority=None):
+        # Top-level arguments, not an `args` wrapper: v14's add(args=None) and v15/v16's
+        # add(args: dict | None = None) both read them from the request when `args` is
+        # absent. assign_to goes as a JSON list (every version parse_json's it). A date
+        # or priority left out takes ERPNext's own default: today, Medium.
+        return self._call("frappe.desk.form.assign_to.add", {
+            "doctype": doctype, "name": name, "assign_to": list(users),
+            "description": description, "date": date, "priority": priority,
+        }, write=True) or []
+
+    def whoami(self):
+        if not getattr(self, "_me", None):
+            self._me = self._call("frappe.auth.get_logged_user")
+        return self._me
+
+    def comment(self, doctype, name, content):
+        # v14 and v15 require comment_email and comment_by (v16 takes the session's user
+        # for the first): the person's own login there, and their name.
+        me = self.whoami()
+        return self._call("frappe.desk.form.utils.add_comment", {
+            "reference_doctype": doctype, "reference_name": name, "content": content,
+            "comment_email": me,
+            "comment_by": (frappe.utils.get_fullname(self.acting_user)
+                           if self.acting_user else me) or me,
+        }, write=True)
+
     # -- change feed -------------------------------------------------------
     def fetch_changes(self, since=None, limit: int = 500):
         """What has changed on the peer since `since`, by its own modified stamps.

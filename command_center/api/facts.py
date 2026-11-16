@@ -225,3 +225,45 @@ def _document_url(sites, row) -> str | None:
     path = urlsplit(url).path
     return f"{base}{path}"
 
+
+
+# Source rows that are not something a person works on: a stock level (Bin) and a ledger
+# line are records, not documents anyone is assigned.
+NOT_A_DOCUMENT = {"Bin", "GL Entry"}
+
+
+def single_document(fact: str | None, filters=None, business_code: str | None = None):
+    """The one ERPNext document behind a figure, when there is exactly one.
+
+    Work raised from an alert is assigned on that document in ERPNext (api/actions), so
+    the assignee is told about it there and the document shows who has it. A line or
+    allocation row belongs to its parent document (the ingestor's `cancellable`): five
+    lines of one invoice are one invoice. None when the records are none, many, or not
+    documents -- and when they cannot be read, which is never a reason to fail the work.
+    """
+    target = FACTS.get(fact or "")
+    if not target:
+        return None
+    try:
+        from command_center.ingest.registry import INGESTORS
+
+        parent = getattr(INGESTORS.get(fact), "cancellable", None)
+        filters = frappe.parse_json(filters) if isinstance(filters, str) else dict(filters or {})
+        if business_code and business_code != "__all__":
+            filters["business_code"] = business_code
+        allowed = filterable(fact)
+        if any(f not in allowed for f in filters):
+            return None
+        t = frappe.qb.DocType(target)
+        q = frappe.qb.from_(t).select(t.src_doctype, t.src_name).distinct()
+        for field, rule in filters.items():
+            q = q.where(condition(t[field], rule))
+        rows = q.limit(2).run(as_dict=True)
+    except Exception:
+        return None
+    if len(rows) != 1 or not rows[0].get("src_name"):
+        return None
+    doctype = parent or rows[0].get("src_doctype")
+    if not doctype or doctype in NOT_A_DOCUMENT:
+        return None
+    return {"doctype": doctype, "name": str(rows[0]["src_name"])}

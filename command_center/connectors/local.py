@@ -148,6 +148,26 @@ class LocalConnector(BusinessConnector):
             doc = frappe.get_doc(doctype, name)
             return apply_workflow(doc, action).as_dict()
 
+    def whoami(self):
+        return self.acting_user or frappe.session.user
+
+    def assign(self, doctype, name, users, description=None, date=None, priority=None):
+        from frappe.desk.form.assign_to import add
+
+        args = {"doctype": doctype, "name": name, "assign_to": list(users),
+                "description": description, "date": date, "priority": priority}
+        with acting_as(self.acting_user):
+            # Left out rather than None, so ERPNext's own defaults apply (today, Medium).
+            return add({k: v for k, v in args.items() if v is not None}) or []
+
+    def comment(self, doctype, name, content):
+        from frappe.desk.form.utils import add_comment
+
+        with acting_as(self.acting_user):
+            user = frappe.session.user
+            c = add_comment(doctype, name, content, user, frappe.utils.get_fullname(user))
+            return c.as_dict() if hasattr(c, "as_dict") else c
+
     def fetch_changes(self, since=None, limit: int = 500):
         from command_center.api.changes import get_changes
 

@@ -6018,3 +6018,265 @@ class ReportRuns(TransactionTestCase):
         self.assertIn("other", left)
         self.assertNotIn("old00", left)
         self.assertIn("old12", left)
+
+
+class _AssignERPNext:
+    """A business's ERPNext as far as handing out work goes: To-Dos, Tasks, ERPNext's own
+    assignment (frappe.desk.form.assign_to.add, as connectors' assign()) and the form's
+    comment endpoint. The manager's login there differs from their login here, as it may
+    on a real site, so the test shows the ERPNext identity is the one used."""
+
+    ME = "boss@erp.test"
+
+    def __init__(self, code):
+        from command_center.connectors.remote import RemoteConnector
+        import types
+        biz = types.SimpleNamespace(business_code=code, business_name="Test Medical Ltd",
+                                    currency="GHS", site_url="https://erp.test/", name=code)
+        self.conn = RemoteConnector(biz, acting_user="manager@test.com")
+        self.todos, self.tasks, self.assigned, self.comments, self.inserted = [], [], [], [], []
+        self.refuse_comment = False
+        self.users = {"ama@test": {"name": "ama@test", "full_name": "Ama Owusu",
+                                   "allowed_in_mentions": 1},
+                      "kofi@test": {"name": "kofi@test", "full_name": "Kofi Mensah",
+                                    "allowed_in_mentions": 0}}
+        c = self.conn
+        c.whoami = lambda: self.ME
+        c.get_list = self.get_list
+        c.insert = self.insert
+        c.assign = self.assign
+        c.comment = self.comment
+        c._call = lambda method, params=None, **k: self.ME if method.endswith("get_logged_user") else []
+
+    @staticmethod
+    def _match(row, filters):
+        for k, rule in (filters or {}).items():
+            v = row.get(k)
+            if isinstance(rule, list):
+                op, val = rule
+                ok = {"!=": v != val, ">=": str(v or "") >= str(val), "in": v in val,
+                      "like": True}.get(op, False)
+            else:
+                ok = v == rule
+            if not ok:
+                return False
+        return True
+
+    def get_list(self, doctype, filters=None, fields=None, limit=20, order_by=None, **kw):
+        rows = {"ToDo": self.todos, "User": list(self.users.values())}.get(doctype, [])
+        rows = [r for r in rows if self._match(r, filters)]
+        if doctype == "ToDo" and order_by == "creation desc":
+            rows = list(reversed(rows))
+        return [{f: r.get(f) for f in fields or ["name"]} for r in rows][:limit]
+
+    def _todo(self, **kw):
+        row = {"name": f"TD-{len(self.todos) + 1:03d}", "status": "Open", "priority": "Medium",
+               "date": None, "reference_type": None, "reference_name": None,
+               "modified": str(TODAY), "creation": str(TODAY), "_user_tags": "", **kw}
+        self.todos.append(row)
+        return row
+
+    def insert(self, doc):
+        doc = dict(doc)
+        self.inserted.append(doc)
+        if doc["doctype"] == "ToDo":
+            return self._todo(**{k: v for k, v in doc.items() if k != "doctype"})
+        if doc["doctype"] == "Task":
+            doc["name"] = f"TASK-{len(self.tasks) + 1:03d}"
+            self.tasks.append(doc)
+            return doc
+        raise AssertionError(f"unexpected insert of {doc['doctype']}")
+
+    def assign(self, doctype, name, users, description=None, date=None, priority=None):
+        self.assigned.append({"doctype": doctype, "name": name, "users": list(users),
+                              "description": description, "date": date, "priority": priority})
+        for user in users:
+            if not any(t["reference_type"] == doctype and t["reference_name"] == name
+                       and t["allocated_to"] == user and t["status"] == "Open" for t in self.todos):
+                self._todo(allocated_to=user, assigned_by=self.ME, reference_type=doctype,
+                           reference_name=name, description=description, date=date,
+                           priority=priority or "Medium")
+        return [{"owner": t["allocated_to"], "name": t["name"]} for t in self.todos
+                if t["reference_type"] == doctype and t["reference_name"] == name
+                and t["status"] == "Open"][:5]
+
+    def comment(self, doctype, name, content):
+        from command_center.connectors.base import RemotePermissionDenied
+        if self.refuse_comment:
+            raise RemotePermissionDenied("Test Medical Ltd refused this. Your account there "
+                                         "does not have permission for it.")
+        self.comments.append((doctype, name, content))
+        return {"name": f"C-{len(self.comments)}"}
+
+
+class Delegation(TransactionTestCase):
+    """Handing out work (api/actions.create_task) tells the person, in their ERPNext: on a
+    document, ERPNext's own assignment; in a project, a Task assigned the same way; about
+    no single document, a To-Do from the manager and a mention on it. A refused
+    notification is reported, never raised, and Outstanding Tasks lists all of it."""
+
+    databases = {"default", "aux"}
+    setUp_settings = SettingsPage.setUp
+    tearDown = SettingsPage.tearDown
+
+    def setUp(self):
+        self.setUp_settings()
+        from command_center import install
+        from insights.compat import run_as
+        from insights.core.models import ConnectedBusiness
+        with run_as("Administrator"):
+            install.register_business("Test Medical Ltd", "https://erp.test", "key", "s3cret")
+        self.code = ConnectedBusiness.objects.get().business_code
+        self.erp = _AssignERPNext(self.code)
+        p = mock.patch("command_center.api.actions.connector_for",
+                       lambda code, acting_user=None: self.erp.conn)
+        p.start()
+        self.patches.append(p)
+
+    def _task(self, **kw):
+        from command_center.api import actions
+        from insights.compat import run_as
+        args = {"business_code": self.code, "subject": "Chase the payment",
+                "description": "Agree a date this week.", "allocated_to": "ama@test",
+                "due_date": str(TODAY + dt.timedelta(days=3))} | kw
+        with run_as("manager@test.com"):
+            return actions.create_task(**args)
+
+    def test_a_document_is_assigned_in_erpnext(self):
+        res = self._task(reference_type="Sales Invoice", reference_name="ACC-SINV-0001",
+                         priority="High")
+        self.assertEqual(self.erp.assigned, [{
+            "doctype": "Sales Invoice", "name": "ACC-SINV-0001", "users": ["ama@test"],
+            "description": "Chase the payment\n\nAgree a date this week.",
+            "date": str(TODAY + dt.timedelta(days=3)), "priority": "High"}])
+        self.assertFalse([d for d in self.erp.inserted if d["doctype"] == "ToDo"],
+                         "ERPNext makes the To-Do itself; none is inserted beside it")
+        todo = self.erp.todos[0]
+        self.assertEqual((todo["assigned_by"], todo["allocated_to"]), (_AssignERPNext.ME, "ama@test"))
+        self.assertEqual(res["name"], todo["name"])
+        self.assertTrue(res["notified"])
+        self.assertEqual(res["document"]["url"], "https://erp.test/app/sales-invoice/ACC-SINV-0001")
+        self.assertEqual(res["url"], f"https://erp.test/app/todo/{todo['name']}")
+        self.assertIn("Sales Invoice ACC-SINV-0001 is assigned to Ama Owusu", res["said"])
+        self.assertIn("notified Ama Owusu", res["notice"])
+        # the same again: ERPNext would decline the duplicate, so it is not asked, and the
+        # answer says nobody was told again
+        again = self._task(reference_type="Sales Invoice", reference_name="ACC-SINV-0001")
+        self.assertEqual(len(self.erp.assigned), 1)
+        self.assertTrue(again["already"])
+        self.assertIs(again["notified"], False)
+        self.assertEqual(again["name"], todo["name"])
+        # assign_to(), the record-level call, is the same assignment
+        from command_center.api import actions
+        from insights.compat import run_as
+        with run_as("manager@test.com"):
+            actions.assign_to(self.code, "Purchase Order", "PUR-ORD-0007", "ama@test")
+        self.assertEqual(self.erp.assigned[-1]["doctype"], "Purchase Order")
+        self.assertEqual(self.erp.assigned[-1]["description"], "Purchase Order PUR-ORD-0007")
+
+    def test_no_document_todo_then_mention(self):
+        res = self._task(priority="High")
+        self.assertFalse(self.erp.assigned)
+        todo = self.erp.inserted[0]
+        self.assertEqual(todo["doctype"], "ToDo")
+        self.assertEqual(todo["assigned_by"], _AssignERPNext.ME,
+                         "assigned_by is the manager's login on that ERPNext")
+        self.assertNotIn("reference_type", todo)
+        self.assertEqual(todo["priority"], "High")
+        [(dt_, name, html)] = self.erp.comments
+        self.assertEqual((dt_, name), ("ToDo", res["name"]))
+        self.assertIn('class="mention" data-id="ama@test"', html)
+        self.assertIn("Chase the payment", html)
+        self.assertIs(res["notified"], True)
+        self.assertIsNone(res["document"])
+        self.assertIn("mentioning them", res["notice"])
+
+    def test_a_refused_notification_is_reported_not_raised(self):
+        self.erp.refuse_comment = True
+        res = self._task()
+        self.assertEqual(len(self.erp.todos), 1, "the To-Do stands")
+        self.assertIs(res["notified"], False)
+        self.assertIn("could not be notified", res["notice"])
+        self.assertIn("refused", res["notice"])
+        # someone ERPNext will not mention is not mentioned, and the answer says why
+        self.erp.refuse_comment = False
+        res = self._task(allocated_to="kofi@test")
+        self.assertIs(res["notified"], False)
+        self.assertIn("Allowed In Mentions", res["notice"])
+        self.assertEqual(self.erp.comments, [])
+
+    def test_an_alert_names_itself_not_a_platform_doctype(self):
+        from insights.core import models as M
+        M.CommandCenterAlert.objects.create(
+            name="AL-1", business_code=self.code, title="One invoice is 200 days late",
+            drill_fact="fact_sales_invoice_line", drill_filters=json.dumps({"customer": "Alpha"}))
+        M.CommandCenterAlert.objects.create(
+            name="AL-2", business_code=self.code, title="Payments never matched",
+            drill_fact="fact_sales_invoice", drill_filters=json.dumps({"customer": "Beta"}))
+        for i, (model, cust, src, row) in enumerate((
+                (M.CommandCenterFactSalesInvoiceLine, "Alpha", "ACC-SINV-0009", "r1"),
+                (M.CommandCenterFactSalesInvoiceLine, "Alpha", "ACC-SINV-0009", "r2"),
+                (M.CommandCenterFactSalesInvoice, "Beta", "ACC-SINV-0010", None),
+                (M.CommandCenterFactSalesInvoice, "Beta", "ACC-SINV-0011", None))):
+            doctype = "Sales Invoice Item" if model is M.CommandCenterFactSalesInvoiceLine else "Sales Invoice"
+            model.objects.create(name=f"f{i}", fact_key=f"f{i}", business_code=self.code,
+                                 customer=cust, src_doctype=doctype, src_name=src,
+                                 src_row_name=row, src_docstatus=1)
+        from command_center.api.facts import single_document
+        self.assertEqual(single_document("fact_sales_invoice_line", {"customer": "Alpha"}, self.code),
+                         {"doctype": "Sales Invoice", "name": "ACC-SINV-0009"},
+                         "two lines of one invoice are that invoice")
+        self.assertIsNone(single_document("fact_sales_invoice", {"customer": "Beta"}, self.code))
+        self.assertIsNone(single_document("fact_sales_invoice", {"no_such_field": 1}, self.code))
+        # one document behind the alert: assigned on it, the alert named in the description
+        res = self._task(alert="AL-1")
+        self.assertEqual(self.erp.assigned[0]["name"], "ACC-SINV-0009")
+        self.assertIn("the alert “One invoice is 200 days late”",
+                      self.erp.assigned[0]["description"])
+        self.assertEqual(res["document"]["name"], "ACC-SINV-0009")
+        # many behind it, passed the old way (the alert as a reference): a To-Do of its
+        # own, with no reference at all, naming the alert
+        res = self._task(reference_type="Command Center Alert", reference_name="AL-2")
+        todo = self.erp.inserted[-1]
+        self.assertNotIn("reference_type", todo)
+        self.assertIn("Payments never matched", todo["description"])
+        self.assertIsNone(res["document"])
+        # the alert lists the document and opens its To-Do on the business's ERPNext
+        from command_center.api import alerts
+        from insights.compat import run_as
+        M.CommandCenterAlert.objects.filter(name="AL-2").update(todo=res["name"])
+        with run_as("manager@test.com"), mock.patch("command_center.api.alerts.ensure_fresh",
+                                                     lambda code: None):
+            listed = {a["name"]: a for a in alerts.open_alerts(self.code)["alerts"]}
+        self.assertEqual(listed["AL-1"]["document"], {"doctype": "Sales Invoice", "name": "ACC-SINV-0009"})
+        self.assertIsNone(listed["AL-2"]["document"])
+        self.assertEqual(listed["AL-2"]["todo_url"], f"https://erp.test/app/todo/{res['name']}")
+
+    def test_a_project_task_is_created_and_assigned(self):
+        res = self._task(project="PROJ-0001", priority="Urgent")
+        [task] = self.erp.tasks
+        self.assertEqual((task["project"], task["subject"], task["priority"]),
+                         ("PROJ-0001", "Chase the payment", "Urgent"))
+        [a] = self.erp.assigned
+        self.assertEqual((a["doctype"], a["name"], a["users"]), ("Task", task["name"], ["ama@test"]))
+        self.assertIsNone(a["priority"], "Urgent is a Task priority, not a To-Do one")
+        self.assertEqual(res["task"], task["name"])
+        self.assertTrue(res["notified"])
+        self.assertIn("is in project PROJ-0001", res["said"])
+
+    def test_outstanding_tasks_lists_what_was_handed_out(self):
+        self._task(reference_type="Sales Invoice", reference_name="ACC-SINV-0001")
+        self._task(subject="Count the stock")
+        self._task(project="PROJ-0001", subject="Fix the pump")
+        from command_center.api import work
+        from insights.compat import run_as
+        with run_as("manager@test.com"):
+            got = work._summary(work._Remote(self.erp.conn), self.code)
+        titles = {t["title"]: t for t in got["open"]}
+        self.assertEqual(set(titles), {"Chase the payment", "Count the stock", "Fix the pump"})
+        self.assertEqual(titles["Chase the payment"]["reference"],
+                         {"doctype": "Sales Invoice", "name": "ACC-SINV-0001"})
+        self.assertIsNone(titles["Count the stock"]["reference"])
+        self.assertEqual(titles["Fix the pump"]["reference"]["doctype"], "Task")
+        self.assertTrue(all(t["to"] == "ama@test" for t in got["open"]))
+        self.assertEqual(got["figures"]["work_open"]["value"], 3)

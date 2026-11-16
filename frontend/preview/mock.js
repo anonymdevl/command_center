@@ -370,7 +370,12 @@ const HANDLERS = {
     { user: "kwame@gigmann.example", name: "Kwame Mensah" },
     { user: "efua@gigmann.example", name: "Efua Owusu" },
   ],
-  "command_center.api.actions.create_task": ({ subject }) => ({ name: "preview-only", subject }),
+  "command_center.api.actions.create_task": ({ subject, reference_type, reference_name }) => ({
+    name: "preview-only", subject, url: null, notified: false,
+    document: reference_type ? { doctype: reference_type, name: reference_name, url: null } : null,
+    said: "Preview only: nothing was sent to ERPNext.",
+    notice: "The preview has no ERPNext, so no one was notified.",
+  }),
   // Today, Approvals and Outstanding Tasks. Sample people and documents, marked so.
   "command_center.api.work.summary": () => {
     const fig = (key, label, value, note) => ({ key, label, value, unit: "count", note,

@@ -6,9 +6,12 @@
  * same six parts -- what, why, figure, source, owner, elapsed -- in the same card, read
  * from the KPIs the cards beside them use.
  *
- * Every action is real. Assign, Request evidence and Escalate become a To-Do linked to
- * the alert; Defer, Dismiss and "Not a real problem" are remembered with a reason; the
- * records open in the drawer. Built as DOM in the designed classes, never as HTML.
+ * Every action is real. Assign, Request evidence and Escalate hand the work out in the
+ * business's ERPNext and notify the person there: assigned on the one document behind the
+ * alert when its records are exactly one (a.document), otherwise a To-Do of its own that
+ * names the alert (api/actions.create_task); the alert then shows whose To-Do it became.
+ * Defer, Dismiss and "Not a real problem" are remembered with a reason; the records open
+ * in the drawer. Built as DOM in the designed classes, never as HTML.
  */
 
 import { api } from "../api/client.js";
@@ -101,7 +104,7 @@ function card(a, onOpen) {
   }
   if (a.todo) {
     const t = el("a", "chip", "");
-    t.href = `/app/todo/${encodeURIComponent(a.todo)}`;
+    t.href = a.todo_url || `/app/todo/${encodeURIComponent(a.todo)}`;
     t.target = "_blank";
     t.rel = "noreferrer";
     t.append(document.createTextNode("To-Do "), el("b", null, a.todo));
@@ -110,7 +113,8 @@ function card(a, onOpen) {
   c.append(meta);
 
   const ctx = { title: a.title, detail: [a.why, a.next_step && `Next: ${a.next_step}`].filter(Boolean).join("\n"),
-                owner: a.owner_label, alert: a.name };
+                owner: a.owner_label, alert: a.name,
+                doctype: a.document?.doctype, docname: a.document?.name };
   const acts = el("div", "acts");
   acts.append(
     btn("Assign", "btn pri", () => fire("cc-action", { kind: "assign", ...ctx })),

@@ -115,9 +115,9 @@ V_COMMAND=f'''<div class="topbar"><div><h3 class="hello" id="greet">Good morning
 <ul class="gauge-parts" id="gauge-parts" hidden></ul></div>
 <div class="panel topc" id="topc"><div class="gp-h"><div><h4>Top customers</h4><p id="topc-sub">Share of sales, last twelve months</p></div></div>
 <div class="topc-bar" id="topc-bar"></div><ul class="topc-l" id="topc-l"><li class="home-wait">Reading the sales…</li></ul></div></div>
-<div class="banner">Every figure here is read from the business&#39;s own ERPNext. Nothing here changes a
-business record: Assign, Request evidence and Escalate put a To-Do on a colleague&#39;s ERPNext list, from you,
-and that is all they do.</div>
+<div class="banner">Every figure here is read from the business&#39;s own ERPNext. Assign, Request evidence
+and Escalate hand the work to a colleague in that ERPNext, from you: assigned on the document when it is about
+one, otherwise as a To-Do, and ERPNext notifies them. Nothing else in a business record changes.</div>
 <div class="sect"><span>The numbers this morning</span></div>
 <div class="kpis" style="grid-template-columns:repeat(6,1fr)">
 {kpi("Money in, month","—","","","flat")}

@@ -201,11 +201,13 @@ export const api = {
 
   /* Actions a manager takes, as themselves -- never the assistant (api/actions.py). */
   people: (business_code) => call("command_center.api.actions.people", { business_code }),
+  /* Assigned on the ERPNext document when there is one, else a To-Do; either way the
+     person is notified in ERPNext, and the answer says whether they were. */
   createTask: ({ business_code, subject, description, allocated_to, due_date, priority,
-                 reference_type, reference_name }) =>
+                 reference_type, reference_name, alert }) =>
     call("command_center.api.actions.create_task",
       { business_code, subject, description, allocated_to, due_date, priority,
-        reference_type, reference_name }),
+        reference_type, reference_name, alert }),
 
   /* Conversations with the AI, kept per person on the server (api/conversations.py). */
   convRecent: (business_code) => call("command_center.api.conversations.recent", { business_code }),
