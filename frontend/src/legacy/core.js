@@ -7,6 +7,8 @@
  *               never the designed figure, never "illustrative"
  *   notes       a tile with an empty footnote takes its figure's note
  *   findings    Business Overview's finding box (api/panels_core.ops_findings)
+ *   overview    Business Overview's front page: its tiles moved into the lead, the
+ *               column beside it and the register (legacy/overview.js)
  *   health      Business Health's sentence on what is going badly is drawn by
  *               home.js; the questions to ask first come from the open alerts here
  *   brief       the Executive Summary's line under its heading
@@ -17,6 +19,7 @@
 import { GUIDE_STATES, guideWords } from "./guide.js";
 import { CARD_KPIS, TILE_KPIS } from "./hydrate.js";
 import { HEALTH_QUESTIONS } from "./home.js";
+import { OVERVIEW_VIEWS, renderOverview } from "./overview.js";
 import { WORK_TILES } from "./work.js";
 
 /** The screens this file finishes. Each .kpi and .bk on them has a figure or a guide. */
@@ -51,6 +54,11 @@ export function renderCore(root, view, state = {}) {
   root.querySelectorAll(".kpi").forEach((card) => finish(card, view, "card", figs, done, reachDown));
   root.querySelectorAll(".bk").forEach((tile) => finish(tile, view, "tile", figs, done, reachDown));
   if (CORE_PANEL_VIEWS.has(view) && panels) findings(root, panels.findings);
+  // After every tile is finished, so each moves with everything written into it.
+  if (OVERVIEW_VIEWS.has(view)) {
+    renderOverview(root, { figures: figs, alerts: alerts ? alerts.alerts || [] : null,
+                           specs: TILE_KPIS[view], done });
+  }
   if (view === "health" && alerts) askFirst(root, alerts.alerts || []);
   if (view === "brief") briefWhen(root, alerts);
   Object.entries(CARD_GO[view] || {}).forEach(([label, to]) => {

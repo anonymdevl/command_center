@@ -19,6 +19,7 @@ import { wireActions } from "../legacy/actions.js";
 import { WORK_VIEWS, renderWork } from "../legacy/work.js";
 import { ALERT_VIEWS, alertsFailed, renderAlerts } from "../legacy/alerts.js";
 import { CORE_PANEL_VIEWS, renderCore } from "../legacy/core.js";
+import { OVERVIEW_VIEWS } from "../legacy/overview.js";
 import ReachBanner from "./ReachBanner.jsx";
 import { renderHealthTiles, renderHome } from "../legacy/home.js";
 import { renderSchedules } from "../legacy/schedules.js";
@@ -86,8 +87,9 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     return () => window.removeEventListener("cc-work-changed", again);
   }, [isWork, work.reload]);
 
-  // Home and the Executive Summary show the alert engine's alerts (api/alerts.py).
-  const hasAlerts = ALERT_VIEWS.has(viewKey);
+  // Home and the Executive Summary show the alert engine's alerts (api/alerts.py);
+  // Business Overview reads them only to decide which area leads (legacy/overview.js).
+  const hasAlerts = ALERT_VIEWS.has(viewKey) || OVERVIEW_VIEWS.has(viewKey);
   const alerts = useApi(() => api.alerts(scope), [viewKey, scope],
     { skip: !hasAlerts, key: keyFor(me, scope, "alerts") });
   useEffect(() => {
