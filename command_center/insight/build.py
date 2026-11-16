@@ -571,7 +571,39 @@ def understand(key: str, business_code: str | None = None) -> dict:
                                  "steps": [], "guide": None, "improve": improve(k, figure, code)}
     section["open_items"] = _open_items(code, {key} | set(related[:4]),
                                         spec.recs if spec else ())
+    section["status"] = status(section["expected"]["checks"])
+    section["headline"] = headline(section)
     return section
+
+
+STATUS = {"bad": ("attention", "Needs Attention"), "warn": ("watch", "Watch"),
+          "ok": ("on_target", "On Target")}
+
+
+def status(checks) -> dict | None:
+    """The drawer's status chip, from the expected-position checks: the worst of them.
+    None when nothing was checked (or only stated for information) -- never On Target by
+    default."""
+    states = {c.get("state") for c in checks or []}
+    for s in ("bad", "warn", "ok"):
+        if s in states:
+            return {"state": STATUS[s][0], "label": STATUS[s][1]}
+    return None
+
+
+def headline(section) -> str | None:
+    """One plain sentence for the top of the drawer, taken from what was worked out:
+    the diagnosis's own headline, else its first sentence, else the worst check's."""
+    d = section.get("diagnosis") or {}
+    if d.get("headline"):
+        return d["headline"]
+    if d.get("sentences"):
+        return d["sentences"][0]
+    for want in ("bad", "warn"):
+        for c in section["expected"]["checks"]:
+            if c.get("state") == want and c.get("text"):
+                return c["text"]
+    return None
 
 
 def _fmt(v, unit, cur) -> str:

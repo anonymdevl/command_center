@@ -5234,6 +5234,61 @@ class FigureUnderstanding(TransactionTestCase):
         self.assertTrue({"ar_total", "ar_unmatched", "ar_in_credit"} <= rel, rel)
         self.assertTrue(all("drill" in r for r in s["related"]), "a related figure opens its drawer")
 
+    def test_drawer_status_and_headline(self):
+        """The drawer's hero: a status chip from the checks (the worst of them) and one
+        sentence read off the bridge -- every figure in it the bridge's own."""
+        s = self._understand("ar_open_invoices")
+        self.assertEqual(s["status"], {"state": "attention", "label": "Needs Attention"})
+        self.assertEqual(
+            s["headline"],
+            "The open invoices say GHS 202,000, but the ledger says GHS 143,500 is owed; "
+            "GHS 60,000 of the gap is money received, not matched to an invoice. "
+            "Reconciling the 2 customers concerned clears all of it.")
+        aged = self._understand("ar_over_90")
+        self.assertTrue(aged["headline"].startswith(
+            "GHS 80,000 of the GHS 143,500 owed by the ledger is over 90 days late (55.7%)"),
+            aged["headline"])
+        self.assertIn("Collecting from Alpha Clinic clears all of it.", aged["headline"])
+        # A clean book reads On Target and says the two agree.
+        from insights.core import models as M
+        M.CommandCenterFactPartyBalance.objects.filter(business_code=REC_CODE).delete()
+        self._fact(M.CommandCenterFactPartyBalance, party_type="Customer", party="Gamma Labs",
+                   open_invoices=30000, open_invoice_count=1, ledger_balance=30000, owed=30000,
+                   d0_30=30000)
+        self.live["Payment Entry"] = []
+        from django.core.cache import cache
+        cache.clear()
+        clean = self._understand("ar_total")
+        self.assertEqual(clean["status"]["label"], "On Target")
+        self.assertEqual(clean["headline"],
+                         "The open invoices and the ledger agree: GHS 30,000 is owed.")
+        # Nothing checked is no chip, never On Target by default.
+        from command_center.insight.build import status
+        self.assertIsNone(status([]))
+        self.assertIsNone(status([{"state": "info"}]))
+        self.assertEqual(status([{"state": "ok"}, {"state": "warn"}])["label"], "Watch")
+
+    def test_records_say_their_measure_and_when_read(self):
+        """Every drawer's records carry the measure they total and when they were read,
+        so a drawer opened from a panel row says its as-of like a figure does."""
+        from insights.core import models as M
+        M.CommandCenterIngestState.objects.create(
+            name="st-si", fact="fact_sales_invoice", business_code=REC_CODE,
+            as_of_date=TODAY, last_run=dt.datetime(2026, 11, 16, 14, 32), status="OK")
+        self.MOD = "command_center.api.facts"
+        try:
+            r = self._call(self.manager, "records", fact="fact_sales_invoice",
+                           business_code=REC_CODE)
+        finally:
+            self.MOD = FigureUnderstanding.MOD
+        self.assertEqual(r.status_code, 200, r.content[:400])
+        summary = r.json()["message"]["summary"]
+        self.assertEqual(summary["measure"], "outstanding_amount")
+        self.assertEqual(summary["total"], 202000)
+        self.assertEqual(summary["as_of"]["date"], str(TODAY))
+        self.assertTrue(summary["as_of"]["last_read"].startswith("2026-11-16 14:32"),
+                        summary["as_of"])
+
     def test_auto_reconcile_is_read_from_the_site(self):
         from command_center.insight.build import auto_reconcile
 

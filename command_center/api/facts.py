@@ -155,6 +155,14 @@ def _records(fact: str, filters=None, business_code: str = None, limit: int = 10
         row["open_url"] = _document_url(sites, row)
 
     whole = total_value or 0
+    # When the records were last read, and the latest date they cover: every drawer says
+    # both, the same statement a figure makes (kpi/engine._as_of).
+    from command_center.kpi.engine import _load_state
+    state = _load_state(fact, business_code)
+    as_of = ({"date": str(state["as_of_date"]) if state.get("as_of_date") else None,
+              "basis": "the latest date the data covers",
+              "last_read": str(state["last_run"]) if state.get("last_run") else None}
+             if state else None)
     return {
         "fact": fact,
         "noun": spec["noun"],
@@ -166,6 +174,7 @@ def _records(fact: str, filters=None, business_code: str = None, limit: int = 10
             "count": total_count or 0,
             "shown": len(rows),
             "total": whole,
+            "measure": measure,
             "measure_word": measure_word,
             "dimension_word": dimension_word,
             "concentration": [
@@ -179,6 +188,7 @@ def _records(fact: str, filters=None, business_code: str = None, limit: int = 10
             ],
             "top_share": (round(sum(c["v"] or 0 for c in top) / whole * 100, 1)
                           if whole and top else None),
+            "as_of": as_of,
         },
     }
 
