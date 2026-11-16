@@ -1458,6 +1458,13 @@ _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_export.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,
       "scripts/test_export.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+# Finances keeps every figure, statement, tab, chart, panel, explainer and export it had
+# before the "Management Accounts" restyle (16 Nov 2026): appearance only, never content.
+_t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_fin_parity.py")],
+             capture_output=True, text=True, timeout=120)
+check(_t.returncode == 0,
+      "scripts/test_fin_parity.py failed -- Finances lost something it had:\n"
+      + (_t.stdout + _t.stderr)[-1500:])
 # The answer's charts and tables (legacy/charts.js, markdown.js): each chart type draws a
 # valid block and refuses a broken one; long tables sort and page with every row kept.
 # Needs Node, which the frontend build needs anyway.

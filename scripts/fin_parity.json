@@ -1,0 +1,331 @@
+{
+ "markup": {
+  "buttons": [
+   "Balance Sheet",
+   "Cash Flow",
+   "Custom",
+   "Detail",
+   "Excel",
+   "Key Ratios",
+   "Last Month",
+   "Last Year",
+   "Not yet measured",
+   "Overview",
+   "PDF",
+   "Profit and Loss",
+   "Show",
+   "This Month",
+   "This Quarter",
+   "Trial Balance",
+   "Year to Date"
+  ],
+  "classes": [
+   "bars",
+   "btn",
+   "chartwrap",
+   "clickable",
+   "delta",
+   "dt",
+   "dt-scroll",
+   "flat",
+   "fs",
+   "fs-body",
+   "fs-cards",
+   "fs-custom",
+   "fs-exports",
+   "fs-head",
+   "fs-p",
+   "fs-periods",
+   "fs-state",
+   "fs-title",
+   "fs-tools",
+   "khead",
+   "kpi",
+   "kpis",
+   "lab",
+   "on",
+   "panel",
+   "ph",
+   "pmore",
+   "sig",
+   "sig-cut",
+   "sig-go",
+   "six",
+   "tab",
+   "tabbar",
+   "tabpane",
+   "thin",
+   "topbar",
+   "two",
+   "val",
+   "warn",
+   "when",
+   "xlab",
+   "ymax"
+  ],
+  "data_attrs": [
+   "data-cc-wired=1",
+   "data-cur=",
+   "data-g=fs",
+   "data-g=t*",
+   "data-i=0",
+   "data-i=1",
+   "data-i=2",
+   "data-i=3",
+   "data-i=4",
+   "data-lead=1",
+   "data-part=bs",
+   "data-part=cf",
+   "data-part=pl",
+   "data-part=ratios",
+   "data-part=tb",
+   "data-period=custom",
+   "data-period=last_month",
+   "data-period=last_year",
+   "data-period=quarter",
+   "data-period=this_month",
+   "data-period=ytd"
+  ],
+  "explainer_links": 3,
+  "figures": [
+   [
+    "Owed to us",
+    "explain('ar')"
+   ],
+   [
+    "Unpaid invoices",
+    "explain('ar')"
+   ],
+   [
+    "Last full month",
+    "explain('rev')"
+   ],
+   [
+    "Best month",
+    "explain('rev')"
+   ],
+   [
+    "Never issued",
+    "explain('drafts')"
+   ],
+   [
+    "Bank checks",
+    "explain('bank')"
+   ]
+  ],
+  "ids": [
+   "fs",
+   "fs-apply",
+   "fs-cards",
+   "fs-custom",
+   "fs-from",
+   "fs-pdf",
+   "fs-state",
+   "fs-to",
+   "fs-when",
+   "fs-xlsx"
+  ],
+  "notes": [
+   "Money the business cannot presently use: debts over three months old, stock on the shelves and orders not yet despatched.",
+   "What the ledger says we owe suppliers, by when it falls due. What is overdue and what falls due in the next 7, 30 and 60 days, after payments not yet matched are set against the oldest bills, against the cash customers are due to pay, so a payment run can be planned rather than guessed.",
+   "The balance on every bank and cash account in the ledger. Each balance is only as good as the last time the account was checked against the bank statement, so that date is shown beside it.",
+   "Spending against the budgets set in ERPNext. Each budget line is compared with what has been posted to it this year, so a breach shows before the money is spent rather than after.",
+   "What the ledger says is owed on each tax account. The amount due on the next VAT, withholding or PAYE filing is the balance on its account; the filing dates themselves are not kept in ERPNext.",
+   "What each product group earns over its cost, over the last twelve months. Margin needs the cost of each item against its selling price; lines sold with no recorded cost are counted separately rather than as pure profit."
+  ],
+  "onclicks": [
+   "explain('ar')",
+   "explain('bank')",
+   "explain('drafts')",
+   "explain('ledger')",
+   "explain('rev')",
+   "explain('workingcap')",
+   "tab(this,'fs',0)",
+   "tab(this,'fs',1)",
+   "tab(this,'fs',2)",
+   "tab(this,'fs',3)",
+   "tab(this,'fs',4)",
+   "tab(this,'t*',0)",
+   "tab(this,'t*',1)",
+   "tab(this,'t*',2)"
+  ],
+  "panels": [
+   [
+    "Money coming in",
+    "Monthly",
+    "explain('rev')",
+    "t*:Overview"
+   ],
+   [
+    "Working capital tied up",
+    "",
+    "explain('workingcap')",
+    "t*:Overview"
+   ],
+   [
+    "Receivables and payables",
+    "What each really owes by the ledger, beside the open invoices and bills",
+    "explain('ledger')",
+    "t*:Detail"
+   ],
+   [
+    "What we owe suppliers",
+    "",
+    "",
+    "t*:Not yet measured"
+   ],
+   [
+    "Cash and bank position",
+    "",
+    "",
+    "t*:Not yet measured"
+   ],
+   [
+    "Budget against actual",
+    "",
+    "",
+    "t*:Not yet measured"
+   ],
+   [
+    "Tax and statutory deadlines",
+    "",
+    "",
+    "t*:Not yet measured"
+   ],
+   [
+    "Profit on what we sell",
+    "",
+    "",
+    "t*:Not yet measured"
+   ]
+  ],
+  "tabbars": {
+   "fs": [
+    "Profit and Loss",
+    "Balance Sheet",
+    "Trial Balance",
+    "Cash Flow",
+    "Key Ratios"
+   ],
+   "t*": [
+    "Overview",
+    "Detail",
+    "Not yet measured"
+   ]
+  },
+  "table_heads": [
+   [
+    "Customer or Supplier",
+    "On Open Invoices",
+    "Ledger Balance",
+    "Difference",
+    "Why",
+    "Not Yet Due",
+    "1–30 Days",
+    "31–60 Days",
+    "61–90 Days",
+    "Over 90 Days"
+   ]
+  ]
+ },
+ "scripts": {
+  "card_kpis_fin": {
+   "Bank checks": "bank_cleared_pct",
+   "Best month": "revenue_best_month",
+   "Last full month": "revenue_last_month",
+   "Never issued": "invoices_draft",
+   "Owed to us": "ar_total",
+   "Unpaid invoices": "ar_count"
+  },
+  "statements_buttons": [
+   "Excel",
+   "PDF",
+   "Show Every Account",
+   "Show Main Groups"
+  ],
+  "statements_calls": [
+   "statements",
+   "statementsPdf",
+   "tablesXlsx"
+  ],
+  "statements_cards": [
+   "Revenue",
+   "Gross Profit",
+   "Net Profit",
+   "Cash & Bank",
+   "Current Ratio",
+   "neg",
+   "fs-total",
+   "fs-group",
+   "fs-heading",
+   "fs-deep",
+   "neg"
+  ],
+  "statements_headings": [
+   "At a Glance",
+   "Balance Sheet",
+   "Cash Flow",
+   "Cash Flow in Detail",
+   "Key Ratios",
+   "Month by Month",
+   "Profit and Loss",
+   "Trial Balance"
+  ],
+  "statements_lookups": [
+   "#fs",
+   "#fs-apply",
+   "#fs-cards",
+   "#fs-custom",
+   "#fs-from",
+   "#fs-pdf",
+   "#fs-state",
+   "#fs-to",
+   "#fs-when",
+   "#fs-xlsx",
+   ".fs-body",
+   ".fs-body[data-part=\"${name}\"]",
+   ".fs-p",
+   ".tabbar[data-g=\"fs\"] .tab"
+  ],
+  "statements_parts": [
+   "bs",
+   "cf",
+   "pl",
+   "ratios",
+   "tb"
+  ],
+  "statements_states": [
+   "needs_setup",
+   "ok",
+   "unreachable"
+  ],
+  "viz_controls": [
+   "PNG",
+   "SVG"
+  ],
+  "viz_views": {
+   "area": "Area",
+   "bar": "Bar",
+   "bubble": "Bubble",
+   "combo": "Combo",
+   "donut": "Donut",
+   "funnel": "Funnel",
+   "gauge": "Gauge",
+   "grouped": "Side by side",
+   "hbar": "Bar",
+   "heatmap": "Heatmap",
+   "line": "Line",
+   "percentage": "100%",
+   "pie": "Pie",
+   "radar": "Radar",
+   "rose": "Rose",
+   "scatter": "Scatter",
+   "stacked": "Stacked",
+   "stacked_area": "Stacked area",
+   "strip": "Stacked",
+   "table": "Table",
+   "treemap": "Treemap",
+   "waterfall": "Bridge"
+  }
+ }
+}

@@ -655,4 +655,186 @@ table.dt.dw-t tfoot td{position:sticky;bottom:0;z-index:1;padding:10px 12px;back
  .dw-clip{max-width:180px}
  .dw-search{width:100%}
 }
+
+/* ======================================================================
+   TABLES, EVERY SCREEN (16 Nov 2026): headers never wrap ("On Open Invoices / GHS" was
+   two lines on Sales and Payments), nor do figures and dates; a table wider than its
+   panel scrolls sideways in its own box (legacy/tables.js puts each in a .dt-x), never
+   the page. Text cells keep wrapping, so a long name or reason stays readable -- unless
+   the cell carries its full text in a title, when it may end in an ellipsis.
+   ====================================================================== */
+table.dt th,[data-theme="light"] table.dt th{white-space:nowrap}
+table.dt td.num,table.dt td.n,table.dt td.dt-nw{white-space:nowrap}
+table.dt td[title]:not(:has(*)){max-width:28ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dt-x{overflow-x:auto;max-width:100%;overscroll-behavior-x:contain}
+.dt-x > table.dt{width:100%}
+.dt-x + .thin{margin-top:14px}
+.dt-x + .warn{margin-top:16px}
+@container panel (max-width:560px){
+ /* In its box the table keeps its own layout; the phone rule that made a bare table
+    scroll itself is for tables outside one (Settings). */
+ :is(.dt-x,.dt-scroll,.fs-wrap) > table.dt{display:table}
+}
+
+/* ======================================================================
+   FINANCES -- "Management Accounts" (option A, approved 16 Nov 2026)
+   Appearance only: every figure, statement, tab, chart and panel is the one the screen
+   had. The figures sit in a ruled ribbon instead of tinted cards, the statements are set
+   like printed management accounts, and the panels lose their weight. Scoped to the
+   screen by its statements block (.view:has(> #fs)) and the rows' .ribbon class.
+   ====================================================================== */
+
+/* ---- the figure ribbon: one ruled band, hairlines between the figures ---- */
+.kpis.ribbon{gap:0;grid-template-columns:repeat(6,minmax(0,1fr));border-top:1px solid var(--ink2);
+ border-bottom:1px solid var(--line2);overflow:hidden;margin:0 0 var(--sp-6);background:none}
+.kpis.fs-cards.ribbon{grid-template-columns:repeat(5,minmax(0,1fr));margin:0 0 var(--sp-5)}
+.kpis.fs-cards.ribbon:empty{display:none}
+.kpis.ribbon > .kpi,.kpis.ribbon > .kpi.sig,
+.kpis.ribbon > .kpi.sig:nth-child(n){background:none;border:0;border-radius:0;box-shadow:none;transform:none;
+ border-left:1px solid var(--line);border-top:1px solid var(--line);margin:-1px 0 0 -1px;min-height:0;
+ padding:var(--sp-4) 30px var(--sp-4) var(--sp-4);text-align:left;align-items:stretch;justify-content:flex-start;
+ transition:background .15s}
+.kpis.ribbon > .kpi.sig.clickable:hover,[data-theme="light"] .kpis.ribbon > .kpi.sig:hover,
+.kpis.ribbon > .kpi.sig:hover{background:var(--hover);border:0;border-left:1px solid var(--line);
+ border-top:1px solid var(--line);box-shadow:none;transform:none}
+.kpis.ribbon > .kpi:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+.kpis.ribbon .sig-cut{display:none}
+.kpis.ribbon .sig-go{top:var(--sp-4);right:var(--sp-3);bottom:auto;width:18px;height:18px;background:none;
+ color:var(--dim);transition:color .15s,transform .2s}
+.kpis.ribbon .sig-go svg{width:14px;height:14px}
+.kpis.ribbon > .kpi.sig:hover .sig-go{color:var(--ink);transform:rotate(45deg)}
+/* The label is read whole: it wraps, and the "as at" pill drops under it when there is no room. */
+.kpis.ribbon .khead{justify-content:flex-start;flex-wrap:wrap;gap:4px 6px;min-height:18px;width:100%}
+.kpis.ribbon .kpi .lab,.kpis.ribbon .kpi.sig .lab{font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--mut);
+ letter-spacing:0;text-transform:none;white-space:normal;overflow:visible;line-height:1.35}
+.kpis.ribbon .flag{font-size:var(--fs-3xs);padding:2px 7px}
+.kpis.ribbon > .kpi.sig .val{font-size:var(--fs-2xl);font-weight:var(--fw-semibold);letter-spacing:-.025em;
+ line-height:1.15;margin:var(--sp-2) 0 0;padding:0;flex:none;justify-content:flex-start;color:var(--ink);
+ font-variant-numeric:tabular-nums}
+.kpis.ribbon .val .cx{font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--mut);vertical-align:.3em;
+ margin-right:5px;letter-spacing:0}
+.kpis.ribbon .val .mag,.kpis.ribbon .val .cur{font-size:.62em;color:var(--mut);font-weight:var(--fw-semibold)}
+.kpis.ribbon > .kpi.sig .delta{font-size:var(--fs-xs);color:var(--mut);margin:var(--sp-1) 0 0;padding:0;border:0;
+ max-width:none;white-space:normal;overflow:visible;line-height:1.4;min-height:0;text-align:left}
+.kpis.ribbon > .kpi.sig .delta.up{color:var(--ok)}
+.kpis.ribbon > .kpi.sig .delta.down{color:var(--crit)}
+/* A figure that is wrong or needs attention says so in its colour: a statement figure
+   the statements mark down (a loss, a current ratio under 1), a figure that failed to
+   load. One needing setup is quiet: there is no figure to colour. */
+.kpis.ribbon > .kpi.sig:has(> .delta.down) .val,
+.kpis.ribbon > .kpi.sig:has(.flag.f-crit) .val{color:var(--crit)}
+.kpis.ribbon > .kpi.sig[data-setup] .val{color:var(--dim)}
+.kpis.ribbon > .kpi[data-loading] .val{opacity:.5}
+/* Six across (five for the statements) while each figure has room, then two rows of three
+   on a narrower laptop. The rows answer to the panel (container: panel), like every card row. */
+@container panel (max-width:1199px){
+ .kpis.ribbon{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+ .kpis.fs-cards.ribbon{grid-template-columns:repeat(5,minmax(0,1fr))!important}
+ .kpis.ribbon > .kpi.sig .val{font-size:var(--fs-xl)}}
+@container panel (max-width:979px){
+ .kpis.ribbon,.kpis.fs-cards.ribbon{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+ .kpis.ribbon > .kpi.sig .val{font-size:var(--fs-2xl)}}
+@container panel (max-width:560px){
+ /* A phone: one figure to a line, the label on the left and the figure on the right. */
+ .kpis.ribbon,.kpis.fs-cards.ribbon{grid-template-columns:minmax(0,1fr)!important}
+ .kpis.ribbon > .kpi,.kpis.ribbon > .kpi.sig,.kpis.ribbon > .kpi.sig:nth-child(n){display:grid;
+  grid-template-columns:minmax(0,1fr) auto;column-gap:var(--sp-3);align-items:baseline;border-left:0;margin-left:0;
+  padding:var(--sp-3) 26px var(--sp-3) 0}
+ .kpis.ribbon > .kpi.sig:hover{border-left:0}
+ .kpis.ribbon > .kpi.sig > .khead{grid-column:1;grid-row:1;min-width:0}
+ .kpis.ribbon > .kpi.sig > .val{grid-column:2;grid-row:1 / span 2;margin:0;font-size:var(--fs-xl);align-self:center}
+ .kpis.ribbon > .kpi.sig > .delta{grid-column:1;grid-row:2}
+ .kpis.ribbon .sig-go{top:50%;right:0;margin-top:-9px}
+ .kpis.ribbon > .kpi.sig:hover .sig-go{transform:none}
+}
+
+/* ---- the statements, set like printed management accounts ---- */
+.fs{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--sp-6) 28px 28px;
+ box-shadow:none}
+.fs-head{margin-bottom:var(--sp-5);align-items:flex-end}
+.fs-title b{font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em}
+.fs-title span{margin-top:4px;font-size:var(--fs-xs);color:var(--mut);line-height:1.5}
+.fs-periods{background:none;border:0;border-radius:0;padding:0;gap:2px var(--sp-1)}
+.fs-p{border-radius:0;padding:6px 6px 5px;color:var(--mut);font-weight:var(--fw-medium);
+ border-bottom:2px solid transparent}
+.fs-p:hover{color:var(--ink)}
+.fs-p.on{background:none;box-shadow:none;color:var(--ink);font-weight:var(--fw-semibold);border-bottom-color:var(--ink)}
+.fs-p:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.fs-exports{padding-left:var(--sp-3);margin-left:var(--sp-1);border-left:1px solid var(--line2)}
+.fs-exports .btn{padding:5px 12px;font-size:var(--fs-xs)}
+/* The statement tabs and the screen's own Overview / Detail tabs: a ruled line with the
+   chosen one underlined, as a printed report's contents would be marked. */
+.fs .tabbar,.view:has(> #fs) > .tabbar{display:flex;gap:var(--sp-6);border:0;border-bottom:1px solid var(--line2);
+ border-radius:0;padding:0;margin:var(--sp-2) 0 var(--sp-6);overflow-x:auto;scrollbar-width:none;max-width:100%}
+.fs .tabbar::-webkit-scrollbar,.view:has(> #fs) > .tabbar::-webkit-scrollbar{display:none}
+.fs .tab,.view:has(> #fs) > .tabbar .tab{border:0;border-radius:0;background:none;box-shadow:none;padding:10px 0 11px;
+ margin:0 0 -1px;border-bottom:2px solid transparent;color:var(--mut);font-weight:var(--fw-medium)}
+.fs .tab:hover,.view:has(> #fs) > .tabbar .tab:hover{color:var(--ink)}
+.fs .tab.on,.view:has(> #fs) > .tabbar .tab.on{background:none;box-shadow:none;color:var(--ink);
+ font-weight:var(--fw-semibold);border:0;border-bottom:2px solid var(--ink)}
+.view:has(> #fs) > .tabbar{margin-top:var(--sp-2)}
+.fs-body h4{font-size:var(--fs-md);font-weight:var(--fw-semibold);letter-spacing:-.01em;margin:var(--sp-8) 0 var(--sp-1)}
+.fs-body h4:first-child{margin-top:0}
+.fs-sub{margin:0 0 var(--sp-3);color:var(--mut)}
+.fs-wrap.tall{border-radius:var(--r-xs)}
+table.dt.fs-t{border-collapse:collapse;font-size:var(--fs-sm)}
+table.dt.fs-t th,[data-theme="light"] table.dt.fs-t th{white-space:nowrap;font-size:var(--fs-2xs);
+ font-weight:var(--fw-semibold);color:var(--mut);letter-spacing:.01em;padding:0 12px var(--sp-2);
+ border-bottom:1px solid var(--ink2);background:none;vertical-align:bottom}
+.fs-wrap.tall table.dt.fs-t th{padding-top:var(--sp-2);background:var(--surface)}
+table.dt.fs-t td{padding:7px 12px;border-bottom:1px solid var(--line);background:none}
+table.dt.fs-t tbody tr:last-child td{border-bottom:1px solid var(--line)}
+table.dt.fs-t tr:hover td{background:var(--hover)}
+table.dt.fs-t td.n{color:var(--ink);font-variant-numeric:tabular-nums}
+table.dt.fs-t :is(td,th).cmp{color:var(--mut)}
+table.dt.fs-t tr.fs-group td,table.dt.fs-t tr.fs-heading td{font-weight:var(--fw-semibold)}
+table.dt.fs-t tr.fs-heading td{color:var(--mut);font-size:var(--fs-xs)}
+/* A heavier rule above every total, and a double rule under the last line of a statement. */
+table.dt.fs-t tr.fs-total td{border-top:1px solid var(--ink2);font-weight:var(--fw-semibold);color:var(--ink)}
+table.dt.fs-t tr.fs-total td.cmp{color:var(--ink2)}
+table.dt.fs-t tbody tr.fs-total:last-child td{border-bottom:3px double var(--ink2)}
+table.dt.fs-t td.neg{color:var(--crit)}
+table.dt.fs-t td.pos{color:var(--ok)}
+table.dt.fs-t a.fs-acc{border-bottom-color:var(--line2)}
+/* The slim bar beside each line of the profit and loss: that line's share of the largest. */
+table.dt.fs-t :is(.fs-bar-h,.fs-bar-c){width:20%;min-width:96px;padding-left:var(--sp-5)}
+.fs-bar{display:block;height:6px;border-radius:2px;background:var(--ink2);opacity:.7}
+.fs-bar.cost{opacity:.3}
+.fs-bar.neg{background:var(--crit);opacity:.85}
+.fs-says{margin:var(--sp-4) 0 0;max-width:76ch;font-size:var(--fs-md);line-height:1.6;color:var(--ink2)}
+.fs-check,.fs-check.ok,.fs-check.bad{background:none;padding:0;border-radius:0;margin-top:var(--sp-3)}
+.fs-check::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.fs-notes{max-width:96ch}
+.fs-mean{margin-top:2px}
+@container panel (max-width:760px){
+ table.dt.fs-t :is(.fs-bar-h,.fs-bar-c){display:none}}
+@container panel (max-width:560px){
+ .fs{padding:var(--sp-4) var(--sp-4) var(--sp-5)}
+ /* The six periods wrap to a second line rather than run off under the edge. */
+ .fs-periods{flex-wrap:wrap;overflow:visible}
+ .fs-exports{border-left:0;padding-left:0;margin-left:0}
+ .fs .tabbar,.view:has(> #fs) > .tabbar{gap:var(--sp-5)}
+ table.dt.fs-t td,table.dt.fs-t th{padding-left:8px;padding-right:8px}
+ /* An account's name keeps a readable width; the figures scroll beside it instead. */
+ table.dt.fs-t td:first-child{min-width:10em}
+ table.dt.fs-t th{padding-bottom:var(--sp-2)}}
+
+/* ---- the panels and charts: quieter frames, no tinted boxes ---- */
+.view:has(> #fs) .panel{border-radius:var(--r-sm);box-shadow:none;padding:var(--sp-5) var(--sp-6)}
+.view:has(> #fs) .panel .ph{padding-bottom:var(--sp-3);margin-bottom:var(--sp-4);border-bottom:1px solid var(--line)}
+.view:has(> #fs) .panel .ph b{font-size:var(--fs-md);letter-spacing:-.01em}
+.view:has(> #fs) .pmore{color:var(--mut);font-weight:var(--fw-medium)}
+.view:has(> #fs) .ph.clickable:hover .pmore{color:var(--accent-ink)}
+.view:has(> #fs) .chartwrap,[data-theme="light"] .view:has(> #fs) .chartwrap{background:none;border:0;box-shadow:none;
+ padding:0}
+.view:has(> #fs) .thin{background:none;border:0;border-left:2px solid var(--line2);border-radius:0;
+ padding:2px 0 2px var(--sp-3);color:var(--mut);font-size:var(--fs-sm);line-height:1.6}
+.view:has(> #fs) .thin b{color:var(--ink2);font-weight:var(--fw-semibold)}
+.view:has(> #fs) .bartrack{border-radius:2px;height:12px}
+.view:has(> #fs) .barfill{border-radius:2px}
+.view:has(> #fs) .vz-seg{border-color:var(--line)}
+.view:has(> #fs) .vz-dl{background:none}
+.view:has(> #fs) .warn{border-radius:var(--r-sm)}
+@container panel (max-width:560px){
+ .view:has(> #fs) .panel{padding:var(--sp-4)}}
 """

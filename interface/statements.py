@@ -36,7 +36,7 @@ def fs_block():
         '<button type="button" class="btn" id="fs-pdf" data-cc-wired="1">PDF</button></div>'
         '</div></div>'
         '<div class="fs-state" id="fs-state" hidden></div>'
-        '<div class="kpis fs-cards" id="fs-cards"></div>'
+        '<div class="kpis fs-cards ribbon" id="fs-cards"></div>'
         f'<div class="tabbar" data-g="fs">{tabs}</div>{panes}'
         '</div>')
 
