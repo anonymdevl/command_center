@@ -14,6 +14,11 @@ remembers them and says where they came from:
                               Snapshot); the latest complete read of the day wins
     weeks(code)               the last eight ISO weeks, the last snapshot in each; a week
                               with none is empty, never filled in
+    record_vitals(code, figs) the Executive Summary's vital signs on the day -- what is owed
+                              to us, what we owe, the stock held -- on the same row
+                              (`vitals`), so the summary can say what changed on last week
+    week_ago(code)            each vital sign as stored about seven days ago (5 to 9 days),
+                              the reading nearest seven; nothing when none was kept
     record_all()              daily: a snapshot for every loaded business, so a day nobody
                               looked still has one
     prune(days)               nightly (insights/core/maintenance.py): about 400 days kept
@@ -37,6 +42,12 @@ CONTROL = "control_score"
 # A read that failed, or found the business's ERPNext away, says nothing about the
 # business: it never replaces an earlier read of the same day.
 PASSING = ("unreachable", "failed")
+# The Executive Summary's vital signs kept daily (summary.py): the positions that exist only
+# now. Money in has its own months and Overall Business Health its own history above.
+VITALS = ("ar_total", "ap_total", "stock_value")
+# A vital sign is kept only when the screen showed a figure for it.
+NOT_SHOWN = PASSING + ("no_access", "not_loaded", "needs_setup")
+WEEK_AGO = (5, 9)         # "about seven days ago": the stored reading nearest seven, in this range
 
 # What each question was counted from: the figure that carries its count (an engine
 # denominator, or the live read's own `counted`), the words for one and for many, and what
@@ -143,7 +154,8 @@ def snapshot(code, figures: dict, today=None) -> bool:
     now = frappe.utils.now_datetime()
     if have:
         old = have[0]
-        if transient:
+        # A row holding only the day's vital signs has no Business Health to protect yet.
+        if transient and old.questions:
             return False
         if _num(old.control_score) == control["value"] and (old.questions or "") == body:
             return False
@@ -171,6 +183,93 @@ def observe(code, figures: dict) -> None:
                          message=frappe.get_traceback())
 
 
+# --------------------------------------------------------------------------- vital signs
+def record_vitals(code, figures: dict, today=None) -> bool:
+    """Today's vital signs for one business, on its day's row (made if the day has none
+    yet). Only a figure the screen showed is kept; one not read, refused or away leaves the
+    day's earlier reading of it as it was. Returns whether anything was written."""
+    if not _concrete(code):
+        return False
+    got = {}
+    for key in VITALS:
+        f = (figures or {}).get(key)
+        if not isinstance(f, dict):
+            continue
+        e = _entry(f)
+        if e["value"] is None or e["state"] in NOT_SHOWN:
+            continue
+        got[key] = e
+    if not got:
+        return False
+    day = frappe.utils.getdate(today or frappe.utils.today())
+    name = _name(code, day)
+    have = frappe.get_all(DOCTYPE, filters={"name": name}, fields=["name", "vitals"], limit=1)
+    if have:
+        try:
+            kept = json.loads(have[0].vitals) if have[0].vitals else {}
+        except ValueError:
+            kept = {}
+        merged = {**kept, **got}
+        if merged == kept:
+            return False
+        frappe.db.set_value(DOCTYPE, name, "vitals", json.dumps(merged, sort_keys=True))
+        return True
+    frappe.db.bulk_insert(DOCTYPE, ["name", "business_code", "day", "control_score", "questions",
+                                    "vitals", "captured_at"],
+                          [(name, code, day, None, None, json.dumps(got, sort_keys=True),
+                            frappe.utils.now_datetime())],
+                          ignore_duplicates=True)
+    return True
+
+
+def observe_vitals(code, figures: dict) -> None:
+    """record_vitals(), from a screen's read: never fails the figures it was taken from."""
+    if not any(k in (figures or {}) for k in VITALS):
+        return
+    try:
+        record_vitals(code, figures)
+    except Exception:
+        frappe.log_error(title="Executive Summary: vital signs not kept",
+                         message=frappe.get_traceback())
+
+
+def week_ago(code, today=None) -> dict:
+    """{"readings": {key: {"value", "day"}}, "older": bool}: each vital sign as stored
+    about a week ago -- the reading nearest seven days back, between five and nine -- and
+    whether anything older than that is kept (so "no reading last week" is told apart from
+    "not kept long enough yet"). Nothing is filled in."""
+    out = {"readings": {}, "older": False}
+    if not _concrete(code):
+        return out
+    today = frappe.utils.getdate(today or frappe.utils.today())
+    lo, hi = WEEK_AGO
+    rows = frappe.get_all(DOCTYPE, filters={"business_code": code,
+                                            "day": ["<=", today - _dt.timedelta(days=lo)]},
+                          fields=["day", "vitals"], order_by="day desc", limit=60)
+    best = {}
+    for r in rows:
+        if not r.vitals:
+            continue
+        d = frappe.utils.getdate(r.day)
+        age = (today - d).days
+        if age > hi:
+            out["older"] = True
+            continue
+        try:
+            vit = json.loads(r.vitals)
+        except ValueError:
+            continue
+        for key, e in vit.items():
+            if key not in VITALS or not isinstance(e, dict) or e.get("value") is None:
+                continue
+            # nearest to seven days; between two as near, the older (a full week)
+            rank = (abs(age - 7), -age)
+            if key not in best or rank < best[key][0]:
+                best[key] = (rank, {"value": float(e["value"]), "day": str(d)})
+    out["readings"] = {k: v for k, (_r, v) in best.items()}
+    return out
+
+
 # --------------------------------------------------------------------------- history
 def _monday(day):
     return day - _dt.timedelta(days=day.weekday())
@@ -188,6 +287,9 @@ def weeks(code, n: int = WEEKS, today=None) -> list:
     last = {}
     for r in rows:
         d = frappe.utils.getdate(r.day)
+        # A day with only the Executive Summary's vital signs has no Business Health.
+        if not r.questions:
+            continue
         if d <= today:
             last[d.isocalendar()[:2]] = r     # ascending, so the week's last one stays
     out = []
@@ -234,13 +336,16 @@ def history(code, today=None) -> dict:
 
 # --------------------------------------------------------------------------- scheduled
 def record_all():
-    """Daily: today's snapshot for every loaded business, worked out as the screen does."""
+    """Daily: today's snapshot and vital signs for every loaded business, worked out as
+    the screens do."""
     from command_center.api.businesses import loaded_codes
     from command_center.api.kpi import figures
-    keys = [k for k, _q in QUESTIONS] + [CONTROL]
+    keys = [k for k, _q in QUESTIONS] + [CONTROL] + list(VITALS)
     for code in loaded_codes():
         try:
-            snapshot(code, annotate(figures(keys, code)))
+            figs = annotate(figures(keys, code))
+            snapshot(code, figs)
+            record_vitals(code, figs)
             frappe.db.commit()
         except Exception:
             frappe.db.rollback()

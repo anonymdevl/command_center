@@ -131,8 +131,15 @@ one, otherwise as a To-Do, and ERPNext notifies them. Nothing else in a business
 <div class="alert-live-list"><div class="work-empty"><b>Reading the alerts&hellip;</b></div></div>'''
 
 # ---------------- V: BRIEF ----------------
-V_BRIEF=f'''<div class="topbar"><div><h3>Executive Summary</h3>
-<div class="when" id="brief-when">Reading the alerts&hellip;</div></div></div>
+# The memo at the top (16 Nov 2026, the approved mockup-exec-summary.html): the heading is
+# its title; the vital signs, the short version, the decisions, the risks, what is going
+# well and what is waiting on you are drawn into #xm-body by legacy/summary.js. Everything
+# below it is the screen as it was, unchanged (insights/tests.py BRIEF_INVENTORY).
+V_BRIEF=f'''<div class="xm" id="xm"><div class="topbar"><div><h3>Executive Summary</h3>
+<div class="when" id="brief-when">Reading the alerts&hellip;</div></div><div class="xm-date" id="xm-date"></div></div>
+<div class="xm-for" id="xm-for"></div>
+<div class="xm-body" id="xm-body"><div class="work-empty"><b>Reading this week&rsquo;s figures&hellip;</b></div></div>
+<div class="xm-below">Below: every recommendation and alert in full</div></div>
 <div class="rec-brief" id="rec-brief" hidden></div>
 <div class="sect"><span>Recommendations</span><span class="rec-sub" id="rec-sub"></span></div>
 <div class="rec-live-list" data-rec="all"><div class="work-empty"><b>Working out what to do first&hellip;</b></div></div>

@@ -29,6 +29,7 @@ import { renderLoads } from "../legacy/loads.js";
 import { PEOPLE_VIEWS, renderPeople } from "../legacy/people.js";
 import { REC_VIEWS, recsFailed, renderRecs } from "../legacy/recommend.js";
 import { STATEMENT_VIEWS, mountStatements } from "../legacy/statements.js";
+import { SUMMARY_VIEWS, memoFailed, renderMemo, renderShort, renderWaiting } from "../legacy/summary.js";
 import { watchTables } from "../legacy/tables.js";
 
 /**
@@ -111,6 +112,43 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     return () => window.removeEventListener("cc-recs-changed", again);
   }, [hasRecs, recs.reload]);
 
+  // The Executive Summary's memo (api/summary.py), and Waiting On You read on its own so
+  // the memo never waits on the business's ERPNext. Read again after a decision below.
+  const hasMemo = SUMMARY_VIEWS.has(viewKey);
+  const memo = useApi(() => api.summaryMemo(scope), [viewKey, scope],
+    { skip: !hasMemo, key: keyFor(me, scope, "summary") });
+  const waiting = useApi(() => api.summaryWaiting(scope), [viewKey, scope],
+    { skip: !hasMemo, key: keyFor(me, scope, "summary-waiting") });
+  useEffect(() => {
+    if (!hasMemo) return undefined;
+    const again = () => memo.reload({ background: true });
+    window.addEventListener("cc-recs-changed", again);
+    window.addEventListener("cc-alerts-changed", again);
+    return () => {
+      window.removeEventListener("cc-recs-changed", again);
+      window.removeEventListener("cc-alerts-changed", again);
+    };
+  }, [hasMemo, memo.reload]);
+  // The short version: the one worked out from the figures is shown at once; when the AI
+  // may write today's, it is asked for once per business and day, and swapped in.
+  const [aiShort, setAiShort] = useState(null);
+  const asked = useRef(new Set());
+  useEffect(() => {
+    setAiShort(null);
+  }, [scope]);
+  useEffect(() => {
+    const s = memo.data?.short;
+    if (!hasMemo || !s?.pending) return;
+    const once = `${scope}|${memo.data?.header?.week_to || ""}`;
+    if (asked.current.has(once)) return;
+    asked.current.add(once);
+    api.summaryWrite(scope)
+      .then((got) => {
+        if (got?.text) setAiShort({ scope, ...got });
+      })
+      .catch(() => {});
+  }, [hasMemo, scope, memo.data]);
+
   // Live: while the screen is being looked at, its figures, panels, work and alerts are
   // read again every minute (the platform refreshes each business's data every two
   // minutes), and at once when the tab comes back into view. The figures on screen stay
@@ -125,6 +163,10 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       if (isWork) work.reload(quiet);
       if (hasAlerts) alerts.reload(quiet);
       if (hasRecs) recs.reload(quiet);
+      if (hasMemo) {
+        memo.reload(quiet);
+        waiting.reload(quiet);
+      }
     };
     const t = setInterval(tick, 60000);
     const onShow = () => {
@@ -135,8 +177,9 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       clearInterval(t);
       document.removeEventListener("visibilitychange", onShow);
     };
-  }, [viewKey, scope, keys.length, hasPanels, isWork, hasAlerts, hasRecs,
-      figures.reload, panels.reload, work.reload, alerts.reload, recs.reload]);
+  }, [viewKey, scope, keys.length, hasPanels, isWork, hasAlerts, hasRecs, hasMemo,
+      figures.reload, panels.reload, work.reload, alerts.reload, recs.reload, memo.reload,
+      waiting.reload]);
 
   // Whether the selected business's ERPNext answers (components/ReachBanner.jsx).
   const [reachDown, setReachDown] = useState(false);
@@ -540,6 +583,13 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     if (hasAlerts && alerts.error) alertsFailed(root, viewKey, alerts.error);
     if (hasRecs) renderRecs(root, viewKey, recs.data, opts);
     if (hasRecs && recs.error) recsFailed(root, viewKey, recs.error);
+    if (hasMemo) {
+      renderMemo(root, memo.data, opts);
+      if (memo.error && !memo.data) memoFailed(root, memo.error);
+      // The AI's paragraph, once written for this business, over the one worked out.
+      if (aiShort && aiShort.scope === scope && memo.data?.short?.source !== "ai") renderShort(root, aiShort);
+      renderWaiting(root, waiting.data, { go: (k) => goRef.current?.(k) });
+    }
     if (hasPanels) {
       renderPanels(root, viewKey, panels.data, { onOpen: opts.onOpen, openDrawer, scope,
                                                  failed: !!panels.error });
@@ -558,7 +608,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     });
   }, [viewKey, html, figures.data, figures.error, work.data, work.error, isWork, alerts.data,
       alerts.error, hasAlerts, scope, openDrawer, hasPanels, panels.data, panels.error, reachDown,
-      hasRecs, recs.data, recs.error]);
+      hasRecs, recs.data, recs.error, hasMemo, memo.data, memo.error, waiting.data, aiShort]);
 
   // The screen's charts (legacy/viz.js) are disposed with it, not left for the sweep.
   useEffect(() => {
@@ -622,6 +672,10 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
         if (isWork) work.reload();
         if (hasAlerts) alerts.reload();
         if (hasRecs) recs.reload();
+        if (hasMemo) {
+          memo.reload();
+          waiting.reload();
+        }
       }} />
       {figures.error ? (
         <div className="warn" style={{ margin: "0 0 14px" }}>

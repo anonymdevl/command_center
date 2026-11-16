@@ -118,6 +118,9 @@ scheduler_events = {
         # (one Claude request per business where it is on; recommend/review.py).
         "15 6 * * *": ["command_center.recommend.review.run_reviews"],
         "30 6 * * *": ["command_center.recommend.daily.write_briefs"],
+        # The Executive Summary's short version, once a day per business, after the review
+        # and the brief: one Claude request, checked against the figures (summary.py).
+        "45 6 * * *": ["command_center.summary.write_all"],
         "0 7 * * *": ["command_center.recommend.daily.send_digests"],
     },
     # Alerts, from the KPIs. Also evaluated when they are read and the last pass is

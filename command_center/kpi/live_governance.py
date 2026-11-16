@@ -39,6 +39,7 @@ QUESTIONS = (("score_deliver", "Can we deliver what we sold?"),
              ("score_records", "Are our records clean?"),
              ("score_access", "Who can see what?"))
 WATCH = 60   # a question scoring below this is "going badly", as the tiles colour it
+HEALTHY = 80  # and at or above this "Healthy" (legacy/home.js toneOf: Act / Watch / Healthy)
 
 
 def _setup(r, text, steps, path):

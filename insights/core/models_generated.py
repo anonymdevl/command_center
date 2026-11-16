@@ -449,6 +449,7 @@ class CommandCenterHealthSnapshot(DocModel):
     day = models.DateField(null=True, blank=True, db_index=True)
     control_score = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
     questions = models.TextField(null=True, blank=True)
+    vitals = models.TextField(null=True, blank=True)
     captured_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
