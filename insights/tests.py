@@ -3646,7 +3646,8 @@ class Branding(TransactionTestCase):
         link the administrator sends (User Management), and the sign-in page says so."""
         login = Client().get("/sign-in").content.decode()
         self.assertNotIn('href="/login', login)
-        self.assertIn("Ask your administrator to email you a link", login)
+        self.assertIn("Ask your administrator.", login)
+        self.assertIn("Management Team Only", login)
 
     def test_built_in_mark(self):
         """Nothing uploaded: the lens-and-chart mark on the sign-in page, in the sidebar and
