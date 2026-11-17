@@ -2814,3 +2814,6 @@ table.dt td.dt-w3 > .dt-tx{min-width:26ch;max-width:44ch;display:-webkit-box;-we
  overflow:hidden;text-wrap:balance;overflow-wrap:anywhere;line-height:1.3}
 .biz-t .asof{overflow:hidden;text-overflow:ellipsis}
 .biz-opt-t{flex:1 1 auto}
+/* The switcher's note on the same 8px inner edge as its rows: the avatar, the note's text
+   and its link line up on the left, and the note ends where the names do on the right. */
+.biz-menu .biz-note{padding:12px 8px 6px}
