@@ -3762,7 +3762,8 @@ class Branding(TransactionTestCase):
             self.assertIn("data:image/png;base64,", html, f"{kind}: the product's logo is in the PDF")
             self.assertIn('class="hd-client"', html, f"{kind}: and the client's")
             self.assertIn("Prepared for <b>Test Medical Group</b>", html)
-            self.assertIn("Acme Insight · built by Acme Systems · hello@acme.test", html)
+            self.assertNotIn("Acme Insight · built by Acme Systems", html,
+                             f"{kind}: the closing note does not repeat the page footer's credit")
             self.assertEqual(options["footer-left"], "Acme Insight · built by Acme Systems · hello@acme.test")
             self.assertEqual(options["footer-right"], "Page [page] of [topage]")
             self.assertNotIn("AI Business Intelligence", html)
@@ -3771,6 +3772,11 @@ class Branding(TransactionTestCase):
         self.assertEqual(html.count("Executive Summary"), 1, "the repeated title is dropped")
         self.assertIn("Cash and Receivables</h2>", html)
         self.assertIn('<ol class="recs">', html)
+        # a formal numbered list: no tinted box, accent bar or drawn number
+        self.assertIn("ol.recs{list-style:decimal}", html)
+        self.assertNotIn("li.rec{", html)
+        self.assertNotIn("border-left:3px solid #2443e8", html)
+        self.assertNotIn("ol.recs li:before", html)
         self.assertIn("<li>Reconcile the receipts by 30 November.</li>", html)
         self.assertIn('<td class="n">636,675</td>', html)
 
@@ -3912,6 +3918,18 @@ class ReportBranding(TransactionTestCase):
         self.assertIn('class="hd-client"', html)
         self.assertIn("Prepared for <b>Test Medical Group</b>", html)
         self.assertIn("Prepared by Ultrasoft Insights from", html)
+        # "Prepared for" on the left, the product and its tagline on the right
+        hd = html[html.index('<table class="hd">'):html.index("</table>", html.index('<table class="hd">'))]
+        left, right = hd.split('<td class="hd-r">')
+        self.assertIn("Prepared for <b>Test Medical Group</b>", left)
+        self.assertIn('class="hd-client"', left)
+        self.assertIn('<div class="brand">Ultrasoft Insights</div>', right)
+        self.assertNotIn("Prepared for", right)
+        # the closing note ends with what the analyst may and may not do; the credit is
+        # the page footer's alone
+        self.assertIn("recommendations are for management to decide on.</div>", html)
+        self.assertNotIn('class="ft-by"', html)
+        self.assertNotIn("Ultrasoft Insights · built by", html)
         self.assertEqual(opts["footer-left"][:40], "Ultrasoft Insights · built by Ultrasoft ")
         self.assertEqual(opts["footer-right"], "Page [page] of [topage]")
         self.assertEqual(files, {})
@@ -3927,7 +3945,9 @@ class ReportBranding(TransactionTestCase):
         self.assertNotIn('<div class="brand">Ultrasoft Insights', html)
         self.assertNotIn("Prepared by Ultrasoft Insights", html)
         self.assertIn("Prepared from Test Medical Ltd", html)
-        self.assertIn('<div class="ft-by">Ultrasoft Insights · built by', html, "the credit stays")
+        self.assertNotIn('class="ft-by"', html)
+        self.assertTrue(opts["footer-left"].startswith("Ultrasoft Insights · built by"),
+                        "the credit stays, on every page's foot")
         self.assertEqual(files, {})
         ws = self._sheet(code)
         self.assertTrue(ws["A2"].value.startswith("Test Medical Group · figures as at"), ws["A2"].value)
@@ -3987,7 +4007,7 @@ class ReportBranding(TransactionTestCase):
         self._ok("set_business_report_style", name=b["name"], credit="small")
         html, opts, _ = self._pdf(code)
         self.assertEqual(opts["footer-left"], "Prepared with Ultrasoft Insights")
-        self.assertIn('<div class="ft-by">Prepared with Ultrasoft Insights</div>', html)
+        self.assertNotIn("Prepared with Ultrasoft Insights", html, "the page footer carries it")
         ws = self._sheet(code)
         self.assertEqual(ws.cell(row=ws.max_row, column=1).value, "Prepared with Ultrasoft Insights")
         self._ok("set_business_report_style", name=b["name"], credit="hide")
@@ -4616,7 +4636,8 @@ class PlansAndUsage(TransactionTestCase):
             self.assertIn("Prepared for <b>Alpha Holdings Ltd</b>", html)
             self.assertIn(label, html)
             self.assertNotIn("Figures as at", html)
-            self.assertIn("Acme Insight · built by Acme Systems · hello@acme.test", html)
+            self.assertNotIn("Acme Insight · built by Acme Systems", html,
+                             "the credit is the page footer's, not repeated in the closing note")
             self.assertEqual(options["footer-left"], "Acme Insight · built by Acme Systems · hello@acme.test")
             self.assertEqual("Total for the month" in html, money)
             self.assertEqual("GHS" in html, money, "money only on the administrator's")

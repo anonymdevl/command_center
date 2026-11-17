@@ -215,8 +215,8 @@ def brand_header(title: str, business_code: str | None = None, kicker: str = "",
                  subtitle: str = "", business: str | None = None,
                  period: str | None = None, own: bool = False, look: dict | None = None) -> str:
     """The top of every PDF the platform makes, as the business's Report Style says --
-    Platform Branding: the product's Report Logo (or name) left, the client's logo and
-    "Prepared for <client>" right; Client Branding: the client's logo (or name) left,
+    Platform Branding: the client's logo and "Prepared for <client>" left, the product's
+    Report Logo (or name) and tagline right; Client Branding: the client's logo (or name) left,
     with its name as the issuer; Client Letterhead: nothing here, the letterhead is on
     every page (page_options) -- then the title block: the kind of document, its title,
     the business, the period it covers, who it was prepared for and when. `title` and
@@ -240,8 +240,8 @@ def brand_header(title: str, business_code: str | None = None, kicker: str = "",
         tag = f'<div class="hd-tag">{escape_html(b["tagline"])}</div>' if b["tagline"] else ""
         client_logo = _logo(b["client_logo"], "hd-client")
         top = ('<table class="hd"><tr>'
-               f'<td class="hd-l">{mark}{tag}</td>'
-               f'<td class="hd-r">{client_logo}<div class="hd-for">Prepared for <b>{escape_html(client)}</b></div></td>'
+               f'<td class="hd-l">{client_logo}<div class="hd-for">Prepared for <b>{escape_html(client)}</b></div></td>'
+               f'<td class="hd-r">{mark}{tag}</td>'
                '</tr></table>')
     return (
         top
@@ -259,11 +259,10 @@ def brand_header(title: str, business_code: str | None = None, kicker: str = "",
 
 def brand_footer(business_code: str | None = None, note: str = "", own: bool = False,
                  look: dict | None = None) -> str:
-    """The closing block of a PDF: `note` (escaped HTML the caller wrote), then the
-    vendor's credit as the business chose it (none when hidden)."""
-    b = look or brand.document(business_code, own=own)
-    by = f'<div class="ft-by">{escape_html(b["credit_line"])}</div>' if b["credit_line"] else ""
-    return f'<div class="ft">{note}{by}</div>'
+    """The closing block of a PDF: `note` (escaped HTML the caller wrote), and only that.
+    The vendor's credit is not repeated under it: the foot of every page already carries
+    it, as the business chose it (pdf_options, or the letterhead's footer page)."""
+    return f'<div class="ft">{note}</div>' if note else ""
 
 
 def made_by(business_code: str | None = None, own: bool = False, look: dict | None = None) -> str:
@@ -746,13 +745,14 @@ svg text{font-family:'Manrope PDF','Manrope','Helvetica Neue',Helvetica,Arial,sa
 table.hd{width:100%;border-collapse:collapse;margin:0 0 14px}
 table.hd td{border:0;padding:0;vertical-align:middle;background:none}
 .hd-logo{height:26px;max-width:200px;display:block}
-.hd-client{height:22px;max-width:150px;display:block;margin:0 0 3px auto}
+.hd-client{height:22px;max-width:150px;display:block;margin:0 0 3px}
+.hd-r .hd-logo{margin-left:auto}
 .brand{font-size:10pt;font-weight:700;color:#2443e8;line-height:1.2}
 .hd-tag{font-size:7pt;color:#646973;margin-top:2px}
 .hd-r{text-align:right}
 .hd-issuer{font-size:8pt;font-weight:600;color:#24272d;margin-top:4px}
 body.lh{padding:0 15mm}
-.hd-for{font-size:7pt;color:#646973}
+.hd-for{font-size:8pt;color:#646973}
 .hd-for b{color:#24272d;font-weight:600}
 .tb{border-top:2px solid #2443e8;border-bottom:1px solid #e3e5ea;padding:12px 0 10px;margin:0 0 20px;
  page-break-inside:avoid}
@@ -771,15 +771,9 @@ h4{font-size:9pt;font-weight:600;margin:12px 0 4px;page-break-after:avoid}
 hr{border:0;border-top:1px solid #e3e5ea;margin:18px 0}
 ul,ol{margin:4px 0 12px;padding-left:18px}
 li{margin:4px 0}
-li.rec{list-style:none;margin:7px 0 7px -18px;padding:8px 12px;border-left:3px solid #2443e8;background:#f4f6fe;
- border-radius:0 8px 8px 0}
-ol.recs,ul.recs{padding-left:0;margin-left:0;list-style:none;counter-reset:rec}
-ol.recs li,ul.recs li{position:relative;margin:0 0 7px;padding:8px 12px 8px 34px;border-left:3px solid #2443e8;
- background:#f4f6fe;border-radius:0 8px 8px 0;page-break-inside:avoid}
-ol.recs li:before{counter-increment:rec;content:counter(rec);position:absolute;left:11px;top:8px;
- font-weight:700;color:#2443e8}
-ul.recs li:before{content:"";position:absolute;left:13px;top:14px;width:6px;height:6px;border-radius:3px;
- background:#2443e8}
+ol.recs{list-style:decimal}
+ul.recs{list-style:disc}
+ol.recs li,ul.recs li{margin:0 0 5px;padding-left:2px;page-break-inside:avoid}
 p.proj{padding:9px 13px;border-left:3px solid #a85a0a;background:#fbf5ec;border-radius:0 8px 8px 0}
 strong,b{font-weight:700}
 em{color:#3b3f47}
@@ -795,7 +789,6 @@ tbody tr:nth-child(even) td{background:#f8f9fb}
 code{font-family:Menlo,Consolas,monospace;font-size:8.5pt}
 .ft{margin-top:26px;border-top:1px solid #e3e5ea;padding-top:9px;font-size:6.5pt;color:#8a8f99;line-height:1.55;
  page-break-inside:avoid}
-.ft-by{margin-top:5px;color:#646973;font-weight:600}
 """
 
 PDF_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><style>

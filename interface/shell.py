@@ -1434,4 +1434,20 @@ td.work-acts .btn{margin:0 4px 0 0}
 .mail-log tr.mail-why td{background:var(--crit-bg);color:var(--ink2);font-size:var(--fs-sm);line-height:1.5;
  white-space:normal}
 .mail-log tr.mail-why b{color:var(--crit);font-weight:var(--fw-semibold)}
+
+/* ======================================================================
+   Recommendations as a formal list (16 Nov 2026). A report is a professional document:
+   its recommendations -- the list under a Recommendations heading (reports.js .md-recs)
+   and any list point labelled Recommendation or Projection (markdown.js .md-rec,
+   .md-proj) -- are plain numbered or bulleted points in the body text, with no tinted
+   box, accent bar or drawn marker, as in the PDF (api/export.py PAGE_CSS). A paragraph
+   labelled Recommendation inside a report reads as body text too.
+   ====================================================================== */
+.md ol.md-recs{list-style:decimal;padding-left:20px;counter-reset:none}
+.md ul.md-recs{list-style:disc;padding-left:20px}
+.md .md-recs li,.md li.md-rec,.md li.md-proj{position:static;list-style:inherit;background:none;border:0;
+ border-radius:0;box-shadow:none;margin:5px 0;padding:0 0 0 2px;color:inherit}
+.md .md-recs li::before,.md li.md-rec::before,.md li.md-proj::before{content:none;display:none}
+.rp-body .md p.md-rec{position:static;background:none;border:0;border-radius:0;padding:0;color:inherit}
+.rp-body .md p.md-rec::before{content:none;display:none}
 """

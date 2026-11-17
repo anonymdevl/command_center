@@ -277,8 +277,9 @@ _seen = {}
 pdf.get_pdf = lambda html, options=None: (_seen.update(options or {}), html.encode())[1]
 export.answer_pdf("Who owes us?", "Lead.", [], "GIGMANN", "m")
 _ans = frappe.local.response.filecontent.decode()
-check('<div class="brand">Ultrasoft Insights</div>' in _ans and "Ultrasoft Insights · built by Ultrasoft Systems" in _ans,
-      "an answer PDF carries the product at the top and the vendor's line at the end")
+check('<div class="brand">Ultrasoft Insights</div>' in _ans and "Ultrasoft Insights · built by Ultrasoft Systems" not in _ans,
+      "an answer PDF carries the product at the top; the vendor's line is the page footer's, "
+      "not repeated in the closing note")
 check(_seen.get("footer-left", "").startswith("Ultrasoft Insights · built by Ultrasoft Systems")
       and _seen.get("footer-right") == "Page [page] of [topage]",
       "every PDF page's footer: the vendor's line, and Page X of Y")
