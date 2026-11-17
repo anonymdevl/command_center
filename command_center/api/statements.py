@@ -173,7 +173,10 @@ class _Ctx:
     def conn(self):
         if self._conn is None:
             from command_center.connectors.registry import connector_for
-            self._conn = connector_for(self.code)
+            from command_center.ingest.company import scoped
+            # The reports are run for ctx.company; the plain reads (the chart, the
+            # closings) are limited to it too where the ERPNext keeps several companies.
+            self._conn = scoped(connector_for(self.code))
         return self._conn
 
     def known_down(self) -> bool:
@@ -763,7 +766,46 @@ def _buckets(tree, root_type, kind):
     return out
 
 
-def bs_figures(tree, col) -> dict:
+def profit_since_closing(ctx, at) -> dict | None:
+    """The profit or loss the profit and loss statement shows from the day after the books
+    were last closed (the latest submitted Period Closing Voucher; the first fiscal year
+    when none ever was) to `at`: {"profit", "from"}. None when it cannot be read.
+
+    ERPNext's balance sheet works its "provisional profit" out as assets less liabilities
+    less equity, so assets always equalled liabilities, equity and that line, and the
+    green "Balances" could never turn red (17 Nov 2026). The profit is taken from the
+    other statement instead: when the two disagree, the books do -- a closing voucher
+    posted wrongly, entries outside every fiscal year, a finance book on one side only."""
+    getdate = frappe.utils.getdate
+    at = getdate(at)
+    try:
+        closed = ctx.conn.get_list("Period Closing Voucher",
+                                   filters={"docstatus": 1, "company": ctx.company,
+                                            "posting_date": ["<=", str(at)]},
+                                   fields=["posting_date"], order_by="posting_date desc", limit=1)
+    except Exception:
+        return None
+    if closed and closed[0].get("posting_date"):
+        start = getdate(frappe.utils.add_days(closed[0]["posting_date"], 1))
+    else:
+        years = ctx.fiscal_years()
+        if not years:
+            return None
+        start = getdate(years[0]["start"])
+    if start > at:
+        return {"profit": 0.0, "from": str(start)}
+    try:
+        tree = _Tree(_pl_run(ctx, start, at), ctx.accounts(), ("Income", "Expense"))
+    except Setup:
+        return None
+    return {"profit": pl_figures(tree)["net_profit"], "from": str(start)}
+
+
+def bs_figures(tree, col, profit=None) -> dict:
+    """The balance sheet's figures. `profit` is the profit and loss statement's profit
+    since the books were last closed (profit_since_closing): the check is assets against
+    liabilities, equity and that, so it can fail. Without it the sheet is not checked
+    (balances None), never passed."""
     assets = tree.total(tree.roots("Asset"), col)
     liabilities = tree.total(tree.roots("Liability"), col)
     equity = tree.total(tree.roots("Equity"), col)
@@ -779,13 +821,14 @@ def bs_figures(tree, col) -> dict:
         li[b] += tree.value(n, col)
     stock = tree.total(tree.topmost(lambda n: n["account_type"] == "Stock", "Asset"), col)
     cash = tree.total(tree.topmost(lambda n: n["account_type"] in CASH_TYPES, "Asset"), col)
-    diff = assets - (liabilities + equity + provisional)
+    diff = None if profit is None else assets - (liabilities + equity + profit)
     return {"assets": assets, "current_assets": a["current"], "fixed_assets": a["fixed"],
             "other_assets": a["other"], "liabilities": liabilities,
             "current_liabilities": li["current"], "long_term_liabilities": li["long_term"],
             "other_liabilities": li["other"], "equity": equity, "provisional_profit": provisional,
             "total_equity": equity + provisional, "inventory": stock, "cash": cash,
-            "difference": diff, "balances": abs(diff) < 0.5}
+            "profit_since_closing": profit,
+            "difference": diff, "balances": None if diff is None else abs(diff) < 0.5}
 
 
 def _bs(ctx, span):
@@ -798,17 +841,26 @@ def _bs(ctx, span):
     cols = tree.cols
     main = cols[-1]["key"] if cols else None
     cmpk = cols[-2]["key"] if len(cols) > 1 else None
-    fm = bs_figures(tree, main)
+    since = profit_since_closing(ctx, bd["at"])
+    fm = bs_figures(tree, main, since["profit"] if since else None)
     fc = bs_figures(tree, cmpk) if cmpk else None
     notes = []
     if res.get("message"):
         notes.append("ERPNext says: " + re.sub(r"<[^>]+>", "", str(res["message"])).strip())
-    if not fm["balances"]:
+    if fm["balances"] is None:
+        notes.append("Not checked: the profit and loss since the books were last closed could "
+                     "not be read from ERPNext, so whether assets equal liabilities, equity and "
+                     "that profit cannot be said.")
+    elif not fm["balances"]:
         notes.append(f"ERPNext's balance sheet does not balance: assets are "
-                     f"{fm['difference']:,.2f} {'more' if fm['difference'] > 0 else 'less'} than "
-                     f"liabilities, equity and the provisional profit together. The usual cause "
-                     f"is an opening balance posted to one side only; ERPNext's Trial Balance "
-                     f"shows where.")
+                     f"{abs(fm['difference']):,.2f} {'more' if fm['difference'] > 0 else 'less'} "
+                     f"than liabilities, equity and the profit or loss since "
+                     f"{_pretty(since['from'])} ({since['profit']:,.2f} by the profit and loss "
+                     f"statement) together. ERPNext's own provisional profit line says "
+                     f"{fm['provisional_profit']:,.2f}. The usual causes are a period closing "
+                     f"voucher posted wrongly, an opening balance posted to one side only, or "
+                     f"entries dated outside every fiscal year; ERPNext's Trial Balance shows "
+                     f"where.")
     if fm["provisional_profit"] and abs(fm["provisional_profit"]) > 0.5:
         notes.append("Provisional profit or loss is the profit or loss not yet closed into "
                      "equity with a Period Closing Voucher, as ERPNext's balance sheet shows it.")
@@ -828,7 +880,7 @@ def _bs(ctx, span):
         _line("Liabilities and Equity", fm["liabilities"] + fm["total_equity"],
               (fc["liabilities"] + fc["total_equity"]) if fc else None, bold=True, key="l_and_e"),
         _line("Difference", fm["difference"], fc["difference"] if fc else None, key="difference",
-              tone=None if fm["balances"] else "bad"),
+              tone=None if fm["balances"] is not False else "bad"),
     ]
     summary = [s for s in summary if not (s["key"] in ("other_assets", "other_liabilities",
                                                       "long_term_liabilities", "provisional_profit")

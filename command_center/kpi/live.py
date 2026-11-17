@@ -95,7 +95,9 @@ class _Reader:
         self.conn = None
         if not self.local:
             from command_center.connectors.registry import connector_for
-            self.conn = connector_for(self.code)
+            from command_center.ingest.company import scoped
+            # The business's company only, where its ERPNext keeps several.
+            self.conn = scoped(connector_for(self.code))
 
     def all(self, doctype, filters=None, fields=None, limit=100000, parent=None,
             order_by=None):
@@ -250,9 +252,28 @@ def po_drafts_oldest(r):
             f"since {frappe.utils.format_date(oldest, 'MMMM yyyy')}")
 
 
+def amended(r, doctype) -> set:
+    """The documents that were cancelled only to be amended: every name another document
+    of the doctype names as `amended_from`. ERPNext amends by cancelling the original and
+    making "-1", "-2" from it, so a cancelled original is a correction, not a withdrawal:
+    on Gigmann's site 132 purchase orders worth GHS 19.46M were cancelled, and 127 of
+    them were amended -- 5, worth GHS 569,924, were really withdrawn (17 Nov 2026)."""
+    return {x.get("amended_from") for x in r.all(doctype, filters={"amended_from": ["is", "set"]},
+                                                  fields=["amended_from"], limit=500000)
+            if x.get("amended_from")}
+
+
+def withdrawn(r, doctype, rows) -> list:
+    """Of docstatus-2 rows (each with its name), those really withdrawn: not amended.
+    Every count of cancelled documents goes through here (preflight)."""
+    gone = amended(r, doctype)
+    return [x for x in rows if x.get("name") not in gone]
+
+
 def po_cancelled(r):
     from command_center.api.businesses import currency_for
-    rows = _po(r, {"docstatus": 2}, ["base_grand_total"])
+    rows = withdrawn(r, "Purchase Order",
+                     _po(r, {"docstatus": 2}, ["name", "base_grand_total"]))
     total = sum(float(x.get("base_grand_total") or 0) for x in rows)
     cur = currency_for(r.code) or ""
     return len(rows), f"worth {cur} {total:,.0f} between them".replace("  ", " ")
@@ -472,6 +493,15 @@ def self_approved(r):
 
 
 # --------------------------------------------------------------------------- bank
+def bank_payments(banks) -> list:
+    """The Payment Entry filters that find each payment through a bank account once: paid
+    from one, or paid into one from somewhere that is not. A transfer between two bank
+    accounts is paid from one and into the other, and counting both sides counted it
+    twice (17 Nov 2026)."""
+    return [{"docstatus": 1, "paid_from": ["in", banks]},
+            {"docstatus": 1, "paid_to": ["in", banks], "paid_from": ["not in", banks]}]
+
+
 def bank_cleared_pct(r):
     """Of the payments made through a bank account, how many carry a clearance date --
     the date ERPNext's bank reconciliation records when a payment is matched to the
@@ -487,8 +517,7 @@ def bank_cleared_pct(r):
              "Match payments to each statement in Bank Reconciliation Tool; that records "
              "the clearance date this card counts."], "/app/account/view/tree")
     total = cleared = 0
-    for side in ("paid_from", "paid_to"):
-        base = {"docstatus": 1, side: ["in", banks]}
+    for base in bank_payments(banks):
         total += r.count("Payment Entry", base)
         cleared += r.count("Payment Entry", {**base, "clearance_date": ["is", "set"]})
     if not total:

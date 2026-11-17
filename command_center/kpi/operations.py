@@ -12,12 +12,16 @@ OPEN_ORDER = {"is_open": 1}
 OPEN_TASK = {"is_open": 1}
 OPEN_CASE = {"is_open": 1}
 ACTIVE = {"is_active": 1}
-# Everything delivered and some of it not billed. per_delivered is a percentage.
-# Open orders with something still to despatch, or still to invoice.
+# Open orders with something still to despatch. Their value is worked out line by line
+# at ingest (ingest/order_lines.py), never from ERPNext's delivered percentage.
 AWAITING_DESPATCH = {"is_open": 1, "undelivered_value": [">", 0]}
-AWAITING_INVOICE = {"is_open": 1, "unbilled_value": [">", 0]}
-DELIVERED_UNBILLED = {"src_docstatus": 1, "per_delivered": [">=", 99.99],
-                      "unbilled_value": [">", 0]}
+# Delivered and not yet invoiced, line by line: the goods have gone and the invoice has
+# not. An order where nothing was delivered is not here, however much is unbilled on it
+# (17 Nov 2026: "Delivered but not invoiced" summed every open order's unbilled value,
+# 718 Gigmann orders and GHS 15.68M, most of it never delivered). One definition for the
+# card, its count, the Sales stage and the alert.
+DELIVERED_UNBILLED = {"src_docstatus": 1, "is_open": 1, "delivered_unbilled_value": [">", 0]}
+AWAITING_INVOICE = DELIVERED_UNBILLED
 
 register(
     # ---------------------------------------------------------------- order book
@@ -97,12 +101,12 @@ register(
         key="order_unbilled",
         label="Delivered but not invoiced",
         fact="fact_sales_order",
-        measure="unbilled_value",
+        measure="delivered_unbilled_value",
         unit="currency",
         direction="higher_is_worse",
-        filters=OPEN_ORDER,
+        filters=DELIVERED_UNBILLED,
         note="revenue earned and not yet billed",
-        drill_filters=OPEN_ORDER,
+        drill_filters=DELIVERED_UNBILLED,
         as_of_basis="data_horizon",
     ),
 
@@ -354,7 +358,7 @@ register(
         key="order_delivered_unbilled",
         label="Delivered, not invoiced",
         fact="fact_sales_order",
-        measure="unbilled_value",
+        measure="delivered_unbilled_value",
         unit="currency",
         direction="higher_is_worse",
         filters=DELIVERED_UNBILLED,

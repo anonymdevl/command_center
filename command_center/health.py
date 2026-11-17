@@ -14,6 +14,8 @@ remembers them and says where they came from:
                               Snapshot); the latest complete read of the day wins
     weeks(code)               the last eight ISO weeks, the last snapshot in each; a week
                               with none is empty, never filled in
+    week_on_week(code)        the latest snapshot against the one nearest seven days before
+                              it (5 to 9 days), over the questions scored in both
     record_vitals(code, figs) the Executive Summary's vital signs on the day -- what is owed
                               to us, what we owe, the stock held -- on the same row
                               (`vitals`), so the summary can say what changed on last week
@@ -42,6 +44,7 @@ CONTROL = "control_score"
 # A read that failed, or found the business's ERPNext away, says nothing about the
 # business: it never replaces an earlier read of the same day.
 PASSING = ("unreachable", "failed")
+PARTIAL = PASSING + ("not_loaded",)
 # The Executive Summary's vital signs kept daily (summary.py): the positions that exist only
 # now. Money in has its own months and Overall Business Health its own history above.
 VITALS = ("ar_total", "ap_total", "stock_value")
@@ -145,8 +148,11 @@ def snapshot(code, figures: dict, today=None) -> bool:
     day = frappe.utils.getdate(today or frappe.utils.today())
     questions = {key: _entry(figures.get(key)) for key, _q in QUESTIONS if key in figures}
     control = _entry(figures.get(CONTROL))
-    transient = control["state"] in PASSING or any(
-        e["state"] in PASSING for e in questions.values())
+    # A read in which a question could not be read this time (ERPNext away, a failure,
+    # the facts still loading) is partial: it never replaces the day's fuller read. A
+    # question that needs setting up, or that ERPNext refuses, is a real state and does.
+    transient = control["state"] in PARTIAL or any(
+        e["state"] in PARTIAL for e in questions.values())
     name = _name(code, day)
     have = frappe.get_all(DOCTYPE, filters={"name": name},
                           fields=["name", "control_score", "questions"], limit=1)
@@ -159,6 +165,7 @@ def snapshot(code, figures: dict, today=None) -> bool:
             return False
         if _num(old.control_score) == control["value"] and (old.questions or "") == body:
             return False
+
         frappe.db.set_value(DOCTYPE, name, {"control_score": control["value"],
                                             "questions": body, "captured_at": now})
         return True
@@ -308,28 +315,84 @@ def weeks(code, n: int = WEEKS, today=None) -> list:
     return out
 
 
-def delta(series: list) -> int | None:
-    """This week's Control Health against last week's, in whole points, from what was
-    stored; None unless both weeks have a score."""
-    if len(series) < 2:
+def _scores(questions) -> dict:
+    """{question: value} for the questions a snapshot scored."""
+    try:
+        qs = json.loads(questions) if isinstance(questions, str) else (questions or {})
+    except ValueError:
+        return {}
+    return {k: float(e["value"]) for k, e in qs.items()
+            if isinstance(e, dict) and e.get("value") is not None}
+
+
+def compare(now: dict, before: dict) -> dict | None:
+    """Overall Business Health now against before, over the questions scored both times:
+    {"delta" (whole points), "now", "before" (each the average of those questions),
+    "questions" (how many), "of"}. A question that entered or left between the two is
+    not a change in the business, so it moves nothing. None when none is common."""
+    common = sorted(set(now) & set(before))
+    if not common:
         return None
-    now, before = series[-1].get("control_score"), series[-2].get("control_score")
-    if now is None or before is None:
+    a = sum(now[k] for k in common) / len(common)
+    b = sum(before[k] for k in common) / len(common)
+    return {"delta": round(a - b), "now": round(a, 4), "before": round(b, 4),
+            "questions": len(common), "of": len(QUESTIONS)}
+
+
+def week_on_week(code, today=None) -> dict | None:
+    """The latest snapshot against the one nearest seven days before it (five to nine
+    days, as the vital signs are: health.week_ago), over the questions scored in both.
+
+    Not this ISO week's last snapshot against last week's: on a Monday that compared
+    Monday with Sunday, one day apart (17 Nov 2026). None when there is no snapshot five
+    to nine days before the latest."""
+    if not _concrete(code):
         return None
-    return round(now) - round(before)
+    today = frappe.utils.getdate(today or frappe.utils.today())
+    lo, hi = WEEK_AGO
+    rows = [r for r in frappe.get_all(
+        DOCTYPE, filters={"business_code": code, "day": [">=", today - _dt.timedelta(days=hi + 7)],
+                          "questions": ["is", "set"]},
+        fields=["day", "control_score", "questions"], order_by="day desc", limit=40)
+        if r.questions and frappe.utils.getdate(r.day) <= today]
+    if not rows:
+        return None
+    latest = rows[0]
+    day = frappe.utils.getdate(latest.day)
+    best = None
+    for r in rows[1:]:
+        age = (day - frappe.utils.getdate(r.day)).days
+        if lo <= age <= hi:
+            rank = (abs(age - 7), -age)
+            if best is None or rank < best[0]:
+                best = (rank, r)
+    if not best:
+        return None
+    got = compare(_scores(latest.questions), _scores(best[1].questions))
+    if not got:
+        return None
+    base = best[1]
+    return {**got, "day": str(day), "base_day": str(frappe.utils.getdate(base.day)),
+            "base_control_score": _num(base.control_score)}
 
 
 def history(code, today=None) -> dict:
     series = weeks(code, today=today)
-    last = series[-2] if len(series) > 1 else None
+    wow = week_on_week(code, today=today)
     return {
         "business_code": code,
         "kept": _concrete(code),
         "weeks": series,
-        "last_week": ({"week": last["week"], "day": last["day"],
-                       "control_score": last["control_score"]}
-                      if last and last["control_score"] is not None else None),
-        "delta": delta(series),
+        # The reading compared with, about a week before the latest: its day and its
+        # score over the questions scored both times (what the delta is measured from).
+        "last_week": ({"week": "{}-W{:02d}".format(*frappe.utils.getdate(
+                           wow["base_day"]).isocalendar()[:2]),
+                       "day": wow["base_day"], "control_score": wow["before"]}
+                      if wow else None),
+        "delta": wow["delta"] if wow else None,
+        # How many questions the change is over, of how many: said beside it when fewer
+        # than every question scored now.
+        "delta_questions": ({"questions": wow["questions"], "of": wow["of"]} if wow else None),
         "watch": WATCH,
     }
 

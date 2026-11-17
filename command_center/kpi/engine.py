@@ -259,8 +259,7 @@ def _period(kpi: Kpi, business_code: str | None) -> dict | None:
         label = f"the {n} days to {horizon.day} {horizon:%b %Y}"
     else:
         n = 1 if window == "last_full_month" else int(window.rsplit("_", 1)[1])
-        end = (horizon if horizon == u.getdate(u.get_last_day(horizon))
-               else u.getdate(u.add_days(u.get_first_day(horizon), -1)))
+        end = full_month_end(horizon)
         start = u.getdate(u.get_first_day(u.add_months(end, -(n - 1))))
         label = (f"{end:%B %Y}" if n == 1 else
                  f"{start:%b} – {end:%b %Y}" if start.year == end.year else
@@ -268,6 +267,20 @@ def _period(kpi: Kpi, business_code: str | None) -> dict | None:
     return {"field": field, "from": str(u.getdate(start)), "to": str(u.getdate(end)),
             "label": label}
 
+
+
+def full_month_end(horizon, today=None):
+    """The last day of the latest calendar month that is over and that the data covers to
+    its end. The horizon's own month counts only when the data reaches its last day AND
+    that day has passed: on 31 October, October is still under way and its money still
+    coming in, so the last full month is September (17 Nov 2026). The one definition for
+    the engine's windows and the analyst's comparisons (ask/tools.py)."""
+    u = frappe.utils
+    h = u.getdate(horizon)
+    last = u.getdate(u.get_last_day(h))
+    if h == last and u.getdate(today or u.today()) > last:
+        return h
+    return u.getdate(u.add_days(u.get_first_day(h), -1))
 
 
 def _load_state(fact: str, business_code: str | None):

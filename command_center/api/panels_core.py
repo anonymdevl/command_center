@@ -69,7 +69,11 @@ def aud_day_one(ctx):
         found.append((f"{rec['alone']:,} purchase order{'s' if rec['alone'] != 1 else ''} or "
                       f"payments approved only by the account that raised them",
                       "Critical", "t-od", "Approvals"))
-    cancelled = _guarded(ctx, "Purchase Order", {"docstatus": 2}, ["name", "base_grand_total"])
+    from command_center.kpi.live import withdrawn
+    # Cancelled to be amended is a correction, not a withdrawal (kpi/live.withdrawn).
+    cancelled = withdrawn(ctx.reader(), "Purchase Order",
+                          _guarded(ctx, "Purchase Order", {"docstatus": 2},
+                                   ["name", "base_grand_total"]))
     if cancelled:
         v = sum(_num(d.get("base_grand_total")) for d in cancelled)
         found.append((f"{len(cancelled):,} purchase order{'s' if len(cancelled) != 1 else ''} "
