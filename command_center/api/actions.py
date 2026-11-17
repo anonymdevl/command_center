@@ -327,6 +327,11 @@ def _todo(conn, user, subject, body, due_date, priority):
 #              person it was taken from: who moved it, from whom, to whom.
 #   cancel     on a document: assign_to.remove; a To-Do of its own: status Cancelled.
 #              A mention in a comment tells them it was withdrawn.
+#   close      finished, or no longer needed: status Closed (frappe.client.set_value) and
+#              a plain comment on the To-Do, "Closed by <name>" and the note. No mention,
+#              so no notification, and no assign_to.remove on a linked document.
+#   bulk       bulk_tasks: close or cancel each of up to BULK_LIMIT, one by one, through
+#              the same paths and checks; one that fails is reported and the rest go on.
 #   edit       the To-Do's date and priority (frappe.client.set_value), and a mention
 #              on it telling them what changed.
 
@@ -370,7 +375,10 @@ def reassign_task(business_code: str, todo: str, to_user: str, note: str = ""):
 @frappe.whitelist()
 def cancel_task(business_code: str, todo: str, reason: str = ""):
     """Withdraw open work this manager handed out -- the wrong person, by mistake."""
-    conn = _conn(business_code)
+    return _cancel(_conn(business_code), todo, reason)
+
+
+def _cancel(conn, todo, reason=""):
     row = _handed_out_todo(conn, todo)
     user = row.get("allocated_to")
     who, ok = _person(conn, user)
@@ -391,6 +399,87 @@ def cancel_task(business_code: str, todo: str, reason: str = ""):
                              f"to do it.{why}", label, "it was withdrawn")
     return {"ok": True, "name": todo, "status": "Cancelled", "to": user, "to_name": who,
             "said": said, "notified": notified, "notice": notice}
+
+
+@frappe.whitelist()
+def close_task(business_code: str, todo: str, note: str = ""):
+    """Close open work this manager handed out: finished, or no longer needed.
+
+    Not Cancel ("withdrawn"): the To-Do's status becomes Closed through the front door
+    (frappe.client.set_value), and a short comment on the To-Do says who closed it, with
+    the note if one is given. Nobody is mentioned, so nobody is notified, and the person
+    is not taken off a linked document with assign_to.remove (which would send them ERPNext's
+    "assignment removed" notification). A To-Do the manager closed is not "Delegated Tasks
+    Done" (api/work: its modified_by is the manager's own login there)."""
+    return _close(_conn(business_code), todo, note)
+
+
+def _close(conn, todo, note=""):
+    from html import escape
+
+    row = _handed_out_todo(conn, todo)
+    user = row.get("allocated_to")
+    who = _person(conn, user)[0]
+    conn.set_value("ToDo", todo, "status", "Closed")
+    note = (note or "").strip()
+    text = f"Closed by {_sender()}." + (f" {note}" if note else "")
+    try:
+        conn.comment("ToDo", todo, f"<p>{escape(text)}</p>")
+        commented, notice = True, (f"A comment on the To-Do says you closed it. {who} was not "
+                                   f"mentioned, so ERPNext did not notify them.")
+    except Exception as e:
+        commented, notice = False, (f"It is closed, but ERPNext refused the comment on the "
+                                    f"To-Do ({_plain_error(e)}). {who} was not notified.")
+    return {"ok": True, "name": todo, "status": "Closed", "to": user, "to_name": who,
+            "said": f"{who}’s To-Do {todo} is closed in ERPNext.",
+            "commented": commented, "notified": None, "notice": notice}
+
+
+BULK_LIMIT = 200
+BULK_ACTIONS = {"close": (_close, "closed"), "cancel": (_cancel, "cancelled")}
+
+
+@frappe.whitelist()
+def bulk_tasks(business_code: str, action: str, todos, note: str = ""):
+    """Close or cancel many tasks this manager handed out, one by one.
+
+    Each goes through the same path and the same checks as the single action (close_task,
+    cancel_task: only open To-Dos this manager handed out), so Cancel tells each person the
+    work was withdrawn and Close tells nobody. A task that fails is reported with the
+    reason and does not stop the others. At most BULK_LIMIT in one call."""
+    import json
+
+    if action not in BULK_ACTIONS:
+        frappe.throw("The action is close or cancel.")
+    if isinstance(todos, str):
+        try:
+            todos = json.loads(todos)
+        except ValueError:
+            todos = [t for t in todos.split(",")]
+    if not isinstance(todos, list):
+        frappe.throw("Send the tasks as a list.")
+    todos = list(dict.fromkeys(str(t).strip() for t in todos if str(t or "").strip()))
+    if not todos:
+        frappe.throw("Choose at least one task.")
+    if len(todos) > BULK_LIMIT:
+        frappe.throw(f"{len(todos)} tasks were chosen; at most {BULK_LIMIT} can be changed "
+                     f"at once. Choose fewer, or filter the list first.")
+    conn = _conn(business_code)
+    fn, word = BULK_ACTIONS[action]
+    done, failed = [], []
+    for todo in todos:
+        try:
+            res = fn(conn, todo, note)
+        except Exception as e:
+            failed.append({"todo": todo, "reason": _plain_error(e)})
+            continue
+        done.append({"todo": todo, "to": res.get("to"), "to_name": res.get("to_name"),
+                     "notified": res.get("notified")})
+    said = f"{len(done)} {word}"
+    if failed:
+        reasons = "; ".join(dict.fromkeys(f["reason"] for f in failed))
+        said += f", {len(failed)} could not be: {reasons}"
+    return {"action": action, "done": done, "failed": failed, "said": said}
 
 
 @frappe.whitelist()

@@ -32,6 +32,12 @@ import { brand } from "../api/boot.js";
  * assign_to.add); "reassign", "cancel_task" and "edit_task" change open work the manager
  * handed out (TaskChange below, api/actions reassign_task / cancel_task / update_task),
  * asking first and saying afterwards whether each person was told.
+ *
+ * Close (17 Nov 2026): "close_task" closes open work handed out as finished or no longer
+ * needed (api/actions close_task): a calm comment on the To-Do, no mention, nobody told.
+ * "bulk_tasks" is Close Selected / Cancel Selected on Outstanding Tasks (BulkChange): it
+ * says how many and to whom before anything changes, then sends them one by one
+ * (api/actions bulk_tasks) and says how many were done and why any were not.
  */
 
 const KINDS = {
@@ -43,7 +49,7 @@ const KINDS = {
 };
 
 /** Changes to open work the manager handed out (TaskChange). */
-const CHANGES = new Set(["reassign", "cancel_task", "edit_task"]);
+const CHANGES = new Set(["reassign", "cancel_task", "close_task", "edit_task"]);
 const PRIORITIES = ["Low", "Medium", "High"];
 
 let peopleCache = {};
@@ -113,7 +119,7 @@ export default function ActionDialog({ scope }) {
     const open = (e) => {
       const r = e.detail || {};
       const decision = r.kind === "decide" || r.kind === "review" || r.kind === "alert"
-        || CHANGES.has(r.kind);
+        || r.kind === "bulk_tasks" || CHANGES.has(r.kind);
       const k = KINDS[r.kind] || KINDS.assign;
       setReq({ ...r, kind: decision || KINDS[r.kind] ? r.kind : "assign" });
       setWho("");
@@ -196,6 +202,9 @@ export default function ActionDialog({ scope }) {
   }, [escalating, whose, scope]);
 
   if (!req) return null;
+  if (req.kind === "bulk_tasks") {
+    return <BulkChange req={req} scope={scope} close={() => setReq(null)} />;
+  }
   if (CHANGES.has(req.kind)) {
     return <TaskChange req={req} scope={scope} close={() => setReq(null)} />;
   }
@@ -424,6 +433,7 @@ const DOC_TYPES = ["Sales Invoice", "Sales Order", "Quotation", "Customer", "Pur
 const CHANGE_WORDS = {
   reassign: { title: "Reassign", verb: "Reassign", done: "Reassigned" },
   cancel_task: { title: "Cancel Assignment", verb: "Cancel Assignment", done: "Assignment Cancelled" },
+  close_task: { title: "Close Task", verb: "Close Task", done: "Task Closed" },
   edit_task: { title: "Edit Date And Priority", verb: "Save Changes", done: "Changed" },
 };
 
@@ -468,7 +478,10 @@ function TaskChange({ req, scope, close }) {
         ? `ERPNext takes ${req.doctype} ${req.docname} off ${them}: their To-Do is cancelled and they leave Assigned To. `
           + "A comment on the document tells them it was withdrawn."
         : `${them}’s To-Do is cancelled in ERPNext, and a comment on it tells them it was withdrawn.`)
-      : `The To-Do’s date and priority change in ERPNext, and a comment on it tells ${them} what changed.`;
+      : req.kind === "close_task"
+        ? `The To-Do is closed in ERPNext, as finished or no longer needed. A short comment on it says you closed it; `
+          + `${them} is not mentioned, so ERPNext does not notify them, and it does not count as work they marked done.`
+        : `The To-Do’s date and priority change in ERPNext, and a comment on it tells ${them} what changed.`;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -483,6 +496,8 @@ function TaskChange({ req, scope, close }) {
         ? await api.reassignTask({ business_code: scope, todo: req.todo, to_user: to, note })
         : req.kind === "cancel_task"
           ? await api.cancelTask({ business_code: scope, todo: req.todo, reason: note })
+          : req.kind === "close_task"
+          ? await api.closeTask({ business_code: scope, todo: req.todo, note })
           : await api.updateTask({ business_code: scope, todo: req.todo, due_date: due || "", priority: prio });
       setRes(got || {});
       setState("done");
@@ -539,6 +554,13 @@ function TaskChange({ req, scope, close }) {
                 <textarea id="dlg-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
               </>
             ) : null}
+            {req.kind === "close_task" ? (
+              <>
+                <p className="dlg-plan">Close this task? Use it when the work is finished or no longer needed.</p>
+                <label htmlFor="dlg-note">Note (optional)</label>
+                <textarea id="dlg-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
+              </>
+            ) : null}
             {req.kind === "edit_task" ? (
               <div className="dlg-two">
                 <div>
@@ -561,6 +583,96 @@ function TaskChange({ req, scope, close }) {
               </button>
             </div>
             <p className="dlg-foot">{what}</p>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** "Close 12 tasks: Ama (5), Kofi (4), Esi (3)" -- how many, and to whom, most first. */
+function bulkPlan(action, tasks) {
+  const by = new Map();
+  tasks.forEach((t) => {
+    const who = firstName(t.to_name || t.to) || "No one";
+    by.set(who, (by.get(who) || 0) + 1);
+  });
+  const people = [...by.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([who, n]) => `${who} (${n})`).join(", ");
+  const n = tasks.length;
+  return `${action === "close" ? "Close" : "Cancel"} ${n} ${n === 1 ? "task" : "tasks"}: ${people}`;
+}
+
+/** Close Selected / Cancel Selected: says how many and to whom first, then one by one. */
+function BulkChange({ req, scope, close }) {
+  const closing = req.action === "close";
+  const [note, setNote] = useState("");
+  const [state, setState] = useState("idle");
+  const [error, setError] = useState("");
+  const [res, setRes] = useState(null);
+  const tasks = req.tasks || [];
+
+  useEffect(() => {
+    const esc = (e) => e.key === "Escape" && state !== "saving" && close();
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [close, state]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setState("saving");
+    setError("");
+    try {
+      const got = await api.bulkTasks({ business_code: scope, action: req.action,
+                                        todos: tasks.map((t) => t.name), note });
+      setRes(got || {});
+      setState("done");
+      window.dispatchEvent(new CustomEvent("cc-tasks-unselect"));
+      window.dispatchEvent(new CustomEvent("cc-work-changed"));
+    } catch (err) {
+      setError(err?.message || "ERPNext did not accept it.");
+      setState("failed");
+    }
+  };
+
+  const titleOf = Object.fromEntries(tasks.map((t) => [t.name, t.title]));
+  const failed = res?.failed || [];
+  return (
+    <div className="dlg-scrim" onMouseDown={(e) => e.target === e.currentTarget && state !== "saving" && close()}>
+      <div className="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+        {state === "done" ? (
+          <>
+            <div className="dlg-ok" aria-hidden="true">{failed.length ? "!" : "✓"}</div>
+            <h3 id="dlg-t">{closing ? "Tasks Closed" : "Assignments Cancelled"}</h3>
+            <p className="dlg-sub">{res.said}</p>
+            {failed.length ? (
+              <ul className="dlg-fails">
+                {failed.slice(0, 20).map((f) => (
+                  <li key={f.todo}><b>{titleOf[f.todo] || f.todo}</b> {f.reason}</li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="dlg-acts">
+              <button type="button" className="ap-act pri" onClick={close}>Done</button>
+            </div>
+          </>
+        ) : (
+          <form onSubmit={submit}>
+            <h3 id="dlg-t">{closing ? "Close Selected" : "Cancel Selected"}</h3>
+            <p className="dlg-plan">{bulkPlan(req.action, tasks)}</p>
+            <p className="dlg-hint">{closing
+              ? "Each To-Do is closed in ERPNext, as finished or no longer needed, with a short comment saying you closed it. No one is mentioned, so ERPNext notifies no one."
+              : "Each assignment is withdrawn in ERPNext, as Cancel Assignment does, and each person is told by a mention that they no longer need to do it."}</p>
+            <label htmlFor="dlg-note">{closing ? "Note (optional)" : "Reason (optional)"}</label>
+            <textarea id="dlg-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
+            {error ? <div className="dlg-err" role="alert">{error}</div> : null}
+            <div className="dlg-acts">
+              <button type="button" className="ap-act" onClick={close} disabled={state === "saving"}>Keep Them</button>
+              <button type="submit" className={`ap-act pri${closing ? "" : " dgr"}`} disabled={state === "saving"}>
+                {state === "saving" ? "Working…" : closing ? `Close ${tasks.length}` : `Cancel ${tasks.length}`}
+              </button>
+            </div>
+            <p className="dlg-foot">They are sent one by one; one that ERPNext refuses does not stop the others, and you are told which and why.</p>
           </form>
         )}
       </div>

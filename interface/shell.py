@@ -1469,4 +1469,33 @@ td.work-acts .btn{margin:0 4px 0 0}
 /* The Projection paragraph too: body text, its label in bold, no box (as the PDF). */
 .rp-body .md p.md-proj{position:static;background:none;border:0;border-radius:0;padding:0;color:inherit}
 .rp-body .md p.md-proj::before{content:none;display:none}
+/* ======================================================================
+   Close and bulk actions on Outstanding Tasks (17 Nov 2026, legacy/work.js,
+   ActionDialog.jsx BulkChange): a checkbox on each open row, Select All and the count
+   above the list, and the bar with Close Selected / Cancel Selected while anything is
+   selected -- kept in view at the foot of the panel, and stacked on a phone.
+   ====================================================================== */
+th.work-pick,td.work-pick{width:36px;padding-right:0;text-align:center}
+.work-pick input,.work-all input{width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer}
+.work-select{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--sp-3);
+ margin:4px 0 8px;font-size:var(--fs-sm);color:var(--ink2)}
+.work-all{display:inline-flex;align-items:center;gap:var(--sp-2);cursor:pointer;font-weight:var(--fw-semibold);
+ color:var(--ink)}
+.work-count{color:var(--mut)}
+.work-bulk{position:sticky;bottom:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;
+ justify-content:space-between;gap:var(--sp-3);margin:12px 0 0;padding:10px 14px;
+ border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--accent-bg);
+ box-shadow:var(--shadow2);font-size:var(--fs-sm);color:var(--ink)}
+.work-bulk[hidden]{display:none}
+.work-bulk-n{font-weight:var(--fw-semibold)}
+.work-bulk-acts{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
+.dlg-fails{margin:8px 0 0;padding:0 0 0 18px;max-height:200px;overflow:auto;font-size:var(--fs-sm);
+ color:var(--ink2);line-height:1.5}
+.dlg-fails b{color:var(--ink);font-weight:var(--fw-semibold)}
+@media(max-width:600px){
+ .work-bulk{flex-direction:column;align-items:stretch}
+ .work-bulk-acts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--sp-2)}
+ .work-bulk-acts .btn{width:100%;margin:0}
+ .work-bulk-acts .btn:last-child{grid-column:1 / -1}
+}
 """

@@ -6647,8 +6647,8 @@ class _AssignERPNext:
             v = row.get(k)
             if isinstance(rule, list):
                 op, val = rule
-                ok = {"!=": v != val, ">=": str(v or "") >= str(val), "in": v in val,
-                      "like": True}.get(op, False)
+                ok = {"!=": lambda: v != val, ">=": lambda: str(v or "") >= str(val),
+                      "in": lambda: v in val, "like": lambda: True}.get(op, lambda: False)()
             else:
                 ok = v == rule
             if not ok:
@@ -7173,6 +7173,7 @@ class _TaskERPNext(_AssignERPNext):
         self.set_values.append((doctype, name, fieldname, value))
         row = next(t for t in self.todos if t["name"] == name)
         row[fieldname] = value
+        row["modified_by"] = self.ME   # as ERPNext records whoever saved it
         return row
 
 
@@ -7324,6 +7325,73 @@ class TaskManagement(TransactionTestCase):
         task = self._work("task", todo=a["name"])
         self.assertTrue(any("Sent back by" in c["text"] for c in task["comments"]))
         self.assertEqual(task["assigned_by"], _AssignERPNext.ME)
+
+    def test_close_sets_closed_comments_and_mentions_no_one(self):
+        doc = self._task(reference_type="Sales Invoice", reference_name="ACC-SINV-0003")
+        res = self._do("close_task", todo=doc["name"], note="Paid in full yesterday.")
+        self.assertIn(("ToDo", doc["name"], "status", "Closed"), self.erp.set_values)
+        self.assertFalse(self.erp.unassigned, "not taken off the document")
+        d, n, html = self.erp.comments[-1]
+        self.assertEqual((d, n), ("ToDo", doc["name"]))
+        self.assertIn("Closed by", html)
+        self.assertIn("Paid in full yesterday.", html)
+        self.assertNotIn("mention", html, "nobody is mentioned, so nobody is notified")
+        self.assertNotIn("data-id", html)
+        self.assertEqual((res["status"], res["to"], res["notified"]), ("Closed", "ama@test", None))
+        self.assertTrue(res["commented"])
+        self.assertEqual(self._work()["open"], [])
+        # only open work, and only work this manager handed out
+        with self.assertRaises(Exception):
+            self._do("close_task", todo=doc["name"])
+        self.erp._todo(allocated_to="ama@test", assigned_by="someone@erp.test")
+        import frappe
+        with self.assertRaises(frappe.PermissionError):
+            self._do("close_task", todo=self.erp.todos[-1]["name"])
+        self.assertEqual(self.erp.todos[-1]["status"], "Open")
+
+    def test_a_task_the_manager_closed_is_not_delegated_work_done(self):
+        mine = self._task(subject="Fix the pump")
+        theirs = self._task(subject="Count the stock")
+        self._do("close_task", todo=mine["name"])
+        row = next(t for t in self.erp.todos if t["name"] == theirs["name"])
+        row.update(status="Closed", modified_by="ama@test")   # Ama marked it done
+        got = self._work()
+        self.assertEqual([t["name"] for t in got["check"]], [theirs["name"]])
+        self.assertEqual(got["figures"]["work_to_check"]["value"], 1)
+        task = self._work("task", todo=mine["name"])
+        self.assertTrue(task["closed_by_you"])
+        self.assertFalse(self._work("task", todo=theirs["name"])["closed_by_you"])
+
+    def test_bulk_close_and_cancel_report_each_and_cap_the_size(self):
+        a = self._task(subject="One")
+        b = self._task(subject="Two", allocated_to="yaw@test")
+        c = self._task(subject="Three", reference_type="Sales Invoice", reference_name="ACC-SINV-0009")
+        other = self.erp._todo(allocated_to="ama@test", assigned_by="someone@erp.test")
+        res = self._do("bulk_tasks", action="close", todos=json.dumps([a["name"], other["name"], b["name"]]),
+                       note="Done at the stock take.")
+        self.assertEqual([d["todo"] for d in res["done"]], [a["name"], b["name"]])
+        self.assertEqual([f["todo"] for f in res["failed"]], [other["name"]])
+        self.assertIn("Only the person who handed this out", res["failed"][0]["reason"])
+        self.assertEqual(res["said"], "2 closed, 1 could not be: Only the person who handed this "
+                                      "out can change it.")
+        self.assertEqual(other["status"], "Open", "the refused one is untouched")
+        closed = [c_ for c_ in self.erp.comments if "Closed by" in c_[2]]
+        self.assertEqual(len(closed), 2)
+        self.assertFalse(any("data-id" in c_[2] for c_ in closed))
+        # cancel goes the cancel_task way: off the document, and the person is told
+        res = self._do("bulk_tasks", action="cancel", todos=[c["name"]])
+        self.assertEqual(res["said"], "1 cancelled")
+        self.assertEqual(self.erp.unassigned, [("Sales Invoice", "ACC-SINV-0009", "ama@test")])
+        self.assertIn("withdrawn", self.erp.comments[-1][2])
+        self.assertIn('data-id="ama@test"', self.erp.comments[-1][2])
+        self.assertTrue(res["done"][0]["notified"])
+        from command_center.api import actions
+        with self.assertRaises(Exception):
+            self._do("bulk_tasks", action="close", todos=[f"TD-{i}" for i in range(actions.BULK_LIMIT + 1)])
+        with self.assertRaises(Exception):
+            self._do("bulk_tasks", action="delete", todos=[a["name"]])
+        with self.assertRaises(Exception):
+            self._do("bulk_tasks", action="close", todos=[])
 
     def test_every_tile_filters_the_list(self):
         self._task()
