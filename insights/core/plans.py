@@ -598,7 +598,7 @@ def notify(people, c, kind: str, dedupe: str, title: str, body: str, link: str =
                 esc = frappe.utils.escape_html
                 frappe.sendmail(recipients=[u.email or u.username], subject=title,
                                 message=branding.email_html(f"<p><b>{esc(title)}</b></p><p>{esc(body)}</p>"),
-                                now=True)
+                                now=True, kind="notice")
                 M.PlanNotice.objects.filter(pk=n.pk).update(emailed=True)
             except Exception:
                 pass  # sendmail has logged why; the bell still has it
@@ -938,7 +938,7 @@ def request_quote(plan: str = "", message: str = "", client_id=None):
     try:
         frappe.sendmail(recipients=[v["email"]], subject=title,
                         message=branding.email_html(f"<p><b>{esc(title)}</b></p><p>{esc(body)}</p>"),
-                        now=True)
+                        now=True, kind="notice")
     except Exception:
         return {"sent": False, "contact": v}
     return {"sent": True, "to": v["email"]}

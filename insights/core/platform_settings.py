@@ -1008,6 +1008,7 @@ def test_email(to: str = ""):
                                      "and save it first."}
     try:
         runtime.sendmail(
+            kind="test",
             recipients=[to], subject=f"Test email from {_product()}",
             message=branding.email_html(
                 f"<p>This is a test from {frappe.utils.escape_html(_product())}.</p>"
@@ -1018,6 +1019,66 @@ def test_email(to: str = ""):
     _audit(f"sent a test email to {to}")
     return {"ok": True, "says": f"Sent to {to}. If it has not arrived in a few minutes, look "
                                 f"in the spam folder."}
+
+
+EMAIL_LOG_SHOWN = 100
+
+
+def _log_row(r) -> dict:
+    return {"id": r.id, "at": r.at.strftime("%Y-%m-%d %H:%M:%S") if r.at else None,
+            "kind": r.kind, "status": r.status, "to": r.recipients, "subject": r.subject,
+            "error": r.error, "business": r.business_code,
+            "can_resend": r.status == "Failed" and bool(r.body),
+            "why_not": (None if r.status != "Failed" or r.body else
+                        "The report's PDF was attached and is not kept, so it cannot be sent "
+                        "again from here: run the report again from Reports."
+                        if r.attachments else
+                        "The message was not kept, so it cannot be sent again from here."),
+            "resend_of": r.resend_of}
+
+
+@frappe.whitelist()
+def email_log(status: str = ""):
+    """The last 100 send attempts, newest first: Sent, Failed, or both. Administrator only,
+    like the rest of Email."""
+    _require_admin()
+    from insights.core.models import EmailLog
+    q = EmailLog.objects.all()
+    if status in ("Sent", "Failed"):
+        q = q.filter(status=status)
+    rows = list(q.order_by("-at", "-id")[:EMAIL_LOG_SHOWN])
+    return {"rows": [_log_row(r) for r in rows], "shown": EMAIL_LOG_SHOWN,
+            "keep_days": _email_log_days()}
+
+
+def _email_log_days() -> int:
+    from django.conf import settings
+    return int(settings.CONFIG.get("email_log_days") or 180)
+
+
+@frappe.whitelist(methods=["POST"])
+def resend_email(id=None):
+    """Send a failed message again, to the same people, exactly as it was -- only when its
+    HTML was kept (it carried no attachment). The resend is a new entry in the log."""
+    _require_admin()
+    from insights.compat import runtime
+    from insights.core.models import EmailLog
+    try:
+        r = EmailLog.objects.get(pk=int(id))
+    except (EmailLog.DoesNotExist, TypeError, ValueError):
+        raise ValidationError("That email is not in the log.")
+    if r.status != "Failed":
+        raise ValidationError("That email was sent; there is nothing to resend.")
+    if not r.body:
+        raise ValidationError(_log_row(r)["why_not"])
+    to = [x.strip() for x in (r.recipients or "").split(",") if x.strip()]
+    try:
+        runtime.sendmail(recipients=to, subject=r.subject, message=r.body, kind=r.kind,
+                         business=r.business_code, resend_of=r.id)
+    except runtime.MailError as e:
+        return {"ok": False, "says": f"Not sent again: {e}"}
+    _audit(f"resent the email “{r.subject}” to {', '.join(to)}")
+    return {"ok": True, "says": f"Sent again to {', '.join(to)}."}
 
 
 @frappe.whitelist()

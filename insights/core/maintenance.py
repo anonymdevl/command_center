@@ -5,7 +5,7 @@ Run every night by the scheduler (manage.py scheduler), or by hand:
     manage.py execute insights.core.maintenance.daily
 
 - the error log keeps `error_log_days` (default 30) days, the sign-in record
-  `security_event_days` (default 730);
+  `security_event_days` (default 730), the email log `email_log_days` (default 180);
 - expired sign-in sessions are cleared (Django never clears them by itself);
 - the Reports screen's runs keep the latest `report_runs_keep` (default 10) of each
   report for each business;
@@ -55,6 +55,20 @@ def prune_security_events() -> int:
     cutoff = dt.datetime.now() - dt.timedelta(days=int(_conf("security_event_days", 730)))
     conn = connections[SecurityEvent.objects.db]
     table = conn.ops.quote_name(SecurityEvent._meta.db_table)
+    with conn.cursor() as cur:
+        cur.execute(f"delete from {table} where at < %s", [cutoff])
+        return cur.rowcount or 0
+
+
+def prune_email_log() -> int:
+    """The email log (runtime.sendmail) is append-only; like the sign-in record its one
+    exception is age: `email_log_days` (default 180) kept, then dropped by date only."""
+    from django.db import connections
+
+    from insights.core.models import EmailLog
+    cutoff = dt.datetime.now() - dt.timedelta(days=int(_conf("email_log_days", 180)))
+    conn = connections[EmailLog.objects.db]
+    table = conn.ops.quote_name(EmailLog._meta.db_table)
     with conn.cursor() as cur:
         cur.execute(f"delete from {table} where at < %s", [cutoff])
         return cur.rowcount or 0
@@ -176,6 +190,11 @@ def daily() -> dict:
     except Exception as e:  # recorded, and the rest of the upkeep still runs
         frappe.log_error(title="Platform upkeep: report runs", message=frappe.get_traceback())
         done["report_runs_pruned"] = f"failed: {e}"
+    try:
+        done["email_log_pruned"] = prune_email_log()
+    except Exception as e:  # recorded, and the rest of the upkeep still runs
+        frappe.log_error(title="Platform upkeep: email log", message=frappe.get_traceback())
+        done["email_log_pruned"] = f"failed: {e}"
     try:
         done["health_snapshots_pruned"] = prune_health_snapshots()
     except Exception as e:  # recorded, and the rest of the upkeep still runs

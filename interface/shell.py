@@ -1427,4 +1427,11 @@ td.work-acts .btn{margin:0 4px 0 0}
  .dlg-two{grid-template-columns:minmax(0,1fr)}
  .topbar .work-tools{width:100%}
 }
+
+/* ---- Settings -> Email -> Email Log (SettingsEmail.jsx): a failed send opens its reason ---- */
+.mail-log tr.mail-failed{cursor:pointer}
+.mail-log tr.mail-failed:hover td{background:var(--raised)}
+.mail-log tr.mail-why td{background:var(--crit-bg);color:var(--ink2);font-size:var(--fs-sm);line-height:1.5;
+ white-space:normal}
+.mail-log tr.mail-why b{color:var(--crit);font-weight:var(--fw-semibold)}
 """

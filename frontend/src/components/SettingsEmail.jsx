@@ -24,6 +24,93 @@ export default function SettingsEmail() {
     <div className="st-stack">
       <Notifications {...status} />
       <EmailServer {...mail} onSaved={reloadBoth} />
+      <EmailLog onResent={status.reload} />
+    </div>
+  );
+}
+
+const KIND_LABEL = { alert: "Alert", report: "Report", notice: "Notice", test: "Test", digest: "Digest", other: "Other" };
+
+/** Every send attempt, newest first (insights/core/platform_settings.email_log). */
+function EmailLog({ onResent }) {
+  const [status, setStatus] = useState("");
+  const log = useApi(() => settingsApi.emailLog(status), [status]);
+  const [open, setOpen] = useState(null);
+  const [st, setSt] = useState({});
+  const rows = log.data?.rows || [];
+  const resend = async (r) => {
+    const out = await act(setSt, () => settingsApi.resendEmail(r.id), (o) => o?.says);
+    if (out && !out.ok) setSt({ bad: out.says });
+    log.reload();
+    onResent?.();
+  };
+  return (
+    <div className="panel">
+      <div className="ph">
+        <div>
+          <b>Email Log</b>
+          <span>
+            Every email the platform tried to send, newest first: the last {log.data?.shown || 100}
+            {log.data?.keep_days ? `, kept ${log.data.keep_days} days` : ""}. Select a failed one to see why.
+          </span>
+        </div>
+        <select aria-label="Show" value={status} onChange={(e) => { setStatus(e.target.value); setOpen(null); }}>
+          <option value="">All</option>
+          <option value="Sent">Sent</option>
+          <option value="Failed">Failed</option>
+        </select>
+      </div>
+      <Msg tone="ok">{st.ok}</Msg>
+      <Msg tone="bad">{st.bad}</Msg>
+      {log.loading && !log.data ? <Loading what="Reading the email log" /> : null}
+      {log.error && !log.data ? <Failed error={log.error} onRetry={log.reload} what="the email log" /> : null}
+      {log.data && !rows.length ? (
+        <div className="thin">{status ? `No ${status.toLowerCase()} emails in the log.` : "Nothing has been sent yet. Each email the platform sends is listed here."}</div>
+      ) : null}
+      {rows.length ? (
+        <div className="sec-scroll">
+          <table className="dt mail-log">
+            <thead><tr><th>Time</th><th>Kind</th><th>To</th><th>Subject</th><th>Status</th><th aria-label="Actions" /></tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <React.Fragment key={r.id}>
+                  <tr className={r.status === "Failed" ? "mail-failed" : undefined}
+                      onClick={r.status === "Failed" ? () => setOpen(open === r.id ? null : r.id) : undefined}
+                      title={r.error || undefined}>
+                    <td className="st-nowrap st-dim">{when(r.at)}</td>
+                    <td className="st-nowrap">{KIND_LABEL[r.kind] || r.kind}</td>
+                    <td className="sec-wrap">{r.to || "—"}</td>
+                    <td className="sec-wrap">{r.subject || "—"}{r.resend_of ? <span className="st-sub">Sent again</span> : null}</td>
+                    <td className="st-nowrap">
+                      {r.status === "Sent" ? <span className="tag t-ok">Sent</span> : <span className="tag t-od">Failed</span>}
+                    </td>
+                    <td className="st-acts">
+                      {r.status === "Failed" ? (
+                        <button type="button" className="btn" aria-expanded={open === r.id}
+                                onClick={(e) => { e.stopPropagation(); setOpen(open === r.id ? null : r.id); }}>
+                          {open === r.id ? "Hide" : "Why"}
+                        </button>
+                      ) : null}
+                      {r.can_resend ? (
+                        <button type="button" className="btn" disabled={st.busy}
+                                onClick={(e) => { e.stopPropagation(); resend(r); }}>Resend</button>
+                      ) : null}
+                    </td>
+                  </tr>
+                  {open === r.id ? (
+                    <tr className="mail-why">
+                      <td colSpan={6}>
+                        <b>Why it failed:</b> {r.error || "No reason was given."}
+                        {r.why_not ? <span className="st-sub">{r.why_not}</span> : null}
+                      </td>
+                    </tr>
+                  ) : null}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }

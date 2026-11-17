@@ -335,6 +335,8 @@ Object.assign(settingsApi, {
   email: () => call(`${PS}.email`),
   setEmail: (args) => call(`${PS}.set_email`, args),
   testEmail: (to) => call(`${PS}.test_email`, { to }),
+  emailLog: (status) => call(`${PS}.email_log`, { status: status || "" }),
+  resendEmail: (id) => call(`${PS}.resend_email`, { id }),
   notifications: () => call(`${PS}.notifications`),
 
   recommend: (business_code) => call(`${PS}.recommendations`, { business_code }),

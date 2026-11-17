@@ -648,4 +648,7 @@ not an app on a client's ERPNext. `insights/` is a Django project (PLATFORM.md):
 - People are Django users (username = email); managers hold the group "Insights
   Dashboard Manager"; the administrator is a superuser (seen as "System Manager").
 - Secrets: encrypted in core.Secret with `encryption_key` from insights.json.
+- Email: every send attempt is a row in `core.EmailLog` (aux; written in
+  `runtime.sendmail` only; kind/business from `command_center.mail.about(...)`), shown in
+  Settings -> Email -> Email Log; pruned at `email_log_days` (180) by maintenance.daily.
 - `manage.py test insights` (in preflight) is the end-to-end check; keep it passing.

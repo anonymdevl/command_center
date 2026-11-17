@@ -1648,6 +1648,103 @@ class SettingsDelegation(TransactionTestCase):
         self.assertEqual((n["schedules_on"], n["failing"]), (1, []))
 
 
+class EmailLogged(TransactionTestCase):
+    """Every send attempt is in the email log (runtime.sendmail, the one place mail goes
+    out): sent or failed with the reason, what it was and which business. Settings ->
+    Email lists the last 100 to the administrator only; a failed message whose HTML was
+    kept can be sent again (a new entry); the log is pruned by age in maintenance.daily."""
+
+    databases = {"default", "aux"}
+    MOD = SettingsPage.MOD
+    MAIL_PW = "mail-pass-xyz-77"
+    setUp = SettingsPage.setUp
+    tearDown = SettingsPage.tearDown
+    _call = SettingsPage._call
+    _ok = SettingsPage._ok
+
+    def _mail_on(self):
+        self._ok("set_email", host="smtp.test.com", port=587, security="starttls",
+                 user="reports@test.com", password=self.MAIL_PW, sender="reports@test.com")
+
+    def test_a_send_is_logged_with_its_kind_and_business(self):
+        import frappe
+        from command_center import mail
+        from insights.core.models import EmailLog
+        self._mail_on()
+        with mock.patch("smtplib.SMTP"):
+            self.assertTrue(self._ok("test_email", to="boss@test.com")["ok"])
+            with mail.about("alert", "gms"):
+                frappe.sendmail(recipients=["a@test.com", "b@test.com"], subject="2 new alerts",
+                                message="<p>Two</p>", now=True)
+        rows = list(EmailLog.objects.order_by("id"))
+        self.assertEqual([(r.kind, r.status, r.business_code) for r in rows],
+                         [("test", "Sent", ""), ("alert", "Sent", "gms")])
+        self.assertEqual(rows[1].recipients, "a@test.com, b@test.com")
+        self.assertEqual(rows[1].subject, "2 new alerts")
+        self.assertEqual(rows[1].error, "")
+        got = self._ok("email_log")
+        self.assertEqual([r["subject"] for r in got["rows"]][0], "2 new alerts", "newest first")
+        self.assertFalse(any(r["can_resend"] for r in got["rows"]))
+        self.assertNotIn(self.MAIL_PW, json.dumps(got))
+        # the administrator's only
+        r = self._call(self.manager, "email_log")
+        self.assertEqual(r.status_code, 403)
+
+    def test_a_failure_is_logged_with_its_error_and_can_be_resent(self):
+        import frappe
+        import smtplib
+        from command_center import mail
+        from insights.compat.runtime import MailError
+        from insights.core.models import EmailLog
+        # not set up at all: failed, and said why
+        with self.assertRaises(MailError), mail.about("digest", "gms"):
+            frappe.sendmail(recipients=["a@test.com"], subject="Digest", message="<p>d</p>", now=True)
+        first = EmailLog.objects.get()
+        self.assertEqual((first.status, first.kind), ("Failed", "digest"))
+        self.assertIn("Email is not set up", first.error)
+        self._mail_on()
+        with mock.patch("smtplib.SMTP") as smtp, mail.about("report", "gms"):
+            smtp.return_value.send_message.side_effect = smtplib.SMTPRecipientsRefused(
+                {"x@test.com": (550, b"no such user")})
+            with self.assertRaises(MailError):
+                frappe.sendmail(recipients=["x@test.com"], subject="Board Report",
+                                message="<p>r</p>", now=True,
+                                attachments=[{"fname": "r.pdf", "fcontent": b"%PDF"}])
+        failed = self._ok("email_log", status="Failed")["rows"]
+        self.assertEqual([r["subject"] for r in failed], ["Board Report", "Digest"])
+        report, digest = failed
+        self.assertIn("refused the address x@test.com", report["error"])
+        self.assertFalse(report["can_resend"], "a report's PDF is not kept")
+        self.assertIn("run the report again", report["why_not"])
+        self.assertTrue(digest["can_resend"])
+        self.assertEqual(self._ok("email_log", status="Sent")["rows"], [])
+        with mock.patch("smtplib.SMTP") as smtp:
+            out = self._ok("resend_email", id=digest["id"])
+        self.assertTrue(out["ok"], out)
+        sent = smtp.return_value.send_message.call_args[0][0]
+        self.assertEqual((sent["To"], sent["Subject"]), ("a@test.com", "Digest"))
+        again = EmailLog.objects.order_by("-id").first()
+        self.assertEqual((again.status, again.kind, again.resend_of), ("Sent", "digest", digest["id"]))
+        self.assertEqual(EmailLog.objects.get(pk=digest["id"]).status, "Failed", "never edited")
+        self.assertIn("is not kept", self._call(self.admin, "resend_email",
+                                                id=report["id"]).content.decode())
+        with self.assertRaises(PermissionError):
+            EmailLog.objects.filter(pk=digest["id"]).update(status="Sent")
+
+    def test_prune_keeps_about_180_days(self):
+        from insights.core import maintenance
+        from insights.core.models import EmailLog
+        now = dt.datetime.now()
+        for days in (1, 100, 179, 181, 400):
+            EmailLog.objects.create(at=now - dt.timedelta(days=days), kind="alert",
+                                    status="Sent", subject=f"{days} days ago")
+        self.assertEqual(maintenance.prune_email_log(), 2)
+        self.assertEqual(sorted(EmailLog.objects.values_list("subject", flat=True)),
+                         ["1 days ago", "100 days ago", "179 days ago"])
+        with mock.patch.object(maintenance, "backup", lambda: "skipped"):
+            self.assertEqual(maintenance.daily()["email_log_pruned"], 0)
+
+
 class DocumentLinks(TransactionTestCase):
     """A record opens in its own business's ERPNext, at the document -- never at this
     platform's administration (which sent every link to <business>/admin/, a 404)."""

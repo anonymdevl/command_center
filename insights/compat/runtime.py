@@ -293,6 +293,35 @@ def _record_attempt(ok: bool, subject: str, to: list, error: str | None = None):
         logging.getLogger("insights").exception("could not record the email attempt")
 
 
+# A message's own HTML is kept for a resend when it carries no attachment and is no
+# larger than this; a report's PDF is never kept.
+EMAIL_BODY_KEEP = 256 * 1024
+
+
+def _log_send(ok: bool, subject: str, to: list, error: str | None, message: str,
+              attachments, kind: str | None, business: str | None, resend_of=None):
+    """One row in the email log (insights.core.models.EmailLog) for every attempt. What
+    the message is about comes from the caller's `command_center.mail.about(...)` (or the
+    `kind`/`business` given here). A log that cannot be written never stops the send."""
+    try:
+        from insights.compat.utils import now_datetime
+        from insights.core.models import EmailLog
+        ctx = getattr(local, "cc_mail", None) or {}
+        n = len(attachments or [])
+        body = message or ""
+        EmailLog.objects.create(
+            at=now_datetime(), kind=str(kind or ctx.get("kind") or "other")[:20],
+            status="Sent" if ok else "Failed", recipients=", ".join(to)[:5000],
+            subject=str(subject or "")[:255], error=str(error or "")[:2000],
+            business_code=str(business or ctx.get("business") or "")[:140],
+            body=body if not n and len(body.encode()) <= EMAIL_BODY_KEEP else "",
+            attachments=n, resend_of=resend_of,
+            sent_by=str(getattr(local, "user", "") or "")[:150])
+    except Exception:
+        import logging
+        logging.getLogger("insights").exception("could not write the email log")
+
+
 def last_mail_attempt() -> dict | None:
     """The last send: what _record_attempt kept, or else the last failure in the log."""
     try:
@@ -309,12 +338,14 @@ def last_mail_attempt() -> dict | None:
             "to": 0, "error": (e.error or "").split("\n", 1)[0][:300]}
 
 
-def sendmail(recipients=None, subject="", message="", attachments=None, sender=None, **kw):
+def sendmail(recipients=None, subject="", message="", attachments=None, sender=None,
+             kind=None, business=None, resend_of=None, **kw):
     """Send now through the configured mail server, or raise MailError with the reason.
 
     Never silent: a message that is not sent -- email not set up, server refused it --
     is written to the error log (MAIL_NOT_SENT) and raised, so the caller records it
-    as failed (a report schedule's last status says why)."""
+    as failed (a report schedule's last status says why). Every attempt, sent or not,
+    is a row in the email log (_log_send; Settings -> Email)."""
     import smtplib
     import ssl
     from email.message import EmailMessage
@@ -331,9 +362,12 @@ def sendmail(recipients=None, subject="", message="", attachments=None, sender=N
         log_error(f"{MAIL_NOT_SENT}: email is not set up",
                   f"{why}\nSubject: {subject}\nTo: {', '.join(to)}")
         _record_attempt(False, subject, to, why)
+        _log_send(False, subject, to, why, message, attachments, kind, business, resend_of)
         raise MailNotConfigured(why)
     if not to:
-        raise MailError("There is no one to send it to.")
+        why = "There is no one to send it to."
+        _log_send(False, subject, to, why, message, attachments, kind, business, resend_of)
+        raise MailError(why)
 
     host, security = str(cfg["host"]).strip(), mail_security(cfg)
     port = mail_port(cfg)
@@ -366,8 +400,10 @@ def sendmail(recipients=None, subject="", message="", attachments=None, sender=N
         log_error(f"{MAIL_NOT_SENT}: {str(subject)[:150]}",
                   f"{why}\nTo: {', '.join(to)}\n\n{get_traceback()}")
         _record_attempt(False, subject, to, why)
+        _log_send(False, subject, to, why, message, attachments, kind, business, resend_of)
         raise MailError(why) from e
     _record_attempt(True, subject, to)
+    _log_send(True, subject, to, None, message, attachments, kind, business, resend_of)
 
 
 # --- pdf ---------------------------------------------------------------------------
