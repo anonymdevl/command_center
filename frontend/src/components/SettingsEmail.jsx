@@ -29,7 +29,7 @@ export default function SettingsEmail() {
   );
 }
 
-const KIND_LABEL = { alert: "Alert", report: "Report", notice: "Notice", test: "Test", digest: "Digest", other: "Other" };
+const KIND_LABEL = { alert: "Alert", report: "Report", notice: "Notice", test: "Test", digest: "Digest", invite: "Invite", other: "Other" };
 
 /** Every send attempt, newest first (insights/core/platform_settings.email_log). */
 function EmailLog({ onResent }) {

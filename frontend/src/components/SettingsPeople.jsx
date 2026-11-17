@@ -7,6 +7,13 @@ import { Dialog, Msg, act, when } from "./SettingsParts.jsx";
 const RULES =
   "At least 10 characters. Not a common password, not only numbers, and not too like their name or email.";
 
+/** How a new person gets their password (platform_settings.add_person). */
+const PW_CHOICES = [
+  ["now", "Set a password now"],
+  ["invite", "Email them a link to set their own password"],
+  ["later", "Set it later"],
+];
+
 /** The Settings sections an administrator can give a manager (platform_settings.GRANTS). */
 const GRANTS = [
   ["businesses", "Businesses", "add, edit, test, pause and reload businesses"],
@@ -99,7 +106,8 @@ export default function SettingsPeople() {
 }
 
 function AddPerson({ meAdmin, onClose, onDone }) {
-  const [f, setF] = useState({ email: "", full_name: "", password: "", password2: "", later: false,
+  // pw: "now" (typed here), "invite" (they are emailed a link to set their own) or "later".
+  const [f, setF] = useState({ email: "", full_name: "", password: "", password2: "", pw: "now",
     manager: true, admin: false, client_id: "", override: false });
   const [st, setSt] = useState({});
   const [made, setMade] = useState(null);
@@ -110,9 +118,11 @@ function AddPerson({ meAdmin, onClose, onDone }) {
 
   const save = async (e) => {
     e.preventDefault();
+    const typed = f.pw === "now";
     const out = await act(setSt, () => settingsApi.addPerson({
-      email: f.email, full_name: f.full_name, password: f.later ? "" : f.password,
-      password2: f.later ? "" : f.password2, set_later: f.later ? 1 : 0,
+      email: f.email, full_name: f.full_name, password: typed ? f.password : "",
+      password2: typed ? f.password2 : "", set_later: f.pw === "later" ? 1 : 0,
+      invite: f.pw === "invite" ? 1 : 0,
       manager: f.manager ? 1 : 0, admin: meAdmin && f.admin ? 1 : 0,
       client_id: f.client_id || undefined, override_seats: meAdmin && f.override ? 1 : 0,
     }));
@@ -123,14 +133,28 @@ function AddPerson({ meAdmin, onClose, onDone }) {
   };
 
   if (made) {
+    const inv = made.invite;
     return (
       <Dialog title="Person added" onClose={onClose}>
-        <p className="dlg-sub">
-          {made.full_name} ({made.email}) can{" "}
-          {made.has_password
-            ? "now sign in with their email and the password you set. Tell them the password yourself; no email is sent."
-            : "sign in with their business's ERPNext. Set a password for them later from Manage if they need one."}
-        </p>
+        {inv && !made.has_password ? (
+          <>
+            <p className="dlg-sub">
+              {made.full_name} ({made.email}) is added.{" "}
+              {inv.ok ? "They can sign in once they have set their password from the link." : null}
+            </p>
+            <Msg tone={inv.ok ? "ok" : "bad"}>{inv.says}</Msg>
+            {!inv.ok ? (
+              <PasswordNow person={made} onSet={(p) => { setMade({ ...p, invite: inv }); onDone(); }} />
+            ) : null}
+          </>
+        ) : (
+          <p className="dlg-sub">
+            {made.full_name} ({made.email}) can{" "}
+            {made.has_password
+              ? "now sign in with their email and the password you set. Tell them the password yourself; no email is sent."
+              : "sign in with their business's ERPNext. Set a password for them later from Manage if they need one."}
+          </p>
+        )}
         <div className="dlg-acts">
           <button type="button" className="ap-act pri" onClick={onClose}>Done</button>
         </div>
@@ -147,16 +171,14 @@ function AddPerson({ meAdmin, onClose, onDone }) {
         <input id="sp-name" autoComplete="off" value={f.full_name} onChange={set("full_name")} required />
 
         <div className="st-choice" role="radiogroup" aria-label="Password">
-          <label className="st-check">
-            <input type="radio" name="sp-pw" checked={!f.later} onChange={() => setF((x) => ({ ...x, later: false }))} />
-            <span>Set a password now</span>
-          </label>
-          <label className="st-check">
-            <input type="radio" name="sp-pw" checked={f.later} onChange={() => setF((x) => ({ ...x, later: true }))} />
-            <span>Set it later</span>
-          </label>
+          {PW_CHOICES.map(([key, label]) => (
+            <label className="st-check" key={key}>
+              <input type="radio" name="sp-pw" checked={f.pw === key} onChange={() => setF((x) => ({ ...x, pw: key }))} />
+              <span>{label}</span>
+            </label>
+          ))}
         </div>
-        {!f.later ? (
+        {f.pw === "now" ? (
           <>
             <label htmlFor="sp-pw1">Password</label>
             <input id="sp-pw1" type="password" autoComplete="new-password" value={f.password} onChange={set("password")} />
@@ -164,6 +186,11 @@ function AddPerson({ meAdmin, onClose, onDone }) {
             <input id="sp-pw2" type="password" autoComplete="new-password" value={f.password2} onChange={set("password2")} />
             <p className="dlg-hint">{RULES}</p>
           </>
+        ) : f.pw === "invite" ? (
+          <p className="dlg-hint">
+            They get an email with a link to choose their own password. It works once and expires in 72 hours.
+            If email is not working you can set a password for them instead.
+          </p>
         ) : (
           <p className="dlg-hint">Until a password is set they can only sign in with their business's ERPNext.</p>
         )}
@@ -216,12 +243,43 @@ function AddPerson({ meAdmin, onClose, onDone }) {
   );
 }
 
+/** After an invite that could not be sent: set a password for them now instead. */
+function PasswordNow({ person, onSet }) {
+  const [pw, setPw] = useState({ password: "", password2: "" });
+  const [st, setSt] = useState({});
+  const save = async (e) => {
+    e.preventDefault();
+    const out = await act(setSt, () => settingsApi.resetPassword({
+      username: person.username, password: pw.password, password2: pw.password2, set_later: 0,
+    }), "Password set. Tell them the password yourself; no email is sent.");
+    if (out) onSet(out);
+  };
+  if (person.has_password) return <Msg tone="ok">Password set. Tell them the password yourself; no email is sent.</Msg>;
+  return (
+    <form className="dlg-sec" onSubmit={save}>
+      <h4>Set a Password Instead</h4>
+      <label htmlFor="pn-pw1">Password</label>
+      <input id="pn-pw1" type="password" autoComplete="new-password" value={pw.password}
+        onChange={(e) => setPw((x) => ({ ...x, password: e.target.value }))} />
+      <label htmlFor="pn-pw2">Type it again</label>
+      <input id="pn-pw2" type="password" autoComplete="new-password" value={pw.password2}
+        onChange={(e) => setPw((x) => ({ ...x, password2: e.target.value }))} />
+      <p className="dlg-hint">{RULES}</p>
+      <Msg tone="bad">{st.bad}</Msg>
+      <div className="dlg-acts">
+        <button type="submit" className="ap-act" disabled={st.busy}>{st.busy ? "Saving…" : "Set Password"}</button>
+      </div>
+    </form>
+  );
+}
+
 function ManagePerson({ meAdmin, person, onClose, onDone }) {
   const [p, setP] = useState(person);
   const [name, setName] = useState(person?.full_name || "");
   const [st, setSt] = useState({});
   const [pw, setPw] = useState({ password: "", password2: "", later: false });
   const [pwSt, setPwSt] = useState({});
+  const [link, setLink] = useState({});
   if (!p) return null;
   // Someone given People can change managers only: not an administrator, not anyone
   // with Settings access, and of themselves only their password (the server says so too).
@@ -249,6 +307,14 @@ function ManagePerson({ meAdmin, person, onClose, onDone }) {
       setPw({ password: "", password2: "", later: false });
       onDone();
     }
+  };
+
+  // A link by email to set their own password (also the answer to a forgotten one).
+  // Never claimed sent when it was not: the server's own sentence is shown either way.
+  const sendLink = async () => {
+    const out = await act(setLink, () => settingsApi.sendSetPasswordLink(p.username),
+      (o) => (o.ok ? o.says : undefined));
+    if (out && !out.ok) setLink({ bad: out.says });
   };
 
   return (
@@ -349,6 +415,24 @@ function ManagePerson({ meAdmin, person, onClose, onDone }) {
             </button>
           </div>
         </form>
+      </div>
+      ) : null}
+
+      {!locked && !p.is_me ? (
+      <div className="dlg-sec">
+        <h4>Set-Password Link</h4>
+        <p className="dlg-hint">
+          {p.active
+            ? "Email them a link to choose their own password, for a new account or a forgotten password. It works once and expires in 72 hours; their current password keeps working until they use it."
+            : "Reactivate them first; a deactivated person cannot use a link."}
+        </p>
+        <Msg tone="ok">{link.ok}</Msg>
+        <Msg tone="bad">{link.bad}</Msg>
+        <div className="dlg-acts">
+          <button type="button" className="ap-act" disabled={link.busy || !p.active} onClick={sendLink}>
+            {link.busy ? "Sending…" : "Send Set-Password Link"}
+          </button>
+        </div>
       </div>
       ) : null}
 

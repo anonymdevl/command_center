@@ -215,6 +215,10 @@ def _render_result(result, resp):
 
 # --- sign-in -------------------------------------------------------------------------------
 LOCK_AFTER, LOCK_MINUTES = 5, 15
+# The password rules as the screens say them (SettingsPeople.jsx RULES, the set-password
+# page); the rules themselves are settings.AUTH_PASSWORD_VALIDATORS.
+RULES = ("At least 10 characters. Not a common password, not only numbers, and not too "
+         "like your name or email.")
 # Wider limits as well, so neither one address trying many accounts nor many addresses
 # trying one account get far.
 LOCK_AFTER_IP, LOCK_AFTER_ACCOUNT = 20, 20
@@ -337,6 +341,86 @@ def management_only(request):
 
 def command_center_access(request):
     return _page(request, "command-center-access.html", "command_center_access")
+
+
+def _link_locked(request) -> bool:
+    """A set-password link counts its refusals against the address only (the sign-in
+    pages' own counter, so Security -> Unlock clears it): never against the account, or
+    anyone could lock a person out by forging links in their name."""
+    from django.core.cache import cache
+    return (cache.get(_fail_keys(request, "")[1]) or 0) >= LOCK_AFTER_IP
+
+
+def _link_failed(request) -> None:
+    from django.core.cache import cache
+    k = _fail_keys(request, "")[1]
+    cache.set(k, (cache.get(k) or 0) + 1, timeout=LOCK_MINUTES * 60)
+
+
+@require_http_methods(["GET", "POST"])
+def set_password(request):
+    """/command-center-set-password?uid=...&token=...: the page the set-password email
+    links to (insights/core/invite.py). GET shows the form; the form posts back here
+    (Django's CSRF check, the page's token); on success the password is set, every other
+    session of theirs ends, they are signed in and go to the platform. A bad, used or
+    expired link, and every refusal while the address is locked, is one calm sentence and
+    a line in the security record. The password is never in a URL or a log."""
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as DjangoValidationError
+    from django.middleware.csrf import get_token
+
+    from command_center.www.command_center import _assets, _brand
+    from insights.compat import users as _users
+    from insights.core import invite, security
+    src = request.POST if request.method == "POST" else request.GET
+    uid, token = str(src.get("uid") or "")[:64], str(src.get("token") or "")[:100]
+    ctx = {"state": "form", "error": "", "uid": uid, "token": token, "minutes": LOCK_MINUTES,
+           "action": invite.PATH, "rules": RULES}
+    status = 200
+    u = None
+    if _link_locked(request):
+        ctx["state"], status = "locked", 429
+        security.record_password_set(request, "", "blocked")
+    else:
+        u = invite.person_for(uid, token)
+        if u is None:
+            _link_failed(request)
+            named = invite.user_of(uid)
+            security.record_password_set(request, named.username if named else "", "refused",
+                                         note="bad, used or expired link")
+            ctx["state"], status = "expired", 400
+    if u is not None and request.method == "POST":
+        pw, pw2 = str(request.POST.get("password") or ""), str(request.POST.get("password2") or "")
+        if not pw:
+            ctx["error"] = "Type the new password twice."
+        elif pw != pw2:
+            ctx["error"] = "The two passwords are not the same."
+        else:
+            try:
+                validate_password(pw, user=u)
+            except DjangoValidationError as e:
+                ctx["error"] = " ".join(e.messages)
+        if not ctx["error"]:
+            u.set_password(pw)
+            u.save(update_fields=["password"])
+            _users.clear_sessions(user=u.username)
+            security.record_password_set(request, u.username, "done")
+            login(request, u)
+            response = HttpResponseRedirect("/command-center")
+            response["Cache-Control"] = "no-store"
+            return response
+        status = 400
+    if u is not None:
+        ctx["email"] = u.email or u.username
+    with run_as("Guest", request=request):
+        ctx.update(brand=_brand(), assets=_assets())
+        html = _jinja.get_template("command-center-set-password.html").render(
+            **ctx, csrf=get_token(request))
+    resp = HttpResponse(html, status=status)
+    resp["Cache-Control"] = "no-store"
+    resp["Referrer-Policy"] = "no-referrer"   # the link's token never leaves in a Referer
+    resp["X-Robots-Tag"] = "noindex, nofollow"
+    return resp
 
 
 def home(request):

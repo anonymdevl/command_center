@@ -299,10 +299,13 @@ EMAIL_BODY_KEEP = 256 * 1024
 
 
 def _log_send(ok: bool, subject: str, to: list, error: str | None, message: str,
-              attachments, kind: str | None, business: str | None, resend_of=None):
+              attachments, kind: str | None, business: str | None, resend_of=None,
+              keep_body: bool = True):
     """One row in the email log (insights.core.models.EmailLog) for every attempt. What
     the message is about comes from the caller's `command_center.mail.about(...)` (or the
-    `kind`/`business` given here). A log that cannot be written never stops the send."""
+    `kind`/`business` given here). A log that cannot be written never stops the send.
+    keep_body=False: the message is not kept (a set-password link must not sit in a log),
+    so it cannot be resent from the log."""
     try:
         from insights.compat.utils import now_datetime
         from insights.core.models import EmailLog
@@ -314,7 +317,7 @@ def _log_send(ok: bool, subject: str, to: list, error: str | None, message: str,
             status="Sent" if ok else "Failed", recipients=", ".join(to)[:5000],
             subject=str(subject or "")[:255], error=str(error or "")[:2000],
             business_code=str(business or ctx.get("business") or "")[:140],
-            body=body if not n and len(body.encode()) <= EMAIL_BODY_KEEP else "",
+            body=body if keep_body and not n and len(body.encode()) <= EMAIL_BODY_KEEP else "",
             attachments=n, resend_of=resend_of,
             sent_by=str(getattr(local, "user", "") or "")[:150])
     except Exception:
@@ -339,7 +342,7 @@ def last_mail_attempt() -> dict | None:
 
 
 def sendmail(recipients=None, subject="", message="", attachments=None, sender=None,
-             kind=None, business=None, resend_of=None, **kw):
+             kind=None, business=None, resend_of=None, keep_body=True, **kw):
     """Send now through the configured mail server, or raise MailError with the reason.
 
     Never silent: a message that is not sent -- email not set up, server refused it --
@@ -362,11 +365,13 @@ def sendmail(recipients=None, subject="", message="", attachments=None, sender=N
         log_error(f"{MAIL_NOT_SENT}: email is not set up",
                   f"{why}\nSubject: {subject}\nTo: {', '.join(to)}")
         _record_attempt(False, subject, to, why)
-        _log_send(False, subject, to, why, message, attachments, kind, business, resend_of)
+        _log_send(False, subject, to, why, message, attachments, kind, business, resend_of,
+                  keep_body)
         raise MailNotConfigured(why)
     if not to:
         why = "There is no one to send it to."
-        _log_send(False, subject, to, why, message, attachments, kind, business, resend_of)
+        _log_send(False, subject, to, why, message, attachments, kind, business, resend_of,
+                  keep_body)
         raise MailError(why)
 
     host, security = str(cfg["host"]).strip(), mail_security(cfg)
@@ -400,10 +405,12 @@ def sendmail(recipients=None, subject="", message="", attachments=None, sender=N
         log_error(f"{MAIL_NOT_SENT}: {str(subject)[:150]}",
                   f"{why}\nTo: {', '.join(to)}\n\n{get_traceback()}")
         _record_attempt(False, subject, to, why)
-        _log_send(False, subject, to, why, message, attachments, kind, business, resend_of)
+        _log_send(False, subject, to, why, message, attachments, kind, business, resend_of,
+                  keep_body)
         raise MailError(why) from e
     _record_attempt(True, subject, to)
-    _log_send(True, subject, to, None, message, attachments, kind, business, resend_of)
+    _log_send(True, subject, to, None, message, attachments, kind, business, resend_of,
+              keep_body)
 
 
 # --- pdf ---------------------------------------------------------------------------

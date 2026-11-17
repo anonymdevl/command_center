@@ -8,7 +8,8 @@ Who may use it:
                       a Django group (GRANTS below); membership is the permission:
                         Businesses              add, edit, test, pause and reload businesses
                         People                  add managers, rename, deactivate and
-                                                reactivate them, reset their passwords --
+                                                reactivate them, reset their passwords or
+                                                email them a set-password link --
                                                 never make anyone an administrator, never
                                                 give Settings access, never change an
                                                 administrator or anyone who has Settings
@@ -230,9 +231,12 @@ def people():
 
 @frappe.whitelist(methods=["POST"])
 def add_person(email: str = "", full_name: str = "", password: str = "", password2: str = "",
-               set_later=0, manager=1, admin=0, client_id=None, override_seats=0):
+               set_later=0, manager=1, admin=0, client_id=None, override_seats=0, invite=0):
     """A new person. They sign in with their email and the password typed here, or -- if
     it is to be set later -- with their business's ERPNext, until a password is set.
+    invite: no password; they are emailed a link to set their own (insights/core/invite.py).
+    The person is added whether or not the email goes: the answer's "invite" says which,
+    so the screen can offer to set a password instead.
     Only the administrator can add an administrator.
 
     client_id: the customer (insights/core/plans.py) whose seat they take. A delegate's
@@ -255,7 +259,8 @@ def add_person(email: str = "", full_name: str = "", password: str = "", passwor
         _say(f"{email} is already on the platform.")
     first, _, last = str(full_name or "").strip().partition(" ")
     u = U(username=email, email=email, first_name=first[:150], last_name=last.strip()[:150])
-    if _truthy(set_later):
+    invite = _truthy(invite)
+    if _truthy(set_later) or invite:
         u.set_unusable_password()
     else:
         u.set_password(_check_password(password, password2, u))
@@ -272,8 +277,12 @@ def add_person(email: str = "", full_name: str = "", password: str = "", passwor
         _audit(f"named {email} on the customer {seat.name}", u)
     roles = [r for r, on in (("manager", _truthy(manager)), ("administrator", _truthy(admin))) if on]
     _audit(f"added {email}" + (f" as {' and '.join(roles)}" if roles else "")
-           + ("; password to be set later" if _truthy(set_later) else "; password set"), u, flag=1)
-    return _person(u, me)
+           + ("; to set their own password by email link" if invite else
+              "; password to be set later" if _truthy(set_later) else "; password set"), u, flag=1)
+    out = _person(u, me)
+    if invite:
+        out["invite"] = _send_link(me, u, new=True)
+    return out
 
 
 def _seat_customer(me, client_id, admin: bool):
@@ -397,6 +406,27 @@ def reset_password(username: str = "", password: str = "", password2: str = "", 
     _audit(f"{'cleared the password of' if _truthy(set_later) else 'set a new password for'} "
            f"{u.username}", u)
     return _person(u, me)
+
+
+def _send_link(me, u, new: bool = False) -> dict:
+    from insights.core import invite as _invite
+    out = _invite.send(u, me, new=new)
+    _audit(f"{'sent' if out['ok'] else 'could not send'} a set-password link to {u.username}", u)
+    return out
+
+
+@frappe.whitelist(methods=["POST"])
+def send_set_password_link(username: str = ""):
+    """Email someone a link to set their own password (also how a forgotten one is
+    handled). The same rules as reset_password: a delegate may send it to managers only,
+    never to an administrator or anyone with Settings access. Their current password
+    keeps working until they use the link. {"ok", "says", "person"}."""
+    me = _require("people")
+    u = _get_person(username)
+    _may_change(me, u, own_password=True)
+    if not u.is_active:
+        _say(f"{_name(u)} is deactivated. Reactivate them first.")
+    return {**_send_link(me, u), "person": _person(u, me)}
 
 
 # --- Settings access ------------------------------------------------------------------
@@ -1030,6 +1060,8 @@ def _log_row(r) -> dict:
             "error": r.error, "business": r.business_code,
             "can_resend": r.status == "Failed" and bool(r.body),
             "why_not": (None if r.status != "Failed" or r.body else
+                        "A set-password link is never kept. Send a new one from User "
+                        "Management, under Manage." if r.kind == "invite" else
                         "The report's PDF was attached and is not kept, so it cannot be sent "
                         "again from here: run the report again from Reports."
                         if r.attachments else

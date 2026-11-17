@@ -159,6 +159,10 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# A set-password link (insights/core/invite.py) works once, for this long: Django's
+# PasswordResetTokenGenerator reads it. The email and the page say the hours from here.
+PASSWORD_RESET_TIMEOUT = 72 * 3600
+
 # Sign-in sessions: a cookie the page's scripts cannot read, sent only to this site.
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"

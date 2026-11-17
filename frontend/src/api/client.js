@@ -310,6 +310,7 @@ export const settingsApi = {
   setAdmin: (username, on) => call(`${PS}.set_admin`, { username, on: on ? 1 : 0 }),
   setActive: (username, on) => call(`${PS}.set_active`, { username, on: on ? 1 : 0 }),
   resetPassword: (args) => call(`${PS}.reset_password`, args),
+  sendSetPasswordLink: (username) => call(`${PS}.send_set_password_link`, { username }),
 
   businesses: () => call(`${PS}.businesses`),
   addBusiness: (args) => call(`${PS}.add_business`, args),
