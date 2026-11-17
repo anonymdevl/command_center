@@ -11,21 +11,38 @@
  *   stale snapshot into a false finding about how the client collects.
  */
 
-export function magnitude(n) {
-  const v = Math.abs(Number(n) || 0);
-  if (v >= 1e9) return { value: n / 1e9, suffix: "B" };
-  if (v >= 1e6) return { value: n / 1e6, suffix: "M" };
-  if (v >= 1e3) return { value: n / 1e3, suffix: "k" };
-  return { value: n, suffix: "" };
+const UNITS = [[1, ""], [1e3, "k"], [1e6, "M"], [1e9, "B"]];
+
+/**
+ * The unit a figure is written in, chosen AFTER rounding to the digits it is shown with
+ * (17 Nov 2026): 999,999 is "1.00M", never "1,000.00k", and 999.6 is "1.00k", never
+ * "1,000". `digits` is the decimals shown, or a function of the unit's suffix giving
+ * them; a figure with no unit shows none by default. A figure that rounds to nothing is
+ * 0, never "-0".
+ */
+export function magnitude(n, digits = (suffix) => (suffix ? 2 : 0)) {
+  const x = Number(n) || 0;
+  const places = (suffix) => (typeof digits === "function" ? digits(suffix) : suffix ? digits : 0);
+  const shown = (v, i) => {
+    const p = 10 ** places(UNITS[i][1]);
+    return Math.round((Math.abs(v) / UNITS[i][0]) * p) / p;
+  };
+  let i = 0;
+  while (i < UNITS.length - 1 && Math.abs(x) >= UNITS[i + 1][0]) i += 1;
+  while (i < UNITS.length - 1 && shown(x, i) >= 1000) i += 1;
+  const value = shown(x, i) === 0 ? 0 : x / UNITS[i][0];
+  return { value, suffix: UNITS[i][1], digits: places(UNITS[i][1]) };
 }
 
 /** Compact money for a card: GHS 9.18M */
 export function money(n, currency = "GHS", { decimals = 2 } = {}) {
-  const { value, suffix } = magnitude(n);
-  const digits = suffix ? decimals : 0;
+  const { value, suffix, digits } = magnitude(n, decimals);
+  const p = 10 ** digits;
+  // Rounded before it is written, so a value that rounds to nothing is "0", not "-0".
+  const rounded = Math.round(value * p) / p || 0;
   return {
     currency,
-    figure: value.toLocaleString("en-GB", {
+    figure: rounded.toLocaleString("en-GB", {
       minimumFractionDigits: digits,
       maximumFractionDigits: digits,
     }),

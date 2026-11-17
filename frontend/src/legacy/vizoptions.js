@@ -50,9 +50,9 @@ export function short(v, unit = "") {
   if (CURRENCY.test(unit)) {
     // As the cards write money ("GHS 9.18M"), with thousands to one place and no
     // trailing zeros ("GHS 412k", "GHS 288.5k").
-    const { value, suffix } = magnitude(n);
-    const digits = suffix === "k" ? 1 : suffix ? 2 : 0;
-    return `${unit} ${value.toLocaleString("en-GB", { maximumFractionDigits: digits })}${suffix}`;
+    const { value, suffix, digits } = magnitude(n, (sfx) => (sfx === "k" ? 1 : sfx ? 2 : 0));
+    const p = 10 ** digits;
+    return `${unit} ${(Math.round(value * p) / p || 0).toLocaleString("en-GB", { maximumFractionDigits: digits })}${suffix}`;
   }
   const a = Math.abs(n);
   const s = a >= 1e9 ? `${(n / 1e9).toFixed(2)}B` : a >= 1e6 ? `${(n / 1e6).toFixed(2)}M`

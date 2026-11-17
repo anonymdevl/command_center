@@ -1547,7 +1547,12 @@ _shell_py = open(os.path.join(ROOT, "interface", "shell.py")).read()
 for _rule in (".main{overflow-wrap:anywhere}", ".chip{max-width:100%;white-space:normal}",
               "table.dt td{white-space:nowrap}", ".main{overflow-x:hidden}"):
     check(_rule in _shell_py, f"interface/shell.py PHONE, EVERY SCREEN lost {_rule!r}")
+# The screens' small pure parts (money across unit boundaries, data-go, the stale line).
 if _node:
+    _t = _sp.run([_node, os.path.join(ROOT, "scripts", "test_screens.mjs")],
+                 capture_output=True, text=True, timeout=120)
+    check(_t.returncode == 0,
+          "scripts/test_screens.mjs failed:\n" + (_t.stdout + _t.stderr)[-1500:])
     # Every screen and Settings section at 375 and 428 wide, with long strings: nothing
     # wider than the screen. Needs Chrome; says so when it was skipped.
     _t = _sp.run([_node, os.path.join(ROOT, "scripts", "test_phone.mjs")],
