@@ -162,7 +162,7 @@ function Business({ scope, onScope }) {
                   {initials(s.label)}
                 </span>
                 <span className="biz-opt-t">
-                  <b>{s.label}</b>
+                  <b title={s.label}>{s.label}</b>
                   <small>{[b?.currency, note].filter(Boolean).join(" · ")}</small>
                 </span>
               </button>
@@ -171,8 +171,8 @@ function Business({ scope, onScope }) {
           {!canSwitch ? (
             <div className="biz-note">
               {options.length ? "This is the only business connected so far. " : "No business is connected yet. "}
-              Each Gigmann company on its own ERPNext site can be connected, and then
-              chosen here, or seen together as All businesses.
+              Each company on its own ERPNext site can be connected, and then chosen
+              here, or seen together as All businesses.
               {canConnect ? (
                 <a href="#settings">Connect a business</a>
               ) : null}

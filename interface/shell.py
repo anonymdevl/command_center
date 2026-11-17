@@ -1388,4 +1388,17 @@ table.dt td.dt-w3 > .dt-tx{min-width:26ch;max-width:44ch;display:-webkit-box;-we
    stay centred (each is a flex row with align-items:center).
    ====================================================================== */
 .alert>.ameta,.alert>.acts{align-self:stretch}
+
+/* ======================================================================
+   The business card at the foot of the sidebar with a long name (16 Nov 2026). "Gigmann
+   Medical Supplies Ltd" broke wherever the column ran out and crowded the line under it.
+   Now the name takes at most two lines, balanced so they read as a pair, and ends in an
+   ellipsis past that with the full name on hover (title); the "as of" line stays one
+   line. The same for the names in the switcher's list.
+   ====================================================================== */
+.biz-t{flex:1 1 auto}
+.biz-t b,.biz-opt-t b{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+ overflow:hidden;text-wrap:balance;overflow-wrap:anywhere;line-height:1.3}
+.biz-t .asof{overflow:hidden;text-overflow:ellipsis}
+.biz-opt-t{flex:1 1 auto}
 """
