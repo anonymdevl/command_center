@@ -3631,6 +3631,13 @@ class Branding(TransactionTestCase):
         self.assertEqual(self._call(self.manager, "upload_brand_logo", kind="logo_signin",
                                     data=_data_url(_png())).status_code, 403)
 
+    def test_sign_in_has_no_dead_forgotten_password_link(self):
+        """The standalone platform has no /login page: a forgotten password is a set-password
+        link the administrator sends (User Management), and the sign-in page says so."""
+        login = Client().get("/command-center-login").content.decode()
+        self.assertNotIn('href="/login', login)
+        self.assertIn("Ask your administrator to email you a link", login)
+
     def test_built_in_mark(self):
         """Nothing uploaded: the lens-and-chart mark on the sign-in page, in the sidebar and
         as the favicon -- one drawing in three places -- and never the old ring mark.
