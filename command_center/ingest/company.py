@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import frappe
 
+from command_center.ingest.base import require_fields
+
 # The standard doctypes that carry the company they belong to (ERPNext v14 to v16). A
 # child table is reached through its parent's names, which are already the company's.
 COMPANY_DOCTYPES = frozenset({
@@ -44,7 +46,8 @@ def companies(conn) -> list | None:
         return None
     if got is None:
         try:
-            got = [r.get("name") for r in conn.get_list("Company", fields=["name"], limit=100)
+            got = [r.get("name") for r in require_fields(
+                conn.get_list("Company", fields=["name"], limit=100), ["name"], "Company")
                    if r.get("name")]
         except Exception:
             cache.set_value(key, "?", expires_in_sec=60)
@@ -90,8 +93,9 @@ class CompanyScoped:
 
     def warehouses(self) -> list:
         if self._warehouses is None:
-            self._warehouses = [r["name"] for r in self._conn.get_list(
-                "Warehouse", filters={"company": self.company}, fields=["name"], limit=100000)]
+            self._warehouses = [r["name"] for r in require_fields(self._conn.get_list(
+                "Warehouse", filters={"company": self.company}, fields=["name"], limit=100000),
+                ["name"], "Warehouse")]
         return self._warehouses
 
     def scope(self, doctype, filters):
