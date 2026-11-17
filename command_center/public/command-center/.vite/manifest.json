@@ -1,6 +1,6 @@
 {
   "index.html": {
-    "file": "command-center.4pbELEZ5.js",
+    "file": "command-center.CCw1YFuB.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -8,7 +8,7 @@
       "src/legacy/echarts-lib.js"
     ],
     "css": [
-      "index.Cx7t49Gd.css"
+      "index.BVgnNaoD.css"
     ],
     "assets": [
       "manrope-cyrillic-wght-normal.Dvxsihut.woff2",
