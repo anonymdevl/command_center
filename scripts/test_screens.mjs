@@ -10,10 +10,15 @@
 //             tiles lost their way to Outstanding Tasks on the second draw and opened
 //             ERPNext's /app/todo instead
 //   staleWords the quiet line a screen shows while a refresh has not come through
+//   backstack the browser's Back closes the top drawer and stays on the screen; a drawer
+//             closed by its own X takes its entry off again, so the next Back goes to the
+//             screen before, never off the platform (a phone pressed Back with a drawer
+//             open and left for the site before it)
 import { magnitude, money } from "../frontend/src/format.js";
 import { goTarget } from "../frontend/src/legacy/hydrate.js";
 import { staleWords } from "../frontend/src/legacy/reach.js";
 import { short } from "../frontend/src/legacy/vizoptions.js";
+import { backstack } from "../frontend/src/backstack.js";
 
 let failed = 0;
 const check = (ok, what) => {
@@ -76,6 +81,123 @@ function node(onclick) {
   const w = staleWords(at);
   check(/^Last updated /.test(w) && /tried again/.test(w), `stale words: ${w}`);
   check(/sign in again/.test(staleWords(at, true)), "signed out says to sign in again");
+}
+
+// backstack: a stand-in browser history -- entries, pushState, an asynchronous go() that
+// fires popstate as a browser does -- and the screens as App.jsx uses them.
+{
+  const fake = () => {
+    const entries = [{ url: "https://site/before", state: null, page: "before" },
+      { url: "/app#command", state: null }];
+    let at = 1;
+    const listeners = [];
+    const win = {
+      location: { get hash() { const u = entries[at].url; return u.includes("#") ? u.slice(u.indexOf("#")) : ""; } },
+      history: {
+        get state() { return entries[at].state; },
+        get length() { return entries.length; },
+        pushState(state, _t, url) {
+          entries.splice(at + 1);
+          entries.push({ url: url ? `/app${url}` : entries[at].url, state });
+          at += 1;
+        },
+        replaceState(state, _t, url) { entries[at] = { url: url ? `/app${url}` : entries[at].url, state }; },
+        go(n) {
+          setTimeout(() => {
+            const to = Math.max(0, Math.min(entries.length - 1, at + n));
+            if (to === at) return;
+            at = to;
+            listeners.forEach((f) => f({ state: entries[at].state }));
+          }, 5);
+        },
+        back() { this.go(-1); },
+      },
+      addEventListener: (k, f) => k === "popstate" && listeners.push(f),
+      removeEventListener: () => {},
+    };
+    return { win, entries, where: () => entries[at], index: () => at };
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 40));
+  const b = fake();
+  const s = backstack(b.win);
+  const open = [];
+  const drawer = (name) => {
+    open.push(name);
+    s.open(() => open.splice(open.indexOf(name)), "drawer");
+  };
+
+  // Back with a drawer open closes it and stays on the screen.
+  drawer("task");
+  check(b.entries.length === 3 && b.where().state?.ccLayer === 1, "opening a drawer adds one entry at the same address");
+  b.win.history.back();
+  await settle();
+  check(open.length === 0, "Back closes the drawer");
+  check(b.where().url === "/app#command", `Back stays on the screen, at ${b.where().url}`);
+
+  // Two drawers: Back closes the top one only.
+  drawer("records");
+  drawer("customer");
+  b.win.history.back();
+  await settle();
+  check(open.join() === "records", `Back closes only the top drawer, left ${open.join()}`);
+  b.win.history.back();
+  await settle();
+  check(open.length === 0 && b.where().url === "/app#command", "and the next Back the one under it");
+
+  // Closed with its own X: its entry goes too, so the next Back is the screen before.
+  s.screen("myday");
+  check(b.where().url === "/app#myday", "a screen is its own entry");
+  drawer("task");
+  s.closeKind("drawer", "first");
+  check(open.length === 0, "X closes the drawer at once");
+  await settle();
+  check(b.where().url === "/app#myday" && !b.where().state, "X takes the drawer's entry off again");
+  b.win.history.back();
+  await settle();
+  check(b.where().url === "/app#command", `the next Back is the screen before, at ${b.where().url}`);
+  check(b.where().page !== "before", "never the site before the platform");
+
+  // Another screen chosen with drawers open: they close, and the screen lands where they were.
+  drawer("records");
+  drawer("customer");
+  s.screen("delegation");
+  check(open.length === 0, "choosing a screen closes the drawers");
+  await settle();
+  await settle();
+  check(b.where().url === "/app#delegation" && b.entries.length === b.index() + 1, "the new screen is the last entry");
+  check(b.entries.filter((e) => e.state?.ccLayer).length === 0, `no drawer entry left behind: ${JSON.stringify(b.entries)}`);
+  b.win.history.back();
+  await settle();
+  check(b.where().url === "/app#command", `Back from the new screen is the one before, at ${b.where().url}`);
+
+  // A drawer opened while an X's move is still under way gets its entry after it.
+  drawer("one");
+  s.closeKind("drawer", "first");
+  drawer("two");
+  await settle();
+  await settle();
+  check(open.join() === "two" && b.where().state?.ccLayer === 1, "a drawer opened mid-move has its own entry");
+  b.win.history.back();
+  await settle();
+  check(open.length === 0 && b.where().url === "/app#command", "and Back closes it, on the screen");
+
+  // Forward into an entry whose drawer is gone is passed over.
+  drawer("gone");
+  s.closeKind("drawer", "first");
+  await settle();
+  b.win.history.go(1);
+  await settle();
+  await settle();
+  check(!b.where().state?.ccLayer, "Forward into a closed drawer's entry comes back");
+  s.stop();
+
+  // Reloaded with a drawer open (its entry is current, nothing is open): back to the screen.
+  const r = fake();
+  r.win.history.pushState({ ccLayer: 1 }, "");
+  const again = backstack(r.win);
+  await settle();
+  check(!r.where().state?.ccLayer && r.where().url === "/app#command", "a reload on a drawer's entry steps back to the screen's");
+  again.stop();
 }
 
 if (failed) {

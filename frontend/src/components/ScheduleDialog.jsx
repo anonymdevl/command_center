@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api/client.js";
+import { useLayer } from "../backstack.js";
 
 /**
  * Set when a report is written and who receives it (api/reports.save_schedule).
@@ -19,6 +20,8 @@ export default function ScheduleDialog({ scope }) {
   const [state, setState] = useState("idle");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(null);
+  // Back closes the dialog, not the screen under it (backstack.js).
+  useLayer(Boolean(req), () => setReq(null), "dialog");
 
   useEffect(() => {
     const open = (e) => {

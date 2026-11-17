@@ -11,7 +11,7 @@
  *
  *   Assign, Request evidence, Escalate, Raise it, Give it an owner, Pass to someone
  *   else, Ask for more  ->  the action dialog: a real ERPNext To-Do, as the manager
- *   Ask AI about this   ->  the question bar, already asked
+ *   Ask AI              ->  the question bar, already asked
  *   Open the records    ->  the drawer the alert's own source chip opens
  *   Approve, Reject, Accept it, Send it back on the sample requests  ->  says they are
  *       samples; deciding real ERPNext approvals here is the approvals inbox, not yet
@@ -47,7 +47,7 @@ export function wireActions(root, scope = null) {
  * An alert keeps its own buttons, in its own order -- "Assign" on a cash alert, "Raise
  * as a finding" on a risk, "Approve" on a request -- and each gets the handler its label
  * means. The dead "⋯" is replaced by a working menu of the same items, plus the records
- * behind the alert; "Ask AI about this" sits after the main button.
+ * behind the alert; "Ask AI" sits after the main button.
  */
 function wireAlert(card, scope) {
   if (card.dataset.ccWired) return;
@@ -80,7 +80,7 @@ function wireAlert(card, scope) {
 
     const primary = acts.querySelector(":scope > button");
     if (acts === card.querySelector(".acts") && ctx.title) {
-      const ai = button("Ask AI about this", "btn", () => askAbout(ctx.title));
+      const ai = button("Ask AI", "btn", () => askAbout(ctx.title));
       primary ? primary.after(ai) : acts.prepend(ai);
       if (source) items.push(["Open the records", () => source.click(), false]);
     }

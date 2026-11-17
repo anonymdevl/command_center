@@ -667,14 +667,27 @@ Object.assign(HANDLERS, {
     { count: 2, label: "tasks you handed out that are late", opens: "delegation" },
     { count: 1, label: "done and waiting for your check", opens: "delegation" }] }),
   "command_center.api.summary.write": () => ({ text: "The AI's paragraph (sample).", source: "ai", at: "06:45", pending: false }),
+  // Three areas, so the Executive Summary shows its groups as they are with several.
   "command_center.api.recommend.current": () => ({
-    areas: { sales: "Sales and money owed" },
+    areas: { cash: "Cash and credit", sales: "Sales and money owed", stock: "Stock", data: "Data hygiene" },
     recommendations: [{ name: "rec-1", severity: "crit", area: "sales", area_label: "Sales", source: "rule", source_label: "Rule",
       title: "Agree payment dates with the three largest late payers",
       why: "They hold GHS 1.4M of what is more than three months late.",
       what_to_do: ["Call each one this week and agree a date for each invoice."], owner_role: "Finance",
       first_seen: "2025-08-12", money_at_stake: 1400000, currency: "GHS",
-      drill: { fact: "fact_sales_invoice", filters: {} } }],
+      drill: { fact: "fact_sales_invoice", filters: {} } },
+    { name: "rec-2", severity: "high", area: "sales", area_label: "Sales", source: "rule", source_label: "Rule",
+      title: "Stop new credit to customers over their limit (sample)",
+      why: "Four customers are over their credit limit and still ordering.", what_to_do: ["Put the four on hold in ERPNext."],
+      owner_role: "Sales", first_seen: "2025-08-14", money_at_stake: 310000, currency: "GHS" },
+    { name: "rec-3", severity: "high", area: "stock", area_label: "Stock", source: "adaptive", source_label: "Adaptive",
+      title: "Order the 5ml syringes promised to customers (sample)",
+      why: "39,941 promised and not in any warehouse.", what_to_do: ["Raise a purchase order this week."],
+      owner_role: "Buying", first_seen: "2025-08-10", money_at_stake: 220000, currency: "GHS" },
+    { name: "rec-4", severity: "med", area: "data", area_label: "Data hygiene", source: "rule", source_label: "Rule",
+      title: "Give the 14 orders with no delivery date a date (sample)",
+      why: "An order with no date is never late, so it never shows up.", what_to_do: ["Set a date on each."],
+      owner_role: "Sales", first_seen: "2025-08-01" }],
     history: [], brief: { text: "Collections are the week's priority.", date: "19 Aug 2025" },
   }),
   "command_center.api.starters.starters": () => [{ q: "Who owes us the most, and how late is it?" }],
@@ -816,10 +829,41 @@ if (Q.get("phone")) {
     const past = (el) => el.getBoundingClientRect().right > edge + 1;
     const out = [];
     main.querySelectorAll("*").forEach((el) => {
+      // A drawing is measured as its <svg>, the box it is laid out in. Inside it, a
+      // turning shape's box is the box of its turned box -- the greeting's sun rays read
+      // as a pixel past the edge at some angles of their spin while drawing nothing there
+      // -- and nothing inside an <svg> can widen the page.
+      if (el.closest("svg") && el.tagName.toLowerCase() !== "svg") return;
       const r = el.getBoundingClientRect();
       if (!r.width || !past(el) || boxed(el) || [...el.children].some(past)) return;
       out.push(`${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]} `
         + `"${(el.textContent || "").trim().slice(0, 40)}" ends at ${Math.round(r.right)}px`);
+    });
+    return out;
+  };
+  // Every table cell keeps its content inside its own box (17 Nov 2026: on a phone, Today's
+  // "What" ran over "Given to"). A cell whose content is wider than the cell, while the cell
+  // does not clip, paints over the next column; so does a block inside it narrower than its
+  // own text that does not clip. Either is a failure.
+  const cells = () => {
+    const out = [];
+    const say = (el, td, sw, cw) => out.push(`${String(td.closest("table")?.className || "table").split(" ")[0]} `
+      + `${td.tagName.toLowerCase()}.${String(td.className).split(" ")[0] || "-"} `
+      + `"${(td.textContent || "").trim().slice(0, 40)}": `
+      + `${el === td ? "the cell's content" : `${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0] || "-"}`} `
+      + `${sw}px in ${cw}px, not clipped`);
+    document.querySelectorAll("#cc-main td, #cc-main th, .drawer td, .drawer th").forEach((td) => {
+      if (!td.getClientRects().length) return;
+      if (getComputedStyle(td).overflowX === "visible" && td.scrollWidth > td.clientWidth + 1) {
+        say(td, td, td.scrollWidth, td.clientWidth);
+        return;
+      }
+      td.querySelectorAll("*").forEach((el) => {
+        const cs = getComputedStyle(el);
+        if (cs.display === "inline" || cs.display === "none" || cs.position === "absolute") return;
+        if (cs.overflowX === "visible" && el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1)
+          say(el, td, el.scrollWidth, el.clientWidth);
+      });
     });
     return out;
   };
@@ -828,7 +872,10 @@ if (Q.get("phone")) {
     const page = document.documentElement.scrollWidth - window.innerWidth;
     const col = main ? main.scrollWidth - main.clientWidth : 0;
     const list = offenders();
-    if (page > 0 || col > 0 || list.length) report[name] = { page, main: col, offenders: list.slice(0, 8) };
+    const spill = cells();
+    if (page > 0 || col > 0 || list.length || spill.length) {
+      report[name] = { page, main: col, offenders: list.slice(0, 8), cells: spill.slice(0, 8), spilled: spill.length };
+    }
   };
   window.addEventListener("load", async () => {
     await wait(800);

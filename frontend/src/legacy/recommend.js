@@ -43,20 +43,28 @@ export function renderRecs(root, view, data, { onOpen } = {}) {
     brief(root, data.brief);
     const sub = root.querySelector("#rec-sub");
     if (sub) sub.textContent = recs.length ? `${count(recs.length)} open, most money at stake first` : "";
+    // Each area is its own group -- a ruled heading with its count, and its cards under
+    // it -- so the areas read at a glance rather than as one long list (17 Nov 2026).
+    // The order and the cards are as they were (shell.py, EXECUTIVE SUMMARY GROUPS).
     const areas = data.areas || {};
     Object.keys(areas).forEach((key) => {
       const mine = recs.filter((r) => r.area === key);
       if (!mine.length) return;
+      const group = el("section", "rec-group");
       const head = el("div", "rec-area", areas[key]);
       head.append(el("span", null, `${count(mine.length)} open`));
-      list.append(head);
-      mine.forEach((r) => list.append(card(r, onOpen)));
+      group.setAttribute("aria-label", areas[key]);
+      group.append(head);
+      mine.forEach((r) => group.append(card(r, onOpen)));
+      list.append(group);
     });
     if ((data.history || []).length) {
-      list.append(el("div", "rec-area", "Recently closed"));
+      const group = el("section", "rec-group rec-group-closed");
+      list.append(group);
+      group.append(el("div", "rec-area", "Recently closed"));
       const ul = el("ul", "rec-done");
       data.history.forEach((h) => ul.append(el("li", null, `${h.title} — ${closed(h)}`)));
-      list.append(ul);
+      group.append(ul);
     }
     if (data.what_worked) list.append(worked(data.what_worked));
   }

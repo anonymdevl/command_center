@@ -19,6 +19,8 @@
  * measure, a long explanation no more than three lines, the rest of it ended with an
  * ellipsis and the whole of it in the cell's title (and, where the row opens, there).
  * The table may then be wider than its panel; it scrolls in its own box, never the page.
+ * On a phone every text cell is one line, clipped with an ellipsis at its ceiling: it
+ * never runs into the next column (shell.py, PHONE, EVERY SCREEN).
  */
 
 const BOXED = ".dt-scroll, .dt-x, .fs-wrap, .dw-tbox, .vz-table, .scrollbox, .work-table";
@@ -42,6 +44,15 @@ function box(table) {
 const BANDS = [[60, "dt-w3"], [24, "dt-w2"], [12, "dt-w1"]];
 const WIDTHS = BANDS.map(([, c]) => c);
 
+const CONTROL = "button, input, select, textarea, .amenu";
+
+/** The cell's own words, without the labels of any controls in it. */
+function words(td) {
+  return [...td.childNodes]
+    .filter((n) => !(n.nodeType === 1 && (n.matches(CONTROL) || n.querySelector(CONTROL))))
+    .map((n) => n.textContent).join("").trim();
+}
+
 function fit(td) {
   if (td.classList.contains("dt-nw") || !td.closest("table.dt")) return;
   const text = (td.textContent || "").trim();
@@ -54,7 +65,10 @@ function fit(td) {
   // whole text in its title (shell.py) keep their own layout.
   if (td.classList.contains("num") || td.classList.contains("n") || td.colSpan > 1) return;
   if (td.hasAttribute("title") && !td.querySelector(":scope > .dt-tx")) return;
-  const band = (BANDS.find(([n]) => text.length > n) || [])[1];
+  // A cell of controls (Reassign and its "⋯" menu) is not text: the menu's hidden items
+  // made Outstanding Tasks' action cell read as a long explanation and take its width.
+  const own = words(td);
+  const band = own && (BANDS.find(([n]) => own.length > n) || [])[1];
   WIDTHS.forEach((c) => td.classList.toggle(c, c === band));
   if (!band) return;
   // A cell of plain text carries its words in one block, which holds the width (a
@@ -67,8 +81,10 @@ function fit(td) {
     td.textContent = "";
     td.append(tx);
   }
+  // A phrase or an explanation can be cut short (three lines on a laptop, one on a phone,
+  // shell.py): its whole text is in its title.
   const tx = td.querySelector(":scope > .dt-tx");
-  if (tx && band === "dt-w3") tx.title = text;
+  if (tx && band !== "dt-w1") tx.title = text;
 }
 
 function oneLine(scope) {

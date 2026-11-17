@@ -3,7 +3,7 @@
     .venv-platform/bin/python manage.py test insights.test_user_management
 
   1. Anyone given Settings access, in any section, is a kind of administrator: the list
-     says Yes for them, and names the sections they may open.
+     says Yes for them, and only Yes (the sections are in Manage, from settings_access).
   2. Administrator accounts are seen by administrators only -- never by a delegate, in
      User Management, the people pickers (the same list) or ERPNext API Keys -- and a
      delegate who names one is answered as if there were no such person, as in ERPNext.
@@ -51,17 +51,18 @@ class UserManagement(TransactionTestCase):
         self.assertEqual(r.status_code, 200, r.content[:300])
         return {p["username"]: p for p in r.json()["message"]}
 
-    def test_settings_access_reads_as_administrator_with_its_sections(self):
+    def test_settings_access_reads_as_administrator(self):
         listed = self._people(self.admin)
         boss, mgr, plain = (listed["boss@test.com"], listed["manager@test.com"],
                             listed["plain@test.com"])
         self.assertTrue(boss["settings_admin"])
-        self.assertEqual(boss["settings_words"], "All of Settings")
         self.assertTrue(mgr["settings_admin"], "Settings access is a kind of administrator")
-        self.assertEqual(mgr["settings_words"], "Settings: User Management, ERPNext API Keys")
+        self.assertEqual(sorted(mgr["settings_access"]), ["keys", "people"])
         self.assertFalse(mgr["is_admin"], "but not the platform's administrator")
         self.assertFalse(plain["settings_admin"])
-        self.assertEqual(plain["settings_words"], "")
+        # Yes is enough: no sentence of sections for the table to print under it.
+        for p in (boss, mgr, plain):
+            self.assertNotIn("settings_words", p)
 
     def test_administrators_are_hidden_from_delegates(self):
         self.assertIn("boss@test.com", self._people(self.admin))

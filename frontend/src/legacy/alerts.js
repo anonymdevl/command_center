@@ -129,7 +129,7 @@ function card(a, onOpen) {
   const acts = el("div", "acts");
   acts.append(
     btn("Assign", "btn pri", () => fire("cc-action", { kind: "assign", ...ctx })),
-    btn("Ask AI about this", "btn", () => {
+    btn("Ask AI", "btn", () => {
       act(a.name, "acknowledge");
       fire("cc-ask", { question: `${a.title}. What is behind this, and what should we do about it?` });
     }),

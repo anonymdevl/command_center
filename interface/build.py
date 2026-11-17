@@ -196,7 +196,7 @@ def ex_html(k):
             f'<div class="exbox"><dl class="kv" style="margin-bottom:0;grid-template-columns:135px 1fr;font-size:var(--fs-xs)">{r}</dl></div>'
             '<div class="acts" style="margin-top:14px"><button class="btn pri">Open in ERPNext &#8599;</button>'
             '<button class="btn">Hand this to someone</button>'
-            '<button class="btn" onclick="closeDrawer();go(&#39;ask&#39;)">Ask about this</button></div>')
+            '<button class="btn" onclick="closeDrawer();go(&#39;ask&#39;)">Ask AI</button></div>')
 EXH={k:ex_html(k) for k in EX}
 DRH={k:drill_html(k) for k in DRILL}
 print("explainers:",len(EXH),"drawers:",len(DR),"views:",len(VIEWS))

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { useLayer } from "../backstack.js";
 
 /**
  * Small pieces the Settings screen's sections share: the dialog frame (the same
@@ -8,6 +9,8 @@ import React, { useEffect, useRef } from "react";
 
 export function Dialog({ title, sub, onClose, children, wide = false }) {
   const box = useRef(null);
+  // Back closes the dialog, not the screen under it (backstack.js).
+  useLayer(true, onClose, "dialog");
   useEffect(() => {
     const esc = (e) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", esc);

@@ -180,7 +180,7 @@ export default function AskBar({ scope, openDrawer }) {
     }
   };
 
-  // "Ask AI about this" on an alert card (legacy/actions.js) asks here, in the bar.
+  // "Ask AI" on an alert card (legacy/actions.js) asks here, in the bar.
   const askRef = useRef(ask);
   askRef.current = ask;
   useEffect(() => {
