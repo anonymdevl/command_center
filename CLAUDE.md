@@ -651,4 +651,11 @@ not an app on a client's ERPNext. `insights/` is a Django project (PLATFORM.md):
 - Email: every send attempt is a row in `core.EmailLog` (aux; written in
   `runtime.sendmail` only; kind/business from `command_center.mail.about(...)`), shown in
   Settings -> Email -> Email Log; pruned at `email_log_days` (180) by maintenance.daily.
+- Set-password links (17 Nov 2026): User Management can email a person a link to choose
+  their own password (Add Person's third choice; Manage -> Send Set-Password Link, also the
+  answer to a forgotten password), under reset_password's rules. `insights/core/invite.py`
+  makes it (PasswordResetTokenGenerator, own salt; dead once the password changes or after
+  PASSWORD_RESET_TIMEOUT, 72 h) on host_name, else the request's host; the email is logged
+  as `invite` without its body. The page is `views.set_password` (`/command-center-set-password`),
+  sharing the sign-in frame `www/_signin.html` with the sign-in page.
 - `manage.py test insights` (in preflight) is the end-to-end check; keep it passing.

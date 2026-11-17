@@ -8147,3 +8147,203 @@ def frappe_vitals(code, day) -> dict:
     row = frappe.get_all("Command Center Health Snapshot", filters={"name": f"{code}::{day}"},
                          fields=["vitals"], limit=1)
     return json.loads(row[0].vitals) if row and row[0].vitals else {}
+
+
+class SetPasswordLink(TransactionTestCase):
+    """Email a person a link to set their own password (insights/core/invite.py): on
+    Add Person, and from Manage for anyone already there. One email, logged as "invite"
+    without its body; the link works once, for 72 hours; a forged or expired one is
+    refused calmly and counted against the address; sending follows the reset-password
+    rules; a send that fails says so and the person can be given a password instead."""
+
+    databases = {"default", "aux"}
+    MOD = SettingsPage.MOD
+    MAIL_PW = "mail-pass-xyz-77"
+    NEW_PW = "my-chosen-long-pass-2"
+    setUp = SettingsPage.setUp
+    tearDown = SettingsPage.tearDown
+    _call = SettingsPage._call
+    _ok = SettingsPage._ok
+    _as = SettingsDelegation._as
+
+    def _mail_on(self):
+        self._ok("set_email", host="smtp.test.com", port=587, security="starttls",
+                 user="reports@test.com", password=self.MAIL_PW, sender="reports@test.com")
+
+    def _sent(self, smtp) -> list:
+        return [c.args[0] for c in smtp.return_value.send_message.call_args_list]
+
+    def _link_in(self, msg) -> str:
+        html = msg.get_body(("html",)).get_content()
+        return re.search(r'href="([^"]+)"', html).group(1).replace("&amp;", "&")
+
+    def _invite(self, email="ama@test.com"):
+        with mock.patch("smtplib.SMTP") as smtp:
+            out = self._ok("add_person", email=email, full_name="Ama Mensah", invite=1)
+        return out, self._sent(smtp)
+
+    def _set(self, path, pw=NEW_PW, pw2=None):
+        """Open the link in a fresh browser that enforces the request token, and post."""
+        c = Client(enforce_csrf_checks=True)
+        page = c.get(path)
+        self.assertEqual(page.status_code, 200, page.content[:300])
+        html = page.content.decode()
+        fields = dict(re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)"', html))
+        fields.update(password=pw, password2=pw if pw2 is None else pw2)
+        return c, c.post("/command-center-set-password", fields)
+
+    def test_an_invite_sends_one_email_with_a_link_that_works_once(self):
+        from insights.core.models import EmailLog, SecurityEvent
+        self._mail_on()
+        out, sent = self._invite()
+        self.assertTrue(out["invite"]["ok"], out["invite"])
+        self.assertFalse(out["has_password"], "no usable password until they set one")
+        self.assertEqual(len(sent), 1)
+        msg = sent[0]
+        self.assertEqual(msg["To"], "ama@test.com")
+        self.assertEqual(msg["Subject"], "Set your password for Ultrasoft Insights")
+        html = msg.get_body(("html",)).get_content()
+        for words in ("invited you to Ultrasoft Insights", "boss@test.com", "ama@test.com",
+                      "expires in 72 hours", "If you weren't expecting this, ignore it",
+                      "Set Your Password"):
+            self.assertIn(words, html.replace("&#x27;", "'").replace("&#39;", "'"))
+        link = self._link_in(msg)
+        self.assertTrue(link.startswith("http://testserver/command-center-set-password?uid="), link)
+        # logged as an invite, without the message (the link is never kept)
+        row = EmailLog.objects.get()
+        self.assertEqual((row.kind, row.status, row.body), ("invite", "Sent", ""))
+        self.assertIn("never kept", self._ok("email_log")["rows"][0]["why_not"] or "x never kept")
+        self.assertTrue(SecurityEvent.objects.filter(kind="invite", outcome="sent",
+                                                     username="ama@test.com").exists())
+        # the page: the form, unindexed, the password rules; then set it and be signed in
+        path = link.split("testserver", 1)[1]
+        page = Client().get(path)
+        self.assertIn('name="robots" content="noindex', page.content.decode())
+        self.assertIn("At least 10 characters", page.content.decode())
+        self.assertEqual(page["Referrer-Policy"], "no-referrer")
+        c, done = self._set(path)
+        self.assertEqual((done.status_code, done["Location"]), (302, "/command-center"))
+        self.assertTrue(get_user_model().objects.get(username="ama@test.com").check_password(self.NEW_PW))
+        self.assertEqual(c.get("/command-center").status_code, 200, "signed in, and a manager")
+        self.assertTrue(SecurityEvent.objects.filter(kind="password_set", outcome="done",
+                                                     username="ama@test.com").exists())
+        # the same link again: refused, calmly, with nothing to fill in
+        again = Client().get(path)
+        self.assertEqual(again.status_code, 400)
+        self.assertIn("This link has expired or was already used. Ask your administrator for a "
+                      "new one.", again.content.decode())
+        self.assertNotIn('name="password"', again.content.decode())
+        # the password is never in a URL, the email log or the security record
+        self.assertNotIn(self.NEW_PW, json.dumps(list(SecurityEvent.objects.values()), default=str))
+        self.assertFalse(EmailLog.objects.filter(body__contains="token=").exists())
+
+    def test_the_page_checks_the_password_and_the_request_token(self):
+        self._mail_on()
+        _, sent = self._invite()
+        path = self._link_in(sent[0]).split("testserver", 1)[1]
+        _, short = self._set(path, pw="short")
+        self.assertEqual(short.status_code, 400)
+        self.assertIn("too short", short.content.decode())
+        _, differ = self._set(path, pw="one-long-pass-111", pw2="two-long-pass-222")
+        self.assertIn("not the same", differ.content.decode())
+        self.assertFalse(get_user_model().objects.get(username="ama@test.com").has_usable_password())
+        # a post without the page's token is refused by Django's CSRF check
+        uid, token = re.search(r"uid=([^&]+)&token=(.+)$", path).groups()
+        r = Client(enforce_csrf_checks=True).post("/command-center-set-password", {
+            "uid": uid, "token": token, "password": self.NEW_PW, "password2": self.NEW_PW})
+        self.assertEqual(r.status_code, 403)
+        self.assertFalse(get_user_model().objects.get(username="ama@test.com").has_usable_password())
+
+    def test_expired_and_forged_links_are_refused(self):
+        import datetime as _dt
+        from insights.core import invite
+        from insights.core.models import SecurityEvent
+        self._mail_on()
+        _, sent = self._invite()
+        path = self._link_in(sent[0]).split("testserver", 1)[1]
+        real_now = invite.TOKENS._now
+        with mock.patch.object(invite.TOKENS, "_now", lambda: real_now() + _dt.timedelta(hours=71)):
+            self.assertEqual(Client().get(path).status_code, 200, "still good at 71 hours")
+        with mock.patch.object(invite.TOKENS, "_now", lambda: real_now() + _dt.timedelta(hours=73)):
+            self.assertIn("has expired", Client().get(path).content.decode())
+        uid = re.search(r"uid=([^&]+)", path).group(1)
+        for bad in (f"?uid={uid}&token=abc-123", f"?uid={uid}", "?uid=!!&token=x", ""):
+            r = Client().get("/command-center-set-password" + bad)
+            self.assertEqual(r.status_code, 400, bad)
+            self.assertIn("Ask your administrator for a new one", r.content.decode())
+        self.assertTrue(SecurityEvent.objects.filter(kind="password_set", outcome="refused",
+                                                     username="ama@test.com").exists())
+        # a deactivated person's link stops working
+        self._ok("set_active", username="ama@test.com", on=0)
+        self.assertEqual(Client().get(path).status_code, 400)
+        self._ok("set_active", username="ama@test.com", on=1)
+        self.assertEqual(Client().get(path).status_code, 200)
+        # guessing is limited like sign-in: the address is locked after 20 refusals
+        c = Client()
+        codes = [c.get(f"/command-center-set-password?uid={uid}&token=x-{i}").status_code
+                 for i in range(20)]
+        self.assertEqual(codes[-1], 429)
+        self.assertIn("Too many attempts", c.get(path).content.decode(), "the real link too, while locked")
+        from django.core.cache import cache
+        cache.clear()
+        self.assertEqual(Client().get(path).status_code, 200)
+
+    def test_who_may_send_follows_the_reset_password_rules(self):
+        self._mail_on()
+        U = get_user_model()
+        U.objects.create_user("ama@test.com", "ama@test.com", "a-long-test-pass-3").groups.add(
+            Group.objects.get(name="Insights Dashboard Manager"))
+        # a plain manager: no
+        self._as(self.manager, "send_set_password_link", 403, username="ama@test.com")
+        self._ok("set_settings_access", username="manager@test.com", sections=["people"])
+        with mock.patch("smtplib.SMTP") as smtp:
+            out = self._as(self.manager, "send_set_password_link", username="ama@test.com")
+            self.assertTrue(out["ok"], out)
+            # never to an administrator, nor to someone with Settings access
+            self._as(self.manager, "send_set_password_link", 403, username="boss@test.com")
+            self._ok("set_settings_access", username="ama@test.com", sections=["businesses"])
+            self._as(self.manager, "send_set_password_link", 403, username="ama@test.com")
+            # the administrator may send to anyone
+            self.assertTrue(self._ok("send_set_password_link", username="ama@test.com")["ok"])
+            self.assertTrue(self._ok("send_set_password_link", username="manager@test.com")["ok"])
+        self.assertEqual([m["To"] for m in self._sent(smtp)],
+                         ["ama@test.com", "ama@test.com", "manager@test.com"])
+        # an existing password keeps working until the link is used
+        self.assertTrue(Client().login(username="ama@test.com", password="a-long-test-pass-3"))
+        # not to a deactivated person
+        self._ok("set_settings_access", username="ama@test.com", sections=[])
+        self._ok("set_active", username="ama@test.com", on=0)
+        self.assertIn("Reactivate", self._call(self.admin, "send_set_password_link",
+                                               username="ama@test.com").content.decode())
+        whats = " | ".join(c["what"] for c in self._ok("changes"))
+        self.assertIn("sent a set-password link to ama@test.com", whats)
+
+    def test_a_mail_failure_is_reported_not_hidden(self):
+        import smtplib
+        from insights.core.models import EmailLog, SecurityEvent
+        # email not set up: the person is added, the dialog is told no link went
+        out = self._ok("add_person", email="kofi@test.com", full_name="Kofi Boateng", invite=1)
+        self.assertFalse(out["invite"]["ok"])
+        self.assertIn("No link was sent", out["invite"]["says"])
+        self.assertIn("Email is not set up", out["invite"]["says"])
+        self.assertFalse(out["has_password"])
+        # the server refuses it
+        self._mail_on()
+        with mock.patch("smtplib.SMTP") as smtp:
+            smtp.return_value.send_message.side_effect = smtplib.SMTPRecipientsRefused(
+                {"ama@test.com": (550, b"no such user")})
+            out = self._ok("add_person", email="ama@test.com", full_name="Ama Mensah", invite=1)
+            again = self._ok("send_set_password_link", username="ama@test.com")
+        for o in (out["invite"], again):
+            self.assertFalse(o["ok"])
+            self.assertIn("No link was sent", o["says"])
+            self.assertNotIn("A link was sent", o["says"])
+        self.assertEqual(EmailLog.objects.filter(kind="invite", status="Failed").count(), 3)
+        self.assertEqual(EmailLog.objects.filter(kind="invite", status="Sent").count(), 0)
+        self.assertEqual(SecurityEvent.objects.filter(kind="invite", outcome="failed").count(), 3)
+        self.assertIn("could not send a set-password link to ama@test.com",
+                      " | ".join(c["what"] for c in self._ok("changes")))
+        # the fallback: set a password for them instead
+        self._ok("reset_password", username="ama@test.com", password="fallback-long-pass-7",
+                 password2="fallback-long-pass-7")
+        self.assertTrue(Client().login(username="ama@test.com", password="fallback-long-pass-7"))

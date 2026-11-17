@@ -2,7 +2,8 @@
 
 Every message the platform sends goes out through one place (frappe.sendmail; in the
 standalone platform insights/compat/runtime.sendmail, which logs every attempt). The
-log says what each message was -- an alert, a report, a notice, a test, a digest -- and
+log says what each message was -- an alert, a report, a notice, a test, a digest, a
+set-password link (invite) -- and
 which business it was about. The caller says so around the send:
 
     with mail.about("alert", business_code):
@@ -18,7 +19,7 @@ import contextlib
 
 import frappe
 
-KINDS = ("alert", "report", "notice", "test", "digest")
+KINDS = ("alert", "report", "notice", "test", "digest", "invite")
 
 
 @contextlib.contextmanager

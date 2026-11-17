@@ -229,6 +229,36 @@ def on_logged_in(sender, request=None, user=None, **kw):
         frappe.log_error(title="Security: sign-in not recorded", message=frappe.get_traceback())
 
 
+def record_link(username: str, outcome: str, actor: str = "", note: str = "") -> None:
+    """A set-password link sent ("sent") or not ("failed", with the reason) to `username`
+    by `actor` (insights/core/invite.py). The link itself is never recorded."""
+    try:
+        req = getattr(local, "request", None)
+        _event(kind="invite", outcome=outcome, username=username, known_user=True, actor=actor,
+               ip=_request_ip(req) if req is not None else "", note=note)
+    except Exception:  # noqa: BLE001 -- the dialog answers whatever happens here
+        frappe.log_error(title="Security: invite link not recorded", message=frappe.get_traceback())
+
+
+def record_password_set(request, username: str, outcome: str, note: str = "") -> None:
+    """The set-password page (views.set_password): a password set by a link ("done"), a
+    link refused as bad, used or expired ("refused"), or refused while the address is
+    locked ("blocked", one line a minute). Never the password or the token."""
+    try:
+        from django.core.cache import cache
+        ip = _request_ip(request)
+        if outcome == "blocked":
+            key = f"sec:blocked:link:{hashlib.sha256(ip.encode()).hexdigest()[:24]}"
+            if cache.get(key):
+                return
+            cache.set(key, 1, timeout=60)
+        _event(kind="password_set", outcome=outcome, username=username, known_user=bool(username),
+               ip=ip, agent=agent_summary(request.META.get("HTTP_USER_AGENT")),
+               channel="platform", note=note)
+    except Exception:  # noqa: BLE001 -- the page answers whatever happens here
+        frappe.log_error(title="Security: set-password not recorded", message=frappe.get_traceback())
+
+
 def record_sign_out(request) -> None:
     u = getattr(request, "user", None)
     if u is None or not u.is_authenticated:
@@ -420,7 +450,11 @@ EVENT_WORDS = {("sign_in", "success"): "Signed In", ("sign_in", "failed"): "Wron
                ("sign_in", "blocked"): "Refused While Locked",
                ("sign_in", "refused"): "Single Sign-On Refused",
                ("sign_out", "done"): "Signed Out", ("unlock", "done"): "Unlocked",
-               ("end_sessions", "done"): "Signed Out Everywhere"}
+               ("end_sessions", "done"): "Signed Out Everywhere",
+               ("invite", "sent"): "Invite Link Sent", ("invite", "failed"): "Invite Link Not Sent",
+               ("password_set", "done"): "Password Set By Invite Link",
+               ("password_set", "refused"): "Invite Link Refused",
+               ("password_set", "blocked"): "Invite Link Refused While Locked"}
 
 
 def _event_row(e) -> dict:
@@ -440,7 +474,9 @@ def _lockouts() -> list:
     from insights.core import views
     M = _models()
     since = now() - _dt.timedelta(minutes=views.LOCK_MINUTES + 1)
-    pairs = (M.SecurityEvent.objects.filter(kind="sign_in", outcome__in=("failed", "blocked"),
+    # A refused set-password link counts against its address too (views.set_password).
+    pairs = (M.SecurityEvent.objects.filter(kind__in=("sign_in", "password_set"),
+                                            outcome__in=("failed", "blocked", "refused"),
                                             at__gte=since)
              .values_list("username", "known_user", "ip").distinct()[:2000])
     out, seen = [], set()
