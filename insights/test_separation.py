@@ -377,3 +377,37 @@ class BillingAndLicence(_Two):
                 stuck = plans.record("ai_reports", 0, "biz_a", outcome="running")
         plans.daily()
         self.assertEqual(UsageEvent.objects.get(pk=stuck.pk).outcome, "interrupted")
+
+
+class KeepAccessOnDeploy(_Two):
+    """The deploy step (migration 0015): with exactly one customer holding every business,
+    a hand-added manager on no customer joins it, so separation takes nobody's access
+    away; with two customers nothing is decided for the administrator."""
+
+    def _run(self):
+        import importlib
+
+        from django.apps import apps
+        mod = importlib.import_module("insights.core.migrations.0015_keep_access_single_customer")
+        mod.keep_access(apps, None)
+
+    def test_two_customers_decide_nothing(self):
+        self._run()
+        self.assertFalse(self.M.ClientMember.objects.filter(username="loose@x.test").exists())
+
+    def test_one_customer_holding_everything_keeps_everyone_in(self):
+        from insights.core import plans
+        from insights.core.models import ConnectedBusiness
+        # Production today: one customer, every business on it.
+        self.M.ClientBusiness.objects.filter(client=self.beta).delete()
+        self.beta.delete()
+        for code in ("biz_b", "biz_u"):
+            self.M.ClientBusiness.objects.get_or_create(client=self.alpha, business_code=code)
+        self.assertEqual(plans.visible_codes("loose@x.test"), frozenset(),
+                         "before the step, separation would take loose@'s businesses away")
+        self._run()
+        self._run()  # twice changes nothing
+        rows = self.M.ClientMember.objects.filter(username="loose@x.test")
+        self.assertEqual([(r.client_id, r.role) for r in rows], [(self.alpha.pk, "user")])
+        self.assertEqual(set(plans.visible_codes("loose@x.test")),
+                         set(ConnectedBusiness.objects.values_list("business_code", flat=True)))

@@ -75,8 +75,9 @@ def _unsure(e) -> bool:
     by name, so the transport's own copy is caught too) or any other failure short of a
     definite refusal -- a timeout or 5xx can follow a write the far site made. A 4xx
     refusal (RequestRefused, RemotePermissionDenied) or a validation error is definite."""
-    from command_center.connectors.base import BusinessUnreachable, RequestRefused
-    if any(c.__name__ == "WriteNotConfirmed" for c in type(e).__mro__):
+    from command_center.connectors.base import (BusinessUnreachable, RequestRefused,
+                                                WriteUnconfirmed)
+    if isinstance(e, WriteUnconfirmed):
         return True
     return isinstance(e, BusinessUnreachable) and not isinstance(e, RequestRefused)
 
