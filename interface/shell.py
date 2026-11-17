@@ -1542,4 +1542,48 @@ body.cc-signin .auth-forgot>span{color:var(--mut)}
 body.cc-signin .auth-only{color:var(--mut)}
 /* The same thin "|" as the footer's, between short items on one line. */
 body.cc-signin .auth-sep{font-style:normal;color:var(--dim);margin:0 8px}
+
+/* ======================================================================
+   PHONE, EVERY SCREEN (17 Nov 2026): the page never scrolls sideways.
+   On an iPhone, Home, the Executive Summary, Today and Approvals scrolled sideways into
+   empty space. Not the layout: long unbroken text. An alert's chip said "Email: not
+   sent: email is not set up on this platform" on one line (.chip was nowrap), an owner
+   or a document name with an email address or a link in it could not break, and each
+   pushed its card -- and .main, which scrolls -- wider than the screen. So:
+     text      breaks inside its own box (overflow-wrap:anywhere, which also lowers the
+               box's smallest width, so a flex or grid child can shrink to its column);
+               a table keeps its own rules (below), so a cell is never cut mid-word on a
+               laptop
+     chips     one line while they fit, wrapping inside themselves when one is longer
+               than its row
+     tables    on a phone, each row on one line and the table scrolling sideways in its
+               own box: the screens' own (tables.js .dt-x), Settings', the drawers' and
+               the dialogs'; never the page
+     heading   the tools beside a heading (New Task) go under it on a phone, so the
+               title and the line under it keep their width
+     safety    only then, and only on a phone: the main column never scrolls sideways.
+   scripts/test_phone.mjs loads every screen at 375 and 428 wide with long strings and
+   fails if the page or the main column is wider than the screen.
+   ====================================================================== */
+.main{overflow-wrap:anywhere}
+.main table,.drawer table,.dlg table{overflow-wrap:normal}
+/* A figure is never broken mid-number: it is short, and its box is sized for it. */
+.main :is(.val,.n,.afig,.xm-vn,.gauge-mid,.flag,.tag,.dpill,.btn){overflow-wrap:normal}
+.chip{max-width:100%;white-space:normal}
+.xm-k{white-space:normal}
+@media(max-width:600px){
+ .topbar{flex-wrap:wrap}
+ .topbar .work-tools{flex:1 1 100%}
+}
+@media(max-width:640px){
+ table.dt td{white-space:nowrap}
+ table.dt td:is(.dt-w1,.dt-w2,.dt-w3){white-space:nowrap}
+ table.dt td > .dt-tx{max-width:none}
+ table.dt td.dt-w3 > .dt-tx{display:block;max-width:34ch;overflow:hidden;text-overflow:ellipsis}
+ .drawer table.dt,.dlg table.dt{display:block;max-width:100%;overflow-x:auto}
+ :is(.dt-x,.dt-scroll,.fs-wrap,.dw-tbox,.work-table,.vz-table,.scrollbox,.ins-scroll,.sec-scroll) > table.dt{display:table}
+}
+@media(max-width:900px){
+ .main{overflow-x:hidden}
+}
 """

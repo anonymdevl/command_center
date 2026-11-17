@@ -18,6 +18,8 @@
  * and named as such.
  */
 
+import VIEW_HTML from "../src/legacy/views.json";
+
 export const PREVIEW_MARKER = "CC_PREVIEW_MOCK";
 
 // ?theme=light&accent=cobalt -- so a screenshot run can pin the look without clicking.
@@ -563,6 +565,139 @@ const HANDLERS = {
   "command_center.api.ingest.status": () => [],
 };
 
+/* ---------------------------------------------------------------------------
+ * Phone and switching checks (17 Nov 2026).
+ *
+ * ?long=1   every name, title, reason, email and note in the answers carries a long
+ *           unbroken string (an email address and an ERPNext link), the way real data
+ *           does: "Not emailed: email is not set up on this platform", a customer called
+ *           by its full legal name, a document URL. Phone overflow is only ever caused
+ *           by content like this, never by the short sample strings.
+ * ?two=1    a second business, so switching business can be looked at.
+ * ?admin=1  the platform administrator: Settings, with sample people, businesses,
+ *           keys and email log.
+ * The Executive Summary, the recommendations and the panels answer here too, so every
+ * screen shows what it shows on the live site rather than its "could not be read".
+ * ------------------------------------------------------------------------- */
+const Q = new URLSearchParams(window.location.search);
+export const LONG = "accounts.receivable.reconciliation-team@gigmann-medical-supplies-limited.example.com "
+  + "https://gigmann.powersoftsystem.com/app/sales-invoice/ACC-SINV-2025-000123456789-RETURN-AGAINST";
+const LONG_KEYS = new Set(["title", "why", "next_step", "emailed", "customer", "owner_label", "detail",
+  "text", "note", "reason", "raised_by", "to_name", "full_name", "email", "subject", "to", "error",
+  "says", "question", "owner", "owner_role", "why_now", "business_name", "site_url", "erpnext_company",
+  "label_long", "dateline", "for", "rule", "source_label", "elapsed", "message", "summary"]);
+function longify(v, key) {
+  if (Array.isArray(v)) return v.map((x) => longify(x, key));
+  if (v && typeof v === "object") {
+    const o = {};
+    for (const [k, x] of Object.entries(v)) o[k] = longify(x, k);
+    return o;
+  }
+  if (typeof v === "string" && LONG_KEYS.has(key) && v.length > 2) return `${v} ${LONG}`;
+  if (typeof v === "string" && key === "what_to_do") return `${v} ${LONG}`;
+  return v;
+}
+const longOn = !!Q.get("long");
+
+if (Q.get("two")) {
+  window.CC_BOOT.businesses.push({ ...window.CC_BOOT.businesses[0], business_code: "SECOND",
+    business_name: "Second Test Business Ltd", erpnext_company: "Second Test Business Ltd" });
+  window.CC_BOOT.scopes.push({ code: "SECOND", label: "Second Test Business Ltd" });
+}
+if (Q.get("admin")) {
+  window.CC_BOOT.user.roles = [...window.CC_BOOT.user.roles, "System Manager"];
+  window.CC_BOOT.settings_sections = ["people", "businesses", "customers", "claude", "email", "branding",
+    "keys", "recommend", "changes", "security"];
+}
+
+// Every always-present sample alert says what became of its email, as the live ones do.
+{
+  const base = HANDLERS["command_center.api.alerts.open_alerts"];
+  HANDLERS["command_center.api.alerts.open_alerts"] = (a) => {
+    const out = base(a);
+    out.alerts.forEach((x, i) => {
+      x.emailed = i % 2 ? "Emailed to finance@gigmann.example" : "Not emailed: email is not set up on this platform";
+    });
+    return out;
+  };
+}
+
+/** The designed panels of a screen that carry a table, by their heading. */
+function tablePanels(view) {
+  const html = VIEW_HTML[view] || "";
+  const out = [];
+  const re = /<div class="ph"><div><b>([^<]+)<\/b>/g;
+  let m;
+  while ((m = re.exec(html))) out.push(m[1].replace(/&amp;/g, "&"));
+  return out;
+}
+Object.assign(HANDLERS, {
+  "command_center.api.panels.get": ({ view }) => ({
+    view, currency: "GHS", when: "Sample panels · as at 19 Aug 2025",
+    panels: Object.fromEntries(tablePanels(view).map((t, i) => [t, i % 2 ? {
+      kind: "bars", rows: ["Northbridge Clinic (sample)", "Akwaaba Medical Centre (sample)", "Coastline Diagnostics (sample)"]
+        .map((label, j) => ({ label, value: 300000 - j * 70000, display: `GHS ${300 - j * 70}k` })),
+    } : {
+      kind: "table",
+      rows: [0, 1, 2].map((j) => ({ cells: [
+        { text: ["Northbridge Clinic (sample)", "Akwaaba Medical Centre (sample)", "St. Anne's Hospital (sample)"][j] },
+        { text: "12 Aug 2025" }, { text: "418,950.00", num: true }, { text: "96 days", num: true },
+        { text: "Pick the three largest and agree payment dates this week." },
+      ] })),
+    }])),
+  }),
+  "command_center.api.summary.memo": () => ({
+    header: { dateline: "Week to 19 Aug 2025 · figures read 06:00", for: "For Kofi Mensah, Managing Director", week_to: "2025-08-19" },
+    vitals: ["ar_total", "revenue_last_month", "stock_value", "ap_total", "control_score"].map((key) => {
+      const k = KPIS[key] || ["Figure", "currency", 1000];
+      return { key, label: k[0], shown: true, figure: { key, label: k[0], unit: k[1], value: k[2] ?? 47, currency: "GHS" },
+        change: { text: "up 4% on last week", tone: "bad", kind: "real" } };
+    }),
+    short: { text: "Customers owe GHS 9.18M, three quarters of it more than three months late. Stock promised to customers is short on 491 products.", source: "fallback", pending: true },
+    decisions: [{ name: "rec-1", title: "Agree payment dates with the three largest late payers", owner: "Finance" }],
+    risks: [{ name: "al-ar", title: "GHS 6.78M of the GHS 9.18M owed is more than three months late", severity: "crit", severity_word: "Critical" }],
+    going_well: [{ key: "score_records", question: "Are our records clean?", text: "Every invoice carries a customer and a date." }],
+  }),
+  "command_center.api.summary.waiting": () => ({ available: true, items: [
+    { count: 2, label: "approvals waiting on you", opens: "approvals" },
+    { count: 2, label: "tasks you handed out that are late", opens: "delegation" },
+    { count: 1, label: "done and waiting for your check", opens: "delegation" }] }),
+  "command_center.api.summary.write": () => ({ text: "The AI's paragraph (sample).", source: "ai", at: "06:45", pending: false }),
+  "command_center.api.recommend.current": () => ({
+    areas: { sales: "Sales and money owed" },
+    recommendations: [{ name: "rec-1", severity: "crit", area: "sales", area_label: "Sales", source: "rule", source_label: "Rule",
+      title: "Agree payment dates with the three largest late payers",
+      why: "They hold GHS 1.4M of what is more than three months late.",
+      what_to_do: ["Call each one this week and agree a date for each invoice."], owner_role: "Finance",
+      first_seen: "2025-08-12", money_at_stake: 1400000, currency: "GHS",
+      drill: { fact: "fact_sales_invoice", filters: {} } }],
+    history: [], brief: { text: "Collections are the week's priority.", date: "19 Aug 2025" },
+  }),
+  "command_center.api.starters.starters": () => [{ q: "Who owes us the most, and how late is it?" }],
+  "insights.core.platform_settings.people": () => [
+    { username: "kofi", full_name: "Kofi Mensah", email: "kofi.mensah@gigmann.example", is_me: true, is_admin: true,
+      is_manager: true, settings_access: [], active: true, has_password: true, last_login: "2026-11-17 08:12:00" },
+    { username: "ama", full_name: "Ama Owusu-Ansah Boateng", email: "ama.owusu-ansah.boateng@gigmann-medical-supplies.example",
+      is_admin: false, is_manager: true, settings_access: ["people", "keys"], active: true, has_password: false,
+      last_login: null, customers: ["Gigmann Medical Supplies Ltd"] },
+    { username: "yaw", full_name: "Yaw Boateng", email: "yaw@gigmann.example", is_admin: false, is_manager: false,
+      settings_access: [], active: false, has_password: true, last_login: "2026-10-02 17:40:00" },
+  ],
+  "insights.core.platform_settings.businesses": () => window.CC_BOOT.businesses.map((b) => ({ ...b, name: b.business_code,
+    site_url: "https://gigmann.powersoftsystem.com", status: "Active", last_load: "2026-11-17 06:00:00" })),
+  "insights.core.platform_settings.credentials": () => [
+    { name: "cred-1", username: "ama", full_name: "Ama Owusu-Ansah Boateng", business_code: BUSINESS,
+      business_name: "Gigmann Medical Supplies Ltd", erp_user: "ama.owusu-ansah.boateng@gigmann-medical-supplies.example",
+      last_checked: "2026-11-16 10:00:00", ok: true }],
+  "insights.core.platform_settings.email": () => ({ configured: false }),
+  "insights.core.platform_settings.notifications": () => ({ rows: [] }),
+  "insights.core.platform_settings.email_log": () => ({ shown: 100, keep_days: 90, rows: [
+    { id: 1, at: "2026-11-17 06:45:00", kind: "brief", to: "kofi.mensah@gigmann-medical-supplies-limited.example.com",
+      subject: "Daily Brief — Gigmann Medical Supplies Ltd — 17 Nov 2026", status: "Failed",
+      error: "Not emailed: email is not set up on this platform", can_resend: true }] }),
+  "insights.core.platform_settings.changes": () => [],
+});
+
 const realFetch = window.fetch.bind(window);
 
 window.fetch = async (input, init = {}) => {
@@ -598,7 +733,7 @@ window.fetch = async (input, init = {}) => {
     console.warn(`[preview] no sample answer for ${method}`);
     return json(417, { message: `Preview has no sample data for ${method}.` });
   }
-  const out = handler(args);
+  const out = longOn ? longify(handler(args)) : handler(args);
   if (deepen && out && typeof out === "object") {
     // A big question: the first pass comes back cut short and a deeper look carries on.
     deepStarted[args.ask_id] = Date.now();
@@ -648,6 +783,71 @@ if (new URLSearchParams(window.location.search).get("audit")) {
     const pre = document.createElement("pre");
     pre.id = "cc-audit";
     pre.textContent = JSON.stringify({ width: window.innerWidth, report });
+    document.body.append(pre);
+  });
+}
+
+/**
+ * ?phone=1 -- walk every screen, and every Settings section, and record anything that
+ * makes the page or the main column wider than the window (scripts/test_phone.mjs runs
+ * it headless at phone widths with ?long=1&admin=1). Measured as overflow, so the CSS
+ * safety net that hides the main column's sideways scroll on a phone cannot hide a fault
+ * from it. Each offender is the innermost element past the edge that is not inside a box
+ * of its own that scrolls or clips. Written into <pre id="cc-phone">.
+ */
+if (Q.get("phone")) {
+  const VIEWS = ["command", "brief", "myday", "ops", "health", "risk", "approvals", "delegation", "ask",
+    "reports", "sales", "proc", "inv", "eng", "cx", "fin", "hr", "it", "aud", "settings", "plan"];
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const offenders = () => {
+    const main = document.getElementById("cc-main");
+    if (!main) return ["no #cc-main"];
+    const edge = main.getBoundingClientRect().right - parseFloat(getComputedStyle(main).paddingRight);
+    const boxed = (el) => {
+      for (let p = el.parentElement; p && p !== main; p = p.parentElement) {
+        if (getComputedStyle(p).overflowX !== "visible") return true;
+      }
+      return false;
+    };
+    const past = (el) => el.getBoundingClientRect().right > edge + 1;
+    const out = [];
+    main.querySelectorAll("*").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !past(el) || boxed(el) || [...el.children].some(past)) return;
+      out.push(`${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]} `
+        + `"${(el.textContent || "").trim().slice(0, 40)}" ends at ${Math.round(r.right)}px`);
+    });
+    return out;
+  };
+  const measure = (name, report) => {
+    const main = document.getElementById("cc-main");
+    const page = document.documentElement.scrollWidth - window.innerWidth;
+    const col = main ? main.scrollWidth - main.clientWidth : 0;
+    const list = offenders();
+    if (page > 0 || col > 0 || list.length) report[name] = { page, main: col, offenders: list.slice(0, 8) };
+  };
+  window.addEventListener("load", async () => {
+    await wait(800);
+    const report = {};
+    const walked = [];
+    for (const v of VIEWS) {
+      window.location.hash = v;
+      await wait(1500);
+      measure(v, report);
+      walked.push(v);
+      if (v === "settings") {
+        const tabs = [...document.querySelectorAll(".st-tabs .tab")];
+        for (const t of tabs) {
+          t.click();
+          await wait(900);
+          measure(`settings/${t.textContent.trim()}`, report);
+          walked.push(`settings/${t.textContent.trim()}`);
+        }
+      }
+    }
+    const pre = document.createElement("pre");
+    pre.id = "cc-phone";
+    pre.textContent = JSON.stringify({ width: window.innerWidth, walked, report });
     document.body.append(pre);
   });
 }

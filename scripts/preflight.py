@@ -1485,6 +1485,30 @@ if _node:
     check(_t.returncode == 0,
           "scripts/test_swr.mjs failed:\n" + (_t.stdout + _t.stderr)[-1500:])
 
+# --------------------------------------------------------------------------
+# Screen faults of 17 Nov 2026: each rule is the one place its fault would come back.
+# --------------------------------------------------------------------------
+import pathlib as _pl
+_fe = _pl.Path(ROOT) / "frontend" / "src"
+_frontend_code = sorted(list(_fe.rglob("*.js")) + list(_fe.rglob("*.jsx")))
+# The phone rules: text breaks inside its box, chips wrap when longer than their row,
+# phone table rows stay one line and scroll in their own box, the main column never
+# scrolls sideways on a phone. test_phone.mjs measures them; these keep the rules named.
+_shell_py = open(os.path.join(ROOT, "interface", "shell.py")).read()
+for _rule in (".main{overflow-wrap:anywhere}", ".chip{max-width:100%;white-space:normal}",
+              "table.dt td{white-space:nowrap}", ".main{overflow-x:hidden}"):
+    check(_rule in _shell_py, f"interface/shell.py PHONE, EVERY SCREEN lost {_rule!r}")
+if _node:
+    # Every screen and Settings section at 375 and 428 wide, with long strings: nothing
+    # wider than the screen. Needs Chrome; says so when it was skipped.
+    _t = _sp.run([_node, os.path.join(ROOT, "scripts", "test_phone.mjs")],
+                 capture_output=True, text=True, timeout=600)
+    _out = "\n".join(l for l in (_t.stdout + _t.stderr).splitlines() if "allow list" not in l)
+    check(_t.returncode == 0, "scripts/test_phone.mjs failed (the page scrolls sideways on a "
+          "phone):\n" + _out[-2500:])
+    if "SKIPPED" in _out:
+        print("note: " + _out.strip().splitlines()[0])
+
 # Business Overview's front page keeps every tile, figure, footnote, flag and click it had
 # (Michael, 16 Nov 2026: appearance only, not content), and places every area once.
 _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_overview_parity.py")],
