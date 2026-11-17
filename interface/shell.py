@@ -1688,4 +1688,107 @@ table.dt.sk-t tfoot td{border-top:1px solid var(--line2);border-bottom:0;backgro
  .rec-live-list>.rec-group{margin-top:var(--sp-8);padding-top:var(--sp-3)}
  .rec-group>.rec-area{margin-bottom:var(--sp-3)}
 }
+/* ======================================================================
+   FOLDED ROWS (17 Nov 2026, the approved declutter mockups; legacy/fold.js)
+   "Cards and action lists collapsible, so the interface stays simple." An approval, a
+   recommendation, an alert, a task marked done and a debtor are each one line -- the
+   essentials and the primary action -- and open in place for the rest. Consecutive rows
+   read as one ruled list: a hairline between them, one frame around them. No tint, glow
+   or shadow; tokens only, so both themes and every accent hold.
+     row       the toggle (pill, title, figure), the primary button, the chevron; one
+               line at any width: the title ellipsises, nothing else wraps or shrinks
+     narrow    under 480px of panel the figure leaves the row for the expansion
+               (.fold-fig-x), and a debtor's avatar goes
+     open      the expansion under a hairline, in the order the card had it
+   ====================================================================== */
+.alert.fold{display:block;padding:0;margin:0;border-radius:0;border-top-width:0;box-shadow:none}
+:not(.alert.fold)+.alert.fold,.alert.fold:first-child{border-top-width:1px;
+ border-top-left-radius:var(--r-sm);border-top-right-radius:var(--r-sm)}
+.alert.fold:not(:has(+ .alert.fold)){border-bottom-left-radius:var(--r-sm);
+ border-bottom-right-radius:var(--r-sm);margin-bottom:var(--sp-3)}
+.alert.fold:hover,.alert.fold:is(.crit,.high,.med,.info):hover{border-color:var(--line)}
+.fold-row{display:flex;align-items:center;gap:var(--sp-3);min-width:0;padding:10px var(--sp-4);cursor:pointer}
+.fold-row:hover{background:var(--hover)}
+.fold-t{display:flex;align-items:center;gap:10px;flex:1 1 auto;min-width:0;margin:0;padding:4px 0;
+ border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.fold-t:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:var(--r-xs)}
+.fold-t>*{flex:none;white-space:nowrap}
+.fold-t .asev{margin:0}
+.fold-t .awhat{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:var(--fs-md);
+ font-weight:var(--fw-semibold);letter-spacing:-.01em;line-height:1.4}
+.fold-t .asev.rec-area-tag{margin:0;max-width:34%;overflow:hidden;text-overflow:ellipsis;display:inline-block}
+.fold-t .afig{background:none;padding:0;border-radius:0;font-size:var(--fs-md);font-weight:var(--fw-semibold);
+ letter-spacing:-.01em;line-height:1.4;text-align:right}
+.fold-t .afig small{display:inline;margin:0 0 0 4px}
+.fold-pri{flex:none;display:inline-flex}
+.fold-pri .btn{white-space:nowrap}
+.fold-chev{flex:none;width:16px;height:16px;display:grid;place-items:center;color:var(--dim)}
+.fold-chev::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;
+ border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);transition:transform .15s}
+.fold-on>.fold-row .fold-chev::before{transform:translateY(2px) rotate(-135deg)}
+.fold-row:hover .fold-chev{color:var(--ink2)}
+.fold-b{border-top:1px solid var(--line);padding:var(--sp-3) var(--sp-4) var(--sp-4);min-width:0}
+.fold-b[hidden]{padding:0;border:0;margin:0}
+.fold-b>*{min-width:0}
+.fold-b>*+*{margin-top:var(--sp-3)}
+.fold-b .awhy{margin-top:0}
+.fold-b>.ameta{margin-top:var(--sp-2)}
+.fold-b>.acts{margin-top:var(--sp-3)}
+.fold-b>.rec-steps{background:var(--raised);border-radius:var(--r-sm);padding:12px 16px;
+ font-size:var(--fs-sm);color:var(--ink2);line-height:1.55}
+.fold-b>.rec-steps .rec-learned{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+.fold-b>.rec-reason{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.fold-b .work-detail{margin:var(--sp-2) 0 0}
+.fold-b .fold-what.work-row{cursor:pointer;border-radius:var(--r-xs)}
+.fold-b .fold-what.work-row:hover .awhy{color:var(--ink2)}
+.fold-b .fold-what.work-row:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.fold-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:var(--sp-2)}
+.fold-tags .asev{margin:0}
+.fold-b .afig.fold-fig-x,.fold-fig-x{display:none}
+/* Largest Receivables: the customer, the Customer Ledger Balance, how long it has waited;
+   the columns line up with the heading row above them. */
+.debt-cols{grid-template-columns:minmax(0,1fr) 180px 110px 16px}
+.debt-cols span:last-child{text-align:left}
+.debt-cols span:nth-child(2){text-align:right}
+.debt-rows>.debt-row.fold{display:block;padding:0;border-bottom:1px solid var(--line);cursor:default}
+.debt-rows>.debt-row.fold:last-child{border-bottom:0}
+.debt-rows>.debt-row.fold:hover{background:none}
+.debt-row>.fold-row{padding:12px 22px}
+.debt-row .fold-t{display:grid;grid-template-columns:minmax(0,1fr) 180px 110px;gap:var(--sp-3);padding:0}
+.debt-row .fold-t .debt-a{align-items:flex-end;text-align:right}
+.debt-row .fold-t .debt-a small{display:none}
+.debt-a b .cx{color:var(--mut);font-size:var(--fs-xs);font-weight:var(--fw-medium)}
+.debt-row .fold-t .av2{width:30px;height:30px;border-radius:var(--r-xs)}
+.debt-row .fold-t .dpill{justify-self:start}
+.debt-row>.fold-b{padding:0 22px 12px;border-top:0}
+.debt-open{display:flex;align-items:center;gap:var(--sp-4);width:100%;padding:10px 12px 10px 42px;margin:0;
+ border:0;border-top:1px solid var(--line);background:none;font:inherit;color:var(--ink);text-align:left;cursor:pointer}
+.debt-open:hover{background:var(--hover)}
+.debt-open:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.debt-open .debt-a{align-items:flex-start}
+.debt-inv{flex:1 1 auto;min-width:0;font-size:var(--fs-xs);color:var(--mut)}
+.debt-open .debt-arrow{flex:none}
+@container panel (max-width:720px){
+ .debt-row .fold-t{grid-template-columns:minmax(0,1fr) auto auto}
+ .debt-row>.fold-row{padding:12px 16px}
+ .debt-row>.fold-b{padding:0 16px 12px}
+ .debt-open{padding-left:12px}
+}
+@container panel (max-width:620px){
+ .fold-b>.arow{flex-direction:column;gap:var(--sp-3)}
+ .fold-b .afig{text-align:left}
+}
+@container panel (max-width:480px){
+ .fold-row{padding:10px var(--sp-3);gap:var(--sp-2)}
+ .fold-t{gap:var(--sp-2)}
+ .fold-b{padding:var(--sp-3)}
+ .fold-t>.afig{display:none}
+ .fold-b .afig.fold-fig-x,.fold-fig-x{display:block}
+ .fold-b>.afig.fold-fig-x{display:table;padding:8px 12px;font-size:var(--fs-lg)}
+ .fold-pri .btn{padding:6px 12px}
+ .debt-row .av2{display:none}
+ .debt-row .fold-t .debt-a b .cx,.debt-a.fold-fig-x b .cx{display:none}
+ .debt-open{flex-wrap:wrap;row-gap:var(--sp-2)}
+ .debt-open .debt-a.fold-fig-x{display:flex}
+}
 """

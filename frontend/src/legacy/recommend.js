@@ -21,6 +21,7 @@ import { count, money } from "../format.js";
 import { menu } from "./actions.js";
 import { guideBox } from "./guide.js";
 import { sparkline } from "./spark.js";
+import { fold } from "./fold.js";
 
 export const REC_VIEWS = new Set(["command", "brief"]);
 const WORDS = { crit: "Critical", high: "High", med: "Medium", info: "For information" };
@@ -142,23 +143,28 @@ function brief(root, b) {
   }
 }
 
+/* One row (legacy/fold.js): priority, what to do, its area; the why, the step, the
+   figure, the owner and every action open under it. */
 function card(r, onOpen) {
   const c = el("div", `alert ${r.severity}`);
   c.id = `rec-${r.name}`;
   c.dataset.live = "1";
   c.dataset.ccWired = "1";
 
+  const head = [el("span", "asev", WORDS[r.severity] || r.severity), el("span", "awhat", r.title),
+    r.area_label ? el("span", "asev rec-area-tag", r.area_label) : null];
+
   const row = el("div", "arow");
   const body = el("div");
-  body.append(el("span", "asev", WORDS[r.severity] || r.severity),
-    el("span", "asev rec-area-tag", r.area_label || ""));
+  const tags = el("div", "fold-tags");
   if (r.source_label) {
     const src = el("span", `asev rec-src rec-src-${r.source || "rule"}`, r.source_label);
     if (r.learned?.explain) src.title = r.learned.explain;
-    body.append(src);
+    tags.append(src);
   }
-  if (r.timeframe) body.append(el("span", "asev rec-area-tag", r.timeframe));
-  body.append(el("div", "awhat", r.title), el("div", "awhy", r.why || ""));
+  if (r.timeframe) tags.append(el("span", "asev rec-area-tag", r.timeframe));
+  if (tags.children.length) body.append(tags);
+  body.append(el("div", "awhy", r.why || ""));
   if (r.why_now) body.append(el("div", "rec-why-now", `Why now: ${r.why_now}`));
   if (r.ai_priority?.reason) {
     const nth = ORDINAL[r.ai_priority.rank] || `number ${r.ai_priority.rank}`;
@@ -178,7 +184,6 @@ function card(r, onOpen) {
     if (chart) side.append(chart);
     row.append(side);
   }
-  c.append(row);
 
   const steps = el("div", "rec-steps");
   steps.hidden = !opened.has(r.name);
@@ -187,7 +192,6 @@ function card(r, onOpen) {
   steps.append(ol);
   if (r.how_in_erpnext) steps.append(guideBox(r.how_in_erpnext, { compact: true }));
   steps.append(...learnedNotes(r));
-  c.append(steps);
 
   const meta = el("div", "ameta");
   if (r.drill?.fact || r.drill?.href) {
@@ -199,7 +203,6 @@ function card(r, onOpen) {
     meta.append(src);
   }
   meta.append(chip("Owner", r.owner_role), chip("Seen since", (r.first_seen || "").slice(0, 10)));
-  c.append(meta);
 
   const acts = el("div", "acts");
   const what = btn(steps.hidden ? "What To Do" : "Hide Steps", "btn pri", () => {
@@ -217,8 +220,7 @@ function card(r, onOpen) {
       ["Snooze 30 Days", () => act(c, r, "snooze", { days: 30 }), false],
     ]),
   );
-  c.append(acts);
-  return c;
+  return fold(c, { key: `rec:${r.name}`, head, body: [row, steps, meta, acts] });
 }
 
 /** Under What To Do: the evidence (AI-found), the usual range, the threshold, the weight. */

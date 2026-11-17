@@ -20,6 +20,7 @@ import { api } from "../api/client.js";
 import { count, exact, money, shortDate } from "../format.js";
 import { GUIDE_STATES, guideBox, guideWords, hasGuide } from "./guide.js";
 import { WAITING } from "./reach.js";
+import { fold, reveal } from "./fold.js";
 
 const SCORES = [
   ["score_deliver", "Delivering what we sold", "Can we deliver what we sold?"],
@@ -348,12 +349,7 @@ function brief(root, data) {
     c.type = "button";
     c.title = `${WORDS[a.severity] || ""}: ${a.title}`;
     c.append(el("b", null, figureText(a)), document.createTextNode(` ${a.rule.toLowerCase()}`));
-    c.onclick = () => {
-      const card = document.getElementById(`alert-${a.name}`);
-      card?.scrollIntoView({ behavior: "smooth", block: "center" });
-      card?.classList.add("alert-flash");
-      setTimeout(() => card?.classList.remove("alert-flash"), 1600);
-    };
+    c.onclick = () => reveal(`alert-${a.name}`, "alert-flash");
     chips.append(c);
   });
 }
@@ -445,29 +441,45 @@ function loadDebts(panel, scope, onOpen) {
     });
 }
 
+/* One row (legacy/fold.js): the customer, the Customer Ledger Balance and how long it
+   has waited. Invoice Outstanding, the open invoices and the last payment open under it,
+   as the button that opens the customer's Customer Ledger Balance. */
 function debtRow(r, currency, onOpen) {
-  const row = el("button", "debt-row");
-  row.type = "button";
-  row.title = `Open ${r.customer}'s Customer Ledger Balance`;
+  const row = el("div", "debt-row");
   const who = el("span", "debt-who");
   who.append(el("span", "av2", initials(r.customer)));
   const name = el("span", "debt-name");
-  name.append(el("b", null, r.customer),
-    el("span", null, `${count(r.invoices)} open invoice${r.invoices === 1 ? "" : "s"}`
-      + (r.last_paid ? ` · last paid ${shortDate(r.last_paid)}` : " · no payment on record")));
+  name.append(el("b", null, r.customer));
   who.append(name);
   const days = el("span", `dpill ${r.days > 90 ? "crit" : r.days > 30 ? "high" : "ok"}`,
     r.days > 0 ? `${count(r.days)} days` : "not yet due");
-  const amt = el("span", "debt-amt");
+  // What the ledger says is really owed. On the row its label is the column heading; on
+  // the narrowest screens, where the heading is not shown, it is in the expansion
+  // (shell.py, FOLDED ROWS).
+  const owed = () => {
+    const o = el("span", "debt-a");
+    const fig = el("b");
+    if (currency) fig.append(el("span", "cx", currency), document.createTextNode(" "));
+    fig.append(document.createTextNode(exact(r.owed, { decimals: 0 })));
+    o.append(fig, el("small", null, `Customer Ledger Balance${currency ? `, ${currency}` : ""}`));
+    return o;
+  };
+
+  const open = el("button", "debt-open");
+  open.type = "button";
+  open.dataset.ccWired = "1";
+  open.title = `Open ${r.customer}'s Customer Ledger Balance`;
   const inv = el("span", "debt-a");
-  // What the open invoices say, then what the ledger says is really owed.
+  // What the open invoices say, beside what the ledger says is owed.
   inv.append(el("b", null, exact(r.on_invoices ?? r.invoiced, { decimals: 0 })), el("small", null, "Invoice Outstanding"));
-  const owed = el("span", "debt-a");
-  owed.append(el("b", null, exact(r.owed, { decimals: 0 })), el("small", null, `Customer Ledger Balance${currency ? `, ${currency}` : ""}`));
-  amt.append(inv, el("span", "debt-arrow", "→"), owed);
-  row.append(who, days, amt);
-  row.onclick = () => onOpen?.({ label: `${r.customer}: Customer Ledger Balance`, drill: r.drill });
-  return row;
+  const narrow = owed();
+  narrow.classList.add("fold-fig-x");
+  open.append(inv, narrow,
+    el("span", "debt-inv", `${count(r.invoices)} open invoice${r.invoices === 1 ? "" : "s"}`
+      + (r.last_paid ? ` · last paid ${shortDate(r.last_paid)}` : " · no payment on record")),
+    el("span", "debt-arrow", "→"));
+  open.onclick = () => onOpen?.({ label: `${r.customer}: Customer Ledger Balance`, drill: r.drill });
+  return fold(row, { key: `debt:${r.customer}`, head: [who, owed(), days], body: [open] });
 }
 
 /* ------------------------------------------------------------------ top customers */

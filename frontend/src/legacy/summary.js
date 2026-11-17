@@ -19,6 +19,7 @@
  */
 
 import { money } from "../format.js";
+import { reveal } from "./fold.js";
 
 export const SUMMARY_VIEWS = new Set(["brief"]);
 const SEV_FLAG = { crit: "f-crit", high: "f-high", med: "f-med", info: "f-ok" };
@@ -225,13 +226,9 @@ function risk(r) {
   return li;
 }
 
-/** Scroll to the full card below and mark it for a moment. */
+/** Scroll to the full card below, opened, and mark it for a moment. */
 function reach(id) {
-  const card = document.getElementById(id);
-  if (!card) return;
-  card.scrollIntoView({ behavior: "smooth", block: "center" });
-  card.classList.add("xm-reached");
-  setTimeout(() => card.classList.remove("xm-reached"), 1600);
+  reveal(id, "xm-reached");
 }
 
 function body2(label, text) {

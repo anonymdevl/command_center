@@ -924,11 +924,17 @@ if (Q.get("phone")) {
     });
     return out;
   };
+  // A folded row (legacy/fold.js) is one line at any width: its title ellipsises and its
+  // pill, figure, button and chevron never wrap or run past the row (17 Nov 2026).
+  const folds = () => [...document.querySelectorAll("#cc-main .fold-row")]
+    .filter((row) => row.getClientRects().length && row.scrollWidth > row.clientWidth + 1)
+    .map((row) => `fold row "${(row.textContent || "").trim().slice(0, 40)}": `
+      + `${row.scrollWidth}px in ${row.clientWidth}px, not one line`);
   const measure = (name, report) => {
     const main = document.getElementById("cc-main");
     const page = document.documentElement.scrollWidth - window.innerWidth;
     const col = main ? main.scrollWidth - main.clientWidth : 0;
-    const list = offenders();
+    const list = [...folds(), ...offenders()];
     const spill = cells();
     if (page > 0 || col > 0 || list.length || spill.length) {
       report[name] = { page, main: col, offenders: list.slice(0, 8), cells: spill.slice(0, 8), spilled: spill.length };
@@ -943,6 +949,14 @@ if (Q.get("phone")) {
       await wait(1500);
       measure(v, report);
       walked.push(v);
+      // And again with every folded row open: what moved into the expansion fits too.
+      const shut = [...document.querySelectorAll("#cc-main .fold-t[aria-expanded='false']")];
+      if (shut.length) {
+        shut.forEach((t) => t.click());
+        await wait(300);
+        measure(`${v} (rows open)`, report);
+        shut.forEach((t) => t.click());
+      }
       if (v === "settings") {
         const tabs = [...document.querySelectorAll(".st-tabs .tab")];
         for (const t of tabs) {

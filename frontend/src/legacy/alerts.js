@@ -18,6 +18,7 @@ import { deskPath, erpUrl } from "../erpLinks.js";
 import { api } from "../api/client.js";
 import { money, exact } from "../format.js";
 import { menu } from "./actions.js";
+import { fold } from "./fold.js";
 
 export const ALERT_VIEWS = new Set(["command", "brief", "health", "risk"]);
 const WORDS = { crit: "Critical", high: "High", med: "Medium", info: "For information" };
@@ -69,22 +70,24 @@ export function alertsFailed(root, view, error) {
   slot.append(e);
 }
 
+/* One row (legacy/fold.js): severity, what happened, the figure and Assign; why it
+   matters, the next step, where it came from, who owns it and the other actions open
+   under it. */
 function card(a, onOpen) {
   const c = el("div", `alert ${a.severity}`);
   c.id = `alert-${a.name}`;
   c.dataset.live = "1";
   c.dataset.ccWired = "1";
 
-  const row = el("div", "arow");
-  const body = el("div");
-  const sev = el("span", "asev", WORDS[a.severity] || a.severity);
-  body.append(sev);
-  if (a.status === "Actioned") body.append(el("span", "asev astate", "Assigned"));
-  body.append(el("div", "awhat", a.title), el("div", "awhy", a.why || ""),
-    el("div", "asw", `→ ${a.next_step || ""}`));
-  row.append(body);
-  if (a.figure !== null && a.figure !== undefined) row.append(figure(a));
-  c.append(row);
+  const fig = () => (a.figure === null || a.figure === undefined ? null : figure(a));
+  const head = [el("span", "asev", WORDS[a.severity] || a.severity),
+    a.status === "Actioned" ? el("span", "asev astate", "Assigned") : null,
+    el("span", "awhat", a.title), fig()];
+  const what = el("div", "fold-what");
+  what.append(el("div", "awhy", a.why || ""), el("div", "asw", `→ ${a.next_step || ""}`));
+  // On the narrowest screens the figure leaves the row for here (shell.py, FOLDED ROWS).
+  const narrow = fig();
+  narrow?.classList.add("fold-fig-x");
 
   const records = () => {
     act(a.name, "acknowledge");
@@ -119,7 +122,6 @@ function card(a, onOpen) {
     t.append(document.createTextNode("To-Do "), el("b", null, a.todo));
     meta.append(t);
   }
-  c.append(meta);
 
   // The alert's own business goes with every action on it: in "All businesses" the
   // screen's scope is no business at all (api/actions._business refuses it).
@@ -127,8 +129,8 @@ function card(a, onOpen) {
                 owner: a.owner_label, alert: a.name, business_code: a.business_code,
                 doctype: a.document?.doctype, docname: a.document?.name };
   const acts = el("div", "acts");
+  const assign = btn("Assign", "btn pri", () => fire("cc-action", { kind: "assign", ...ctx }));
   acts.append(
-    btn("Assign", "btn pri", () => fire("cc-action", { kind: "assign", ...ctx })),
     btn("Ask AI", "btn", () => {
       act(a.name, "acknowledge");
       fire("cc-ask", { question: `${a.title}. What is behind this, and what should we do about it?` });
@@ -142,12 +144,11 @@ function card(a, onOpen) {
       ["Dismiss…", () => fire("cc-action", { kind: "alert", verb: "dismiss", alert: a.name, title: a.title }), true],
     ]),
   );
-  c.append(acts);
-  return c;
+  return fold(c, { key: `alert:${a.name}`, head, primary: assign, body: [what, narrow, meta, acts] });
 }
 
 function figure(a) {
-  const f = el("div", "afig");
+  const f = el("span", "afig");
   if (a.figure_unit === "currency") {
     const m = money(a.figure, a.currency || "");
     f.append(el("span", "cx", m.currency), document.createTextNode(m.figure));

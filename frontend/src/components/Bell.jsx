@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { reveal } from "../legacy/fold.js";
 import { api, plansApi } from "../api/client.js";
 import { boot } from "../api/boot.js";
 import { follow, OPEN_KEY, SIGNED_OUT } from "../legacy/reports.js";
@@ -142,25 +143,13 @@ export default function Bell({ scope, onGo }) {
     setOpen(false);
     onGo?.("command");
     // Home renders its alerts after its figures; give it a moment, then bring this one up.
-    setTimeout(() => {
-      const card = document.getElementById(`alert-${a.name}`);
-      if (!card) return;
-      card.scrollIntoView({ behavior: "smooth", block: "center" });
-      card.classList.add("alert-flash");
-      setTimeout(() => card.classList.remove("alert-flash"), 1600);
-    }, 450);
+    setTimeout(() => reveal(`alert-${a.name}`, "alert-flash"), 450);
   };
 
   const showRec = (r) => {
     setOpen(false);
     onGo?.("brief");
-    setTimeout(() => {
-      const card = document.getElementById(`rec-${r.name}`);
-      if (!card) return;
-      card.scrollIntoView({ behavior: "smooth", block: "center" });
-      card.classList.add("alert-flash");
-      setTimeout(() => card.classList.remove("alert-flash"), 1600);
-    }, 650);
+    setTimeout(() => reveal(`rec-${r.name}`, "alert-flash"), 650);
   };
 
   return (
