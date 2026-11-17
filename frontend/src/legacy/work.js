@@ -38,6 +38,7 @@ import { count, exact, shortDate } from "../format.js";
 import { guideBox } from "./guide.js";
 import { goTarget, hydrateTiles } from "./hydrate.js";
 import { menu } from "./actions.js";
+import { fold } from "./fold.js";
 
 export const WORK_VIEWS = new Set(["myday", "approvals", "delegation"]);
 
@@ -216,7 +217,7 @@ function today(root, data, opts) {
     waiting.after(list);
   }
 
-  const promises = sects.find((s) => /^promises|^work you handed out/i.test(s.textContent.trim()));
+  const promises = sects.find((s) => /^promises|^work you handed out|^overdue delegated tasks/i.test(s.textContent.trim()));
   if (promises) {
     promises.textContent = "Overdue Delegated Tasks";
     const old = promises.nextElementSibling;
@@ -344,26 +345,34 @@ export function taskRequest(kind, t) {
 }
 
 /* ------------------------------------------------------------------ cards */
+/* Each card is one row (legacy/fold.js): what it is, the figure and the first decision;
+   the rest -- where it stands, who raised it, the document and every other action -- opens
+   under it. */
 function approvalCard(a, currency) {
   const sev = a.waiting_days > 30 ? "crit" : a.waiting_days > 7 ? "high" : "med";
   const card = el("div", `alert ${sev}`);
   card.dataset.ccWired = "1";
   card.dataset.live = "1";
-  const row = el("div", "arow");
-  const body = el("div");
-  body.append(
-    el("span", "asev", a.waiting_days ? `Waiting ${days(a.waiting_days)}` : "New today"),
-    el("div", "awhat", `${a.doctype} — ${a.title}`),
+  const waited = a.waiting_days ? `Waiting ${days(a.waiting_days)}` : "New today";
+  const pill = el("span", "asev", a.waiting_days ? age(a.waiting_days) : "New");
+  pill.title = waited;
+  pill.setAttribute("aria-label", waited);
+  const amount = () => {
+    if (!a.value) return null;
+    const fig = el("span", "afig");
+    fig.append(el("span", "cx", currency || ""), document.createTextNode(exact(a.value, { decimals: 0 })));
+    return fig;
+  };
+  const head = [pill, el("span", "awhat", `${a.doctype} — ${a.title}`), amount()];
+
+  const what = el("div", "fold-what");
+  what.append(
     el("div", "awhy", `At “${a.state}” · raised by ${a.raised_by} on ${shortDate(a.raised)}`),
     el("div", "asw", `→ Your step: ${a.actions.join(" or ")}.`),
   );
-  row.append(body);
-  if (a.value) {
-    const fig = el("div", "afig");
-    fig.append(el("span", "cx", currency || ""), document.createTextNode(exact(a.value, { decimals: 0 })));
-    row.append(fig);
-  }
-  card.append(row);
+  // On the narrowest screens the figure leaves the row for here (shell.py, FOLDED ROWS).
+  const narrow = amount();
+  narrow?.classList.add("fold-fig-x");
 
   const meta = el("div", "ameta");
   const doc = el("a", "chip src", "");
@@ -372,40 +381,37 @@ function approvalCard(a, currency) {
   doc.rel = "noreferrer";
   doc.append(document.createTextNode(`${a.doctype} · `), el("b", null, a.name));
   meta.append(doc, chip("State", a.state), chip("Raised by", a.raised_by));
-  card.append(meta);
 
   const acts = el("div", "acts");
-  a.actions.forEach((action, i) => {
-    acts.append(btn(action, i === 0 ? "btn pri" : /reject|cancel|return/i.test(action) ? "btn dgr" : "btn",
+  const decisions = a.actions.map((action, i) =>
+    btn(action, i === 0 ? "btn pri" : /reject|cancel|return/i.test(action) ? "btn dgr" : "btn",
       // The state and stamp the card shows: the server refuses the action if the document
       // has moved on since (api/actions.apply_workflow_action), never applies it to a later step.
       () => fire("cc-action", { kind: "decide", business_code: a.business_code, doctype: a.doctype, name: a.name, action,
                                 state: a.state, state_field: a.state_field, modified: a.modified,
                                 title: `${a.doctype} — ${a.title}` })));
-  });
+  acts.append(...decisions.slice(1));
   acts.append(btn("Ask AI", "btn", () => fire("cc-ask", {
     question: `${a.doctype} ${a.name} (${a.title}) is waiting for my approval. `
       + "What should I know before I decide?" })));
-  card.append(acts);
-  return card;
+  return fold(card, { key: `appr:${a.business_code || ""}:${a.doctype}:${a.name}`, head,
+                      primary: decisions[0] || null, body: [what, narrow, meta, acts] });
 }
 
 function checkCard(t, opts) {
   const card = el("div", "alert med");
-  opensTask(card, t, opts);
   card.dataset.ccWired = "1";
   card.dataset.live = "1";
-  const row = el("div", "arow");
-  const body = el("div");
-  body.append(
-    el("span", "asev", "Marked done"),
-    el("div", "awhat", t.title),
+  const head = [el("span", "asev", "Marked done"), el("span", "awhat", t.title)];
+
+  // The words open the task's own drawer, as the whole card did before it folded.
+  const what = el("div", "fold-what");
+  what.append(
     el("div", "awhy", `Given to ${t.to_name || t.to} · marked done on ${shortDate(t.closed_on)}`),
     el("div", "asw", "→ Accept it, or send it back with what is still needed."),
   );
-  row.append(body);
-  card.append(row);
-  if (t.detail) card.append(el("div", "work-detail", t.detail));
+  if (t.detail) what.append(el("div", "work-detail", t.detail));
+  opensTask(what, t, opts);
 
   const meta = el("div", "ameta");
   const link = el("a", "chip src", "");
@@ -416,15 +422,14 @@ function checkCard(t, opts) {
   meta.append(link);
   if (t.date) meta.append(chip("Due", shortDate(t.date)));
   if (t.reference) meta.append(chip(t.reference.doctype, t.reference.name));
-  card.append(meta);
 
   const acts = el("div", "acts");
+  const accept = btn("Accept it", "btn pri", () => fire("cc-action", { kind: "review", verdict: "accept", business_code: t.business_code, todo: t.name, title: t.title }));
   acts.append(
-    btn("Accept it", "btn pri", () => fire("cc-action", { kind: "review", verdict: "accept", business_code: t.business_code, todo: t.name, title: t.title })),
     btn("Send it back", "btn dgr", () => fire("cc-action", { kind: "review", verdict: "return", business_code: t.business_code, todo: t.name, title: t.title })),
   );
-  card.append(acts);
-  return card;
+  return fold(card, { key: `check:${t.business_code || ""}:${t.name}`, head, primary: accept,
+                      body: [what, meta, acts] });
 }
 
 function tasksTable(rows, { withPriority = false, selectable = false, empty: none, opts } = {}) {
@@ -545,6 +550,11 @@ function checkbox(label, on, change) {
 function setWhen(root, text) {
   const w = root.querySelector(".topbar .when");
   if (w) w.textContent = text;
+}
+
+/** The row's waiting pill: "12d", "3mo"; the words are its title. */
+function age(n) {
+  return n >= 60 ? `${Math.round(n / 30.4)}mo` : `${count(n)}d`;
 }
 
 function days(n) {

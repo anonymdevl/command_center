@@ -103,7 +103,7 @@ V_COMMAND=f'''<div class="topbar"><div><h3 class="hello" id="greet">Good morning
 <button type="button" class="on" data-mode="all" role="tab" aria-selected="true">All</button>
 <button type="button" data-mode="overdue" role="tab" aria-selected="false">Overdue</button>
 <button type="button" data-mode="over90" role="tab" aria-selected="false">Over 90 Days</button></div></div>
-<div class="debt-cols"><span>Customer</span><span>Waiting</span><span>Invoice Outstanding → Customer Ledger Balance</span></div>
+<div class="debt-cols"><span>Customer</span><span>Customer Ledger Balance</span><span>Waiting</span></div>
 <div class="debt-rows" id="debt-rows"><div class="home-wait">Reading Accounts Receivable…</div></div></div>
 <div class="counts">
 <div class="count dark" onclick="go('cx')"><span class="count-i" aria-hidden="true">●</span><b id="cnt-cases">—</b><span>customer issues open</span></div>
