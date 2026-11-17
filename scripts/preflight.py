@@ -1299,7 +1299,7 @@ check(not _dead,
       f"button(s) {', '.join(map(repr, _dead))} have no onclick and legacy/actions.js does "
       f"not know them, so they would do nothing when pressed.")
 check("<ActionDialog" in open(os.path.join(ROOT, "frontend", "src", "App.jsx")).read()
-      and "wireActions(ref.current)" in open(os.path.join(ROOT, "frontend", "src", "components",
+      and "wireActions(ref.current" in open(os.path.join(ROOT, "frontend", "src", "components",
                                                          "LegacyView.jsx")).read(),
       "the action dialog is not mounted or the screens' buttons are not wired, so Assign, "
       "Escalate and the alert menus do nothing.")

@@ -60,7 +60,13 @@ async function browser() {
     "--no-default-browser-check", "--hide-scrollbars", "--remote-debugging-port=0",
     `--user-data-dir=${dir}`, "about:blank"], { stdio: "ignore" });
   const portFile = path.join(dir, "DevToolsActivePort");
-  for (let i = 0; i < 100 && !existsSync(portFile); i++) await sleep(100);
+  // A busy machine (a test suite running beside it) can take a while to start Chrome.
+  for (let i = 0; i < 600 && !existsSync(portFile); i++) await sleep(100);
+  if (!existsSync(portFile)) {
+    proc.kill();
+    console.log("FAIL: headless Chrome did not start within a minute.");
+    process.exit(1);
+  }
   const [devPort] = readFileSync(portFile, "utf8").split("\n");
   const list = await (await fetch(`http://127.0.0.1:${devPort}/json/list`)).json();
   const ws = new WebSocket(list.find((t) => t.type === "page").webSocketDebuggerUrl);
