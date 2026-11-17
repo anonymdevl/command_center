@@ -8,7 +8,9 @@ AUX_MODELS = {("core", "errorlog"), ("django_cache", "cacheentry"),
               # the usage ledger and its notices (plans.py): billing outlives a rollback
               ("core", "usageevent"), ("core", "plannotice"),
               # the sign-in record (security.py): a rolled-back request keeps its attempt
-              ("core", "securityevent")}
+              ("core", "securityevent"),
+              # every email send attempt (runtime.sendmail): a rolled-back request keeps it
+              ("core", "emaillog")}
 
 
 class AuxRouter:

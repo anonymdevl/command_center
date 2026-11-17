@@ -224,6 +224,16 @@ class BusinessConnector:
         """
         raise NotImplementedError
 
+    def unassign(self, doctype, name, user) -> list:
+        """Take a document's assignment off one person the way the desk's "x" on Assigned
+        To does: `frappe.desk.form.assign_to.remove(doctype, name, assign_to)`, the same
+        three arguments on v14, v15 and v16 (v15/v16 add `ignore_permissions`, never
+        passed). ERPNext cancels that person's open To-Do on it, takes them off the
+        document's Assigned To, writes the "removed assignment" comment and sends them the
+        Assignment notification that it was removed. Runs as the acting user. Returns the
+        document's remaining assignments."""
+        raise NotImplementedError
+
     def comment(self, doctype, name, content) -> dict:
         """A comment on a record through the form's own endpoint
         (`frappe.desk.form.utils.add_comment`): anyone who may read the record may

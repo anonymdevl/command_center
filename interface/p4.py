@@ -58,11 +58,11 @@ who decided, what they decided and when.</li></ul></div>'''
 V_DELEG=f'''<div class="topbar"><div><h3>Outstanding Tasks</h3>
 <div class="when">Reading the work you handed out&hellip;</div></div></div>
 <div class="grid" style="grid-template-columns:repeat(4,1fr)">
-<div class="bk"><div class="n">—</div><div class="l">Still open</div><div class="v">work you handed out</div></div>
+<div class="bk"><div class="n">—</div><div class="l">Still Open</div><div class="v">work you handed out</div></div>
 <div class="bk"><div class="n">—</div><div class="l">Late</div><div class="v">past the date you set</div></div>
-<div class="bk"><div class="n">—</div><div class="l">Reopened twice+</div><div class="v">sent back more than once</div></div>
-<div class="bk"><div class="n">—</div><div class="l">High risk</div><div class="v">marked high priority</div></div></div>
+<div class="bk"><div class="n">—</div><div class="l">Sent Back More Than Once</div><div class="v">you rejected the work twice or more</div></div>
+<div class="bk"><div class="n">—</div><div class="l">High Priority</div><div class="v">marked high priority</div></div></div>
 <div class="note"><h4>Where the work actually happens</h4><ul>
 <li>This platform is for management. <b>The people you hand work to do not need a login here.</b></li>
 <li>Each task is a To-Do in ERPNext, where they already work: ERPNext notifies them, and they mark it done there.
-Only the decision to accept or reject it happens on this screen.</li></ul></div>'''
+You hand work out, move it, withdraw it or change its date here, and accept it or send it back when it is done.</li></ul></div>'''

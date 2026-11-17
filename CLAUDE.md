@@ -516,6 +516,14 @@ no manager is a stated reason with its fix, and the sender picks someone by hand
 work and who escalated, and tells the person by a mention comment on the document (else their
 To-Do, else the new one) -- never unassigned. Open delegated tasks carry an Escalate button.
 The assistant never calls it. Approve/Reject/Accept/Send back on the sample requests say they are samples.
+Outstanding Tasks manages the work (16 Nov 2026): New Task (the same dialog, subject + priority +
+optional document), and on each open row Edit (To-Do `date`/`priority` by `set_value`), Reassign
+(document: `assign_to.remove` then `assign_to.add`; To-Do: status Cancelled + a new To-Do with a
+mention), Escalate and Cancel Assignment (`assign_to.remove`, or status Cancelled), each telling
+the person by a mention comment (`actions._tell`). A row opens `TaskDrawer.jsx` (`work.task`:
+details, document, ERPNext comments when readable). Every Send Back is kept in `Command Center
+Task Send Back`; "Sent Back More Than Once" counts it (Comments only added when readable, never
+a failure). Each tile filters the list (`work.TILE_FILTERS`); Today's two open it filtered.
 Defer, Dismiss and Approve inside an alert's menu are removed until an alert engine can
 remember a decision. A new button label needs a handler there, or preflight fails.
 
@@ -580,8 +588,8 @@ Order of work:
    `legacy/work.js` replaces the sample cards on Approvals, Today and Outstanding Tasks
    and hydrates their tiles (WORK_TILES). Decisions go through ActionDialog: approve /
    reject = `actions.apply_workflow_action`; accept = tag "Accepted"; send back = reopen
-   with the reason as a comment (`work.review`). Not yet: "Reopened twice+" (needs To-Do
-   history), connected peers' queues, Executive Summary.
+   with the reason as a comment (`work.review`). "Sent Back More Than Once" counts the
+   platform's own Send Back record (16 Nov 2026). Not yet: connected peers' queues.
 9. ~~**Reports**~~ — written by the analyst on Run, PDF/Excel export (18 Oct 2026).
    ~~Schedule and email~~ Done (18 Oct 2026): `Command Center Report Schedule` (one per
    report per business; daily/weekly/monthly at an hour), set from the Reports screen
@@ -640,4 +648,7 @@ not an app on a client's ERPNext. `insights/` is a Django project (PLATFORM.md):
 - People are Django users (username = email); managers hold the group "Insights
   Dashboard Manager"; the administrator is a superuser (seen as "System Manager").
 - Secrets: encrypted in core.Secret with `encryption_key` from insights.json.
+- Email: every send attempt is a row in `core.EmailLog` (aux; written in
+  `runtime.sendmail` only; kind/business from `command_center.mail.about(...)`), shown in
+  Settings -> Email -> Email Log; pruned at `email_log_days` (180) by maintenance.daily.
 - `manage.py test insights` (in preflight) is the end-to-end check; keep it passing.

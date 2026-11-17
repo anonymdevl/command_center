@@ -250,6 +250,15 @@ export const api = {
     call("command_center.api.actions.apply_workflow_action", { business_code, doctype, name, action }),
   review: ({ business_code, todo, verdict, note }) =>
     call("command_center.api.work.review", { business_code, todo, verdict, note }),
+  /* One task handed out, for its drawer: details, dates, document, comments. */
+  task: ({ business_code, todo }) => call("command_center.api.work.task", { business_code, todo }),
+  /* Managing work handed out, as the manager, in the business's ERPNext (api/actions). */
+  reassignTask: ({ business_code, todo, to_user, note }) =>
+    call("command_center.api.actions.reassign_task", { business_code, todo, to_user, note }),
+  cancelTask: ({ business_code, todo, reason }) =>
+    call("command_center.api.actions.cancel_task", { business_code, todo, reason }),
+  updateTask: ({ business_code, todo, due_date, priority }) =>
+    call("command_center.api.actions.update_task", { business_code, todo, due_date, priority }),
 
   /* Downloads. Reads only: nothing is written to the site, not even a File. */
   answerPdf: (args) => download("command_center.api.export.answer_pdf", args, "answer.pdf"),
@@ -326,6 +335,8 @@ Object.assign(settingsApi, {
   email: () => call(`${PS}.email`),
   setEmail: (args) => call(`${PS}.set_email`, args),
   testEmail: (to) => call(`${PS}.test_email`, { to }),
+  emailLog: (status) => call(`${PS}.email_log`, { status: status || "" }),
+  resendEmail: (id) => call(`${PS}.resend_email`, { id }),
   notifications: () => call(`${PS}.notifications`),
 
   recommend: (business_code) => call(`${PS}.recommendations`, { business_code }),

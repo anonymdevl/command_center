@@ -24,7 +24,7 @@ import uuid
 
 import frappe
 
-from command_center import branding
+from command_center import branding, mail
 from command_center.api.businesses import require_manager
 
 REPORT_STEPS = 30
@@ -766,20 +766,21 @@ def _write_and_send(doc, written=None):
     when = frappe.utils.format_date(frappe.utils.today(), "d MMM yyyy")
     lead = (answer.split("\n\n", 1)[0] or "")[:1200]
     esc = frappe.utils.escape_html
-    frappe.sendmail(
-        recipients=_recipients(doc.recipients),
-        subject=f"{heading} · {business} · {when}",
-        message=branding.email_html(
-            f"<p><b>{esc(heading)}</b> · {esc(business)}</p>"
-            f"<p>{esc(lead)}</p>"
-            f"<p>The full report is attached. It was written from the records as at "
-            f"{esc(_as_of())}, with the permissions of "
-            f"{esc(frappe.utils.get_fullname(doc.run_as))}.</p>"
-            f"<p style='color:#777'>Sent by {esc(branding.branding()['product'])} on its "
-            f"{esc(describe(doc))} schedule.</p>", doc.business_code),
-        attachments=[{"fname": f"{heading} {frappe.utils.today()}.pdf", "fcontent": pdf}],
-        now=True,
-    )
+    with mail.about("report", doc.business_code):
+        frappe.sendmail(
+            recipients=_recipients(doc.recipients),
+            subject=f"{heading} · {business} · {when}",
+            message=branding.email_html(
+                f"<p><b>{esc(heading)}</b> · {esc(business)}</p>"
+                f"<p>{esc(lead)}</p>"
+                f"<p>The full report is attached. It was written from the records as at "
+                f"{esc(_as_of())}, with the permissions of "
+                f"{esc(frappe.utils.get_fullname(doc.run_as))}.</p>"
+                f"<p style='color:#777'>Sent by {esc(branding.branding()['product'])} on its "
+                f"{esc(describe(doc))} schedule.</p>", doc.business_code),
+            attachments=[{"fname": f"{heading} {frappe.utils.today()}.pdf", "fcontent": pdf}],
+            now=True,
+        )
 
 
 def _recipients(text) -> list:

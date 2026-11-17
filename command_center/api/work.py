@@ -34,6 +34,7 @@ from frappe.utils import add_days, date_diff, getdate, today
 from command_center.api.businesses import require_manager
 
 ACCEPTED_TAG = "Accepted"
+SEND_BACK = "Command Center Task Send Back"
 CHECK_DAYS = 14
 VALUE_FIELDS = ("base_grand_total", "grand_total", "base_total", "total", "amount",
                 "total_amount", "paid_amount")
@@ -91,7 +92,7 @@ def summary(business_code: str | None = None):
         return {"available": False, "reason": guide_["text"], "guide": guide_}
     from command_center.connectors.base import BusinessUnreachable
     try:
-        return _summary(src, business_code)
+        return _summary(src, _code(business_code))
     except BusinessUnreachable as e:
         return _unreachable(getattr(getattr(src, "conn", None), "code", None) or business_code, e)
 
@@ -107,7 +108,10 @@ def _summary(src, business_code):
     late = [t for t in open_ if t["late_days"] > 0]
     check = [t for t in handed if t["status"] == "Closed" and not t["accepted"]]
     high = [t for t in open_ if t["priority"] == "High"]
-    reopened = _sent_back_twice(open_, src)
+    times = _sent_back(open_, src, business_code)
+    for t in open_:
+        t["sent_back"] = times.get(t["name"], 0)
+    reopened = [t for t in open_ if t["sent_back"] >= 2]
     due_today = [t for t in mine if t["date"] and getdate(t["date"]) <= now]
     value = sum(a["value"] or 0 for a in approvals)
     oldest = max((t["late_days"] for t in late), default=0)
@@ -129,21 +133,20 @@ def _summary(src, business_code):
                             f"assigned by you · oldest {_age(oldest)} late" if late
                             else "assigned by you · none past its date",
                             f"{site}/app/todo?status=Open&assigned_by={user}"),
-        "work_open": _fig("work_open", "Still open", len(open_), "work you handed out",
+        "work_open": _fig("work_open", "Still Open", len(open_), "work you handed out",
                           f"{site}/app/todo?status=Open&assigned_by={user}"),
         "work_late": _fig("work_late", "Late", len(late), "past the date you set",
                           f"{site}/app/todo?status=Open&assigned_by={user}"),
-        "work_high": _fig("work_high", "High risk", len(high), "marked high priority",
+        "work_high": _fig("work_high", "High Priority", len(high), "marked high priority",
                           f"{site}/app/todo?status=Open&priority=High&assigned_by={user}"),
-        "work_reopened": _fig("work_reopened", "Reopened twice+", len(reopened or []),
-                              "sent back more than once",
+        "work_reopened": _fig("work_reopened", "Sent Back More Than Once", len(reopened),
+                              "you rejected the work twice or more",
                               f"{site}/app/todo?status=Open&assigned_by={user}"),
     }
-    if reopened is None:
-        # The comments could not be read: the tile says so, rather than saying nothing
-        # was ever sent back.
-        figures["work_reopened"].update(value=None, note="could not be read", data_status={
-            "state": "failed", "message": "The comments on these To-Dos could not be read."})
+    # Each tile filters the list on Outstanding Tasks (legacy/work.js), and Today's two
+    # open it filtered the same way.
+    for key, f in TILE_FILTERS.items():
+        figures[key]["filter"] = f
     return {"available": True, "user": user, "today": str(now), "currency": currency,
             "approvals": approvals, "open": open_, "late": late, "check": check,
             "mine": mine, "figures": figures}
@@ -169,7 +172,15 @@ def review(todo: str, verdict: str, note: str = "", business_code: str | None = 
     if not src:
         frappe.throw(guide_["text"])
     if isinstance(src, _Remote):
-        return _review_remote(src, todo, verdict, note)
+        out = _review_remote(src, todo, verdict, note)
+    else:
+        out = _review_local(todo, verdict, note)
+    if verdict == "return":
+        out["sent_back"] = _record_send_back(_code(business_code), todo, note)
+    return out
+
+
+def _review_local(todo, verdict, note):
     doc = frappe.get_doc("ToDo", todo)
     if doc.assigned_by != frappe.session.user:
         frappe.throw("Only the person who handed this out can accept it or send it back.",
@@ -206,6 +217,42 @@ def _review_remote(src, todo, verdict, note):
     # Through the form's own comment endpoint: inserting a Comment needs System Manager.
     conn.comment("ToDo", todo, text)
     return {"ok": True, "status": status}
+
+
+@frappe.whitelist()
+def task(todo: str, business_code: str | None = None):
+    """One task handed out, for its drawer: what it is, who has it, who gave it, its
+    dates, priority and status, the document it is about, how often it was sent back,
+    and ERPNext's comments on the To-Do and the document -- when the manager may read
+    them there (`comments` None when not). Only for the person who handed it out."""
+    require_manager()
+    src, guide_ = _source(business_code)
+    if not src:
+        frappe.throw(guide_["text"])
+    me = src.me()
+    rows = _todos({"name": todo}, src, limit=1, extra=["assigned_by"])
+    if not rows or rows[0].get("assigned_by") != me:
+        frappe.throw("Only the person who handed this out can open it here.",
+                     frappe.PermissionError)
+    t = rows[0]
+    t["assigned_by_name"] = src.fullname(me)
+    t["sent_back"] = _sent_back([t], src, _code(business_code)).get(t["name"], 0)
+    t["document"] = ({**t["reference"], "url": src.url(t["reference"]["doctype"],
+                                                       t["reference"]["name"])}
+                     if t["reference"] else None)
+    t["text"] = frappe.utils.strip_html(t.pop("_description", "") or "").strip()
+    places = [("ToDo", t["name"])] + ([(t["reference"]["doctype"], t["reference"]["name"])]
+                                      if t["reference"] else [])
+    got, readable = [], False
+    for doctype, name in places:
+        c = src.comments(doctype, name)
+        if c is None:
+            continue
+        readable = True
+        got += [{**x, "on": doctype} for x in c]
+    got.sort(key=lambda c: str(c.get("when") or ""), reverse=True)
+    t["comments"] = got[:100] if readable else None
+    return t
 
 
 # ---------------------------------------------------------------------------
@@ -269,15 +316,46 @@ def _cancels(action, next_state, ends):
     return not ends and (action or "").strip().lower() == "cancel"
 
 
-def _sent_back_twice(open_, src):
-    """Open work handed out that has been sent back more than once.
+# Tile figure -> the filter it puts on Outstanding Tasks' list (legacy/work.js).
+TILE_FILTERS = {"work_open": "open", "work_late": "late", "work_high": "high",
+                "work_reopened": "sent_back", "work_to_check": "check",
+                "work_unkept": "late"}
 
-    "Send it back" (review) reopens the To-Do and leaves a comment beginning "Sent back
-    by", so the comments are the record of each return. None when they cannot be read.
+
+def _code(business_code):
+    """The business a task belongs to: the one asked for, else the default."""
+    from command_center.api.businesses import default_business_code
+    return business_code if business_code and business_code != "__all__" \
+        else default_business_code()
+
+
+def _record_send_back(code, todo, note) -> int:
+    """Keep this Send Back on the platform, and say how many times this To-Do has now
+    been sent back. The doctype by name: it is the app's own (preflight)."""
+    frappe.get_doc({
+        "doctype": "Command Center Task Send Back", "business_code": code or "",
+        "todo": todo, "sent_by": frappe.session.user, "sent_at": frappe.utils.now_datetime(),
+        "note": (note or "").strip()[:1000],
+    }).insert(ignore_permissions=True)
+    return frappe.db.count(SEND_BACK, {"business_code": code or "", "todo": todo})
+
+
+def _sent_back(open_, src, code) -> dict:
+    """How many times each open To-Do was sent back: {todo: n}.
+
+    Counted from the platform's own record of every Send Back (review keeps one). Work
+    sent back before that record existed shows only in ERPNext's Comments ("Sent back
+    by ..."), which ordinary users usually may not read: they are counted too when they
+    can be read, and silently left out when they cannot -- never a failure.
     """
     names = [t["name"] for t in open_]
     if not names:
-        return []
+        return {}
+    times = {}
+    for r in frappe.get_all(SEND_BACK, filters={"business_code": code or "",
+                                                "todo": ["in", names]},
+                            fields=["todo"], limit=100000):
+        times[r["todo"]] = times.get(r["todo"], 0) + 1
     try:
         rows = src.list("Comment", filters={"reference_doctype": "ToDo",
                                             "reference_name": ["in", names],
@@ -285,16 +363,19 @@ def _sent_back_twice(open_, src):
                                             "content": ["like", "Sent back by %"]},
                         fields=["reference_name"], limit=5000)
     except Exception:
-        return None
-    times = {}
-    for r in rows:
+        rows = []
+    seen = {}
+    for r in rows or []:
         if "reference_name" not in r:
-            return None   # the reply lost the column: unreadable, not "none"
-        times[r["reference_name"]] = times.get(r["reference_name"], 0) + 1
-    return [t for t in open_ if times.get(t["name"], 0) >= 2]
+            seen = {}
+            break   # the reply lost the column: unreadable, so not counted
+        seen[r["reference_name"]] = seen.get(r["reference_name"], 0) + 1
+    for name, n in seen.items():
+        times[name] = max(times.get(name, 0), n)
+    return times
 
 
-def _todos(filters, src, limit=200):
+def _todos(filters, src, limit=200, extra=None):
     rows = src.list("ToDo", filters=filters,
                     fields=["name", "description", "status", "priority", "date",
                             "allocated_to", "assigned_by", "reference_type",
@@ -321,6 +402,10 @@ def _todos(filters, src, limit=200):
             "closed_on": str(r.modified)[:10] if r.status == "Closed" else None,
             "accepted": ACCEPTED_TAG in (r._user_tags or ""),
             "url": src.url("ToDo", r.name),
+            "created": str(r.creation)[:10] if r.creation else None,
+            "modified": str(r.modified)[:16] if r.modified else None,
+            **({"assigned_by": r.assigned_by, "_description": r.description or ""}
+               if extra else {}),
         })
     return out
 
@@ -384,6 +469,15 @@ class _Local:
 
     def fullname(self, user):
         return frappe.utils.get_fullname(user)
+
+    def comments(self, doctype, name):
+        try:
+            rows = frappe.get_list("Comment", filters={"reference_doctype": doctype,
+                                                       "reference_name": name},
+                                   fields=COMMENT_FIELDS, order_by="creation desc", limit=100)
+        except Exception:
+            return None
+        return _comments(rows, self)
 
     def url(self, doctype, name):
         from command_center.connectors.base import desk_path
@@ -470,8 +564,51 @@ class _Remote:
                 self._names[user] = user
         return self._names[user]
 
+    def comments(self, doctype, name):
+        """The record's comments as the desk shows them: the form's own load
+        (frappe.desk.form.load.getdoc -> docinfo.comments), which anyone who may read the
+        record may call, where listing Comment needs a role most people do not hold.
+        Then Comment itself; None when neither answers."""
+        try:
+            got = self.conn._call("frappe.desk.form.load.getdoc",
+                                  {"doctype": doctype, "name": name}, whole=True) or {}
+            info = got.get("docinfo") if isinstance(got, dict) else None
+            if isinstance(info, dict) and isinstance(info.get("comments"), list):
+                return _comments(info["comments"], self)
+        except Exception:
+            pass
+        try:
+            rows = self.conn.get_list("Comment", filters={"reference_doctype": doctype,
+                                                          "reference_name": name},
+                                      fields=COMMENT_FIELDS, order_by="creation desc", limit=100)
+        except Exception:
+            return None
+        if rows and "content" not in rows[0]:
+            return None
+        return _comments(rows, self)
+
     def url(self, doctype, name):
         return self.conn.desk_url(doctype, name)
+
+
+COMMENT_FIELDS = ["name", "comment_type", "content", "comment_email", "owner", "creation"]
+SHOWN_COMMENTS = {None, "", "Comment", "Info", "Assigned", "Assignment Completed", "Edit",
+                  "Attachment", "Shared", "Workflow"}
+
+
+def _comments(rows, src):
+    out = []
+    for r in rows or []:
+        kind = r.get("comment_type")
+        if kind not in SHOWN_COMMENTS:
+            continue
+        text = frappe.utils.strip_html(r.get("content") or "").strip()
+        if not text:
+            continue
+        by = r.get("comment_email") or r.get("owner") or ""
+        out.append({"by": src.fullname(by) if by else "", "when": str(r.get("creation") or "")[:16],
+                    "text": text[:2000], "kind": kind or "Comment"})
+    return out
 
 
 def _fig(key, label, value, note, href):

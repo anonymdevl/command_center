@@ -448,6 +448,12 @@ class RemoteConnector(BusinessConnector):
             "description": description, "date": date, "priority": priority,
         }, write=True) or []
 
+    def unassign(self, doctype, name, user):
+        # remove(doctype, name, assign_to) on every version; assign_to is one login.
+        return self._call("frappe.desk.form.assign_to.remove", {
+            "doctype": doctype, "name": name, "assign_to": user,
+        }, write=True) or []
+
     def whoami(self):
         if not getattr(self, "_me", None):
             self._me = self._call("frappe.auth.get_logged_user")

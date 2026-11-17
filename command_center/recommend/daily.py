@@ -26,6 +26,7 @@ import re
 import frappe
 from frappe.utils import getdate, now_datetime, today
 
+from command_center import mail
 from command_center.recommend import engine
 
 BRIEF_PARENT = "__cc_brief"
@@ -249,15 +250,16 @@ def send_digest(code, force: bool = False) -> dict:
     subject = (f"{len(new)} new recommendation{'s' if len(new) != 1 else ''} · {name}" if new
                else f"{len(recs)} open recommendation{'s' if len(recs) != 1 else ''} · {name}")
     try:
-        frappe.sendmail(
-            recipients=to, subject=subject,
-            message=(f"<p>What the figures of {esc(name)} say is worth doing today.</p>"
-                     + "".join(parts)
-                     + "<p>Open the platform's Home screen to mark each one done, not "
-                       "relevant, or snooze it.</p><p style='color:#777'>Sent by AI Business "
-                       "Intelligence to its managers. Switch the digest off in Settings, "
-                       "Recommendations.</p>"),
-            now=True)
+        with mail.about("digest", code):
+            frappe.sendmail(
+                recipients=to, subject=subject,
+                message=(f"<p>What the figures of {esc(name)} say is worth doing today.</p>"
+                         + "".join(parts)
+                         + "<p>Open the platform's Home screen to mark each one done, not "
+                           "relevant, or snooze it.</p><p style='color:#777'>Sent by AI Business "
+                           "Intelligence to its managers. Switch the digest off in Settings, "
+                           "Recommendations.</p>"),
+                now=True)
     except Exception as e:
         frappe.log_error(title="Command Center: recommendation digest not sent",
                          message=frappe.get_traceback())

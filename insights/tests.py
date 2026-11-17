@@ -1648,6 +1648,103 @@ class SettingsDelegation(TransactionTestCase):
         self.assertEqual((n["schedules_on"], n["failing"]), (1, []))
 
 
+class EmailLogged(TransactionTestCase):
+    """Every send attempt is in the email log (runtime.sendmail, the one place mail goes
+    out): sent or failed with the reason, what it was and which business. Settings ->
+    Email lists the last 100 to the administrator only; a failed message whose HTML was
+    kept can be sent again (a new entry); the log is pruned by age in maintenance.daily."""
+
+    databases = {"default", "aux"}
+    MOD = SettingsPage.MOD
+    MAIL_PW = "mail-pass-xyz-77"
+    setUp = SettingsPage.setUp
+    tearDown = SettingsPage.tearDown
+    _call = SettingsPage._call
+    _ok = SettingsPage._ok
+
+    def _mail_on(self):
+        self._ok("set_email", host="smtp.test.com", port=587, security="starttls",
+                 user="reports@test.com", password=self.MAIL_PW, sender="reports@test.com")
+
+    def test_a_send_is_logged_with_its_kind_and_business(self):
+        import frappe
+        from command_center import mail
+        from insights.core.models import EmailLog
+        self._mail_on()
+        with mock.patch("smtplib.SMTP"):
+            self.assertTrue(self._ok("test_email", to="boss@test.com")["ok"])
+            with mail.about("alert", "gms"):
+                frappe.sendmail(recipients=["a@test.com", "b@test.com"], subject="2 new alerts",
+                                message="<p>Two</p>", now=True)
+        rows = list(EmailLog.objects.order_by("id"))
+        self.assertEqual([(r.kind, r.status, r.business_code) for r in rows],
+                         [("test", "Sent", ""), ("alert", "Sent", "gms")])
+        self.assertEqual(rows[1].recipients, "a@test.com, b@test.com")
+        self.assertEqual(rows[1].subject, "2 new alerts")
+        self.assertEqual(rows[1].error, "")
+        got = self._ok("email_log")
+        self.assertEqual([r["subject"] for r in got["rows"]][0], "2 new alerts", "newest first")
+        self.assertFalse(any(r["can_resend"] for r in got["rows"]))
+        self.assertNotIn(self.MAIL_PW, json.dumps(got))
+        # the administrator's only
+        r = self._call(self.manager, "email_log")
+        self.assertEqual(r.status_code, 403)
+
+    def test_a_failure_is_logged_with_its_error_and_can_be_resent(self):
+        import frappe
+        import smtplib
+        from command_center import mail
+        from insights.compat.runtime import MailError
+        from insights.core.models import EmailLog
+        # not set up at all: failed, and said why
+        with self.assertRaises(MailError), mail.about("digest", "gms"):
+            frappe.sendmail(recipients=["a@test.com"], subject="Digest", message="<p>d</p>", now=True)
+        first = EmailLog.objects.get()
+        self.assertEqual((first.status, first.kind), ("Failed", "digest"))
+        self.assertIn("Email is not set up", first.error)
+        self._mail_on()
+        with mock.patch("smtplib.SMTP") as smtp, mail.about("report", "gms"):
+            smtp.return_value.send_message.side_effect = smtplib.SMTPRecipientsRefused(
+                {"x@test.com": (550, b"no such user")})
+            with self.assertRaises(MailError):
+                frappe.sendmail(recipients=["x@test.com"], subject="Board Report",
+                                message="<p>r</p>", now=True,
+                                attachments=[{"fname": "r.pdf", "fcontent": b"%PDF"}])
+        failed = self._ok("email_log", status="Failed")["rows"]
+        self.assertEqual([r["subject"] for r in failed], ["Board Report", "Digest"])
+        report, digest = failed
+        self.assertIn("refused the address x@test.com", report["error"])
+        self.assertFalse(report["can_resend"], "a report's PDF is not kept")
+        self.assertIn("run the report again", report["why_not"])
+        self.assertTrue(digest["can_resend"])
+        self.assertEqual(self._ok("email_log", status="Sent")["rows"], [])
+        with mock.patch("smtplib.SMTP") as smtp:
+            out = self._ok("resend_email", id=digest["id"])
+        self.assertTrue(out["ok"], out)
+        sent = smtp.return_value.send_message.call_args[0][0]
+        self.assertEqual((sent["To"], sent["Subject"]), ("a@test.com", "Digest"))
+        again = EmailLog.objects.order_by("-id").first()
+        self.assertEqual((again.status, again.kind, again.resend_of), ("Sent", "digest", digest["id"]))
+        self.assertEqual(EmailLog.objects.get(pk=digest["id"]).status, "Failed", "never edited")
+        self.assertIn("is not kept", self._call(self.admin, "resend_email",
+                                                id=report["id"]).content.decode())
+        with self.assertRaises(PermissionError):
+            EmailLog.objects.filter(pk=digest["id"]).update(status="Sent")
+
+    def test_prune_keeps_about_180_days(self):
+        from insights.core import maintenance
+        from insights.core.models import EmailLog
+        now = dt.datetime.now()
+        for days in (1, 100, 179, 181, 400):
+            EmailLog.objects.create(at=now - dt.timedelta(days=days), kind="alert",
+                                    status="Sent", subject=f"{days} days ago")
+        self.assertEqual(maintenance.prune_email_log(), 2)
+        self.assertEqual(sorted(EmailLog.objects.values_list("subject", flat=True)),
+                         ["1 days ago", "100 days ago", "179 days ago"])
+        with mock.patch.object(maintenance, "backup", lambda: "skipped"):
+            self.assertEqual(maintenance.daily()["email_log_pruned"], 0)
+
+
 class DocumentLinks(TransactionTestCase):
     """A record opens in its own business's ERPNext, at the document -- never at this
     platform's administration (which sent every link to <business>/admin/, a 404)."""
@@ -3665,7 +3762,8 @@ class Branding(TransactionTestCase):
             self.assertIn("data:image/png;base64,", html, f"{kind}: the product's logo is in the PDF")
             self.assertIn('class="hd-client"', html, f"{kind}: and the client's")
             self.assertIn("Prepared for <b>Test Medical Group</b>", html)
-            self.assertIn("Acme Insight · built by Acme Systems · hello@acme.test", html)
+            self.assertNotIn("Acme Insight · built by Acme Systems", html,
+                             f"{kind}: the closing note does not repeat the page footer's credit")
             self.assertEqual(options["footer-left"], "Acme Insight · built by Acme Systems · hello@acme.test")
             self.assertEqual(options["footer-right"], "Page [page] of [topage]")
             self.assertNotIn("AI Business Intelligence", html)
@@ -3674,6 +3772,11 @@ class Branding(TransactionTestCase):
         self.assertEqual(html.count("Executive Summary"), 1, "the repeated title is dropped")
         self.assertIn("Cash and Receivables</h2>", html)
         self.assertIn('<ol class="recs">', html)
+        # a formal numbered list: no tinted box, accent bar or drawn number
+        self.assertIn("ol.recs{list-style:decimal}", html)
+        self.assertNotIn("li.rec{", html)
+        self.assertNotIn("border-left:3px solid #2443e8", html)
+        self.assertNotIn("ol.recs li:before", html)
         self.assertIn("<li>Reconcile the receipts by 30 November.</li>", html)
         self.assertIn('<td class="n">636,675</td>', html)
 
@@ -3815,6 +3918,18 @@ class ReportBranding(TransactionTestCase):
         self.assertIn('class="hd-client"', html)
         self.assertIn("Prepared for <b>Test Medical Group</b>", html)
         self.assertIn("Prepared by Ultrasoft Insights from", html)
+        # "Prepared for" on the left, the product and its tagline on the right
+        hd = html[html.index('<table class="hd">'):html.index("</table>", html.index('<table class="hd">'))]
+        left, right = hd.split('<td class="hd-r">')
+        self.assertIn("Prepared for <b>Test Medical Group</b>", left)
+        self.assertIn('class="hd-client"', left)
+        self.assertIn('<div class="brand">Ultrasoft Insights</div>', right)
+        self.assertNotIn("Prepared for", right)
+        # the closing note ends with what the analyst may and may not do; the credit is
+        # the page footer's alone
+        self.assertIn("recommendations are for management to decide on.</div>", html)
+        self.assertNotIn('class="ft-by"', html)
+        self.assertNotIn("Ultrasoft Insights · built by", html)
         self.assertEqual(opts["footer-left"][:40], "Ultrasoft Insights · built by Ultrasoft ")
         self.assertEqual(opts["footer-right"], "Page [page] of [topage]")
         self.assertEqual(files, {})
@@ -3830,7 +3945,9 @@ class ReportBranding(TransactionTestCase):
         self.assertNotIn('<div class="brand">Ultrasoft Insights', html)
         self.assertNotIn("Prepared by Ultrasoft Insights", html)
         self.assertIn("Prepared from Test Medical Ltd", html)
-        self.assertIn('<div class="ft-by">Ultrasoft Insights · built by', html, "the credit stays")
+        self.assertNotIn('class="ft-by"', html)
+        self.assertTrue(opts["footer-left"].startswith("Ultrasoft Insights · built by"),
+                        "the credit stays, on every page's foot")
         self.assertEqual(files, {})
         ws = self._sheet(code)
         self.assertTrue(ws["A2"].value.startswith("Test Medical Group · figures as at"), ws["A2"].value)
@@ -3890,7 +4007,7 @@ class ReportBranding(TransactionTestCase):
         self._ok("set_business_report_style", name=b["name"], credit="small")
         html, opts, _ = self._pdf(code)
         self.assertEqual(opts["footer-left"], "Prepared with Ultrasoft Insights")
-        self.assertIn('<div class="ft-by">Prepared with Ultrasoft Insights</div>', html)
+        self.assertNotIn("Prepared with Ultrasoft Insights", html, "the page footer carries it")
         ws = self._sheet(code)
         self.assertEqual(ws.cell(row=ws.max_row, column=1).value, "Prepared with Ultrasoft Insights")
         self._ok("set_business_report_style", name=b["name"], credit="hide")
@@ -4519,7 +4636,8 @@ class PlansAndUsage(TransactionTestCase):
             self.assertIn("Prepared for <b>Alpha Holdings Ltd</b>", html)
             self.assertIn(label, html)
             self.assertNotIn("Figures as at", html)
-            self.assertIn("Acme Insight · built by Acme Systems · hello@acme.test", html)
+            self.assertNotIn("Acme Insight · built by Acme Systems", html,
+                             "the credit is the page footer's, not repeated in the closing note")
             self.assertEqual(options["footer-left"], "Acme Insight · built by Acme Systems · hello@acme.test")
             self.assertEqual("Total for the month" in html, money)
             self.assertEqual("GHS" in html, money, "money only on the administrator's")
@@ -7003,6 +7121,226 @@ class Escalation(TransactionTestCase):
         self.assertIn('evidence: { title: "Request evidence", verb: "Send the request", '
                       'lead: "Please send the evidence for: ", days: 3 },', src)
         self.assertIn('escalate_of: escalating ? whose : null', src)
+
+
+# --------------------------------------------------------------------------- Task management
+class _TaskERPNext(_AssignERPNext):
+    """The handing-out ERPNext, also able to take an assignment off someone (assign_to.
+    remove, connectors' unassign), set a field through the front door (set_value), and
+    answer -- or refuse -- the comments the task drawer reads."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.users["yaw@test"] = {"name": "yaw@test", "full_name": "Yaw Boateng",
+                                  "allowed_in_mentions": 1}
+        self.unassigned, self.set_values = [], []
+        self.comments_readable = True
+        c = self.conn
+        c.unassign = self.unassign
+        c.set_value = self.set_value
+        c._call = self.call
+
+    def call(self, method, params=None, **k):
+        if method.endswith("get_logged_user"):
+            return self.ME
+        if method == "frappe.desk.form.load.getdoc":
+            if not self.comments_readable:
+                from command_center.connectors.base import RemotePermissionDenied
+                raise RemotePermissionDenied("not permitted")
+            mine = [{"comment_type": "Comment", "content": html, "comment_email": self.ME,
+                     "creation": f"{TODAY} 09:0{i}:00"}
+                    for i, (dt_, name, html) in enumerate(self.comments)
+                    if (dt_, name) == (params["doctype"], params["name"])]
+            return {"docs": [], "docinfo": {"comments": mine}}
+        return []
+
+    def get_list(self, doctype, filters=None, fields=None, limit=20, order_by=None, **kw):
+        if doctype == "Comment" and not self.comments_readable:
+            from command_center.connectors.base import RemotePermissionDenied
+            raise RemotePermissionDenied("Comment is not readable")
+        return super().get_list(doctype, filters=filters, fields=fields, limit=limit,
+                                order_by=order_by, **kw)
+
+    def unassign(self, doctype, name, user):
+        self.unassigned.append((doctype, name, user))
+        for t in self.todos:
+            if (t["reference_type"], t["reference_name"], t["allocated_to"], t["status"]) == \
+                    (doctype, name, user, "Open"):
+                t["status"] = "Cancelled"
+        return []
+
+    def set_value(self, doctype, name, fieldname, value):
+        self.set_values.append((doctype, name, fieldname, value))
+        row = next(t for t in self.todos if t["name"] == name)
+        row[fieldname] = value
+        return row
+
+
+class TaskManagement(TransactionTestCase):
+    """Outstanding Tasks manages the work handed out (16 Nov 2026): New Task (on a
+    document or not), Reassign and Cancel Assignment (assign_to.remove + add on a document;
+    status Cancelled and a new To-Do otherwise), Edit Date And Priority, the task drawer,
+    and Sent Back More Than Once counted from the platform's own record of each Send Back
+    -- never a failure because Comments cannot be read. Each tile carries its filter."""
+
+    databases = {"default", "aux"}
+    setUp_settings = SettingsPage.setUp
+    tearDown = SettingsPage.tearDown
+    _task = Delegation._task
+
+    def setUp(self):
+        Delegation.setUp(self)
+        self.erp = _TaskERPNext(self.code)
+        for p in (mock.patch("command_center.api.actions.connector_for",
+                             lambda code, acting_user=None: self.erp.conn),
+                  mock.patch("command_center.connectors.registry.connector_for",
+                             lambda code, acting_user=None: self.erp.conn),
+                  mock.patch("command_center.api.credentials.credential_for",
+                             lambda code, user=None: {"api_key": "k", "api_secret": "s"})):
+            p.start()
+            self.patches.append(p)
+
+    def _do(self, fn, **kw):
+        from command_center.api import actions
+        from insights.compat import run_as
+        with run_as("manager@test.com"):
+            return getattr(actions, fn)(business_code=self.code, **kw)
+
+    def _work(self, fn="summary", **kw):
+        from command_center.api import work
+        from insights.compat import run_as
+        with run_as("manager@test.com"):
+            return getattr(work, fn)(business_code=self.code, **kw)
+
+    def test_new_task_with_a_document_and_without(self):
+        on_doc = self._task(subject="Agree the credit limit", priority="Low",
+                            reference_type="Customer", reference_name="Alpha Clinic")
+        self.assertEqual(self.erp.assigned[-1]["doctype"], "Customer")
+        self.assertEqual(self.erp.assigned[-1]["priority"], "Low")
+        self.assertTrue(on_doc["notified"])
+        plain = self._task(subject="Count the stock", priority="High")
+        self.assertIsNone(plain["document"])
+        self.assertEqual(self.erp.inserted[-1]["priority"], "High")
+        got = self._work()
+        self.assertEqual({t["title"] for t in got["open"]}, {"Agree the credit limit", "Count the stock"})
+
+    def test_reassign_on_a_document(self):
+        first = self._task(reference_type="Sales Invoice", reference_name="ACC-SINV-0001")
+        res = self._do("reassign_task", todo=first["name"], to_user="yaw@test")
+        self.assertEqual(self.erp.unassigned, [("Sales Invoice", "ACC-SINV-0001", "ama@test")])
+        self.assertEqual(self.erp.assigned[-1]["users"], ["yaw@test"])
+        self.assertEqual(self.erp.assigned[-1]["description"], "Chase the payment\n\nAgree a date this week.")
+        old = next(t for t in self.erp.todos if t["name"] == first["name"])
+        self.assertEqual(old["status"], "Cancelled")
+        new = next(t for t in self.erp.todos if t["status"] == "Open")
+        self.assertEqual(new["allocated_to"], "yaw@test")
+        dt_, name, html = self.erp.comments[-1]
+        self.assertEqual((dt_, name), ("Sales Invoice", "ACC-SINV-0001"))
+        self.assertIn('data-id="ama@test"', html)
+        self.assertIn("from Ama Owusu to Yaw Boateng", html)
+        self.assertTrue(res["notified"])
+        self.assertTrue(res["told"])
+        self.assertIn("Reassigned by", res["said"])
+        with self.assertRaises(Exception):
+            self._do("reassign_task", todo=new["name"], to_user="yaw@test")  # already theirs
+
+    def test_reassign_a_todo_of_its_own(self):
+        first = self._task()
+        res = self._do("reassign_task", todo=first["name"], to_user="yaw@test", note="Ama is away.")
+        self.assertIn(("ToDo", first["name"], "status", "Cancelled"), self.erp.set_values)
+        self.assertFalse(self.erp.unassigned)
+        new = self.erp.inserted[-1]
+        self.assertEqual((new["allocated_to"], new["assigned_by"]), ("yaw@test", _AssignERPNext.ME))
+        self.assertTrue(new["description"].startswith("Chase the payment\n\nAgree a date this week."))
+        self.assertIn("Ama is away.", new["description"])
+        on = {(d, n): h for d, n, h in self.erp.comments}
+        self.assertIn('data-id="yaw@test"', on[("ToDo", res["name"])], "the new person is mentioned")
+        self.assertIn('data-id="ama@test"', on[("ToDo", first["name"])], "the old one is told")
+        self.assertTrue(res["notified"])
+        self.assertTrue(res["told"])
+
+    def test_cancel_on_a_document_and_a_todo(self):
+        doc = self._task(reference_type="Sales Invoice", reference_name="ACC-SINV-0002")
+        res = self._do("cancel_task", todo=doc["name"], reason="Wrong person.")
+        self.assertEqual(self.erp.unassigned, [("Sales Invoice", "ACC-SINV-0002", "ama@test")])
+        d, n, html = self.erp.comments[-1]
+        self.assertEqual((d, n), ("Sales Invoice", "ACC-SINV-0002"))
+        self.assertIn("withdrawn", html)
+        self.assertIn("Wrong person.", html)
+        self.assertTrue(res["notified"])
+        plain = self._task(subject="Count the stock")
+        res = self._do("cancel_task", todo=plain["name"])
+        self.assertIn(("ToDo", plain["name"], "status", "Cancelled"), self.erp.set_values)
+        self.assertEqual(self.erp.comments[-1][:2], ("ToDo", plain["name"]))
+        self.assertEqual(res["status"], "Cancelled")
+        self.assertEqual(self._work()["open"], [])
+        # only open work can be changed, and only by whoever handed it out
+        with self.assertRaises(Exception):
+            self._do("cancel_task", todo=plain["name"])
+        self.erp._todo(allocated_to="ama@test", assigned_by="someone@erp.test")
+        import frappe
+        with self.assertRaises(frappe.PermissionError):
+            self._do("cancel_task", todo=self.erp.todos[-1]["name"])
+
+    def test_edit_due_date_and_priority(self):
+        t = self._task()
+        due = str(TODAY + dt.timedelta(days=10))
+        res = self._do("update_task", todo=t["name"], due_date=due, priority="High")
+        self.assertIn(("ToDo", t["name"], "date", due), self.erp.set_values)
+        self.assertIn(("ToDo", t["name"], "priority", "High"), self.erp.set_values)
+        self.assertIn("priority High", res["said"])
+        self.assertTrue(res["notified"])
+        self.assertIn('data-id="ama@test"', self.erp.comments[-1][2])
+        again = self._do("update_task", todo=t["name"], due_date=due, priority="High")
+        self.assertEqual(again["changed"], [])
+        with self.assertRaises(Exception):
+            self._do("update_task", todo=t["name"], priority="Urgent")
+
+    def test_send_back_is_recorded_and_counted_without_reading_comments(self):
+        a = self._task(subject="Fix the pump")
+        b = self._task(subject="Count the stock")
+        self.erp.comments_readable = False
+        for _ in range(2):
+            next(t for t in self.erp.todos if t["name"] == a["name"])["status"] = "Closed"
+            res = self._work("review", todo=a["name"], verdict="return", note="Still leaking.")
+        self.assertEqual(res["sent_back"], 2)
+        next(t for t in self.erp.todos if t["name"] == b["name"])["status"] = "Closed"
+        self._work("review", todo=b["name"], verdict="return", note="Shelf 4 missing.")
+        from insights.core import models as M
+        self.assertEqual(M.CommandCenterTaskSendBack.objects.filter(todo=a["name"]).count(), 2)
+        got = self._work()
+        fig = got["figures"]["work_reopened"]
+        self.assertEqual(fig["value"], 1, "only the one sent back twice")
+        self.assertEqual(fig["label"], "Sent Back More Than Once")
+        self.assertEqual(fig["note"], "you rejected the work twice or more")
+        self.assertEqual(fig["data_status"]["state"], "live", "unreadable Comments are no failure")
+        counts = {t["name"]: t["sent_back"] for t in got["open"]}
+        self.assertEqual(counts, {a["name"]: 2, b["name"]: 1})
+        # the drawer says the same, and that the comments could not be read
+        task = self._work("task", todo=a["name"])
+        self.assertEqual(task["sent_back"], 2)
+        self.assertIsNone(task["comments"])
+        self.erp.comments_readable = True
+        task = self._work("task", todo=a["name"])
+        self.assertTrue(any("Sent back by" in c["text"] for c in task["comments"]))
+        self.assertEqual(task["assigned_by"], _AssignERPNext.ME)
+
+    def test_every_tile_filters_the_list(self):
+        self._task()
+        figs = self._work()["figures"]
+        self.assertEqual({k: figs[k]["filter"] for k in ("work_open", "work_late", "work_high",
+                                                          "work_reopened", "work_to_check",
+                                                          "work_unkept")},
+                         {"work_open": "open", "work_late": "late", "work_high": "high",
+                          "work_reopened": "sent_back", "work_to_check": "check",
+                          "work_unkept": "late"})
+        self.assertEqual([figs[k]["label"] for k in ("work_open", "work_late", "work_high", "work_reopened")],
+                         ["Still Open", "Late", "High Priority", "Sent Back More Than Once"])
+        import pathlib
+        js = (pathlib.Path(__file__).resolve().parent.parent / "frontend/src/legacy/work.js").read_text()
+        for f in ("open:", "late:", "high:", "sent_back:", "check:"):
+            self.assertIn(f, js, f"work.js knows the {f} filter")
+        self.assertIn('pendingFilter = f;', js, "Today's tiles hand their filter over")
 
 
 # --------------------------------------------------------------------------- Business Health

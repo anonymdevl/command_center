@@ -247,6 +247,49 @@ class SecurityEvent(models.Model):
         raise PermissionError("The security record is never deleted from.")
 
 
+class _EmailLogQS(models.QuerySet):
+    def update(self, **kw):
+        raise PermissionError("The email log is never edited: a resend is a new entry.")
+
+    def delete(self):
+        raise PermissionError("The email log is only pruned by age (maintenance.daily).")
+
+
+class EmailLog(models.Model):
+    """Every attempt to send an email (insights/compat/runtime.sendmail, the one place
+    mail goes out): when, to whom, the subject, what it was (alert, report, notice, test,
+    digest), Sent or Failed with the reason, and the business it was about. Append-only,
+    pruned by age (`email_log_days`, default 180) in maintenance.daily. The message's own
+    HTML is kept when it carried no attachment, so a failed one can be sent again (a
+    report's PDF is not kept). On "aux": a rolled-back request still leaves its attempt."""
+
+    at = models.DateTimeField(db_index=True)
+    kind = models.CharField(max_length=20, db_index=True, default="other")
+    status = models.CharField(max_length=10, db_index=True)    # Sent, Failed
+    recipients = models.TextField(blank=True, default="")      # comma-separated
+    subject = models.CharField(max_length=255, blank=True, default="")
+    error = models.TextField(blank=True, default="")
+    business_code = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    body = models.TextField(blank=True, default="")
+    attachments = models.IntegerField(default=0)
+    resend_of = models.IntegerField(null=True, blank=True)
+    sent_by = models.CharField(max_length=150, blank=True, default="")
+
+    objects = _EmailLogQS.as_manager()
+
+    class Meta:
+        db_table = "insights_email_log"
+        ordering = ["-at", "-id"]
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            raise PermissionError("The email log is never edited: a resend is a new entry.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PermissionError("The email log is only pruned by age (maintenance.daily).")
+
+
 class SecurityCheck(models.Model):
     """The last run of one watch check on one connected business's ERPNext: whether it
     could be read, and what was seen (the baseline the next run is compared with --

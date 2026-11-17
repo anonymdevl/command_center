@@ -26,6 +26,12 @@ import { brand } from "../api/boot.js";
  * action to a document waiting on this person, and "review" accepts or sends back work
  * they handed out. Both ask first and say exactly what will change; after either, a
  * "cc-work-changed" event tells the screen to read the queue again.
+ *
+ * Outstanding Tasks (16 Nov 2026): "new_task" is this same form with a subject, a
+ * priority and, optionally, the ERPNext document it concerns (assigned on it through
+ * assign_to.add); "reassign", "cancel_task" and "edit_task" change open work the manager
+ * handed out (TaskChange below, api/actions reassign_task / cancel_task / update_task),
+ * asking first and saying afterwards whether each person was told.
  */
 
 const KINDS = {
@@ -33,7 +39,12 @@ const KINDS = {
   evidence: { title: "Request evidence", verb: "Send the request", lead: "Please send the evidence for: ", days: 3 },
   escalate: { title: "Escalate", verb: "Escalate", lead: "Escalated: ", days: 1, priority: "High" },
   finding: { title: "Raise as a finding", verb: "Raise it", lead: "Finding: ", days: 7 },
+  new_task: { title: "New Task", verb: "Create Task", lead: "", days: 3 },
 };
+
+/** Changes to open work the manager handed out (TaskChange). */
+const CHANGES = new Set(["reassign", "cancel_task", "edit_task"]);
+const PRIORITIES = ["Low", "Medium", "High"];
 
 let peopleCache = {};
 
@@ -55,8 +66,12 @@ function escalationPlan(mgr, ofName, toUser, toName) {
 }
 
 /** What sending will do, in plain words, before it is sent. */
-function plan(req, name) {
+function plan(req, name, doc) {
   const them = name || "the person you choose";
+  if (doc?.doctype && doc?.name) {
+    return `Assigns ${doc.doctype} ${doc.name} to ${them} in ERPNext, as you: it goes on their To-Do list, `
+      + "the document shows them under Assigned To, and ERPNext notifies them.";
+  }
   if (req.doctype && req.docname) {
     return `Assigns ${req.doctype} ${req.docname} to ${them} in ERPNext, as you: it goes on their To-Do list, `
       + "the document shows them under Assigned To, and ERPNext notifies them.";
@@ -87,17 +102,27 @@ export default function ActionDialog({ scope }) {
   const [prefill, setPrefill] = useState(null); // {user, name, via, todo}
   const [mgr, setMgr] = useState(null);
   const [mgrState, setMgrState] = useState("idle"); // idle | loading | done | failed
+  // New Task only: its subject, priority and the ERPNext document it concerns, if any.
+  const [subject, setSubject] = useState("");
+  const [prio, setPrio] = useState("Medium");
+  const [docType, setDocType] = useState("");
+  const [docName, setDocName] = useState("");
   const first = useRef(null);
 
   useEffect(() => {
     const open = (e) => {
       const r = e.detail || {};
-      const decision = r.kind === "decide" || r.kind === "review" || r.kind === "alert";
+      const decision = r.kind === "decide" || r.kind === "review" || r.kind === "alert"
+        || CHANGES.has(r.kind);
       const k = KINDS[r.kind] || KINDS.assign;
       setReq({ ...r, kind: decision || KINDS[r.kind] ? r.kind : "assign" });
       setWho("");
       setDue(addDays(k.days));
-      setNote(decision ? "" : [r.title, r.detail].filter(Boolean).join("\n\n"));
+      setNote(decision || r.kind === "new_task" ? "" : [r.title, r.detail].filter(Boolean).join("\n\n"));
+      setSubject("");
+      setPrio("Medium");
+      setDocType("");
+      setDocName("");
       setState("idle");
       setError("");
       setDone(null);
@@ -171,10 +196,16 @@ export default function ActionDialog({ scope }) {
   }, [escalating, whose, scope]);
 
   if (!req) return null;
+  if (CHANGES.has(req.kind)) {
+    return <TaskChange req={req} scope={scope} close={() => setReq(null)} />;
+  }
   if (!KINDS[req.kind]) {
     return <Decision req={req} scope={scope} note={note} setNote={setNote} close={() => setReq(null)} />;
   }
   const k = KINDS[req.kind];
+  const creating = req.kind === "new_task";
+  const doc = creating && docType.trim() && docName.trim()
+    ? { doctype: docType.trim(), name: docName.trim() } : null;
   const person = people.find((p) => p.user === who);
   const owner = people.find((p) => p.user === whose);
   const ownerName = owner?.name || (prefill?.user === whose ? prefill?.name : "") || mgr?.user_name || whose;
@@ -194,6 +225,14 @@ export default function ActionDialog({ scope }) {
       setError(escalating ? "Choose who it is escalated to." : "Choose who this goes to.");
       return;
     }
+    if (creating && !subject.trim()) {
+      setError("Say what the task is.");
+      return;
+    }
+    if (creating && !!docType.trim() !== !!docName.trim()) {
+      setError("Give both the document type and its name, or leave both empty.");
+      return;
+    }
     if (escalating && who === whose) {
       setError("That is the person whose work it is. An escalation goes to someone else: their manager.");
       return;
@@ -201,16 +240,17 @@ export default function ActionDialog({ scope }) {
     setState("saving");
     setError("");
     try {
-      const subject = `${k.lead}${req.title || `From ${brand.product}`}`.slice(0, 140);
+      const title = creating ? subject.trim()
+        : `${k.lead}${req.title || `From ${brand.product}`}`.slice(0, 140);
       const res = await api.createTask({
         business_code: scope,
-        subject,
+        subject: title.slice(0, 140),
         description: note,
         allocated_to: who,
         due_date: due || null,
-        priority: k.priority || null,
-        reference_type: req.doctype || null,
-        reference_name: req.docname || null,
+        priority: creating ? prio : k.priority || null,
+        reference_type: creating ? doc?.doctype || null : req.doctype || null,
+        reference_name: creating ? doc?.name || null : req.docname || null,
         alert: req.alert || null,
         escalate_of: escalating ? whose : null,
         escalate_todo: escalating && prefill?.user === whose ? prefill?.todo || null : null,
@@ -266,7 +306,14 @@ export default function ActionDialog({ scope }) {
         ) : (
           <form onSubmit={submit}>
             <h3 id="dlg-t">{k.title}</h3>
-            <p className="dlg-sub">{req.title}</p>
+            {req.title ? <p className="dlg-sub">{req.title}</p> : null}
+            {creating ? (
+              <>
+                <label htmlFor="dlg-subject">Subject</label>
+                <input id="dlg-subject" ref={first} type="text" maxLength={140} value={subject}
+                       onChange={(e) => setSubject(e.target.value)} placeholder="What needs doing" />
+              </>
+            ) : null}
             {req.owner ? <p className="dlg-hint">Suggested owner: {req.owner}</p> : null}
 
             {escalating ? (
@@ -307,7 +354,7 @@ export default function ActionDialog({ scope }) {
             ) : (
               <>
                 <label htmlFor="dlg-who">To</label>
-                <select id="dlg-who" ref={first} value={who} onChange={(e) => setWho(e.target.value)}>
+                <select id="dlg-who" ref={creating ? null : first} value={who} onChange={(e) => setWho(e.target.value)}>
                   <option value="">{people.length ? "Choose a person" : "Loading people…"}</option>
                   {people.map((p) => (
                     <option key={p.user} value={p.user}>{p.name}</option>
@@ -319,8 +366,38 @@ export default function ActionDialog({ scope }) {
             <label htmlFor="dlg-due">By</label>
             <input id="dlg-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
 
-            <label htmlFor="dlg-note">Note</label>
-            <textarea id="dlg-note" rows={5} value={note} onChange={(e) => setNote(e.target.value)} />
+            {creating ? (
+              <>
+                <label htmlFor="dlg-prio">Priority</label>
+                <select id="dlg-prio" value={prio} onChange={(e) => setPrio(e.target.value)}>
+                  {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </>
+            ) : null}
+
+            <label htmlFor="dlg-note">{creating ? "Details" : "Note"}</label>
+            <textarea id="dlg-note" rows={creating ? 4 : 5} value={note} onChange={(e) => setNote(e.target.value)} />
+
+            {creating ? (
+              <fieldset className="dlg-doc">
+                <legend>ERPNext Document (Optional)</legend>
+                <div className="dlg-two">
+                  <div>
+                    <label htmlFor="dlg-doctype">Document Type</label>
+                    <input id="dlg-doctype" type="text" list="dlg-doctypes" value={docType}
+                           onChange={(e) => setDocType(e.target.value)} placeholder="Choose or type one" />
+                    <datalist id="dlg-doctypes">
+                      {DOC_TYPES.map((d) => <option key={d} value={d} />)}
+                    </datalist>
+                  </div>
+                  <div>
+                    <label htmlFor="dlg-docname">Document Name</label>
+                    <input id="dlg-docname" type="text" value={docName}
+                           onChange={(e) => setDocName(e.target.value)} placeholder="Its ID in ERPNext" />
+                  </div>
+                </div>
+              </fieldset>
+            ) : null}
 
             {error ? <div className="dlg-err" role="alert">{error}</div> : null}
             <div className="dlg-acts">
@@ -329,7 +406,7 @@ export default function ActionDialog({ scope }) {
                 {state === "saving" ? "Sending…" : k.verb}
               </button>
             </div>
-            <p className="dlg-foot">{plan(req, who ? toName : "")}</p>
+            <p className="dlg-foot">{plan(req, who ? toName : "", creating ? doc : null)}</p>
           </form>
         )}
       </div>
@@ -337,6 +414,159 @@ export default function ActionDialog({ scope }) {
   );
 }
 
+
+/** Document types offered on New Task; any other may be typed. */
+const DOC_TYPES = ["Sales Invoice", "Sales Order", "Quotation", "Customer", "Purchase Order",
+  "Purchase Invoice", "Supplier", "Payment Entry", "Journal Entry", "Delivery Note",
+  "Purchase Receipt", "Material Request", "Stock Entry", "Item", "Issue", "Project", "Task",
+  "Employee"];
+
+const CHANGE_WORDS = {
+  reassign: { title: "Reassign", verb: "Reassign", done: "Reassigned" },
+  cancel_task: { title: "Cancel Assignment", verb: "Cancel Assignment", done: "Assignment Cancelled" },
+  edit_task: { title: "Edit Date And Priority", verb: "Save Changes", done: "Changed" },
+};
+
+/** Reassign, withdraw, or change the date and priority of open work handed out. Asks first. */
+function TaskChange({ req, scope, close }) {
+  const w = CHANGE_WORDS[req.kind];
+  const [people, setPeople] = useState(peopleCache[scope || "__all__"] || []);
+  const [to, setTo] = useState("");
+  const [note, setNote] = useState("");
+  const [due, setDue] = useState(req.date || "");
+  const [prio, setPrio] = useState(PRIORITIES.includes(req.priority) ? req.priority : "Medium");
+  const [state, setState] = useState("idle");
+  const [error, setError] = useState("");
+  const [res, setRes] = useState(null);
+  const them = req.assignee_name || req.assignee || "them";
+  const onDoc = req.doctype && req.docname;
+
+  useEffect(() => {
+    if (req.kind !== "reassign" || people.length) return;
+    const key = scope || "__all__";
+    api.people(scope).then((p) => {
+      peopleCache[key] = p || [];
+      setPeople(peopleCache[key]);
+    }).catch(() => setPeople([]));
+  }, [req.kind, scope, people.length]);
+
+  useEffect(() => {
+    const esc = (e) => e.key === "Escape" && close();
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [close]);
+
+  const toName = people.find((p) => p.user === to)?.name || to;
+  const what = req.kind === "reassign"
+    ? (onDoc
+      ? `ERPNext takes ${req.doctype} ${req.docname} off ${them} and assigns it to ${to ? toName : "the person you choose"}, `
+        + "so both are notified there. A comment on the document says you moved it."
+      : `${them}’s To-Do is cancelled in ERPNext and a new one with the same subject and details goes to `
+        + `${to ? toName : "the person you choose"}, who is mentioned on it. A comment on the old To-Do tells ${them}.`)
+    : req.kind === "cancel_task"
+      ? (onDoc
+        ? `ERPNext takes ${req.doctype} ${req.docname} off ${them}: their To-Do is cancelled and they leave Assigned To. `
+          + "A comment on the document tells them it was withdrawn."
+        : `${them}’s To-Do is cancelled in ERPNext, and a comment on it tells them it was withdrawn.`)
+      : `The To-Do’s date and priority change in ERPNext, and a comment on it tells ${them} what changed.`;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (req.kind === "reassign" && !to) {
+      setError("Choose who it goes to now.");
+      return;
+    }
+    setState("saving");
+    setError("");
+    try {
+      const got = req.kind === "reassign"
+        ? await api.reassignTask({ business_code: scope, todo: req.todo, to_user: to, note })
+        : req.kind === "cancel_task"
+          ? await api.cancelTask({ business_code: scope, todo: req.todo, reason: note })
+          : await api.updateTask({ business_code: scope, todo: req.todo, due_date: due || "", priority: prio });
+      setRes(got || {});
+      setState("done");
+      window.dispatchEvent(new CustomEvent("cc-work-changed"));
+    } catch (err) {
+      setError(err?.message || "ERPNext did not accept it.");
+      setState("failed");
+    }
+  };
+
+  const notice = (text, ok) => (text ? (
+    <p className={ok === false ? "dlg-err" : "dlg-hint"} role={ok === false ? "alert" : undefined}>{text}</p>
+  ) : null);
+
+  return (
+    <div className="dlg-scrim" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div className="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+        {state === "done" ? (
+          <>
+            <div className="dlg-ok" aria-hidden="true">✓</div>
+            <h3 id="dlg-t">{req.kind === "reassign" ? `Reassigned to ${res.to_name || toName}` : w.done}</h3>
+            <p className="dlg-sub">{res.said || "Done in ERPNext, as you."}</p>
+            {notice(res.notice, res.notified)}
+            {notice(res.told_notice, res.told)}
+            <div className="dlg-acts">
+              {res.url ? (
+                <a className="ap-act" href={res.url} target="_blank" rel="noreferrer">Open the To-Do ↗</a>
+              ) : null}
+              <button type="button" className="ap-act pri" onClick={close}>Done</button>
+            </div>
+          </>
+        ) : (
+          <form onSubmit={submit}>
+            <h3 id="dlg-t">{w.title}</h3>
+            <p className="dlg-sub">{req.title}</p>
+            <p className="dlg-hint">Now with {them}{req.date ? `, due ${new Date(`${req.date}T00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}.</p>
+            {req.kind === "reassign" ? (
+              <>
+                <label htmlFor="dlg-to">Give it to</label>
+                <select id="dlg-to" value={to} onChange={(e) => setTo(e.target.value)} autoFocus>
+                  <option value="">{people.length ? "Choose a person" : "Loading people…"}</option>
+                  {people.filter((p) => p.user !== req.assignee).map((p) => (
+                    <option key={p.user} value={p.user}>{p.name}</option>
+                  ))}
+                </select>
+                <label htmlFor="dlg-note">Note (optional)</label>
+                <textarea id="dlg-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
+              </>
+            ) : null}
+            {req.kind === "cancel_task" ? (
+              <>
+                <p className="dlg-plan">Cancel this assignment? It is for work given to the wrong person by mistake.</p>
+                <label htmlFor="dlg-note">Reason (optional)</label>
+                <textarea id="dlg-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
+              </>
+            ) : null}
+            {req.kind === "edit_task" ? (
+              <div className="dlg-two">
+                <div>
+                  <label htmlFor="dlg-due">Due date</label>
+                  <input id="dlg-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} autoFocus />
+                </div>
+                <div>
+                  <label htmlFor="dlg-prio">Priority</label>
+                  <select id="dlg-prio" value={prio} onChange={(e) => setPrio(e.target.value)}>
+                    {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+              </div>
+            ) : null}
+            {error ? <div className="dlg-err" role="alert">{error}</div> : null}
+            <div className="dlg-acts">
+              <button type="button" className="ap-act" onClick={close}>{req.kind === "cancel_task" ? "Keep It" : "Cancel"}</button>
+              <button type="submit" className={`ap-act pri${req.kind === "cancel_task" ? " dgr" : ""}`} disabled={state === "saving"}>
+                {state === "saving" ? "Working…" : w.verb}
+              </button>
+            </div>
+            <p className="dlg-foot">{what}</p>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /** Approve / reject a document, or accept / send back handed-out work. Asks first. */
 const ALERT_VERBS = {

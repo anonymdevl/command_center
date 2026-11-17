@@ -621,6 +621,19 @@ class CommandCenterSiteCredential(DocModel):
         verbose_name_plural = "Command Center Site Credential"
 
 
+class CommandCenterTaskSendBack(DocModel):
+    business_code = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    todo = models.CharField(max_length=140, null=True, blank=True, db_index=True)
+    sent_by = models.CharField(max_length=140, null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    note = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = "tabCommand Center Task Send Back"
+        verbose_name = "Command Center Task Send Back"
+        verbose_name_plural = "Command Center Task Send Back"
+
+
 class ConnectedBusiness(DocModel):
     business_name = models.CharField(max_length=140, null=True, blank=True, unique=True)
     business_code = models.CharField(max_length=140, null=True, blank=True, unique=True)
@@ -669,5 +682,6 @@ DOCTYPE_MODELS = {
     "Command Center Report Run": CommandCenterReportRun,
     "Command Center Report Schedule": CommandCenterReportSchedule,
     "Command Center Site Credential": CommandCenterSiteCredential,
+    "Command Center Task Send Back": CommandCenterTaskSendBack,
     "Connected Business": ConnectedBusiness,
 }
