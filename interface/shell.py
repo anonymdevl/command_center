@@ -1498,4 +1498,9 @@ th.work-pick,td.work-pick{width:36px;padding-right:0;text-align:center}
  .work-bulk-acts .btn{width:100%;margin:0}
  .work-bulk-acts .btn:last-child{grid-column:1 / -1}
 }
+
+/* Outstanding Tasks rows: Reassign and the "⋯" menu side by side on one line. */
+td.work-acts{white-space:nowrap;vertical-align:middle}
+td.work-acts>*{display:inline-flex;vertical-align:middle}
+td.work-acts .amenu{margin-left:2px}
 """

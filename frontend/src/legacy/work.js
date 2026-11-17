@@ -37,6 +37,7 @@ import { WAITING } from "./reach.js";
 import { count, exact, shortDate } from "../format.js";
 import { guideBox } from "./guide.js";
 import { hydrateTiles } from "./hydrate.js";
+import { menu } from "./actions.js";
 
 export const WORK_VIEWS = new Set(["myday", "approvals", "delegation"]);
 
@@ -411,12 +412,17 @@ function tasksTable(rows, { withPriority = false, selectable = false, empty: non
     // Edit, Reassign, Close, Cancel: the work stays the manager's to manage (api/actions).
     // Escalate goes up the line, to the manager ERPNext names for the person. Close is
     // finished or no longer needed; Cancel is withdrawn.
+    // One visible action and the rest under "⋯" (as on the alert cards), so a row stays one
+    // line; the task drawer, opened by the row, carries every action too.
+    last.onclick = (e) => e.stopPropagation();
     last.append(
-      btn("Edit", "btn", () => fire("cc-action", taskRequest("edit_task", t))),
       btn("Reassign", "btn", () => fire("cc-action", taskRequest("reassign", t))),
-      btn("Escalate", "btn", () => fire("cc-action", taskRequest("escalate", t))),
-      btn("Close", "btn", () => fire("cc-action", taskRequest("close_task", t))),
-      btn("Cancel", "btn dgr", () => fire("cc-action", taskRequest("cancel_task", t))));
+      menu([
+        ["Edit Date And Priority", () => fire("cc-action", taskRequest("edit_task", t))],
+        ["Escalate", () => fire("cc-action", taskRequest("escalate", t))],
+        ["Close", () => fire("cc-action", taskRequest("close_task", t))],
+        ["Cancel Assignment", () => fire("cc-action", taskRequest("cancel_task", t)), true],
+      ]));
     opensTask(tr, t, opts);
     if (selectable) {
       const td = el("td", "work-pick");
