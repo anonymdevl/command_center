@@ -4,3 +4,4 @@ command_center.patches.rename_manager_role
 [post_model_sync]
 command_center.patches.seed_local_business
 command_center.patches.remove_desk_views
+command_center.patches.reload_changed_facts

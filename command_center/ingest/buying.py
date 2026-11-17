@@ -11,17 +11,24 @@ the truth.
 
 from __future__ import annotations
 
-from frappe.utils import date_diff, flt, getdate
+from frappe.utils import flt, getdate
 
-from command_center.ingest.base import Ingestor, ageing_bucket, require_fields
+from command_center.ingest.base import Ingestor, require_fields
+from command_center.ingest.sales import due_age
 
-PAGE = 2000
+# Every row: the connector reads it page by page, by key (connectors/remote.py).
+ALL = 10_000_000
 
 
 class PurchaseInvoiceIngestor(Ingestor):
     fact = "fact_purchase_invoice"
     source_doctype = "Purchase Invoice"
     cancellable = "Purchase Invoice"
+    deletable = ("Purchase Invoice", {"src_docstatus": 0}, {"docstatus": 0})
+    aged_by = ("due_date",)
+
+    def age(self, row, as_of):
+        return due_age(row.get("due_date"), as_of)
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         from command_center.ingest.base import resolve_as_of
@@ -36,18 +43,16 @@ class PurchaseInvoiceIngestor(Ingestor):
                      "base_grand_total", "outstanding_amount"]
 
         rows = []
-        while True:
-            batch = require_fields(
-                conn.get_list("Purchase Invoice", filters=filters, fields=pi_fields,
-                              order_by="modified asc",
-                              limit=min(PAGE, limit or PAGE)),
-                pi_fields, "Purchase Invoice")
-            if not batch:
-                break
+        # One read, paged by the connector by key (never "modified > the last page's",
+        # which skipped documents sharing the boundary's timestamp).
+        batch = require_fields(
+            conn.get_list("Purchase Invoice", filters=filters, fields=pi_fields,
+                          order_by="modified asc", limit=limit or ALL),
+            pi_fields, "Purchase Invoice")
+        if batch:
             groups = _supplier_groups(conn, {d.get("supplier") for d in batch})
             for d in batch:
                 due = d.get("due_date")
-                days = date_diff(as_of, due) if due else None
                 rows.append({
                     "src_name": d["name"],
                     "src_modified": d["modified"],
@@ -62,14 +67,8 @@ class PurchaseInvoiceIngestor(Ingestor):
                     "base_grand_total": flt(d.get("base_grand_total")),
                     "outstanding_amount": flt(d.get("outstanding_amount")),
                     "as_of_date": getdate(as_of),
-                    "days_overdue": days,
-                    "ageing_bucket": ageing_bucket(days),
+                    **due_age(due, as_of),
                 })
-            if limit and len(rows) >= limit:
-                return rows[:limit]
-            if len(batch) < PAGE:
-                break
-            filters["modified"] = [">", batch[-1]["modified"]]
         return rows
 
 
@@ -77,6 +76,7 @@ class PurchaseInvoiceLineIngestor(Ingestor):
     fact = "fact_purchase_invoice_line"
     source_doctype = "Purchase Invoice Item"
     cancellable = "Purchase Invoice"
+    deletable = ("Purchase Invoice", {"src_docstatus": 0}, {"docstatus": 0})
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         """Lines, with the supplier carried down from the parent.
@@ -92,7 +92,7 @@ class PurchaseInvoiceLineIngestor(Ingestor):
         parent_fields = ["name", "modified", "docstatus", "posting_date", "supplier"]
         parents = require_fields(
             conn.get_list("Purchase Invoice", filters=filters, fields=parent_fields,
-                          order_by="modified asc", limit=limit or 100000),
+                          order_by="modified asc", limit=limit or ALL),
             parent_fields, "Purchase Invoice")
         if not parents:
             return []

@@ -23,12 +23,14 @@ from frappe.utils import flt
 
 from command_center.ingest.base import Ingestor, require_fields
 
-PAGE = 2000
+# Every row: the connector reads it page by page, by key (connectors/remote.py).
+ALL = 10_000_000
 
 
 class StockBalanceIngestor(Ingestor):
     fact = "fact_stock_balance"
     source_doctype = "Bin"
+    deletable = ("Bin", {}, {})
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         filters = {}
@@ -39,26 +41,16 @@ class StockBalanceIngestor(Ingestor):
                       "actual_qty", "reserved_qty", "ordered_qty",
                       "projected_qty", "valuation_rate", "stock_value"]
 
-        rows, seen_items = [], set()
-        raw = []
-        while True:
-            # Guarded: a field the source drops without complaint becomes a silently
-            # blank fact column, which is how sixty cases loaded with no status.
-            batch = require_fields(
-                conn.get_list("Bin", filters=filters, fields=bin_fields,
-                              order_by="modified asc",
-                              limit=min(PAGE, limit or PAGE)),
-                bin_fields, "Bin")
-            if not batch:
-                break
-            raw.extend(batch)
-            seen_items.update(b.get("item_code") for b in batch)
-            if limit and len(raw) >= limit:
-                raw = raw[:limit]
-                break
-            if len(batch) < PAGE:
-                break
-            filters["modified"] = [">", batch[-1]["modified"]]
+        rows = []
+        # Guarded: a field the source drops without complaint becomes a silently blank
+        # fact column, which is how sixty cases loaded with no status. One read, paged by
+        # the connector by key (never "modified > the last page's", which skipped Bins
+        # sharing the boundary's timestamp).
+        raw = require_fields(
+            conn.get_list("Bin", filters=filters, fields=bin_fields,
+                          order_by="modified asc", limit=limit or ALL),
+            bin_fields, "Bin")
+        seen_items = {b.get("item_code") for b in raw}
 
         groups = _item_groups(conn, seen_items)
 

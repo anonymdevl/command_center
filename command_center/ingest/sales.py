@@ -19,13 +19,19 @@ from frappe.utils import date_diff, flt, getdate
 
 from command_center.ingest.base import Ingestor, ageing_bucket, require_fields
 
-PAGE = 2000
+# Every row: the connector reads it page by page, by key (connectors/remote.py).
+ALL = 10_000_000
 
 
 class SalesInvoiceIngestor(Ingestor):
     fact = "fact_sales_invoice"
     source_doctype = "Sales Invoice"
     cancellable = "Sales Invoice"
+    deletable = ("Sales Invoice", {"src_docstatus": 0}, {"docstatus": 0})
+    aged_by = ("due_date",)
+
+    def age(self, row, as_of):
+        return due_age(row.get("due_date"), as_of)
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         from command_center.ingest.base import resolve_as_of
@@ -36,22 +42,20 @@ class SalesInvoiceIngestor(Ingestor):
         if since:
             filters["modified"] = [">", since]
 
-        rows, start = [], 0
-        while True:
-            si_fields = ["name", "modified", "docstatus", "posting_date", "due_date",
-                         "status", "is_return", "customer", "customer_group",
-                         "territory", "currency", "base_grand_total",
-                         "outstanding_amount"]
-            batch = require_fields(
-                conn.get_list("Sales Invoice", filters=filters, fields=si_fields,
-                              order_by="modified asc",
-                              limit=min(PAGE, limit or PAGE)),
-                si_fields, "Sales Invoice")
-            if not batch:
-                break
+        rows = []
+        si_fields = ["name", "modified", "docstatus", "posting_date", "due_date",
+                     "status", "is_return", "customer", "customer_group",
+                     "territory", "currency", "base_grand_total",
+                     "outstanding_amount"]
+        # One read, paged by the connector by key (never "modified > the last page's",
+        # which skipped documents sharing the boundary's timestamp).
+        batch = require_fields(
+            conn.get_list("Sales Invoice", filters=filters, fields=si_fields,
+                          order_by="modified asc", limit=limit or ALL),
+            si_fields, "Sales Invoice")
+        if batch:
             for d in batch:
                 due = d.get("due_date")
-                days = date_diff(as_of, due) if due else None
                 rows.append({
                     "src_name": d["name"],
                     "src_modified": d["modified"],
@@ -67,21 +71,23 @@ class SalesInvoiceIngestor(Ingestor):
                     "base_grand_total": flt(d.get("base_grand_total")),
                     "outstanding_amount": flt(d.get("outstanding_amount")),
                     "as_of_date": getdate(as_of),
-                    "days_overdue": days,
-                    "ageing_bucket": ageing_bucket(days),
+                    **due_age(due, as_of),
                 })
-            if limit and len(rows) >= limit:
-                return rows[:limit]
-            if len(batch) < PAGE:
-                break
-            filters["modified"] = [">", batch[-1]["modified"]]
         return rows
+
+
+def due_age(due, as_of) -> dict:
+    """Days past the due date and the band, as at the as-of date: one definition for
+    the extract and the daily re-ageing (Ingestor.reage), sales and buying alike."""
+    days = date_diff(as_of, due) if due else None
+    return {"days_overdue": days, "ageing_bucket": ageing_bucket(days)}
 
 
 class SalesInvoiceLineIngestor(Ingestor):
     fact = "fact_sales_invoice_line"
     source_doctype = "Sales Invoice Item"
     cancellable = "Sales Invoice"
+    deletable = ("Sales Invoice", {"src_docstatus": 0}, {"docstatus": 0})
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         """Lines, with the parent's party context carried down.
@@ -100,7 +106,7 @@ class SalesInvoiceLineIngestor(Ingestor):
             "Sales Invoice", filters=filters,
             fields=["name", "modified", "docstatus", "posting_date", "customer",
                     "customer_group", "territory"],
-            order_by="modified asc", limit=limit or 100000,
+            order_by="modified asc", limit=limit or ALL,
         )
         if not parents:
             return []
@@ -166,6 +172,11 @@ class PaymentAllocationIngestor(Ingestor):
         repeated across a payment's rows. Summing it over allocations overstates
         unmatched cash; the field's own description says so, and any KPI over it
         must aggregate over distinct payments.
+
+        `payment_amount` is the payment's own amount, on its first row only, and a
+        payment matched to nothing gets a row of its own (src_doctype Payment Entry, no
+        allocation): money in is every receipt, not the part matched to invoices
+        (Gigmann, October 2026: 380,573.61 came in, 349,821.03 of it matched).
         """
         filters = {"docstatus": 1}
         if since:
@@ -174,9 +185,9 @@ class PaymentAllocationIngestor(Ingestor):
         pays = conn.get_list(
             "Payment Entry", filters=filters,
             fields=["name", "modified", "docstatus", "posting_date", "party_type",
-                    "party", "payment_type", "base_paid_amount",
+                    "party", "payment_type", "base_paid_amount", "base_received_amount",
                     "unallocated_amount"],
-            order_by="modified asc", limit=limit or 100000,
+            order_by="modified asc", limit=limit or ALL,
         )
         if not pays:
             return []
@@ -207,10 +218,13 @@ class PaymentAllocationIngestor(Ingestor):
                                        fields=["name", "due_date"], limit=100000):
                     due[d["name"]] = d.get("due_date")
 
-            for r in refs:
+            matched = set()
+            for r in sorted(refs, key=lambda x: (x["parent"], x["name"])):
                 p = by_name.get(r["parent"])
                 if not p:
                     continue
+                first = p["name"] not in matched
+                matched.add(p["name"])
                 d = due.get(r.get("reference_name"))
                 rows.append({
                     "src_name": r["parent"],
@@ -226,9 +240,40 @@ class PaymentAllocationIngestor(Ingestor):
                     "allocated_amount": flt(r.get("allocated_amount")),
                     "base_paid_amount": flt(p.get("base_paid_amount")),
                     "unallocated_amount": flt(p.get("unallocated_amount")),
+                    "payment_amount": _amount(p) if first else 0.0,
                     "days_to_pay": date_diff(p["posting_date"], d) if d else None,
                 })
+            # A payment matched to nothing still came in (or went out).
+            for name in chunk:
+                if name in matched:
+                    continue
+                p = by_name[name]
+                rows.append({
+                    "src_doctype": "Payment Entry",
+                    "src_name": name,
+                    "src_modified": p["modified"],
+                    "src_docstatus": p["docstatus"],
+                    "posting_date": p["posting_date"],
+                    "party_type": p.get("party_type"),
+                    "party": p.get("party"),
+                    "payment_type": p.get("payment_type"),
+                    "against_doctype": None,
+                    "against_name": None,
+                    "allocated_amount": 0.0,
+                    "base_paid_amount": flt(p.get("base_paid_amount")),
+                    "unallocated_amount": flt(p.get("unallocated_amount")),
+                    "payment_amount": _amount(p),
+                    "days_to_pay": None,
+                })
         return rows
+
+
+def _amount(p) -> float:
+    """What a payment moved, in the company's currency: received into the bank for money
+    in, paid out of it otherwise."""
+    if p.get("payment_type") == "Receive":
+        return flt(p.get("base_received_amount"))
+    return flt(p.get("base_paid_amount"))
 
 
 INGESTORS = {

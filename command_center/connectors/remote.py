@@ -329,14 +329,34 @@ class RemoteConnector(BusinessConnector):
             return _refit(self._call("frappe.client.get_list",
                                      {**base, "limit_page_length": want}) or [], renamed, missing)
         out, start = [], 0
+        # Paged by a stable key, never by position (17 Nov 2026): with limit_start over
+        # "modified asc", a document saved while the walk was under way moved to the end,
+        # every one after it moved up a place, and the one that slid into a page already
+        # read was never read at all -- on a full load too. So each page after the first
+        # starts after the last row of the one before by (order field, name)
+        # (_keyset), which no save, insert or deletion can shift; an order that is not
+        # one plain field pages by position as before.
+        keyed = _keyset(order_by, fields)
+        ask = dict(base)
+        if keyed:
+            ask["order_by"] = keyed["order_by"]
+            ask["fields"] = keyed["fields"]
+        last = None
         while len(out) < want:
             n = min(page, want - len(out))
-            rows = self._call("frappe.client.get_list",
-                              {**base, "limit_start": start, "limit_page_length": n}) or []
+            if keyed and last is not None:
+                rows = self._after(ask, keyed, last, n)
+            else:
+                rows = self._call("frappe.client.get_list",
+                                  {**ask, "limit_start": start, "limit_page_length": n}) or []
             out.extend(rows)
             if len(rows) < n:
                 break
             start += n
+            if keyed:
+                last = (rows[-1].get(keyed["field"]), rows[-1].get("name"))
+                if last[0] is None or last[1] is None:
+                    keyed = None      # no key to start after: by position from here
             # Paced: a load may run to thousands of pages on somebody's production
             # server. A screen's read a person is waiting for (speed.interactive, never
             # a system read) goes without the pause for its first INTERACTIVE_PAGES.
@@ -347,7 +367,28 @@ class RemoteConnector(BusinessConnector):
                 started = time.perf_counter()
                 time.sleep(pause)
                 _count(started)
+        if keyed and keyed["added"]:
+            out = [{k: v for k, v in r.items() if k not in keyed["added"]} for r in out]
         return _refit(out, renamed, missing)
+
+    def _after(self, ask, keyed, last, n):
+        """The next `n` rows after `last` = (order value, name): those with the same order
+        value and a later name, then those with a later order value."""
+        field, desc = keyed["field"], keyed["desc"]
+        value, name = last
+        beyond = "<" if desc else ">"
+        rows = []
+        if field != "name":
+            rows = self._call("frappe.client.get_list", {
+                **ask, "filters": _and(ask["doctype"], ask["filters"],
+                                       [(field, "=", value), ("name", beyond, name)]),
+                "order_by": f"name {'desc' if desc else 'asc'}", "limit_page_length": n}) or []
+        if len(rows) < n:
+            rows += self._call("frappe.client.get_list", {
+                **ask, "filters": _and(ask["doctype"], ask["filters"],
+                                       [(field, beyond, value if field != "name" else name)]),
+                "limit_page_length": n - len(rows)}) or []
+        return rows
 
     # -- one platform, every ERPNext version ------------------------------------
     def fieldnames(self, doctype) -> set | None:
@@ -573,6 +614,48 @@ _STANDARD = {"name", "owner", "creation", "modified", "modified_by", "docstatus"
              "parent", "parenttype", "parentfield", "_assign", "_comments", "_liked_by",
              "_user_tags", "_seen"}
 _PLAIN = __import__("re").compile(r"^[a-z_][a-z0-9_]*$")
+
+
+_ORDER = re.compile(r"^\s*`?(?:tab[\w ]+`?\.`?)?(\w+)`?(?:\s+(asc|desc))?\s*$", re.I)
+
+
+def _keyset(order_by, fields) -> dict | None:
+    """How a large read pages by key: the one field it is ordered by (Frappe's default,
+    modified desc, when none is named), with the name to break ties; the fields it needs
+    to read for that, and which of them the caller did not ask for. None for an order of
+    several fields or an expression: such a read pages by position."""
+    m = _ORDER.match(order_by or "modified desc")
+    if not m or any(not isinstance(f, str) or not _PLAIN.match(f) for f in fields if f != "*"):
+        return None
+    field, desc = m.group(1), (m.group(2) or "asc").lower() == "desc"
+    if "*" in fields:
+        added = []
+    else:
+        added = [f for f in (field, "name") if f not in fields]
+    d = "desc" if desc else "asc"
+    return {"field": field, "desc": desc, "added": added,
+            "fields": list(fields) + [f for f in added if f not in fields],
+            "order_by": f"{field} {d}" + (f", name {d}" if field != "name" else "")}
+
+
+def _and(doctype, filters, extra) -> list | dict:
+    """`filters` with the conditions in `extra` [(field, op, value)] added. A dict keeps
+    its shape where no field is named twice; otherwise both become Frappe's list form."""
+    if isinstance(filters, dict) and not any(f in filters for f, _, _ in extra):
+        return {**filters, **{f: [op, v] for f, op, v in extra}}
+    rows = []
+    if isinstance(filters, dict):
+        for k, v in filters.items():
+            if isinstance(v, (list, tuple)) and len(v) == 2 and isinstance(v[0], str):
+                rows.append([doctype, k, v[0], v[1]])
+            elif v is None:
+                rows.append([doctype, k, "is", "not set"])
+            else:
+                rows.append([doctype, k, "=", v])
+    else:
+        rows = [list(x) if len(x) == 4 else [doctype] + list(x) for x in (filters or [])
+                if isinstance(x, (list, tuple))]
+    return rows + [[doctype, f, op, v] for f, op, v in extra]
 
 
 def _refit(rows, renamed, missing):

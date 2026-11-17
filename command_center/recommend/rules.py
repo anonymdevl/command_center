@@ -186,20 +186,54 @@ def grouped(ctx, doctype, filters, group_by, aggs, parent=None):
         raise
 
 
+# What takes stock out of the business: a sale (its delivery or an invoice that updates
+# stock). A Stock Entry counts only for what it consumed -- its net for an item, so a
+# Material Transfer, which takes from one warehouse and puts into another, nets to nothing
+# and is no sale (17 Nov 2026: transfers kept slow stock "moving"). A Stock
+# Reconciliation's correction, a return to a supplier and a stock receipt are not use.
+SOLD_VOUCHERS = ("Delivery Note", "Sales Invoice", "POS Invoice")
+
+
 def outflow(ctx, days):
-    """Per product, what went out of stock (sold, issued) in the last `days` days, read
-    from the business's Stock Ledger: {item: (quantity, movements)}. Sums and counts
-    only -- v14 refuses min()/max() in a list read."""
+    """Per product, what was sold or consumed in the last `days` days, read from the
+    business's Stock Ledger: {item: (quantity, movements)}. Sums and counts only -- v14
+    refuses min()/max() in a list read."""
     import frappe
     key = f"_out_{days}"
     if key not in ctx.__dict__:
         frm = str(frappe.utils.add_days(frappe.utils.today(), -int(days)))
-        rows = grouped(ctx, "Stock Ledger Entry",
-                       {"is_cancelled": 0, "posting_date": [">=", frm], "actual_qty": ["<", 0]},
-                       "item_code", [("sum", "actual_qty", "out_qty"), ("count", "name", "moves")])
-        ctx.__dict__[key] = {r["item_code"]: (abs(_num(r.get("out_qty"))), int(_num(r.get("moves"))))
-                             for r in rows if r.get("item_code")}
+        ctx.__dict__[key] = stock_used(ctx, frm)
     return ctx.__dict__[key]
+
+
+def stock_used(ctx, frm=None, last=False) -> dict:
+    """{item: (quantity sold or consumed, movements[, latest date])} since `frm` (or ever):
+    the one definition of stock going out for good (SOLD_VOUCHERS above)."""
+    base = {"is_cancelled": 0}
+    if frm:
+        base["posting_date"] = [">=", str(frm)]
+    aggs = [("sum", "actual_qty", "out_qty"), ("count", "name", "moves")]
+    if last:
+        aggs.append(("max", "posting_date", "last_date"))
+    out = {}
+
+    def add(item, qty, moves, day):
+        q, n, d = out.get(item, (0.0, 0, None))
+        d = max([x for x in (d, str(day) if day else None) if x], default=None)
+        out[item] = (q + qty, n + moves, d)
+    for r in grouped(ctx, "Stock Ledger Entry",
+                     {**base, "actual_qty": ["<", 0], "voucher_type": ["in", list(SOLD_VOUCHERS)]},
+                     "item_code", aggs):
+        if r.get("item_code"):
+            add(r["item_code"], abs(_num(r.get("out_qty"))), int(_num(r.get("moves"))),
+                r.get("last_date"))
+    # A Stock Entry, per item and entry: what it took out net of what it put back.
+    for r in grouped(ctx, "Stock Ledger Entry", {**base, "voucher_type": "Stock Entry"},
+                     "item_code, voucher_no", aggs):
+        net = _num(r.get("out_qty"))
+        if r.get("item_code") and net < 0:
+            add(r["item_code"], -net, 1, r.get("last_date"))
+    return {k: (v[0], v[1], v[2]) if last else (v[0], v[1]) for k, v in out.items()}
 
 
 def _rec(**kw):
@@ -540,6 +574,7 @@ def sales_falling(ctx, p):
                 f"{month_label(base_span[0])}?",
             drill={"fact": "fact_sales_invoice_line",
                    "filters": {"item_group": g if g != "No product group" else ["is", "not set"],
+                               "src_docstatus": 1,
                                "posting_date": ["between", [str(base_span[0]), str(base_span[1])]]}},
             money=drop))
     out.sort(key=lambda x: -x["money"])
@@ -703,9 +738,9 @@ def delivered_unbilled(ctx, p):
         return []
     return [_rec(
         title=f"Invoice {ms(ctx, value)} of goods already delivered.",
-        why=(f"{plural(n, 'order')} {'was' if n == 1 else 'were'} delivered in full with "
-             f"{m(ctx, value)} not yet invoiced. Until it is, it is in nobody's receivables "
-             f"and nobody chases it."),
+        why=(f"{plural(n, 'open order')} {'has' if n == 1 else 'have'} goods delivered and "
+             f"not yet invoiced, {m(ctx, value)} line by line. Until it is invoiced, it is in "
+             f"nobody's receivables and nobody chases it."),
         what_to_do=["Raise the invoices this week.",
                     "Where one should not be billed, close the order with the reason."],
         how=how(ctx, "To invoice a delivered order in ERPNext:",
@@ -770,7 +805,7 @@ def margin_shrinking(ctx, p):
             ask=f"Why has the margin on {g} fallen, and which products drove it?",
             drill={"fact": "fact_sales_invoice_line",
                    "filters": {"item_group": g if g != "No product group" else ["is", "not set"],
-                               "has_cost": 1,
+                               "has_cost": 1, "src_docstatus": 1,
                                "posting_date": ["between", [str(recent_from), str(cur[1])]]}},
             money=lost))
     out.sort(key=lambda x: -x["money"])
@@ -803,7 +838,7 @@ def sold_below_cost(ctx, p):
                  "from."], "/app/query-report/Gross%20Profit", "Open Gross Profit"),
         ask="Which products have we sold below cost recently, and to whom?",
         drill={"fact": "fact_sales_invoice_line",
-               "filters": {"has_cost": 1, "base_margin_amount": ["<", 0],
+               "filters": {"has_cost": 1, "base_margin_amount": ["<", 0], "src_docstatus": 1,
                            "posting_date": [">=", str(frm)]}},
         money=loss, count=len(rows), unit="lines")]
 
@@ -834,7 +869,7 @@ def lines_without_cost(ctx, p):
                 "/app/item", "Open Item"),
         ask="Which products have no cost recorded, and how much did we sell of them?",
         drill={"fact": "fact_sales_invoice_line",
-               "filters": {"has_cost": 0, "posting_date": [">=", str(frm)]}},
+               "filters": {"has_cost": 0, "src_docstatus": 1, "posting_date": [">=", str(frm)]}},
         money=value, severity=None)]
 
 
@@ -1100,7 +1135,8 @@ def supplier_concentration(ctx, p):
                 "/app/request-for-quotation/new", "New Request for Quotation"),
         ask=f"What happens if {a} stops supplying?",
         drill={"fact": "fact_purchase_invoice_line",
-               "filters": {"supplier": ["in", [a, b]], "posting_date": [">=", str(frm)]}},
+               "filters": {"supplier": ["in", [a, b]], "src_docstatus": 1,
+                           "posting_date": [">=", str(frm)]}},
         money=two)]
 
 
@@ -1111,8 +1147,12 @@ def late_suppliers(ctx, p):
             and frappe.utils.getdate(x["schedule_date"]) < edge]
     if len(late) < p["count"]:
         return []
+    # Still to receive, line by line (ingest/order_lines.py): never the order's value
+    # times ERPNext's received percentage, which is a share of quantity.
+    from command_center.ingest import order_lines
+    left = order_lines.order_values(ctx.reader(), order_lines.BUYING, late, "per_received")
     for x in late:
-        x["pending"] = _num(x.get("base_grand_total")) * (100 - _num(x.get("per_received"))) / 100
+        x["pending"] = left[x["name"]]["left"]
     value = sum(x["pending"] for x in late)
     if value <= 0:
         return []

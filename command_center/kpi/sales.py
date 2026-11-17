@@ -12,6 +12,8 @@ UNPAID = {"outstanding_amount": [">", 0], "src_docstatus": 1}
 SUBMITTED = {"src_docstatus": 1}
 DRAFT = {"src_docstatus": 0}
 RECEIVED = {"payment_type": "Receive", "against_doctype": "Sales Invoice"}
+# Money in: every submitted Receive payment, once (payment_amount is on one row a payment).
+MONEY_IN = {"payment_type": "Receive", "src_docstatus": 1}
 CUSTOMERS = {"party_type": "Customer"}
 OWING = {**CUSTOMERS, "owed": [">", 0]}
 IN_CREDIT = {**CUSTOMERS, "in_credit": [">", 0]}
@@ -312,12 +314,14 @@ register(
         key="cash_in_month",
         label="Money in, last full month",
         fact="fact_payment_allocation",
-        measure="allocated_amount",
+        # Every receipt once, matched or not: what came in, not the part allocated to
+        # invoices (17 Nov 2026: Gigmann's October showed 349,821.03 of 380,573.61).
+        measure="payment_amount",
         unit="currency",
         direction="higher_is_better",
-        filters=RECEIVED,
-        note="{period}, matched to invoices",
-        drill_filters=RECEIVED,
+        filters=MONEY_IN,
+        note="{period}, every payment received",
+        drill_filters=MONEY_IN,
         period={"field": "posting_date", "window": "last_full_month"},
         as_of_basis="data_horizon",
     ),

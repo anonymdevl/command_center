@@ -27,7 +27,7 @@ The short version is one paragraph. The AI writes it once a day per business -- 
 or when the screen is opened and today's is not written -- from what the memo shows
 (given()), through ask/claude.complete, as the Daily Brief and the daily AI review do.
 Every number in it must be one of those it was given, as written or rounded
-(recommend/review.allowed_numbers); one that is not, a reply that is not one short
+(recommend/numbers.py); one that is not, a reply that is not one short
 paragraph, an AI that is off, not set up, paused by the licence or out of reach -- each
 leaves the deterministic paragraph built from the same figures (fallback()), which is
 also what the screen shows while the AI writes, so the page never waits on it. Kept per
@@ -159,6 +159,11 @@ def health_change(code, fig, hist: dict) -> dict | None:
         return {"kind": "pending", "text": "Change from next week"}
     text = ("No change on last week" if d == 0 else
             f"{'▲' if d > 0 else '▼'} {abs(d)} on last week")
+    # Measured over the questions scored both times (health.week_on_week): said when that
+    # is not every question.
+    over = hist.get("delta_questions") or {}
+    if over and over.get("questions") and over["questions"] < over.get("of", 0):
+        text += f", on the {over['questions']} questions scored both times"
     return {"kind": "week", "dir": _arrow(d), "points": abs(d),
             "base_day": (hist.get("last_week") or {}).get("day"), "text": text}
 
@@ -276,9 +281,14 @@ def header(code, figs: dict, user=None, now=None) -> dict:
     user = user or frappe.session.user
     person = frappe.utils.get_fullname(user) or user
     name, names = _names(code)
+    # The oldest read among the vital signs shown: "read from ERPNext at 09:40" must hold
+    # for every figure under it, so a stale one is never dated by a fresh one beside it
+    # (17 Nov 2026: the newest was taken).
+    vital = {k for k, _l in VITALS}
     reads = sorted(str((f.get("as_of") or {}).get("last_read") or "")[:16]
-                   for f in figs.values() if isinstance(f, dict) and (f.get("as_of") or {}).get("last_read"))
-    read = reads[-1] if reads else None
+                   for k, f in figs.items() if k in vital and _shown(f)
+                   and (f.get("as_of") or {}).get("last_read"))
+    read = reads[0] if reads else None
     day = getdate(now)
     dateline = f"Week to {day.strftime('%A')} {day.day} {day.strftime('%B %Y')}"
     if read:
@@ -380,19 +390,35 @@ def given(head: dict, vit: list, decs: list, rsk: list, well: list) -> tuple:
     return "\n".join(lines), data
 
 
-def allowed(text: str, data: dict) -> set:
-    from command_center.recommend.review import allowed_numbers
-    return allowed_numbers({"text": text, "data": data})
+def allowed(data: dict):
+    """The figures the memo gave the AI, for the one check of an AI's numbers
+    (recommend/numbers.py): each vital sign with its note and its change on one line (so
+    "rose" is checked against the change beside it), the decisions, risks and what is
+    going well -- the dateline and the periods as dates only, never as numbers."""
+    from command_center.recommend import numbers
+    g = numbers.Given().date(data.get("week_to"))
+    for x in data.get("figures") or []:
+        g.date(x.get("what"))
+        g.text(f"{x.get('text') or ''}, {x.get('note') or ''}"
+               + (f" ({x['change']})" if x.get("change") else ""))
+    for d in data.get("decisions") or []:
+        g.text(f"{d.get('title') or ''} {d.get('money_text') or ''}")
+    for r in data.get("risks") or []:
+        g.text(r.get("title"))
+    for w in data.get("going_well") or []:
+        g.text(w)
+    return g
 
 
 def check(paragraph: str, text: str, data: dict) -> str | None:
-    """None when the paragraph may be shown; else why not. Every number in it must be one
-    of those it was given, as written or rounded."""
-    from command_center.recommend.review import numbers_in
+    """None when the paragraph may be shown; else why not. Every figure in it must be one
+    of those it was given -- the same value with its unit, as written or rounded to what
+    it shows, in the direction it was given (recommend/numbers.py)."""
+    from command_center.recommend import numbers
     p = (paragraph or "").strip()
     if not p:
         return "It was empty."
-    stray = sorted(numbers_in(p) - allowed(text, data))
+    stray = numbers.problems(p, allowed(data))
     if stray:
         return f"It gave {', '.join(stray[:3])}, which is not among the figures it was given."
     if "\n" in p or re.search(r"(^|\s)(#|\*\*|- )", p):

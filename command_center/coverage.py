@@ -270,6 +270,7 @@ def gather(r) -> dict:
 # --------------------------------------------------------------------------- working it out
 def work_out(data: dict, today, window: int = WINDOW_DAYS, after: int = AFTER_DAYS) -> dict:
     """The coverage of every open line, from gather()'s rows. Pure: no reads."""
+    from command_center.ingest import order_lines
     today = _d(today)
     orders = {o["name"]: o for o in data["orders"]}
     stock = defaultdict(float, data.get("stock") or {})
@@ -286,8 +287,6 @@ def work_out(data: dict, today, window: int = WINDOW_DAYS, after: int = AFTER_DA
             continue
         cf = _num(x.get("conversion_factor")) or 1.0
         left = max(_num(x.get("qty")) - _num(x.get("delivered_qty")), 0.0)
-        net = _num(o.get("base_net_total"))
-        factor = (_num(o.get("base_grand_total")) / net) if net > 0 else 1.0
         item = x.get("item_code")
         lines.append({
             "id": x["name"], "order": x["parent"], "idx": int(_num(x.get("idx"))),
@@ -301,7 +300,8 @@ def work_out(data: dict, today, window: int = WINDOW_DAYS, after: int = AFTER_DA
             "ordered": round(_num(x.get("qty")) * cf, 6),
             "delivered": round(_num(x.get("delivered_qty")) * cf, 6),
             "pending": round(left * cf, 6),
-            "value": round(left * _num(x.get("base_net_rate")) * factor, 2),
+            # The one valuation of what is left on a line (ingest/order_lines.py).
+            "value": round(order_lines.left_value(x, o, "delivered_qty"), 2),
             "stocked": item not in data.get("non_stock", set()),
             "drop_ship": bool(int(_num(x.get("delivered_by_supplier")))),
             "need": round(left * cf, 6),

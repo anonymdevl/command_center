@@ -27,6 +27,7 @@
   "allocated_amount",
   "sec_cash",
   "base_paid_amount",
+  "payment_amount",
   "unallocated_amount",
   "days_to_pay"
  ],
@@ -71,7 +72,7 @@
    "fieldname": "src_docstatus",
    "fieldtype": "Int",
    "label": "Source Docstatus",
-   "description": "0 draft \u00b7 1 submitted \u00b7 2 cancelled"
+   "description": "0 draft · 1 submitted · 2 cancelled"
   },
   {
    "fieldname": "ingested_at",
@@ -147,6 +148,12 @@
    "fieldname": "base_paid_amount",
    "fieldtype": "Currency",
    "label": "Payment Total"
+  },
+  {
+   "fieldname": "payment_amount",
+   "fieldtype": "Currency",
+   "label": "Amount Of The Payment",
+   "description": "What the payment itself moved, in the company's currency (received for money in, paid for money out), on ONE row per payment and 0 on its others, so it can be summed over rows. A payment matched to nothing has a row of its own with this and no allocation. Money in is this, never the allocations: Gigmann's October 2026 receipts were 380,573.61, of which 349,821.03 was matched."
   },
   {
    "fieldname": "unallocated_amount",

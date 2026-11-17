@@ -249,13 +249,14 @@ def positions(code) -> dict:
         if row and any(v is not None for v in row):
             out.update({k: _num(v) for k, v in zip(cols, row)})
     so = _t("fact_sales_order")
-    rows = (frappe.qb.from_(so).select(so.undelivered_value, so.unbilled_value, so.days_late,
-                                       so.per_delivered)
+    rows = (frappe.qb.from_(so).select(so.undelivered_value, so.delivered_unbilled_value,
+                                       so.days_late)
             .where(so.business_code == code).where(so.is_open == 1).run())
     if rows:
+        # Both valued line by line at ingest (ingest/order_lines.py), as the cards are.
         out["order_book"] = sum(_num(r[0]) for r in rows)
         out["overdue_deliveries"] = sum(_num(r[0]) for r in rows if _num(r[2]) > 0)
-        out["delivered_unbilled"] = sum(_num(r[1]) for r in rows if _num(r[3]) >= 100)
+        out["delivered_unbilled"] = sum(_num(r[1]) for r in rows)
     sb = _t("fact_stock_balance")
     got = (frappe.qb.from_(sb).select(Sum(sb.stock_value)).where(sb.business_code == code).run()
            or [[None]])[0][0]

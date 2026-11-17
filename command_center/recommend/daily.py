@@ -21,7 +21,6 @@ keyed by business.
 from __future__ import annotations
 
 import json
-import re
 
 import frappe
 from frappe.utils import getdate, now_datetime, today
@@ -125,20 +124,6 @@ def brief_input(code) -> tuple:
     return "\n".join(lines), snap
 
 
-NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
-
-
-def _numbers(text: str) -> set:
-    return {n.replace(",", "").rstrip(".") for n in NUMBER.findall(text or "")}
-
-
-def foreign_numbers(brief: str, given: str) -> list:
-    """Numbers in the brief that are not in what it was given (the numbered list's 1-3
-    apart)."""
-    allowed = _numbers(given) | {"1", "2", "3"}
-    return sorted(n for n in _numbers(brief) if n not in allowed)
-
-
 def write_brief(code) -> dict:
     """Write today's brief for one business and keep it (or why it could not be)."""
     from command_center.ask import claude, llm
@@ -162,7 +147,9 @@ def write_brief(code) -> dict:
         if err:
             out["error"] = f"Claude could not write it: {err}"
         else:
-            bad = foreign_numbers(got, text)
+            # The one check of an AI's numbers (recommend/numbers.py).
+            from command_center.recommend import numbers
+            bad = numbers.problems(got, numbers.Given().text(text))
             if bad:
                 out["error"] = (f"Not used: it gave {', '.join(bad[:3])}, which is not in the "
                                 f"figures it was given.")

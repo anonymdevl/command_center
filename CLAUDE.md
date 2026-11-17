@@ -289,6 +289,36 @@ disagrees with its GL by GHS 2.82M on journals. `ar_total`/`ap_total` are the po
 balances; `ar_open_invoices`/`ap_open_invoices` keep the invoice view. `api/audit.py` is
 Check Figures (Settings → Businesses), line by line against the business's ERPNext.
 
+## Figure rules (17 Nov 2026)
+
+An audit found figures that were plausible and wrong. Each rule below has a test in
+`insights/test_figures.py` and, where it could recur, a check in `scripts/figure_rules.py`
+(run by preflight, each check proved to fail on the code that was wrong).
+
+- **What is left on an order is valued line by line** (`ingest/order_lines.py`): (qty -
+  delivered or received) x base net rate, taxes in proportion. ERPNext's `per_delivered`,
+  `per_received` and `per_billed` are shares of quantity: never multiply money by them
+  (SAL-ORD-2025-00942: 103,541.78 by the percentage, 16,290 by line). "Delivered but not
+  invoiced" is `delivered_unbilled_value`, by line; an order with nothing delivered is not in it.
+- **Cancelled is not withdrawn when it was amended** (`kpi/live.withdrawn`): 132 Gigmann POs
+  "withdrawn" were 5.
+- **Money in is every receipt once** (`payment_amount`, on one row a payment; a payment
+  matched to nothing has its own row), never the allocations.
+- **Ageing is worked out again on every load** (`Ingestor.aged_by` / `age` / `reage`),
+  never left as it was on the day the document last changed.
+- **One check of an AI's numbers** (`recommend/numbers.py`): value, unit, rounding to what
+  is written (within 2%), direction words against the change, dates as dates.
+- **"Orders awaiting payment" is by the ledger** (`ingest/ledger.unpaid_by_ledger`).
+- **A drill counts what its figure counts** (drafts out); **transfers are not sales**
+  (`recommend/rules.stock_used`); **a bank transfer is one payment** (`kpi/live.bank_payments`).
+- **Business Health "on last week"** is the latest snapshot against the one nearest seven
+  days before (5-9), over the questions scored in both (`health.week_on_week`).
+- **One company of several** (`ingest/company.scoped`) where an ERPNext keeps more than one.
+- **A month is full once it is over** (`kpi/engine.full_month_end`); **large reads page by
+  key** (`connectors/remote.py`); **deleted drafts, tasks and cases leave at the next
+  incremental load** (`Ingestor.deletable`); **the balance sheet is checked against the
+  profit and loss since the books were last closed**, so it can fail.
+
 ## What covers a promise (15 Nov 2026)
 
 "Promised, not delivered" read as stock promised and not there. `command_center/coverage.py`
@@ -490,7 +520,7 @@ rank), risks `alerts.open_alerts`' first three, Going Well the questions at or o
 `work.summary`'s counts, read separately so the memo never waits on ERPNext. The short version:
 the paragraph worked out from the figures (`fallback`) shows at once; the AI's (06:45
 `summary.write_all`, or on demand) replaces it when every number in it is one it was given
-(`review.allowed_numbers`), kept per business per day (`__cc_exec_summary`), re-checked on
+(`recommend/numbers.py`, the one check of an AI's numbers: value, unit, direction, dates as dates), kept per business per day (`__cc_exec_summary`), re-checked on
 every read. Metered as `ai_review` with `count=False`: tokens and cost on the ledger, counted
 as no review, question or report. All businesses: no AI paragraph and no week-on-week.
 

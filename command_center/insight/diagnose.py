@@ -690,6 +690,10 @@ def bank(ctx) -> dict:
                                       fields=["name"], limit=500)]
     if not banks:
         return {"empty": True}
+    from command_center.kpi.live import bank_payments
+    # Per account, every payment through it: a transfer between two of them is on both
+    # accounts' statements, so it is in both rows. The totals count each payment once
+    # (kpi/live.bank_payments), as the figure does.
     per = defaultdict(lambda: [0, 0])
     for side in ("paid_from", "paid_to"):
         for cleared, idx in ((None, 0), (True, 1)):
@@ -700,7 +704,10 @@ def bank(ctx) -> dict:
                 per[row.get(side)][idx] += int(flt(row.get("n")))
     site = _site(ctx)
     rows = sorted(per.items(), key=lambda kv: -(kv[1][0] - kv[1][1]))
-    total, cleared = sum(v[0] for v in per.values()), sum(v[1] for v in per.values())
+    total = cleared = 0
+    for f in bank_payments(banks):
+        total += int(r.count("Payment Entry", f) or 0)
+        cleared += int(r.count("Payment Entry", {**f, "clearance_date": ["is", "set"]}) or 0)
     out = {"chips": [{"label": "Bank payments", "value": total, "unit": "count"},
                      {"label": "Matched to a statement", "value": cleared, "unit": "count"},
                      {"label": "Not yet matched", "value": total - cleared, "unit": "count",

@@ -5,7 +5,7 @@ analyst is given the section in words (build.as_text) and nothing else -- no too
 records, no ERPNext -- through ask/claude.py, so every request is metered (metering.event,
 meter ai_questions) and the plan's allowance and licence gate it (metering.gate). Its
 answer is checked like the Daily Brief's: one that gives a number not in what it was
-given is not shown, and the reason is said instead (recommend/daily.foreign_numbers).
+given is not shown, and the reason is said instead (recommend/numbers.problems).
 Kept per business, figure and data version, so opening it again costs nothing.
 """
 
@@ -47,7 +47,7 @@ def explain(key: str, business_code: str | None = None) -> dict:
     from command_center.api.businesses import default_business_code
     from command_center.ask import claude, llm
     from command_center.insight.build import as_text, understand
-    from command_center.recommend.daily import foreign_numbers
+    from command_center.recommend import numbers
 
     code = business_code or default_business_code()
     c = frappe.cache()
@@ -64,7 +64,7 @@ def explain(key: str, business_code: str | None = None) -> dict:
     given = as_text(section)
     with metering.event(METER, code, ref=key, note="Explain This") as ev:
         got, err = claude.complete(SYSTEM, given, kind="analyst", timeout=60, max_tokens=2000)
-        bad = foreign_numbers(got, given) if got and not err else []
+        bad = numbers.problems(got, numbers.Given().text(given)) if got and not err else []
         ev["ok"] = bool(got and not err and not bad)
     if err:
         return {"error": f"The analyst could not write it: {err}"}

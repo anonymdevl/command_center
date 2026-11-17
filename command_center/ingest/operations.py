@@ -14,9 +14,11 @@ from __future__ import annotations
 import frappe
 from frappe.utils import date_diff, flt, getdate
 
+from command_center.ingest import order_lines
 from command_center.ingest.base import Ingestor, lateness_bucket, require_fields
 
-PAGE = 2000
+# Every row: the connector reads it page by page (connectors/remote.py).
+ALL = 10_000_000
 
 # ERPNext statuses that mean the document is finished with. Read as a set rather than
 # a string comparison, because an installation can add its own.
@@ -26,9 +28,12 @@ CLOSED_CASE = {"Closed", "Resolved"}
 
 
 def _paged(conn, doctype, fields, filters, limit=None, order_by="modified asc"):
-    """Walk a doctype in pages by its modified watermark.
+    """Every row of a doctype the filters match, in one read the connector pages itself
+    -- by key, so a document saved while the walk is under way is never skipped
+    (connectors/remote.py). Paging here by "modified > the page's last" skipped any
+    document sharing the boundary's timestamp (17 Nov 2026).
 
-    Every page is checked for the fields that were asked for. Frappe does not always
+    The rows are checked for the fields that were asked for. Frappe does not always
     report an unknown field: asking Issue for resolution_date -- which v16 calls
     sla_resolution_date -- returned rows carrying only name and modified, with no
     error. Sixty cases loaded with a blank status and no opening date, every one
@@ -36,28 +41,26 @@ def _paged(conn, doctype, fields, filters, limit=None, order_by="modified asc"):
 
     A fact table that quietly loses a column is worse than one that fails to build.
     """
-    out = []
-    filters = dict(filters)
-    while True:
-        batch = require_fields(
-            conn.get_list(doctype, filters=filters, fields=fields,
-                          order_by=order_by, limit=min(PAGE, limit or PAGE)),
-            fields, doctype)
-        if not batch:
-            break
-        out.extend(batch)
-        if limit and len(out) >= limit:
-            return out[:limit]
-        if len(batch) < PAGE:
-            break
-        filters["modified"] = [">", batch[-1]["modified"]]
-    return out
+    return require_fields(conn.get_list(doctype, filters=dict(filters), fields=fields,
+                                        order_by=order_by, limit=limit or ALL), fields, doctype)
+
+
+def late_age(due, is_open, as_of, field="days_late", bucket="lateness_bucket") -> dict:
+    """How late, as at the as-of date. Lateness applies only to what is still owed: a
+    completed order or task that was once late is a fact about the past, and the screens
+    are about exposure now. One definition for the extract and the re-ageing."""
+    days = date_diff(as_of, due) if (due and is_open) else None
+    return {field: days, bucket: lateness_bucket(days) if is_open else "Closed"}
 
 
 class SalesOrderIngestor(Ingestor):
     fact = "fact_sales_order"
     source_doctype = "Sales Order"
     cancellable = "Sales Order"
+    aged_by = ("delivery_date", "is_open")
+
+    def age(self, row, as_of):
+        return late_age(row.get("delivery_date"), row.get("is_open"), as_of)
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         from command_center.ingest.base import resolve_as_of
@@ -70,9 +73,12 @@ class SalesOrderIngestor(Ingestor):
         orders = _paged(conn, "Sales Order",
                         ["name", "modified", "docstatus", "transaction_date",
                          "delivery_date", "status", "customer", "customer_group",
-                         "territory", "currency", "base_grand_total",
+                         "territory", "currency", "base_grand_total", "base_net_total",
                          "per_delivered", "per_billed"],
                         filters, limit)
+        # What is left on each order, line by line (ingest/order_lines.py): never the
+        # order's value times ERPNext's delivered or billed percentage.
+        left = order_lines.order_values(conn, order_lines.SALES, orders, "per_delivered")
 
         rows = []
         for d in orders:
@@ -81,10 +87,8 @@ class SalesOrderIngestor(Ingestor):
             delivered = flt(d.get("per_delivered"))
             billed = flt(d.get("per_billed"))
             value = flt(d.get("base_grand_total"))
+            owed = left[d["name"]]
             promised = d.get("delivery_date")
-            # Lateness applies only to what is still owed. A completed order that was
-            # once late is a fact about the past; this screen is about exposure now.
-            days = date_diff(as_of, promised) if (promised and is_open) else None
             rows.append({
                 "src_name": d["name"],
                 "src_modified": d["modified"],
@@ -97,19 +101,13 @@ class SalesOrderIngestor(Ingestor):
                 "territory": d.get("territory"),
                 "currency": d.get("currency"),
                 "base_grand_total": value,
-                # Percentages can exceed 100 on over-delivery, which would otherwise
-                # make the undelivered value negative and understate the order book.
-                # Rounded here: a derived money column carried float noise into every
-                # total that summed it.
-                "undelivered_value": round(
-                    max(value * (1 - min(delivered, 100.0) / 100.0), 0), 2),
-                "unbilled_value": round(
-                    max(value * (1 - min(billed, 100.0) / 100.0), 0), 2),
+                "undelivered_value": owed["left"],
+                "unbilled_value": owed["unbilled"],
+                "delivered_unbilled_value": owed["delivered_unbilled"],
                 "per_delivered": delivered,
                 "per_billed": billed,
                 "as_of_date": getdate(as_of),
-                "days_late": days,
-                "lateness_bucket": lateness_bucket(days) if is_open else "Closed",
+                **late_age(promised, is_open, as_of),
                 "is_open": is_open,
             })
         return rows
@@ -118,6 +116,11 @@ class SalesOrderIngestor(Ingestor):
 class TaskIngestor(Ingestor):
     fact = "fact_task"
     source_doctype = "Task"
+    deletable = ("Task", {}, {})
+    aged_by = ("exp_end_date", "is_open")
+
+    def age(self, row, as_of):
+        return late_age(row.get("exp_end_date"), row.get("is_open"), as_of)
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         from command_center.ingest.base import resolve_as_of
@@ -140,7 +143,6 @@ class TaskIngestor(Ingestor):
             status = t.get("status") or ""
             is_open = 0 if status in CLOSED_TASK else 1
             due = t.get("exp_end_date")
-            days = date_diff(as_of, due) if (due and is_open) else None
             who = _first_assignee(t.get("_assign"))
             rows.append({
                 "src_name": t["name"],
@@ -157,8 +159,7 @@ class TaskIngestor(Ingestor):
                 "exp_end_date": due,
                 "completed_on": t.get("completed_on"),
                 "as_of_date": getdate(as_of),
-                "days_late": days,
-                "lateness_bucket": lateness_bucket(days) if is_open else "Closed",
+                **late_age(due, is_open, as_of),
                 "is_open": is_open,
                 "is_assigned": 1 if who else 0,
             })
@@ -168,6 +169,11 @@ class TaskIngestor(Ingestor):
 class PersonIngestor(Ingestor):
     fact = "fact_person"
     source_doctype = "Employee"
+    deletable = ("Employee", {}, {})
+    aged_by = ("date_of_joining", "relieving_date")
+
+    def age(self, row, as_of):
+        return tenure(row.get("date_of_joining"), row.get("relieving_date"), as_of)
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         from command_center.ingest.base import resolve_as_of
@@ -186,9 +192,6 @@ class PersonIngestor(Ingestor):
         rows = []
         for e in people:
             joined = e.get("date_of_joining")
-            # Tenure ends when someone leaves, not at the data horizon. Counting a
-            # leaver's service up to today would keep growing after they had gone.
-            ended = e.get("relieving_date") or as_of
             rows.append({
                 "src_name": e["name"],
                 "src_modified": e["modified"],
@@ -203,16 +206,36 @@ class PersonIngestor(Ingestor):
                 "date_of_joining": joined,
                 "relieving_date": e.get("relieving_date"),
                 "as_of_date": getdate(as_of),
-                "tenure_days": date_diff(ended, joined) if joined else None,
+                **tenure(joined, e.get("relieving_date"), as_of),
                 "is_active": 1 if (e.get("status") or "") == "Active" else 0,
                 "has_user": 1 if e.get("user_id") else 0,
             })
         return rows
 
 
+def tenure(joined, left, as_of) -> dict:
+    """Tenure ends when someone leaves, not at the data horizon. Counting a leaver's
+    service up to today would keep growing after they had gone."""
+    return {"tenure_days": date_diff(left or as_of, joined) if joined else None}
+
+
+def wait(opened, resolved, is_open, as_of) -> dict:
+    """An open case has waited until the horizon; a closed one until it closed."""
+    until = as_of if is_open else (resolved or as_of)
+    days = date_diff(until, opened) if opened else None
+    return {"days_open": max(days, 0) if days is not None else None,
+            "wait_bucket": lateness_bucket(days) if is_open else "Closed"}
+
+
 class CaseIngestor(Ingestor):
     fact = "fact_case"
     source_doctype = "Issue"
+    deletable = ("Issue", {}, {})
+    aged_by = ("opening_date", "resolution_date", "is_open")
+
+    def age(self, row, as_of):
+        return wait(row.get("opening_date"), row.get("resolution_date"), row.get("is_open"),
+                    as_of)
 
     def extract(self, conn, since=None, limit=None, as_of=None):
         from command_center.ingest.base import resolve_as_of
@@ -242,10 +265,7 @@ class CaseIngestor(Ingestor):
             status = c.get("status") or ""
             is_open = 0 if status in CLOSED_CASE else 1
             opened = c.get("opening_date")
-            # An open case has waited until the horizon; a closed one until it closed.
             resolved = c.get(resolved_field)
-            until = as_of if is_open else (resolved or as_of)
-            days = date_diff(until, opened) if opened else None
             who = _first_assignee(c.get("_assign"))
             rows.append({
                 "src_name": c["name"],
@@ -261,8 +281,7 @@ class CaseIngestor(Ingestor):
                 "opening_date": opened,
                 "resolution_date": getdate(resolved) if resolved else None,
                 "as_of_date": getdate(as_of),
-                "days_open": max(days, 0) if days is not None else None,
-                "wait_bucket": lateness_bucket(days) if is_open else "Closed",
+                **wait(opened, getdate(resolved) if resolved else None, is_open, as_of),
                 "is_open": is_open,
                 "is_assigned": 1 if who else 0,
             })

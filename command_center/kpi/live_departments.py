@@ -227,22 +227,39 @@ def order_awaiting_install(r):
 
 
 def order_awaiting_payment(r):
-    """Confirmed orders with an invoice raised against them that is still unpaid: the
-    invoice lines name their order, the invoices what is outstanding. The value is what
-    those invoices still owe, each invoice once."""
-    unpaid = {x["src_name"]: num(x["outstanding_amount"]) for x in facts(
-        r, "fact_sales_invoice", {"src_docstatus": 1, "outstanding_amount": [">", 0]},
-        ["src_name", "outstanding_amount"])}
+    """Confirmed orders with an invoice raised against them that the customer has not
+    paid -- by the ledger, as everything owed is (CLAUDE.md, "What is owed is the
+    ledger"). An invoice's own outstanding amount says unpaid wherever a payment was not
+    matched to it, and Gigmann seldom matches them, so paid orders showed as awaiting
+    payment (17 Nov 2026). Here each customer's payments not matched to an invoice are set
+    against its oldest invoices first (ingest/ledger.unpaid_by_ledger, as the receivable's
+    ageing does), so an invoice counts only for what the customer still owes by the ledger.
+    The value is that, each invoice once, never more than the ledger says."""
+    from command_center.ingest.ledger import unpaid_by_ledger
+    balances = {x["party"]: x for x in facts(r, "fact_party_balance", {"party_type": "Customer"},
+                                             ["party", "owed", "unlinked_debits"])}
+    invoices = facts(r, "fact_sales_invoice", {"src_docstatus": 1, "outstanding_amount": [">", 0]},
+                     ["src_name", "customer", "due_date", "posting_date", "outstanding_amount"])
+    if invoices and not balances:
+        return None, "the ledger balances are not loaded yet"
+    by_customer = {}
+    for x in invoices:
+        by_customer.setdefault(x["customer"], []).append(
+            (x["src_name"], x.get("due_date") or x.get("posting_date"), num(x["outstanding_amount"])))
+    unpaid = {}
+    for customer, rows in by_customer.items():
+        b = balances.get(customer) or {}
+        unpaid.update(unpaid_by_ledger(rows, num(b.get("owed")), num(b.get("unlinked_debits"))))
     confirmed = {o["src_name"] for o in facts(r, "fact_sales_order", {"src_docstatus": 1},
                                               ["src_name"])}
-    names, invoices = set(), set()
+    names, invoices_hit = set(), set()
     for line in facts(r, "fact_sales_invoice_line", {"src_docstatus": 1,
                                                      "sales_order": ["is", "set"]},
                       ["src_name", "sales_order"]):
         if line["src_name"] in unpaid and line["sales_order"] in confirmed:
             names.add(line["sales_order"])
-            invoices.add(line["src_name"])
-    return (len(names), f"{money(r, sum(unpaid[i] for i in invoices))} unpaid",
+            invoices_hit.add(line["src_name"])
+    return (len(names), f"{money(r, sum(unpaid[i] for i in invoices_hit))} unpaid by the ledger",
             _orders_drill(names))
 
 

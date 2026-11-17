@@ -1619,6 +1619,14 @@ _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_alerts.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,
       "scripts/test_alerts.py failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+# The figure rules (17 Nov 2026): money never valued by ERPNext's quantity percentages,
+# amended originals never "withdrawn", one check of an AI's numbers, money in as every
+# receipt, transfers never sales, ageing never frozen, paging by key, a month full only
+# once it is over -- each proved able to fail on the code that was wrong.
+_t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "figure_rules.py")],
+             capture_output=True, text=True, timeout=120)
+check(_t.returncode == 0,
+      "scripts/figure_rules.py failed:\n" + (_t.stdout + _t.stderr)[-2500:])
 _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_kpi.py")],
              capture_output=True, text=True, timeout=120)
 check(_t.returncode == 0,

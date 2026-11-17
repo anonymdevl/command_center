@@ -53,6 +53,24 @@ class Ingestor:
     # party, say, rather than per document): every load that returns rows replaces all
     # of the business's rows, and an extract that returns None means nothing changed.
     whole: bool = False
+    # The stored columns a row's age is worked out from (a due date, a promised date and
+    # whether it is still open). Ageing measured once, at extract, goes stale: an
+    # incremental load reads only documents changed since the watermark, so an invoice
+    # nobody touched stayed "61-90" after it passed ninety days (17 Nov 2026). Every load
+    # works the age of each row not yet measured against its as-of date out again
+    # (reage), with the same age() the extract uses.
+    aged_by: tuple = ()
+    # What ERPNext deletes rather than cancels -- a draft invoice, a task, a case -- leaves
+    # nothing for the watermark to find, and its rows were counted until the weekly full
+    # rebuild (17 Nov 2026: deleted drafts stayed in "Invoices left as drafts"). Named
+    # here as (doctype, the fact rows that can be deleted, the source rows to compare
+    # with): every incremental load compares the names, which is cheap, and drops the
+    # rows of a document ERPNext no longer has (deleted()).
+    deletable: tuple | None = None
+
+    def age(self, row: dict, as_of) -> dict:
+        """The age columns of a row with the aged_by columns of `row`, as at `as_of`."""
+        return {}
 
     @property
     def target(self) -> str:
@@ -111,7 +129,8 @@ class Ingestor:
             changed = rows is not None
             rows = [self.stamp(r, conn.code) for r in rows or []]
 
-            withdrawn = set() if full or not since else self.withdrawn(conn, since)
+            withdrawn = (set() if full or not since else
+                         self.withdrawn(conn, since) | self.deleted(conn, conn.code))
             if full or (self.whole and changed):
                 # A full load means the table is rebuilt from what the source holds
                 # now. Purging only the batch leaves rows behind for documents that
@@ -123,6 +142,8 @@ class Ingestor:
                 self._purge(conn.code, {r["src_name"] for r in rows} | withdrawn)
             if rows:
                 self._insert(rows)
+            if as_of:
+                self.reage(conn.code, as_of)
 
             watermark = max((r.get("src_modified") for r in rows
                              if r.get("src_modified")), default=since)
@@ -162,6 +183,47 @@ class Ingestor:
                 frappe.log_error(title=f"Command Center ingest {self.fact}",
                                  message=failure)
             raise
+
+    def reage(self, business_code: str, as_of) -> int:
+        """Every row of the business not measured as at `as_of`, measured again: one update
+        per distinct set of aged_by values (a due date, say), not one per row. Returns how
+        many groups were updated."""
+        if not self.aged_by:
+            return 0
+        from frappe.utils import getdate
+        as_of = getdate(as_of)
+        stale = {"business_code": business_code, "as_of_date": ["!=", as_of]}
+        groups = frappe.get_all(self.target, filters=stale, fields=list(self.aged_by),
+                                distinct=True, limit=1000000)
+        for g in groups:
+            match = {k: (["is", "not set"] if g.get(k) is None else g.get(k))
+                     for k in self.aged_by}
+            frappe.db.set_value(self.target, {**stale, **match},
+                                {**self.age(dict(g), as_of), "as_of_date": as_of},
+                                update_modified=False)
+        return len(groups)
+
+    def deleted(self, conn, business_code) -> set:
+        """Documents with rows here that ERPNext no longer has at all (deleted)."""
+        if not self.deletable:
+            return set()
+        doctype, fact_filters, src_filters = self.deletable
+        have = set(frappe.get_all(self.target,
+                                  filters={"business_code": business_code, **fact_filters},
+                                  pluck="src_name", distinct=True, limit=10_000_000))
+        if not have:
+            return set()
+        there = {r["name"] for r in conn.get_list(doctype, filters=dict(src_filters),
+                                                  fields=["name"], limit=10_000_000)}
+        gone = sorted(have - there)
+        # Not among the drafts now, but perhaps submitted since: only what ERPNext does not
+        # have under any status is gone.
+        for i in range(0, len(gone), 200):
+            part = gone[i:i + 200]
+            still = {r["name"] for r in conn.get_list(doctype, filters={"name": ["in", part]},
+                                                      fields=["name"], limit=len(part))}
+            gone = [n for n in gone if n not in still]
+        return set(gone)
 
     def withdrawn(self, conn, since) -> set:
         """Documents cancelled after `since`, whose rows must leave the fact."""

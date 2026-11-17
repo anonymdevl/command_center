@@ -454,10 +454,11 @@ def _spans(horizon, compare: str, current_from=None, current_to=None, earlier_fr
         return spans[0], spans[1]
     if compare not in COMPARISONS:
         raise ToolError(f"compare must be one of {', '.join(COMPARISONS)}")
-    h = u.getdate(horizon)
-    # The latest calendar month the data covers to its last day (as the engine's
-    # last_full_month): data stopping on 12 August makes that July.
-    end = h if h == u.getdate(u.get_last_day(h)) else u.getdate(u.add_days(u.get_first_day(h), -1))
+    # The latest calendar month that is over and the data covers to its last day (the
+    # engine's own rule, kpi/engine.full_month_end): data stopping on 12 August makes
+    # that July, and so does 31 August read on 31 August.
+    from command_center.kpi.engine import full_month_end
+    end = full_month_end(horizon)
     if compare.startswith("quarter"):
         while end.month % 3:
             end = u.getdate(u.add_days(u.get_first_day(end), -1))

@@ -215,52 +215,32 @@ def pack(code) -> tuple:
 
 
 # --------------------------------------------------------------------------- grounding
-_KEY_MENTION = re.compile(r"\b(?:[FAO]\d+|M:[a-z0-9_]+|L:[a-z0-9_]+)\b")
+UNITS = {"money": "currency", "percent": "percent"}
 
 
-def _norm(n: str) -> str:
-    n = n.replace(",", "").rstrip(".")
-    if "." in n:
-        n = n.rstrip("0").rstrip(".")
-    return n or "0"
-
-
-def numbers_in(text: str) -> set:
-    from command_center.recommend.daily import NUMBER
-    return {_norm(n) for n in NUMBER.findall(_KEY_MENTION.sub(" ", text or ""))}
-
-
-def _walk(v):
-    if isinstance(v, dict):
-        for x in v.values():
-            yield from _walk(x)
-    elif isinstance(v, (list, tuple)):
-        for x in v:
-            yield from _walk(x)
-    else:
-        yield v
-
-
-def allowed_numbers(p: dict) -> set:
-    """Every number the pack states, as written and in the usual roundings: 7254533.12 is
-    also 7254533, 7254533.1, 7255k, 7.25M, 7.3M and 7M."""
-    out = set()
-    for v in _walk(p):
-        if isinstance(v, bool) or v is None:
-            continue
-        if isinstance(v, str):
-            out |= numbers_in(v)
-            continue
-        if not isinstance(v, (int, float)):
-            continue
-        a = abs(float(v))
-        for dp in (0, 1, 2):
-            out.add(_norm(f"{a:.{dp}f}"))
-        for div in (1e3, 1e6, 1e9):
-            if a >= div:
-                for dp in (0, 1, 2):
-                    out.add(_norm(f"{a / div:.{dp}f}"))
-    return out
+def given(p: dict):
+    """What the pack states, for the one check of an AI's numbers (recommend/numbers.py):
+    the findings' and figures' own words and values, each with its unit -- never a rule's
+    weight, a z-score or the pack's date."""
+    from command_center.recommend import numbers
+    g = numbers.Given().date(p.get("today"))
+    for f in p.get("findings") or []:
+        g.text(f.get("title"), f.get("why"), f.get("why_now"), f.get("money_text"))
+        g.value(f.get("money"), "currency")
+    for x in p.get("figures") or []:
+        unit = UNITS.get(x.get("unit"), "count")
+        g.text(x.get("latest"), x.get("usual")).date(x.get("period"))
+        for k in ("latest_value", "usual_low", "usual_high"):
+            g.value(x.get(k), unit)
+        for day, v in x.get("history") or []:
+            g.date(day).value(v, unit)
+    for a in p.get("anomalies") or []:
+        g.text(a.get("text"))
+    for o in p.get("outcomes") or []:
+        g.text(o.get("title"), o.get("note"))
+    for fb in p.get("feedback") or []:
+        g.text(fb.get("text"))
+    return g
 
 
 def _money_values(p: dict) -> list:
@@ -271,7 +251,8 @@ def _money_values(p: dict) -> list:
 
 def validate(got, p: dict, refs: dict) -> dict:
     """{"recommendations", "patterns", "priorities", "rejected": [{"title", "why"}]}."""
-    allowed = allowed_numbers(p)
+    from command_center.recommend import numbers
+    allowed = given(p)
     money = _money_values(p)
     out = {"recommendations": [], "patterns": [], "priorities": [], "rejected": []}
     if not isinstance(got, dict):
@@ -279,10 +260,8 @@ def validate(got, p: dict, refs: dict) -> dict:
         return out
 
     def stray(*texts):
-        found = set()
-        for t in texts:
-            found |= numbers_in(t if isinstance(t, str) else " ".join(map(str, t or [])))
-        return sorted(found - allowed)
+        return numbers.problems("\n".join(t if isinstance(t, str) else
+                                           "\n".join(map(str, t or [])) for t in texts), allowed)
 
     def bad_keys(keys):
         return [k for k in (keys or []) if k not in refs]

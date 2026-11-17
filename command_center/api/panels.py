@@ -617,13 +617,15 @@ def sales_ageing(ctx):
 
 def sales_not_despatched(ctx):
     rows = ctx.rows("fact_sales_order", ["src_name", "customer", "undelivered_value",
-                                         "per_delivered", "days_late"],
-                    lambda t: [t.src_docstatus == 1, t.is_open == 1, t.per_delivered < 100,
-                               t.undelivered_value > 0])
+                                         "base_grand_total", "days_late"],
+                    lambda t: [t.src_docstatus == 1, t.is_open == 1, t.undelivered_value > 0])
     rows.sort(key=lambda r: -_num(r["undelivered_value"]))
     out = []
     for r in rows[:8]:
-        pct = _num(r["per_delivered"])
+        # The share of the order's value delivered, from the line-by-line value still to
+        # deliver -- never ERPNext's per_delivered, which is a share of quantity.
+        value = _num(r["base_grand_total"])
+        pct = 100 * (1 - _num(r["undelivered_value"]) / value) if value > 0 else 0
         out.append({"cells": [
             {"text": r["src_name"], "drill": {"fact": "fact_sales_order",
                                               "filters": {"src_name": r["src_name"]}}},
@@ -644,8 +646,9 @@ def _pos(ctx):
         try:
             ctx._pos = ctx.reader().all(
                 "Purchase Order", filters={"docstatus": 1},
-                fields=["name", "supplier", "base_grand_total", "transaction_date",
-                        "schedule_date", "per_received", "per_billed", "status"])
+                fields=["name", "supplier", "base_grand_total", "base_net_total",
+                        "transaction_date", "schedule_date", "per_received", "per_billed",
+                        "status"])
         except Exception as e:
             ctx._pos = e
     if isinstance(ctx._pos, Exception):
@@ -935,12 +938,14 @@ def cx_causes(ctx):
 
 # --------------------------------------------------------------------------- finances
 def fin_money_in(ctx):
-    out = _trend(ctx, "fact_payment_allocation", "posting_date", "allocated_amount",
+    # Every receipt once (payment_amount), as Money In's card counts it -- not the part
+    # matched to invoices.
+    out = _trend(ctx, "fact_payment_allocation", "posting_date", "payment_amount",
                  lambda t: [t.payment_type == "Receive", t.src_docstatus == 1])
     if out:
         out["subtitle"] = f"Monthly, {out['period']}"
         return out
-    return _guide(ctx, "No customer payment in the last twelve months is matched to an invoice.",
+    return _guide(ctx, "No payment received in the last twelve months is recorded in ERPNext.",
                   ["Record each payment received with Payment Entry (from the Sales Invoice: "
                    "Create, Payment).", "Allocate it against the invoices it pays in the "
                    "References table, then Submit."], "/app/payment-entry/new")
@@ -1116,17 +1121,25 @@ def _approval_rows(ctx, doctype, party, value):
     column then, and the site refuses the field by name."""
     cache = ctx.__dict__.setdefault("_approvals", {})
     if doctype not in cache:
-        fields = ["name", "docstatus", "status", "owner", party, value]
+        fields = ["name", "docstatus", "status", "owner", "amended_from", party, value]
         try:
-            cache[doctype] = (_guarded(ctx, doctype, {}, fields + ["workflow_state"]), True)
+            docs, has_wf = _guarded(ctx, doctype, {}, fields + ["workflow_state"]), True
         except Exception as e:
             if "workflow_state" not in str(e):
                 raise
-            cache[doctype] = (_guarded(ctx, doctype, {}, fields), False)
+            docs, has_wf = _guarded(ctx, doctype, {}, fields), False
+        # An original cancelled to be amended was replaced by its amendment, which stands
+        # in its place: counting both says one order twice, the first time as "Cancelled"
+        # (kpi/live.withdrawn -- read here from the rows already in hand).
+        gone = {d.get("amended_from") for d in docs if d.get("amended_from")}
+        cache[doctype] = ([d for d in docs if not (d.get("docstatus") == 2 and d["name"] in gone)],
+                          has_wf)
     return cache[doctype]
 
 
 def _stage(row, has_wf) -> str:
+    """Where a document stands. Its rows come from _approval_rows, which has left out the
+    originals cancelled to be amended: "Cancelled" here is withdrawn."""
     if row.get("docstatus") == 0:
         return "Draft — never submitted"
     if row.get("docstatus") == 2:
@@ -1520,9 +1533,10 @@ def inv_not_moving(ctx):
     held = {k: v for k, v in held.items() if v[0] > 0}
     if not held:
         return _guide(ctx, "No stock is recorded in ERPNext.", STOCK_STEPS, "/app/stock-entry/new")
-    last = {x["item_code"]: x.get("last_date") for x in _grouped(
-        ctx, "Stock Ledger Entry", {"is_cancelled": 0}, "item_code",
-        [("max", "posting_date", "last_date")])}
+    # The last time each was sold or used (recommend/rules.stock_used): a transfer between
+    # warehouses, a receipt or a stock correction is not the stock moving on.
+    from command_center.recommend.rules import stock_used
+    last = {item: v[2] for item, v in stock_used(ctx, last=True).items()}
     today = _today()
     idle = []
     for item, (qty, value) in held.items():
@@ -1983,10 +1997,24 @@ def fin_budget(ctx):
                           [("sum", "debit", "debit_total"), ("sum", "credit", "credit_total")]):
             actual[(r["account"], r.get("cost_center"))] = (_num(r.get("debit_total"))
                                                             - _num(r.get("credit_total")))
+    # A budget set on a group cost centre covers the spending of every cost centre under
+    # it: the ledger posts to the leaves, never to the group, which read 0% used
+    # (17 Nov 2026). ERPNext's tree (lft/rgt) says which are under which.
+    tree = {c["name"]: (_num(c.get("lft")), _num(c.get("rgt"))) for c in _guarded(
+        ctx, "Cost Center", {}, ["name", "lft", "rgt"], limit=5000)}
+
+    def under(top):
+        lo, hi = tree.get(top, (None, None))
+        if lo is None:
+            return {top}
+        return {n for n, (a, b) in tree.items() if lo <= a and b <= hi} | {top}
+
     rows = []
     for x in lines:
         budget = _num(x["budget_amount"])
-        spent = actual.get((x["account"], cc.get(x["parent"])), 0.0)
+        centres = under(cc.get(x["parent"]))
+        spent = sum(v for (acc, centre), v in actual.items()
+                    if acc == x["account"] and centre in centres)
         used = _pct(spent, budget)
         rows.append((used, {"label": f"{x['account']} · {cc.get(x['parent'])}", "value": min(used, 150),
                             "display": f"{used}% used",
