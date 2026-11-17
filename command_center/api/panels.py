@@ -2429,7 +2429,7 @@ SCREENS = {
         "Sales Orders To Deliver": sales_not_despatched,
         "Sales Funnel": sales_funnel,
         "Discounts Outside Pricing Rules": sales_discounts,
-        "Promised Orders — Cover": _cover("sales"),
+        "Sales Orders To Deliver — Stock and Purchase Orders": _cover("sales"),
     },
     "proc": {
         "Purchase Orders by Supplier": proc_money,
@@ -2438,14 +2438,14 @@ SCREENS = {
         "Purchase Invoice Checks": proc_checks,
         "Supplier Performance": proc_performance,
         "Unreconciled Supplier Payments": proc_advances,
-        "Promised Orders — Cover": _cover("proc"),
+        "Sales Orders To Deliver — Stock and Purchase Orders": _cover("proc"),
     },
     "inv": {
         "Stock Value by Warehouse": inv_where,
-        "Reserved against what is available": inv_reserved,
+        "Reserved Qty vs Actual Qty": inv_reserved,
         "Stock Ageing, No Movement 90 Days": inv_not_moving,
         "Batch Expiry": inv_expiry,
-        "Promised Orders — Cover": _cover("inv"),
+        "Sales Orders To Deliver — Stock and Purchase Orders": _cover("inv"),
     },
     "eng": {
         "Can we actually deliver the work we are holding?": eng_capacity,

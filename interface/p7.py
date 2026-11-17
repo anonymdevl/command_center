@@ -17,7 +17,7 @@ recorded anywhere. Both are quick to fix and both are needed before this screen 
 V_INV=simple("Stock and warehouses","GHS 3,769,970 held across six locations",
  f'''<div class="kpis" style="grid-template-columns:repeat(4,1fr)">
 {kpi("Stock we hold","3.77","M GHS","a third not in any warehouse","dn")}
-{kpi("Off warehouse","1.18","M GHS","31% of everything","dn","review","openDrawer('recon')")}
+{kpi("Transit or Disabled Warehouses","1.18","M GHS","31% of everything","dn","review","openDrawer('recon')")}
 {kpi("Reserved, unavail.","491","products","no stock behind the promise","dn","","openDrawer('stock')")}
 {kpi("Reserved lines","771","")}</div>
 <div class="sect">Where the value sits</div>

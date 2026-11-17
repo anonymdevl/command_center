@@ -36,13 +36,13 @@ from typing import Callable
 from command_center.coverage import AFTER_DAYS, WINDOW_DAYS
 
 AREAS = {
-    "cash": "Cash and Credit",
+    "cash": "Accounts Receivable and Payable",
     "sales": "Sales",
-    "margin": "Gross Margin",
+    "margin": "Gross Profit",
     "stock": "Stock",
     "buying": "Buying",
-    "control": "People and Control",
-    "data": "Data Hygiene",
+    "control": "Approvals and Staff",
+    "data": "Incomplete Records",
 }
 SEVERITY_WEIGHT = {"crit": 1.0, "high": 0.7, "med": 0.4, "info": 0.2}
 SEVERITY_RANK = {"crit": 0, "high": 1, "med": 2, "info": 3}

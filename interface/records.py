@@ -30,7 +30,7 @@ RECORDS={
   ("<b>Ten largest</b>","<b>"+C(4592482)+"</b>","","")],
  "806 invoices are unpaid in total. Three of these customers are also waiting on us — HAIRASH, UBUNTU and EJURA."),
 
-"worst": tbl([("Product",0),("Where",0),("Reserved",1),("Available",1),("Short by",1)],
+"worst": tbl([("Item",0),("Where",0),("Reserved Qty",1),("Actual Qty",1),("Short By",1)],
  [("Syringe &amp; needle 5ml","Central Warehouse",C(40080),C(139),RED(C(39941))),
   ("Syringe &amp; needle 10ml","Central Warehouse",C(16021),"0",RED(C(16021))),
   ("Infusion sets","Central Warehouse",C(8000),"0",RED(C(8000))),
@@ -88,7 +88,7 @@ RECORDS={
   ("GHS 903,632 of purchase orders were never submitted for approval","High","Buying")],
  "Every one was found in the records on the first morning, before anything was built."),
 
-"over": tbl([("Product",0),("Where",0),("Reserved",1),("Available",1),("Short by",1)],
+"over": tbl([("Item",0),("Where",0),("Reserved Qty",1),("Actual Qty",1),("Short By",1)],
  [("Syringe &amp; needle 5ml","Central Warehouse",C(40080),C(139),RED(C(39941))),
   ("Syringe &amp; needle 10ml","Central Warehouse",C(16021),"0",RED(C(16021))),
   ("Infusion sets","Central Warehouse",C(8000),"0",RED(C(8000))),

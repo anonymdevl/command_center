@@ -15,7 +15,7 @@ import frappe
 
 from command_center.api.businesses import require_manager
 
-HEADING = "Promised Orders — Cover"
+HEADING = "Sales Orders To Deliver — Stock and Purchase Orders"
 PER_STATE = 25
 MAX_PAGE = 100
 # What a row carries to the screen: the table's cells and the drawer's chain.

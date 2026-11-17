@@ -22,7 +22,7 @@ import frappe
 from frappe.utils import getdate, now_datetime, today
 
 from command_center.alerts.engine import DOCTYPE, OPEN, elapsed, ensure_fresh
-from command_center.alerts.rules import RULES, SEVERITY_RANK
+from command_center.alerts.rules import RULES, SEVERITY_RANK, label
 from command_center.api.businesses import require_manager
 
 # The rules that know when their condition began (Rule.since): only their alerts have an age.
@@ -56,6 +56,7 @@ def open_alerts(business_code: str | None = None):
         out.append({
             **{k: r.get(k) for k in FIELDS if k not in ("drill_filters",)},
             "drill_filters": filters,
+            "label": label(r.rule),
             # How old the oldest item behind it is ("oldest over 2 years"); blank for a
             # rule that measures no start date (it would read as "new today").
             "elapsed": elapsed(r.elapsed_from, r.measured_to) if r.rule in AGED else "",

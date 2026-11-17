@@ -47,7 +47,7 @@ V_INV=f'''<div class="topbar"><div><h3>Stock &amp; Warehouses</h3>
 <div class="when"></div></div></div>
 <div class="kpis six">
 {kpi("Stock Value","—","","","flat","","stockval")}
-{kpi("Off warehouse","—","","","flat","","recon")}
+{kpi("Transit or Disabled Warehouses","—","","","flat","","recon")}
 {kpi("Reserved Qty","—","","","flat","","over")}
 {kpi("Worst Shortfall","—","","","flat","","worst")}
 {kpi("Lines with Reserved Qty","—","","","flat","","reserved")}
@@ -56,8 +56,8 @@ V_INV=f'''<div class="topbar"><div><h3>Stock &amp; Warehouses</h3>
 <div class="two">
 {panel("Stock Value by Warehouse", bars0(),
  "","stockval")}
-{panel("Reserved against what is available",
- dtable(["Item","Where",("Reserved Qty",True),("Available",True),("Short By",True)]),"Where the promise exceeds the stock","over")}
+{panel("Reserved Qty vs Actual Qty",
+ dtable(["Item","Where",("Reserved Qty",True),("Actual Qty",True),("Short By",True)]),"Items where Reserved Qty exceeds Actual Qty","over")}
 </div>
 {warn0()}
 {cover0()}

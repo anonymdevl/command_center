@@ -347,7 +347,7 @@ function brief(root, data) {
     const c = el("button", `mb-chip ${a.severity}`);
     c.type = "button";
     c.title = `${WORDS[a.severity] || ""}: ${a.title}`;
-    c.append(el("b", null, figureText(a)), document.createTextNode(` ${a.rule.toLowerCase()}`));
+    c.append(el("b", null, figureText(a)), document.createTextNode(` ${(a.label || a.rule).toLowerCase()}`));
     c.onclick = () => {
       const card = document.getElementById(`alert-${a.name}`);
       card?.scrollIntoView({ behavior: "smooth", block: "center" });

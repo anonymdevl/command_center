@@ -53,7 +53,7 @@ def cover0():
     """Promised Orders — Cover (api/coverage.py, legacy/cover.js): every open order line and
     what covers it. Empty until the business answers; the same panel on Sales, Buying and
     Stock."""
-    return panel("Promised Orders — Cover", '<div class="cover"></div>',
+    return panel("Sales Orders To Deliver — Stock and Purchase Orders", '<div class="cover"></div>',
                  "Every open Sales Order line, and what covers it", "cover")
 
 V_SALES=f'''<div class="topbar"><div><h3>Sales and Payments</h3>
