@@ -195,17 +195,23 @@ D = dt.date
 # full month is July -- and today (2026) has nothing to do with it.
 rows("fact_payment_allocation",
      {"posting_date": D(2025, 5, 3), "payment_type": "Receive", "against_doctype": "Sales Invoice",
-      "allocated_amount": 100, "days_to_pay": 10},
+      "allocated_amount": 100, "payment_amount": 100, "days_to_pay": 10, "src_docstatus": 1},
      {"posting_date": D(2025, 6, 9), "payment_type": "Receive", "against_doctype": "Sales Invoice",
-      "allocated_amount": 200, "days_to_pay": 20},
+      "allocated_amount": 200, "payment_amount": 200, "days_to_pay": 20, "src_docstatus": 1},
      {"posting_date": D(2025, 7, 1), "payment_type": "Receive", "against_doctype": "Sales Invoice",
-      "allocated_amount": 300, "days_to_pay": 30},
+      "allocated_amount": 300, "payment_amount": 300, "days_to_pay": 30, "src_docstatus": 1},
      {"posting_date": D(2025, 7, 31), "payment_type": "Receive", "against_doctype": "Sales Invoice",
-      "allocated_amount": 50, "days_to_pay": 0},
+      "allocated_amount": 50, "payment_amount": 50, "days_to_pay": 0, "src_docstatus": 1},
+     # a second allocation of the 31 July payment: its amount is on its first row only
+     {"posting_date": D(2025, 7, 31), "payment_type": "Receive", "against_doctype": "Sales Invoice",
+      "allocated_amount": 0, "payment_amount": 0, "days_to_pay": 0, "src_docstatus": 1},
+     # a July receipt matched to nothing: money in all the same (17 Nov 2026)
+     {"posting_date": D(2025, 7, 20), "payment_type": "Receive", "against_doctype": None,
+      "allocated_amount": 0, "payment_amount": 25, "days_to_pay": None, "src_docstatus": 1},
      {"posting_date": D(2025, 7, 15), "payment_type": "Pay", "against_doctype": "Purchase Invoice",
-      "allocated_amount": 9999, "days_to_pay": 999},
+      "allocated_amount": 9999, "payment_amount": 9999, "days_to_pay": 999, "src_docstatus": 1},
      {"posting_date": D(2025, 8, 12), "payment_type": "Receive", "against_doctype": "Sales Invoice",
-      "allocated_amount": 70, "days_to_pay": 5})
+      "allocated_amount": 70, "payment_amount": 70, "days_to_pay": 5, "src_docstatus": 1})
 
 rows("fact_sales_invoice_line",
      {"posting_date": D(2025, 6, 2), "base_net_amount": 1000, "src_docstatus": 1},
@@ -266,17 +272,17 @@ r = engine.evaluate_set(KEYS, "GIG")
 
 # Windows, from the end of the data.
 c = r["cash_in_month"]
-check(c["value"] == 350, f"cash_in_month: July receipts are 300+50, got {c['value']}")
+check(c["value"] == 375, f"cash_in_month: July receipts are 300+50+25 unmatched, got {c['value']}")
 check(c["period"]["from"] == "2025-07-01" and c["period"]["to"] == "2025-07-31",
       f"cash_in_month: last full month should be July 2025, got {c['period']}")
-check(c["note"] == "July 2025, matched to invoices", f"cash_in_month note: {c['note']!r}")
+check(c["note"] == "July 2025, every payment received", f"cash_in_month note: {c['note']!r}")
 check(c["drill"]["filters"]["posting_date"] == ["between", ["2025-07-01", "2025-07-31"]],
       f"cash_in_month: the drill must carry the window, got {c['drill']['filters']}")
 
 p = r["days_to_pay"]
 check(p["period"]["from"] == "2025-05-01" and p["period"]["to"] == "2025-07-31",
       f"days_to_pay: three full months is May-July, got {p['period']}")
-check(p["value"] == 15, f"days_to_pay: mean of 10,20,30,0 is 15, got {p['value']}")
+check(p["value"] == 12, f"days_to_pay: mean of the allocations 10,20,30,0,0 is 12, got {p['value']}")
 check(p["note"] == "after the due date, on average, May – Jul 2025", f"days_to_pay note: {p['note']!r}")
 
 check(r["revenue_last_month"]["value"] == 1551,
@@ -322,21 +328,31 @@ e = engine.evaluate_set(["cash_in_month", "days_to_pay", "tasks_longest_wait",
                          "supplier_top_share"], "GIG")
 for k in e:
     check(e[k]["value"] is None, f"{k} over no rows should be unknown, got {e[k]['value']}")
-check(e["cash_in_month"]["note"] == "—, matched to invoices" or "no dated" in e["cash_in_month"]["note"],
+check(e["cash_in_month"]["note"] == "—, every payment received" or "no dated" in e["cash_in_month"]["note"],
       f"cash_in_month with no data: {e['cash_in_month']['note']!r}")
 
 # A month the data covers to its last day counts as full.
 DATA[FACTS["fact_payment_allocation"]] = [
     {"business_code": "GIG", "name": "x1", "posting_date": D(2025, 8, 31), "payment_type": "Receive",
-     "against_doctype": "Sales Invoice", "allocated_amount": 5, "days_to_pay": 1}]
+     "against_doctype": "Sales Invoice", "allocated_amount": 5, "payment_amount": 5, "days_to_pay": 1,
+     "src_docstatus": 1}]
 f = engine.evaluate_set(["cash_in_month"], "GIG")["cash_in_month"]
 check(f["period"]["label"] == "August 2025" and f["value"] == 5,
       f"data ending 31 Aug: last full month is August, got {f['period']} / {f['value']}")
 
+# ...but only once that day is over: read on 31 August itself, August is still under way
+# and its money still coming in, so the last full month is July (17 Nov 2026).
+frappe.utils.today = lambda: "2025-08-31"
+f = engine.evaluate_set(["cash_in_month"], "GIG")["cash_in_month"]
+check(f["period"]["label"] == "July 2025",
+      f"read on 31 Aug: August is not over, the last full month is July, got {f['period']}")
+frappe.utils.today = lambda: "2026-10-18"
+
 # Another business's rows never leak in.
 DATA[FACTS["fact_payment_allocation"]].append(
     {"business_code": "OTHER", "name": "x2", "posting_date": D(2025, 8, 20), "payment_type": "Receive",
-     "against_doctype": "Sales Invoice", "allocated_amount": 1000, "days_to_pay": 1})
+     "against_doctype": "Sales Invoice", "allocated_amount": 1000, "payment_amount": 1000,
+     "days_to_pay": 1, "src_docstatus": 1})
 f = engine.evaluate_set(["cash_in_month"], "GIG")["cash_in_month"]
 check(f["value"] == 5, f"another business's payment leaked into GIG: {f['value']}")
 

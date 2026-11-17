@@ -310,6 +310,10 @@ class FakeERPNext:
         self.hr_reads = []
         self.reports = []
         self.fiscal_years = True
+        # The books were last closed five months ago, so the profit and loss since then
+        # (2,000 a month) is the balance sheet's provisional 10,000 (statements.py checks
+        # the one against the other). [] for books never closed.
+        self.closings = None
 
     def __call__(self, method_name):
         def call(url, headers=None, params=None, data=None, json=None, timeout=None):
@@ -402,6 +406,13 @@ class FakeERPNext:
             return self.ledger(doctype, fields, filters, p.get("group_by"), start, n)
         if doctype == "Company":
             return [{"name": "Test Medical Ltd", "default_currency": "GHS"}][:n]
+        if doctype == "Period Closing Voucher":
+            if self.closings is not None:
+                return self.closings[:n]
+            m = TODAY.replace(day=1)
+            for _ in range(4):
+                m = (m - dt.timedelta(days=1)).replace(day=1)
+            return [{"posting_date": str(m - dt.timedelta(days=1))}][:n]
         if doctype == "Fiscal Year":
             return [{"name": str(y), "year_start_date": f"{y}-01-01", "year_end_date": f"{y}-12-31"}
                     for y in range(TODAY.year - 3, TODAY.year + 1)] if self.fiscal_years else []
@@ -2831,7 +2842,8 @@ class Recommendations(TransactionTestCase):
         self._fact(SO, src_name="SO-LATE", customer="Alpha Clinic", is_open=1, days_late=10,
                    lateness_bucket="0-30", undelivered_value=7000, base_grand_total=7000)
         self._fact(SO, src_name="SO-DONE", customer="C2", is_open=1, per_delivered=100,
-                   unbilled_value=4000, base_grand_total=4000, lateness_bucket="Not due")
+                   unbilled_value=4000, delivered_unbilled_value=4000, base_grand_total=4000,
+                   lateness_bucket="Not due")
         SB = M.CommandCenterFactStockBalance
         self._fact(SB, item_code="ITEM-SLOW", warehouse="Stores", actual_qty=10,
                    stock_value=20000, has_valuation=1)
@@ -2866,10 +2878,13 @@ class Recommendations(TransactionTestCase):
             if "name" in f:
                 return [{"name": "PO-1", "owner": "a@test.com"}]
             return [{"name": "PO-1", "supplier": "Sup One", "base_grand_total": 9000,
+                     "base_net_total": 9000,
                      "transaction_date": d(60), "schedule_date": d(30), "per_received": 0,
                      "per_billed": 0, "status": "To Receive and Bill"}]
         return {
-            "Stock Ledger Entry": [{"item_code": "ITEM-FAST", "out_qty": -90, "moves": 9}],
+            # sales only: the Stock Entry read (consumption, net per entry) finds none
+            "Stock Ledger Entry": lambda f: ([] if f.get("voucher_type") == "Stock Entry" else
+                                             [{"item_code": "ITEM-FAST", "out_qty": -90, "moves": 9}]),
             "Account": [{"name": "Bank - T"}],
             "GL Entry": [{"account": "Bank - T", "debit_total": 30000, "credit_total": 10000}],
             "Sales Invoice Item": [{"parent": "SI-X", "item_code": "CON-1", "qty": 200,
@@ -2878,7 +2893,8 @@ class Recommendations(TransactionTestCase):
                        "batch_qty": 5}],
             "Purchase Order": pos,
             "Purchase Order Item": [{"parent": "PO-1", "item_code": "ITEM-SLOW", "qty": 10,
-                                     "received_qty": 0, "base_net_amount": 9000}],
+                                     "received_qty": 0, "base_net_amount": 9000,
+                                     "base_net_rate": 900, "amount": 9000, "billed_amt": 0}],
             "Purchase Invoice Item": [{"parent": "PINV-1", "purchase_order": None,
                                        "purchase_receipt": None}],
             "Purchase Invoice": [{"name": "PINV-1", "update_stock": 0}],
@@ -3150,8 +3166,9 @@ class Recommendations(TransactionTestCase):
                           + [f"GHS {float(f['value']):,.0f}" for f in figs.values()
                              if f.get("value") is not None]
                           + [TODAY.strftime("%-d %B %Y")])
-        stray = daily._numbers(seen["text"]) - daily._numbers(source)
-        self.assertEqual(stray, set(), f"numbers given to Claude that the engine did not make: {stray}")
+        from command_center.recommend import numbers
+        stray = numbers.problems(seen["text"], numbers.Given().text(source))
+        self.assertEqual(stray, [], f"numbers given to Claude that the engine did not make: {stray}")
         shown = self._call(self.manager, "current", business_code=REC_CODE).json()["message"]["brief"]
         self.assertEqual(shown["text"], seen["reply"])
 
@@ -3336,10 +3353,16 @@ class FinancialStatements(TransactionTestCase):
         self.assertNotIn(-123, [v for r in cf["cf"]["rows"] for v in r["values"]])
 
     def test_a_statement_that_does_not_balance_says_so(self):
-        with mock.patch(f"{__name__}.PROVISIONAL", 9000):
-            out = self._get(period="ytd")
+        # ERPNext's provisional profit is assets less liabilities less equity, so the sheet
+        # always "balanced" with it (17 Nov 2026). The check is against the profit and loss
+        # statement since the books were last closed: here they never were, so that runs
+        # from the first fiscal year (TODAY.year - 3) and disagrees with the 10,000.
+        self.fake.closings = []
+        out = self._get(period="ytd")
+        months = 36 + TODAY.month
         self.assertFalse(out["bs"]["figures"]["balances"])
-        self.assertAlmostEqual(out["bs"]["figures"]["difference"], 1000)
+        self.assertAlmostEqual(out["bs"]["figures"]["profit_since_closing"], 2000 * months)
+        self.assertAlmostEqual(out["bs"]["figures"]["difference"], 10000 - 2000 * months)
         self.assertTrue(any("does not balance" in n for n in out["bs"]["notes"]), out["bs"]["notes"])
 
     def test_guides_when_not_set_up(self):
@@ -7519,22 +7542,28 @@ class BusinessHealthHistory(TransactionTestCase):
         self.assertEqual(health.prune(days=60), 1)  # only 1 Sep is older than 60 days
 
     def test_last_week_delta(self):
+        # The latest snapshot against the one nearest seven days before it (5 to 9 days),
+        # never this ISO week's against last week's: Sunday 15th is two days before
+        # Tuesday 17th, not a week (17 Nov 2026).
         from command_center import health
+        every = lambda v: _health_figs(v, **{k: float(v) for k in SIX})  # noqa: E731
         today = dt.date(2026, 11, 18)
-        health.snapshot("biz", _health_figs(70), today=dt.date(2026, 11, 13))
-        health.snapshot("biz", _health_figs(82), today=dt.date(2026, 11, 15))   # Sunday: last week's
-        health.snapshot("biz", _health_figs(85), today=dt.date(2026, 11, 17))
+        health.snapshot("biz", every(70), today=dt.date(2026, 11, 9))
+        health.snapshot("biz", every(82), today=dt.date(2026, 11, 10))  # seven days before the 17th
+        health.snapshot("biz", every(60), today=dt.date(2026, 11, 15))  # Sunday: two days before
+        health.snapshot("biz", every(85), today=dt.date(2026, 11, 17))
         got = health.history("biz", today=today)
-        self.assertEqual(got["last_week"], {"week": "2026-W46", "day": "2026-11-15", "control_score": 82})
+        self.assertEqual(got["last_week"], {"week": "2026-W46", "day": "2026-11-10", "control_score": 82})
         self.assertEqual(got["delta"], 3)
-        health.snapshot("biz", _health_figs(79), today=today)
+        self.assertEqual(got["delta_questions"], {"questions": 6, "of": 6})
+        health.snapshot("biz", every(79), today=today)                  # the 10th is eight before
         self.assertEqual(health.history("biz", today=today)["delta"], -3)
         # no score stored last week: no delta, and no last week to show
         fresh = health.history("other", today=today)
         self.assertIsNone(fresh["last_week"])
         self.assertIsNone(fresh["delta"])
         self.assertEqual(len(fresh["weeks"]), 8)
-        self.assertIsNone(health.delta([{"control_score": 80}, {"control_score": None}]))
+        self.assertIsNone(health.compare({"score_paid": 80.0}, {"score_deliver": 70.0}))
 
 
 class BusinessHealthScreen(TransactionTestCase):
