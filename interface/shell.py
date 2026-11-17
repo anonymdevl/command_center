@@ -1378,4 +1378,14 @@ table.dt td.dt-w3 > .dt-tx{min-width:26ch;max-width:44ch;display:-webkit-box;-we
    sits on one. */
 .st-logo-box .logo{width:44px;height:44px;border-radius:13px}
 [data-theme="dark"] .st-logo-box .logo{background:var(--surface);color:var(--ink)}
+
+/* ======================================================================
+   The card footer's line (16 Nov 2026). An alert or recommendation card's footer is two
+   flex items side by side -- the meta (Records, Owner, Seen since) and the actions (What To
+   Do, Ask AI, Done) -- each drawing its own top border (blocks.py). Centred on the line,
+   the shorter one sat lower, so the two borders met in a visible 3px step. Stretched to
+   the line's full height, both borders start at its top and read as one; their contents
+   stay centred (each is a flex row with align-items:center).
+   ====================================================================== */
+.alert>.ameta,.alert>.acts{align-self:stretch}
 """
