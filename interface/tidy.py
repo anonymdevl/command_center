@@ -37,7 +37,7 @@ def _merge_headers(blocks):
         else: out.append(pending)
     return out
 
-def tabify(view_html, tabs=("Overview","Detail","Not yet measured"), ov_count=3):
+def tabify(view_html, tabs=("Overview","Detail","Not Yet Measured"), ov_count=3):
     """Header (topbar+kpis) stays; remaining blocks are split across tabs."""
     blocks=_merge_headers(split_blocks(view_html))
     head=[];rest=[]

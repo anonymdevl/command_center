@@ -30,7 +30,7 @@ BOXES = {"sales": 2, "fin": 2, "proc": 2, "aud": 2}
 def finding(r) -> dict:
     first = (r.get("what_to_do") or [""])[0]
     return {"title": r["title"], "text": f"{r['why']} First: {first}".strip(),
-            "ask": r.get("ask") or r["title"], "ask_label": "Ask about it"}
+            "ask": r.get("ask") or r["title"], "ask_label": "Ask About It"}
 
 
 def for_view(view, code) -> list:

@@ -174,10 +174,10 @@ def drawer_html(d):
             f'<button class="btn" onclick="closeDrawer()">Close ✕</button></div>'
             f'<dl class="kv" style="margin-bottom:14px">{rows}</dl>'
             f'<div class="sect">How far it got</div><div class="chain">{ch}</div>'
-            f'<div class="sect">Where this comes from</div>'
+            f'<div class="sect">Where This Comes From</div>'
             f'<div class="exbox"><dl class="kv" style="margin-bottom:0;grid-template-columns:130px 1fr;font-size:var(--fs-xs)">{pr}</dl></div>'
             f'<div class="acts" style="margin-top:14px"><button class="btn pri">Open in ERPNext ↗</button>'
-            f'<button class="btn">Hand this to someone</button>'
+            f'<button class="btn">Hand This to Someone</button>'
             f'<button class="btn" onclick="closeDrawer();go(\'ask\')">Ask about it</button></div>')
 DR={k:drawer_html(v) for k,v in DRAWERS.items()}
 
@@ -187,15 +187,15 @@ def ex_html(k):
     # The records behind a figure open from the figure itself (the live records drawer);
     # an explainer says only what the figure is and how it is worked out.
     recblock=""
-    return (f'<div class="dhead"><div><div class="dt">Where this comes from</div><h4>{t}</h4></div>'
+    return (f'<div class="dhead"><div><div class="dt">Where This Comes From</div><h4>{t}</h4></div>'
             f'<button class="btn" onclick="closeDrawer()">Close &#10005;</button></div>'
             f'<p style="font-size:var(--fs-sm);color:var(--mut);margin-bottom:10px">{sub}</p>'
             f'<div style="font-size:var(--fs-sm);line-height:1.6;margin-bottom:4px">{foot}</div>'
             + recblock +
-            '<div class="sect" style="margin-top:16px">How it is put together</div>'
+            '<div class="sect" style="margin-top:16px">How It Is Put Together</div>'
             f'<div class="exbox"><dl class="kv" style="margin-bottom:0;grid-template-columns:135px 1fr;font-size:var(--fs-xs)">{r}</dl></div>'
             '<div class="acts" style="margin-top:14px"><button class="btn pri">Open in ERPNext &#8599;</button>'
-            '<button class="btn">Hand this to someone</button>'
+            '<button class="btn">Hand This to Someone</button>'
             '<button class="btn" onclick="closeDrawer();go(&#39;ask&#39;)">Ask AI</button></div>')
 EXH={k:ex_html(k) for k in EX}
 DRH={k:drill_html(k) for k in DRILL}
@@ -240,7 +240,7 @@ BODY=f"""
 <div class="body"><div class="side">{navh}</div>
 <div class="main" id="main">
 <div class="view" id="v-denied" data-roles="ceo,fin,sales,audit,hr"><div class="denied"><div class="big">⛔</div>
-<h4>Not available to your role</h4><p>You are signed in as a role that has not been granted this area.
+<h4>Not Available to Your Role</h4><p>You are signed in as a role that has not been granted this area.
 Nothing is hidden on the screen — the figures were never fetched. Access is granted per role and per
 business, and nobody gains it by default.</p><div class="acts" style="justify-content:center;margin-top:16px">
 <button class="btn pri" onclick="go('command')">Back to Command</button></div></div></div>

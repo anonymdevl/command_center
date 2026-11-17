@@ -24,7 +24,7 @@ export function Failed({ error, onRetry, what = "these figures" }) {
       {onRetry ? (
         <div className="acts" style={{ marginTop: 10 }}>
           <button className="btn" onClick={onRetry}>
-            Try again
+            Try Again
           </button>
         </div>
       ) : null}

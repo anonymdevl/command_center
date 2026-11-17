@@ -36,13 +36,13 @@ from typing import Callable
 from command_center.coverage import AFTER_DAYS, WINDOW_DAYS
 
 AREAS = {
-    "cash": "Cash and credit",
+    "cash": "Cash and Credit",
     "sales": "Sales",
-    "margin": "Margin",
+    "margin": "Gross Margin",
     "stock": "Stock",
     "buying": "Buying",
-    "control": "People and control",
-    "data": "Data hygiene",
+    "control": "People and Control",
+    "data": "Data Hygiene",
 }
 SEVERITY_WEIGHT = {"crit": 1.0, "high": 0.7, "med": 0.4, "info": 0.2}
 SEVERITY_RANK = {"crit": 0, "high": 1, "med": 2, "info": 3}
@@ -257,18 +257,18 @@ def unmatched_receipts(ctx, p):
     return [_rec(
         title=f"Match {ms(ctx, paid)} of customer payments to the invoices they pay.",
         why=(f"{m(ctx, paid)} received in {plural(n, 'payment')} from "
-             f"{plural(len(top), 'customer')} is not matched to any invoice. Until it is, the "
+             f"{plural(len(top), 'customer')} is not reconciled. Until it is, "
              f"Sales Invoice Outstanding is {m(ctx, on_docs)} where the Customer Ledger Balance is "
              f"{m(ctx, owed)}, and every reminder drawn from the invoices is wrong. "
              f"Largest: {largest}."),
         what_to_do=[f"Start with the largest: {top[0]['party']}.",
-                    "Match each payment to the invoices it pays in Payment Reconciliation.",
+                    "Reconcile each payment in Payment Reconciliation.",
                     "Ask whoever records receipts to allocate each one to its invoice when "
                     "it is entered."],
         how=payment_reconciliation(ctx.code, f"Match the {plural(n, 'payment')} to their "
                                              f"invoices in ERPNext:"),
-        ask="Which customers have payments not matched to invoices, and how much does each "
-            "really owe?",
+        ask="Which customers have unreconciled payments, and what is each "
+            "Customer Ledger Balance?",
         drill={"fact": "fact_party_balance",
                "filters": {"party_type": "Customer", "unmatched_payments": [">", 0]}},
         money=paid, count=n, unit="payments")]
@@ -316,7 +316,7 @@ def overdue_customers(ctx, p):
             key=party,
             title=f"Get a payment date from {party} for {ms(ctx, late)} more than 90 days late.",
             why=(f"{party} owes {m(ctx, r['owed'])} on the Customer Ledger; {m(ctx, late)} of it is more "
-                 f"than 90 days past due once payments not yet matched are set against the "
+                 f"than 90 days past due once unreconciled payments are set against the "
                  f"oldest invoices{since_txt}."),
             what_to_do=[f"Call {party} this week and agree a date for the {ms(ctx, late)}.",
                         "Send the statement of account so both sides work from the Customer Ledger.",
@@ -365,7 +365,7 @@ def credit_hold(ctx, p):
                 ["Open the Customer, section Credit Limit and Payment Terms.",
                  "Add a row: the Company and the Credit Limit (zero allows no credit).",
                  "Leave Bypass Credit Limit Check at Sales Order unticked, then save."],
-                f"/app/customer/{quote(who[0])}", "Open the customer"),
+                f"/app/customer/{quote(who[0])}", "Open the Customer"),
         ask="Which customers are we still selling to while they owe us money over 90 days "
             "old?",
         drill={"fact": "fact_sales_invoice",
@@ -467,16 +467,16 @@ def supplier_payments_due(ctx, p):
              f"{m(ctx, soon)} more falls due by {date(edge)} ({m(ctx, in_week)} of it within "
              f"7 days). {held_long} "
              f"Customers are due to pay {m(ctx, coming)} in the same {days} days."),
-        what_to_do=["Decide today which bills are paid first: the suppliers you cannot be "
+        what_to_do=["Decide today which Purchase Invoices are paid first: the suppliers you cannot be "
                     "without.",
                     f"Chase the {ms(ctx, coming)} customers are due to pay in the same days.",
-                    "Agree new dates with the other suppliers before their bills fall due."],
+                    "Agree new dates with the other suppliers before their Purchase Invoices fall due."],
         how=how(ctx, "What is due to whom, in ERPNext:",
                 ["Open Accounts Payable (the link below) and sort by due date.",
-                 "Mark the bills to pay this week; record each payment as a Payment Entry "
-                 "against its bill so the bill shows paid."],
+                 "Mark the Purchase Invoices to pay this week; record each payment as a Payment Entry "
+                 "against its Purchase Invoice so the Purchase Invoice shows paid."],
                 "/app/query-report/Accounts%20Payable", "Open Accounts Payable"),
-        ask=f"Which supplier bills fall due in the next {days} days, and can we pay them "
+        ask=f"Which Purchase Invoices fall due in the next {days} days, and can we pay them "
             f"from the bank?",
         drill={"fact": "fact_party_balance", "filters": {"party_type": "Supplier",
                                                          "owed": [">", 0]}},
@@ -495,22 +495,22 @@ def unmatched_supplier_payments(ctx, p):
     largest = "; ".join(f"{r['party']} {m(ctx, r['unmatched_payments'])}" for r in top[:3])
     ahead = [r for r in rows if r["in_credit"] > 0]
     ahead_txt = (f" On the Supplier Ledger {m(ctx, sum(r['in_credit'] for r in ahead))} of it is really "
-                 f"paid ahead of the bills ({plural(len(ahead), 'supplier')} in credit); the "
-                 f"rest pays bills it was never matched to." if ahead else "")
+                 f"paid ahead of the Purchase Invoices ({plural(len(ahead), 'supplier')} in credit); the "
+                 f"rest pays Purchase Invoices it was never matched to." if ahead else "")
     return [_rec(
-        title=f"Match {ms(ctx, paid)} paid to suppliers to their bills before the next "
+        title=f"Match {ms(ctx, paid)} paid to suppliers to their Purchase Invoices before the next "
               f"payment run.",
-        why=(f"{m(ctx, paid)} paid in {plural(n, 'payment')} is matched to no bill, so the "
-             f"bills show {m(ctx, sum(r['open_invoices'] for r in rows))} to pay where the "
+        why=(f"{m(ctx, paid)} paid in {plural(n, 'payment')} is unreconciled, so the "
+             f"Purchase Invoices show {m(ctx, sum(r['open_invoices'] for r in rows))} to pay where the "
              f"Supplier Ledger Balance is {m(ctx, sum(r['owed'] for r in rows))}. A payment run drawn from "
-             f"the bills would pay some twice. Largest: {largest}.{ahead_txt}"),
+             f"the Purchase Invoices would pay some twice. Largest: {largest}.{ahead_txt}"),
         what_to_do=[f"Start with {top[0]['party']}.",
-                    "Match each payment to the bills it pays in Payment Reconciliation.",
+                    "Reconcile each payment in Payment Reconciliation.",
                     "Pay from the Supplier Ledger Balance, not from the list of open Purchase Invoices, until done."],
-        how=payment_reconciliation(ctx.code, f"Match the {plural(n, 'payment')} to their bills "
+        how=payment_reconciliation(ctx.code, f"Match the {plural(n, 'payment')} to their Purchase Invoices "
                                              f"in ERPNext:"),
-        ask="Which suppliers have payments not matched to bills, and how much do we really "
-            "owe each?",
+        ask="Which suppliers have unreconciled payments, and what is"
+            " each Supplier Ledger Balance?",
         drill={"fact": "fact_party_balance",
                "filters": {"party_type": "Supplier", "unmatched_payments": [">", 0]}},
         money=paid, count=n, unit="payments")]
@@ -544,7 +544,7 @@ def sales_falling(ctx, p):
     by = defaultdict(lambda: [0.0, 0.0, 0.0])
     for r in rows:
         d = frappe.utils.getdate(r["posting_date"])
-        g = r["item_group"] or "No product group"
+        g = r["item_group"] or "No Item Group"
         for i, span in enumerate((cur, prev, ly)):
             if span and span[0] <= d <= span[1]:
                 by[g][i] += _num(r["base_net_amount"])
@@ -566,7 +566,7 @@ def sales_falling(ctx, p):
                         f"Check {g} was in stock through {month_label(cur[0])}.",
                         f"Call the customers who bought {g} in {month_label(base_span[0])} and "
                         f"not since."],
-            how=how(ctx, "ERPNext's own comparison, by product group:",
+            how=how(ctx, "ERPNext's own comparison, by Item Group:",
                     ["Open Sales Analytics (the link below).",
                      "Set Tree Type to Item Group, Value or Qty to Value, Range Monthly."],
                     "/app/query-report/Sales%20Analytics", "Open Sales Analytics"),
@@ -686,7 +686,7 @@ def discounts_outside_price_list(ctx, p):
         title=f"Put the {ms(ctx, total)} of discounts given outside the price list under a "
               f"rule.",
         why=(f"{plural(len(loose), 'invoice line')} in the last {int(p['days'])} days "
-             f"{'was' if len(loose) == 1 else 'were'} sold below the price-list price with no "
+             f"{'was' if len(loose) == 1 else 'were'} sold below the Price List Rate with no "
              f"pricing rule behind them: {m(ctx, total)} below list. The largest is "
              f"{big['parent']}, {big.get('item_code') or 'one product'}, {m(ctx, big['given'])}."),
         what_to_do=["Decide which discounts are allowed, and record them as Pricing Rules.",
@@ -724,7 +724,7 @@ def late_orders(ctx, p):
         how=how(ctx, "The late orders in ERPNext:",
                 ["Open Sales Order, filter Status To Deliver and Bill, sort by Delivery Date.",
                  "Change the Delivery Date on each once the customer agrees (Update Items)."],
-                "/app/sales-order?status=To%20Deliver%20and%20Bill", "Open the orders"),
+                "/app/sales-order?status=To%20Deliver%20and%20Bill", "Open the Orders"),
         ask="Which orders are past their promised delivery date, and what is holding them?",
         drill=f["order_book_late"].get("drill") or {},
         money=value, count=n, unit="orders")]
@@ -746,7 +746,7 @@ def delivered_unbilled(ctx, p):
         how=how(ctx, "To invoice a delivered order in ERPNext:",
                 ["Open Sales Order, filter Status To Bill.",
                  "Open each, click Create, then Sales Invoice; check and submit it."],
-                "/app/sales-order?status=To%20Bill", "Open the orders"),
+                "/app/sales-order?status=To%20Bill", "Open the Orders"),
         ask="Which orders were delivered but never invoiced?",
         drill=f["order_delivered_unbilled"].get("drill") or {},
         money=value, count=n, unit="orders")]
@@ -759,7 +759,7 @@ def _margin_by_group(ctx, frm, to):
                       ["item_group", "base_net_amount", "base_margin_amount"],
                       lambda t: [t.src_docstatus == 1, t.has_cost == 1, t.posting_date >= frm,
                                  t.posting_date <= to]):
-        g = by[r["item_group"] or "No product group"]
+        g = by[r["item_group"] or "No Item Group"]
         g[0] += _num(r["base_net_amount"])
         g[1] += _num(r["base_margin_amount"])
     return by
@@ -962,7 +962,7 @@ def reserved_over_available(ctx, p):
         title=f"Stop promising stock we do not have: {plural(len(gaps), 'product')} "
               f"short.",
         why=(f"{plural(len(gaps), 'product')} {'is' if len(gaps) == 1 else 'are'} reserved for "
-             f"customers beyond what is on hand. Worst: {item}, {x['reserved']:,.0f} reserved, "
+             f"customers beyond Actual Qty. Worst: {item}, {x['reserved']:,.0f} reserved, "
              f"{max(x['qty'], 0):,.0f} on hand. The shortfall is worth about {m(ctx, money)} at "
              f"cost."),
         what_to_do=[f"Freeze new orders for {names([g[0] for g in gaps])} until stock arrives.",
@@ -1099,7 +1099,7 @@ def po_for_slow_items(ctx, p):
         how=how(ctx, "To stop the rest of an order in ERPNext:",
                 ["Open the Purchase Order, click Status, then Close (or Update Items to reduce "
                  "the quantity)."], "/app/purchase-order?status=To%20Receive%20and%20Bill",
-                "Open the orders"),
+                "Open the Orders"),
         ask="Which open purchase orders are for products that are not selling?",
         drill={"href": f"{ctx.site()}/app/purchase-order?name=" + orders[0]},
         money=value, count=len(orders), unit="orders")]
@@ -1174,7 +1174,7 @@ def late_suppliers(ctx, p):
         how=how(ctx, "The late orders in ERPNext:",
                 ["Open Purchase Order, filter To Receive, sort by Required By.",
                  "Update the Required By date once the supplier confirms."],
-                "/app/purchase-order?status=To%20Receive%20and%20Bill", "Open the orders"),
+                "/app/purchase-order?status=To%20Receive%20and%20Bill", "Open the Orders"),
         ask="Which purchase orders are past their Required By date, and from whom?",
         drill={"href": f"{ctx.site()}/app/purchase-order/{oldest['name']}"},
         money=value, count=len(late), unit="orders")]
@@ -1211,22 +1211,22 @@ def bills_not_matching(ctx, p):
     if value <= p["amount"]:
         return []
     return [_rec(
-        title=f"Check {plural(len(flagged), 'unpaid bill')} with no order or goods receipt "
+        title=f"Check {plural(len(flagged), 'unpaid Purchase Invoice')} with no order or Purchase Receipt "
               f"before paying.",
-        why=(f"{plural(len(flagged), 'unpaid supplier bill')} from "
+        why=(f"{plural(len(flagged), 'unpaid Purchase Invoice')} from "
              f"{plural(len(by), 'supplier')} {'does' if len(flagged) == 1 else 'do'} not rest on "
-             f"both a purchase order and a goods receipt. Against what the Supplier Ledger says is owed "
+             f"both a purchase order and a Purchase Receipt. Against what the Supplier Ledger says is owed "
              f"to those suppliers, {m(ctx, value)} is at stake. Most with "
              f"{names(sorted(by, key=lambda s: -by[s]))}."),
         what_to_do=["Before paying, confirm each was ordered and the goods arrived.",
                     "Record the missing receipt, or ask why there was no order.",
-                    "Ask that every bill be made from its order or receipt (Create, Purchase "
+                    "Ask that every Purchase Invoice be made from its order or receipt (Create, Purchase "
                     "Invoice)."],
-        how=how(ctx, "Bills against their orders and receipts in ERPNext:",
-                ["Open Purchase Invoice Trends or each bill's Purchase Order and Purchase "
-                 "Receipt fields.", "Make new bills from the receipt: Purchase Receipt, Create, "
-                 "Purchase Invoice."], "/app/purchase-invoice?status=Unpaid", "Open the bills"),
-        ask="Which unpaid supplier bills have no purchase order or goods receipt behind them?",
+        how=how(ctx, "Purchase Invoices against their orders and receipts in ERPNext:",
+                ["Open Purchase Invoice Trends or each Purchase Invoice's Purchase Order and Purchase "
+                 "Receipt fields.", "Make new Purchase Invoices from the receipt: Purchase Receipt, Create, "
+                 "Purchase Invoice."], "/app/purchase-invoice?status=Unpaid", "Open the Purchase Invoices"),
+        ask="Which unpaid Purchase Invoices have no purchase order or Purchase Receipt behind them?",
         drill={"fact": "fact_purchase_invoice",
                "filters": {"src_name": ["in", sorted(gaps)[:200]]}},
         money=value, count=len(flagged), unit="bills")]
@@ -1241,16 +1241,16 @@ def long_unpaid_bills(ctx, p):
     largest = "; ".join(f"{r['party']} {m(ctx, r['d90_plus'])}" for r in rows[:3])
     return [_rec(
         title=f"Agree a plan for {ms(ctx, total)} owed to suppliers over 90 days.",
-        why=(f"On the Supplier Ledger, once payments not yet matched are set against the oldest bills, "
+        why=(f"On the Supplier Ledger, once unreconciled payments are set against the oldest Purchase Invoices, "
              f"{m(ctx, total)} owed to {plural(len(rows), 'supplier')} is more than 90 days "
              f"past due. Largest: {largest}. Suppliers this far behind start holding "
              f"deliveries."),
         what_to_do=["Call the largest and agree a payment plan in writing.",
-                    "Check first that the debt is real: payments not matched make bills look "
+                    "Check first that the debt is real: unreconciled payments make Purchase Invoices look "
                     "unpaid.", "Put the plan's dates in the payment schedule."],
         how=how(ctx, "What is owed to whom, in ERPNext:",
                 ["Open Accounts Payable (the link below), ageing by due date.",
-                 "Match payments to bills first (Payment Reconciliation) so only real debts "
+                 "Match payments to Purchase Invoices first (Payment Reconciliation) so only real debts "
                  "remain."], "/app/query-report/Accounts%20Payable", "Open Accounts Payable"),
         ask="Which suppliers have we owed for more than 90 days, and how much?",
         drill={"fact": "fact_party_balance",
@@ -1348,7 +1348,7 @@ def approvals_bottleneck(ctx, p):
                          "whoever may take them.",
                          "Approve or reject each one from its Actions menu."],
                         f"/app/{_slug(doctype)}?{quote(field_)}={quote(state)}",
-                        "Open the queue"),
+                        "Open the Queue"),
                 ask=f"Which {word}s are waiting at {state}, for how long, and who raised them?",
                 drill={"href": f"{ctx.site()}/app/{_slug(doctype)}?{quote(field_)}={quote(state)}"},
                 money=total, count=len(rows), unit=word + ("" if len(rows) == 1 else "s"),
@@ -1378,7 +1378,7 @@ def overdue_tasks_by_owner(ctx, p):
         how=how(ctx, "The late jobs in ERPNext:",
                 ["Open Task, filter Status Overdue, group by Assigned To.",
                  "Assign each (the Assigned To field) and update Expected End Date."],
-                "/app/task?status=Overdue", "Open the tasks"),
+                "/app/task?status=Overdue", "Open the Tasks"),
         ask="Who holds the jobs past their date, and how late are they?",
         drill={"fact": "fact_task", "filters": {"is_open": 1, "days_late": [">", 0]}},
         count=len(rows), unit="jobs")]
@@ -1403,7 +1403,7 @@ def self_approvals(ctx, p):
         how=how(ctx, "Who did what is in ERPNext's change history:",
                 ["Open the document and its Activity at the foot: each approval shows who took "
                  "it.", "An administrator can untick Allow Self Approval on the workflow's "
-                 "transitions."], "/app/version", "Open the change history"),
+                 "transitions."], "/app/version", "Open the Change History"),
         ask="Which purchase orders and payments were approved by the person who raised them?",
         drill={"href": f"{ctx.site()}/app/version"},
         count=int(n), unit="documents")]
@@ -1456,15 +1456,15 @@ def draft_documents(ctx, p):
         title=f"Issue or cancel {plural(len(drafts), 'invoice')} left as drafts.",
         why=(f"{plural(len(drafts), 'sales invoice')} worth {m(ctx, value)} "
              f"{'was' if len(drafts) == 1 else 'were'} saved more than {int(p['days'])} days "
-             f"ago and never issued" + (f", the oldest dated {date(oldest)}" if oldest else "") +
+             f"ago and left in Draft" + (f", the oldest dated {date(oldest)}" if oldest else "") +
              ". A draft is in no figure: not owed, not sold, not chased."),
-        what_to_do=["Issue the ones that were really sold.",
+        what_to_do=["Submit the ones that were really sold.",
                     "Cancel or delete the rest, so the list holds only real work."],
         how=how(ctx, "The drafts in ERPNext:",
                 ["Open Sales Invoice, filter Status Draft, sort by Posting Date.",
                  "Open each: Submit it, or Delete it if it was never a sale."],
-                "/app/sales-invoice?docstatus=0", "Open the drafts"),
-        ask="Which invoices were written but never issued, and who wrote them?",
+                "/app/sales-invoice?docstatus=0", "Open the Drafts"),
+        ask="Which Sales Invoices are still Draft, and who created them?",
         drill={"fact": "fact_sales_invoice", "filters": {"src_docstatus": 0,
                                                          "posting_date": ["<", str(old)]}},
         money=value, count=len(drafts), unit="invoices")]
@@ -1529,11 +1529,11 @@ def missing_valuations(ctx, p):
 A, D, C, PCT, PTS = "amount", "days", "count", "percent", "points"
 RULES = (
     # cash and credit
-    Rule("unmatched_receipts", "cash", "Customer payments not matched to invoices", "high",
+    Rule("unmatched_receipts", "cash", "Unreconciled Customer Payments", "high",
          "Finance", unmatched_receipts,
          (Param("amount", "Recommend when more than", 1000, A),),
          twin_alert="Customer payments not matched"),
-    Rule("customers_in_credit", "cash", "Customers in credit, to refund or use", "med",
+    Rule("customers_in_credit", "cash", "Customers in Credit, to Refund or Use", "med",
          "Finance", customers_in_credit, (Param("amount", "Recommend when more than", 1000, A),)),
     Rule("overdue_customers", "cash", "Customer Ledger Balance Over 90 Days", "high",
          "Finance", overdue_customers,
@@ -1541,92 +1541,92 @@ RULES = (
           Param("crit_amount", "Critical from", 100000, A),
           Param("max_items", "Show at most", 3, C)),
          twin_alert="Overdue receivables"),
-    Rule("credit_hold", "cash", "Customers still invoiced while seriously late", "high",
+    Rule("credit_hold", "cash", "Customers Still Invoiced While Over 90 Days", "high",
          "Finance", credit_hold,
          (Param("amount", "Over 90 days late by more than", 5000, A),
           Param("days", "Invoiced within the last", 30, D))),
-    Rule("days_to_pay_worsening", "cash", "Customers paying more slowly", "med", "Finance",
+    Rule("days_to_pay_worsening", "cash", "Customers Paying More Slowly", "med", "Finance",
          days_to_pay_worsening,
          (Param("days", "Later by at least", 10, D),
           Param("count", "Payments needed in each period", 20, C))),
-    Rule("supplier_payments_due", "cash", "Supplier bills falling due against bank and cash",
+    Rule("supplier_payments_due", "cash", "Purchase Invoices Due Against Bank and Cash",
          "high", "Finance", supplier_payments_due,
          (Param("days", "Falling due within", 14, D),
           Param("pct", "When due exceeds this share of bank and cash", 100, PCT))),
-    Rule("unmatched_supplier_payments", "cash", "Supplier payments not matched to bills",
+    Rule("unmatched_supplier_payments", "cash", "Unreconciled Supplier Payments",
          "med", "Finance", unmatched_supplier_payments,
          (Param("amount", "Recommend when more than", 1000, A),),
          twin_alert="Supplier payments not matched"),
     # sales
-    Rule("sales_falling", "sales", "Sales falling, by product group", "high", "Sales",
+    Rule("sales_falling", "sales", "Sales Falling, by Item Group", "high", "Sales",
          sales_falling,
          (Param("pct", "Down by at least", 25, PCT), Param("amount", "And by more than", 10000, A),
           Param("max_items", "Show at most", 3, C))),
-    Rule("customer_concentration", "sales", "Customer concentration", "med", "Sales",
+    Rule("customer_concentration", "sales", "Customer Concentration", "med", "Sales",
          customer_concentration,
          (Param("pct", "Five largest customers' share from", 40, PCT),
           Param("one_pct", "Or one customer's share from", 25, PCT))),
-    Rule("customers_gone_quiet", "sales", "Regular customers gone quiet", "med", "Sales",
+    Rule("customers_gone_quiet", "sales", "Inactive Customers", "med", "Sales",
          customers_gone_quiet,
          (Param("days", "Nothing bought for", 90, D),
           Param("count", "Bought in at least (months of the year before)", 3, C),
           Param("amount", "And bought more than", 10000, A))),
-    Rule("discounts_outside_price_list", "sales", "Discounts outside the price list", "med",
+    Rule("discounts_outside_price_list", "sales", "Discounts Outside Pricing Rules", "med",
          "Sales", discounts_outside_price_list,
          (Param("amount", "Recommend when more than", 5000, A),
           Param("days", "Over the last", 90, D))),
-    Rule("late_orders", "sales", "Orders past their promised date", "high", "Sales",
+    Rule("late_orders", "sales", "Sales Orders Past Delivery Date", "high", "Sales",
          late_orders, (Param("count", "More than (orders)", 0, C),
                        Param("amount", "And worth more than", 0, A)),
          twin_alert="Orders past their promised date"),
-    Rule("delivered_unbilled", "sales", "Delivered but not invoiced", "high", "Finance",
+    Rule("delivered_unbilled", "sales", "To Bill", "high", "Finance",
          delivered_unbilled, (Param("amount", "Recommend when more than", 0, A),),
          twin_alert="Delivered but not invoiced"),
     # margin
-    Rule("margin_shrinking", "margin", "Product groups with shrinking margin", "med", "Sales",
+    Rule("margin_shrinking", "margin", "Item Groups with Shrinking Margin", "med", "Sales",
          margin_shrinking,
          (Param("points", "Margin down by at least (points)", 5, PTS),
           Param("amount", "On sales of at least", 20000, A),
           Param("max_items", "Show at most", 3, C))),
-    Rule("sold_below_cost", "margin", "Sold below cost", "high", "Sales", sold_below_cost,
+    Rule("sold_below_cost", "margin", "Sold Below Valuation Rate", "high", "Sales", sold_below_cost,
          (Param("amount", "Loss more than", 1000, A), Param("days", "Over the last", 90, D))),
-    Rule("lines_without_cost", "margin", "Sales with no cost recorded", "med", "Finance",
+    Rule("lines_without_cost", "margin", "Sales with No Valuation Rate", "med", "Finance",
          lines_without_cost, (Param("pct", "Share of sales from", 5, PCT),)),
     # stock
-    Rule("stock_not_moving", "stock", "Stock not moving", "med", "Stock Manager",
+    Rule("stock_not_moving", "stock", "Stock Ageing, No Movement", "med", "Stock Manager",
          stock_not_moving,
          (Param("days", "Nothing out for", 90, D), Param("amount", "Worth more than", 10000, A))),
-    Rule("fast_movers_running_out", "stock", "Fast movers about to run out", "high",
+    Rule("fast_movers_running_out", "stock", "Fast Movers About to Run Out", "high",
          "Stock Manager", fast_movers_running_out,
          (Param("days", "Running out within", 21, D),
           Param("count", "Moved out at least (times, 90 days)", 3, C))),
-    Rule("reserved_over_available", "stock", "Reserved beyond what is on hand", "high",
+    Rule("reserved_over_available", "stock", "Reserved Qty Above Actual Qty", "high",
          "Stock Manager", reserved_over_available, (Param("count", "More than (products)", 0, C),),
          twin_alert="Stock promised but not there"),
-    Rule("promised_not_ordered", "stock", "Promised to customers, not ordered", "high",
+    Rule("promised_not_ordered", "stock", "Sales Orders Not Covered by a Purchase Order", "high",
          "Purchasing", promised_not_ordered,
          (Param("amount", "Recommend when more than", 0, A),
           Param("window", "Likely cover: purchase orders raised up to (days before the order)",
                 WINDOW_DAYS, D),
           Param("after", "Likely cover: and up to (days after the order)", AFTER_DAYS, D))),
-    Rule("near_expiry", "stock", "Stock near expiry", "high", "Stock Manager", near_expiry,
+    Rule("near_expiry", "stock", "Batches Near Expiry", "high", "Stock Manager", near_expiry,
          (Param("days", "Expiring within", 90, D),)),
-    Rule("po_for_slow_items", "stock", "Purchase orders for products not selling", "med",
+    Rule("po_for_slow_items", "stock", "Purchase Orders for Items Not Selling", "med",
          "Purchasing", po_for_slow_items,
          (Param("days", "Not moved for", 90, D), Param("amount", "Still to come, more than", 1000, A))),
     # buying
-    Rule("supplier_concentration", "buying", "Supplier concentration", "med", "Purchasing",
+    Rule("supplier_concentration", "buying", "Supplier Concentration", "med", "Purchasing",
          supplier_concentration, (Param("pct", "Two largest suppliers' share from", 60, PCT),)),
-    Rule("late_suppliers", "buying", "Suppliers past their promised date", "med", "Purchasing",
+    Rule("late_suppliers", "buying", "Purchase Orders Past Required By", "med", "Purchasing",
          late_suppliers,
          (Param("days", "Late by more than", 7, D), Param("count", "At least (orders)", 1, C))),
-    Rule("bills_not_matching", "buying", "Bills without an order or goods receipt", "med",
+    Rule("bills_not_matching", "buying", "Purchase Invoices Without PO or Purchase Receipt", "med",
          "Finance", bills_not_matching, (Param("amount", "Recommend when more than", 1000, A),)),
     Rule("long_unpaid_bills", "buying", "Supplier Ledger Balance Over 90 Days", "med",
          "Finance", long_unpaid_bills, (Param("amount", "Recommend when more than", 10000, A),),
          twin_alert="Overdue supplier invoices"),
     # people and control
-    Rule("approvals_bottleneck", "control", "Approvals waiting at one step", "high",
+    Rule("approvals_bottleneck", "control", "Approvals Waiting at One Workflow State", "high",
          "Directors", approvals_bottleneck,
          (Param("count", "At least (documents)", 3, C),
           Param("days", "Or the oldest waiting at least", 14, D),
@@ -1635,18 +1635,18 @@ RULES = (
     Rule("overdue_tasks_by_owner", "control", "Late jobs, by who holds them", "med",
          "Operations", overdue_tasks_by_owner, (Param("count", "More than (jobs)", 0, C),),
          twin_alert="Jobs past their date"),
-    Rule("self_approvals", "control", "Approved by whoever raised them", "high", "Directors",
+    Rule("self_approvals", "control", "Approved by Their Owner", "high", "Directors",
          self_approvals, (Param("count", "More than (documents)", 0, C),)),
-    Rule("leavers_trend", "control", "More people leaving", "med", "HR", leavers_trend,
+    Rule("leavers_trend", "control", "More People Leaving", "med", "HR", leavers_trend,
          (Param("count", "At least (leavers in six months)", 3, C),)),
     # data hygiene
-    Rule("draft_documents", "data", "Invoices left as drafts", "med", "Finance",
+    Rule("draft_documents", "data", "Draft Sales Invoices", "med", "Finance",
          draft_documents,
          (Param("days", "Older than", 7, D), Param("count", "More than (invoices)", 0, C)),
          twin_alert="Invoices never issued"),
-    Rule("duplicate_departments", "data", "Departments recorded twice", "info", "HR",
+    Rule("duplicate_departments", "data", "Duplicate Departments", "info", "HR",
          duplicate_departments, (Param("count", "At least (departments)", 1, C),)),
-    Rule("missing_valuations", "data", "Stock held with no valuation", "med", "Stock Manager",
+    Rule("missing_valuations", "data", "Stock with No Valuation Rate", "med", "Stock Manager",
          missing_valuations, (Param("count", "More than (stock lines)", 0, C),)),
 )
 BY_ID = {r.rule_id: r for r in RULES}

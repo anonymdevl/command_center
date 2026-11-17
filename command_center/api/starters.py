@@ -41,12 +41,12 @@ ROLE_AREAS = [
 # Directors and anyone whose role names no area: the spread, most telling first.
 EVERYONE = ["money", "sales", "orders", "stock", "customers", "projects", "suppliers",
             "cash", "cases", "payables", "people"]
-AREA_WORDS = {"money": "Money owed", "cash": "Money in", "payables": "Supplier bills",
-              "sales": "Sales", "orders": "Orders", "customers": "Customers",
+AREA_WORDS = {"money": "Accounts Receivable", "cash": "Payments Received", "payables": "Accounts Payable",
+              "sales": "Sales", "orders": "Sales Orders", "customers": "Customers",
               "stock": "Stock", "suppliers": "Buying", "projects": "Projects",
               "cases": "Customer issues", "people": "People"}
 # The plain questions (ask/engine.ANALYST_EXAMPLES), by the area each belongs to.
-EXAMPLE_AREAS = {"Money owed": "money", "Sales": "sales", "Buying": "suppliers",
+EXAMPLE_AREAS = {"Accounts Receivable": "money", "Sales": "sales", "Buying": "suppliers",
                  "Stock": "stock", "Projects": "projects", "Customers": "customers"}
 
 FIGURES = ["ar_over_90", "ar_over_90_pct", "largest_debt", "order_book_late_count",
@@ -115,13 +115,13 @@ def _live(business_code) -> dict:
 
     out = {}
     if has("ar_over_90"):
-        share = f" — {w('ar_over_90_pct')} of what customers owe" if has("ar_over_90_pct") else ""
-        out["money"] = _q(f"{w('ar_over_90')} has been owed for more than three months{share}. "
+        share = f" — {w('ar_over_90_pct')} of Accounts Receivable" if has("ar_over_90_pct") else ""
+        out["money"] = _q(f"{w('ar_over_90')} of Accounts Receivable is over 90 days{share}. "
                           f"Who should we chase first?", f, "ar_over_90", "ar_over_90_pct")
     lead = (f.get("largest_debt") or {}).get("group") or {}
     if has("largest_debt") and lead.get("label"):
-        out["customers"] = _q(f"{lead['label']} owes us {w('largest_debt')}, our largest single "
-                              f"debt. How long has it been owed, and are they paying?",
+        out["customers"] = _q(f"{lead['label']} owes us {w('largest_debt')}, our largest receivable"
+                              f". How long has it been owed, and are they paying?",
                               f, "largest_debt")
     if has("order_book_late_count"):
         n = f["order_book_late_count"]["value"]
@@ -132,7 +132,7 @@ def _live(business_code) -> dict:
     if has("stock_short_products"):
         n = f["stock_short_products"]["value"]
         out["stock"] = _q(f"{w('stock_short_products')} product{_s(n)} {_are(n)} promised to "
-                          f"customers but not on the shelves. Which orders are at risk?",
+                          f"customers but not in stock. Which orders are at risk?",
                           f, "stock_short_products")
     if has("tasks_overdue"):
         n = f["tasks_overdue"]["value"]
@@ -144,8 +144,8 @@ def _live(business_code) -> dict:
                               f"{top['label']}. What happens if they stop supplying?",
                               f, "supplier_top_share")
     if has("ap_over_90"):
-        out["payables"] = _q(f"We have owed suppliers {w('ap_over_90')} for more than three "
-                             f"months. Which bills, and to whom?", f, "ap_over_90")
+        out["payables"] = _q(f"{w('ap_over_90')} of Accounts Payable is "
+                             f"over 90 days. Which Purchase Invoices, and to whom?", f, "ap_over_90")
     if has("cases_over_30"):
         n = f["cases_over_30"]["value"]
         out["cases"] = _q(f"{w('cases_over_30')} customer complaint{_s(n)} {_have(n)} waited over "
@@ -169,7 +169,7 @@ def _live(business_code) -> dict:
     cash = _change("cash_in_month", business_code)
     if cash and cash[0] <= -10:
         pct, cur, old, texts = cash
-        out["cash"] = {"q": f"Money received fell {abs(pct):.0f}% in {cur} against {old}. "
+        out["cash"] = {"q": f"Payments received fell {abs(pct):.0f}% in {cur} against {old}. "
                             f"Who has stopped paying?", "figures": texts}
     return out
 

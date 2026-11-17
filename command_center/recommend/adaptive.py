@@ -207,7 +207,7 @@ class Learned:
             when = (f"in {metrics._when(mt, b)}" if mt.grain == "month" else "now")
             rec = {
                 "id": f"{ANOMALY_RULE}:{mt.key}", "rule": ANOMALY_RULE,
-                "rule_title": "Unusual movements in the business's own figures",
+                "rule_title": "Unusual Movements",
                 "area": area, "area_label": AREAS[area], "severity": sev,
                 "money_at_stake": round(excess, 2), "currency": self.cur,
                 "count": None, "unit": None,

@@ -62,6 +62,34 @@ BASELINE = {
 }
 
 
+# The ERPNext wording review of 17 Nov 2026 renamed some of what BASELINE records: each
+# old word -> the agreed new one. BASELINE itself stays the screen at BASE_REF (proven
+# below); the built screen is checked against BASELINE with these applied, so a rename
+# not listed here is still a loss.
+WORDING = {
+    "Nine areas · open any one of them": "",
+    "Sales & money owed": "Sales and Payments",
+    "Buying & suppliers": "Buying and Suppliers",
+    "Stock & warehouses": "Stock & Warehouses",
+    "Engineering & installs": "Project Insights",
+    "Money in & out": "Finances",
+    "Systems & access": "Systems and Access",
+    "owed to us": "Accounts Receivable",
+    "owed to suppliers": "Accounts Payable",
+    "value on hand": "Stock Value",
+    "payments and journals": "Payment Entries and Journal Entries",
+    "everyone on the books": "Employees",
+    "open alerts to review": "open alerts",
+    "Live data": "Live Data",
+    "postings": "entries",
+}
+
+
+def now(word):
+    """What BASELINE's word reads as today."""
+    return WORDING.get(word, word)
+
+
 def read(*parts):
     with open(os.path.join(ROOT, *parts)) as f:
         return f.read()
@@ -115,12 +143,13 @@ def compare(markup: str, tmap: dict, js: dict) -> list:
     lost = []
     inv = inventory(markup)
     for k in ("heading", "when", "finding_boxes"):
-        if inv[k] != BASELINE[k]:
-            lost.append(f"{k}: was {BASELINE[k]!r}, now {inv[k]!r}")
+        if inv[k] != now(BASELINE[k]):
+            lost.append(f"{k}: was {now(BASELINE[k])!r}, now {inv[k]!r}")
     by_label = {t["label"]: t for t in inv["tiles"]}
     if len(inv["tiles"]) != len(BASELINE["tiles"]):
         lost.append(f"the screen had {len(BASELINE['tiles'])} tiles and now has {len(inv['tiles'])}")
     for label, click, foot, flag, key, unit in BASELINE["tiles"]:
+        label, foot, flag, unit = now(label), now(foot), now(flag), now(unit)
         t = by_label.get(label)
         if not t:
             lost.append(f"tile {label!r} is gone")

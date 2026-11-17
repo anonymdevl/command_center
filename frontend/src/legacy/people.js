@@ -53,7 +53,7 @@ function drawLookup(body, state) {
   let filled = false;
   const load = async () => {
     const mine = ++seq;
-    if (!out.childNodes.length) out.append(el("div", "pp-empty", "Reading the people on the books…"));
+    if (!out.childNodes.length) out.append(el("div", "pp-empty", "Reading the Employees…"));
     let res;
     try {
       res = await call(`${M}.directory`, {
@@ -77,7 +77,7 @@ function drawLookup(body, state) {
       filled = true;
     }
     page = res.page;
-    count.textContent = `${res.total.toLocaleString("en-GB")} of ${res.on_books.toLocaleString("en-GB")} on the books`;
+    count.textContent = `${res.total.toLocaleString("en-GB")} of ${res.on_books.toLocaleString("en-GB")} Employees`;
     if (!res.rows.length) {
       out.append(el("div", "pp-empty", "No one matches. Try fewer words or another filter."));
       return;
@@ -556,7 +556,7 @@ function drawBalances(body, res, open) {
 function stateNode(res) {
   if (res?.kind === "guide" && res.guide) return guideBox(res.guide);
   if (res?.kind === "unreachable") return el("div", "thin", waitingLine(res.business, res.last_loaded));
-  if (res?.kind === "missing") return el("div", "thin", res.message || "This person is not on the books.");
+  if (res?.kind === "missing") return el("div", "thin", res.message || "No Employee record for this person.");
   if (res?.kind === "refused") {
     return el("div", "thin", "The business's ERPNext refused this read: the platform's key there "
       + "may not have permission for HR records.");

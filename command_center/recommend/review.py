@@ -349,7 +349,7 @@ def store(code, accepted: list, p: dict, refs: dict, model: str) -> dict:
         sev = SEVERITY[item["confidence"]]
         first_metric = next((refs[k]["metric"] for k in item["evidence"]
                              if refs[k].get("metric")), None)
-        rec = {"id": rec_key, "rule": adaptive.AI_RULE, "rule_title": "Daily AI review",
+        rec = {"id": rec_key, "rule": adaptive.AI_RULE, "rule_title": "Daily AI Review",
                "area": item["area"], "area_label": AREAS[item["area"]], "severity": sev,
                "money_at_stake": round(item["money_at_stake"], 2), "currency": p["currency"],
                "count": None, "unit": None, "title": item["title"], "why": item["why"],
@@ -457,7 +457,7 @@ def review(code) -> dict:
             + json.dumps(p, ensure_ascii=False, separators=(",", ":")))
     model = claude.model_for("analyst")
     frappe.local.cc_claude_usage = None        # this request's tokens only
-    with metering.event(METER, code, note="Daily AI review") as ev:
+    with metering.event(METER, code, note="Daily AI Review") as ev:
         got, err = claude.complete(SYSTEM, text, kind="analyst", max_tokens=16000, schema=SCHEMA)
         ev["ok"] = bool(got and not err)
     out["model"] = model

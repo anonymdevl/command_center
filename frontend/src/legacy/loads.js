@@ -23,7 +23,7 @@ export function renderLoads(root, data, { scope, onRefreshed } = {}) {
   } else {
     const t = el("table", "dt");
     const head = el("tr");
-    ["Records", "Covers up to", "Last read", "Rows last time", ""].forEach((h) => head.append(el("th", null, h)));
+    ["Records", "Covers Up To", "Last Read", "Rows last time", ""].forEach((h) => head.append(el("th", null, h)));
     const thead = el("thead");
     thead.append(head);
     const body = el("tbody");
@@ -95,7 +95,7 @@ function wire(panel, scope, onRefreshed) {
       const hist = panel.querySelector("#loads-hist");
       hist.hidden = !hist.hidden;
       more.setAttribute("aria-expanded", String(!hist.hidden));
-      more.textContent = hist.hidden ? "Show the load history" : "Hide the load history";
+      more.textContent = hist.hidden ? "Show Load History" : "Hide Load History";
     };
   }
 }

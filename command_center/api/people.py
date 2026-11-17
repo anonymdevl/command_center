@@ -604,7 +604,7 @@ def _profile(ctx, employee) -> dict:
     staff = _staff(ctx)
     person = next((p for p in staff if p["employee"] == employee), None)
     if not person:
-        return {"kind": "missing", "message": f"No employee {employee} on the books."}
+        return {"kind": "missing", "message": f"No Employee record {employee}."}
     today = _today()
     site = ctx.site
     manager = next((p for p in staff if p["employee"] == person["reports_to"]), None)

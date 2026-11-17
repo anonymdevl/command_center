@@ -342,7 +342,7 @@ LIVE = {k.key: k for k in (
     # down: the questions read from ERPNext are left out and the note says so.
     Live("control_score", "Overall Business Health", "percent", control_score, "/app/version",
          source="fact_sales_invoice"),
-    Live("alerts_open", "Open alerts", "count", alerts_open, "/app/version",
+    Live("alerts_open", "Open Alerts", "count", alerts_open, "/app/version",
          source="fact_sales_invoice", reads_erp=False),
     Live("findings_open", "Open findings", "count", findings_open, "/app/non-conformance"),
     Live("findings_repeat", "Repeat findings", "count", findings_repeat, "/app/non-conformance"),

@@ -34,21 +34,21 @@ REPORTS = {
     "rp01": ("Executive Summary",
              "the daily executive brief: the critical movements since the previous period, "
              "the exceptions that need attention, approvals pending and overdue actions"),
-    "rp02": ("Weekly management report",
+    "rp02": ("Weekly Management Report",
              "performance across the business, unresolved tasks, sales, cash, stock, "
              "operations, people, complaints and risks"),
-    "rp03": ("Monthly report",
+    "rp03": ("Monthly Report",
              "financial and operational performance for the latest complete month: profit "
              "and loss against the previous month, KPI trends, variances, compliance and "
              "corrective actions"),
-    "rp04": ("Board report",
+    "rp04": ("Board Report",
              "for the board: strategy and growth, the financial position (profit and loss, "
              "balance sheet, cash), major risks, governance matters and the decisions the "
              "board is asked to take"),
     "rp05": ("Sales and Payments",
              "pipeline and conversion, orders, invoicing, collections and ageing of what "
              "customers owe, discounts, and the key customers"),
-    "rp06": ("Buying and stock",
+    "rp06": ("Buying and Stock",
              "open purchases, supplier status and dependence, stock availability, ageing, "
              "variances and the working capital tied up in stock"),
     "rp07": ("Engineering",
@@ -59,7 +59,7 @@ REPORTS = {
              "headcount and its movement, recruitment, attendance, payroll status, "
              "performance and training -- as totals and by department only, naming no "
              "individual and giving no individual's pay"),
-    "rp09": ("Compliance and audit",
+    "rp09": ("Compliance and Audit",
              "licences and statutory deadlines, audit findings and corrective actions, "
              "who has access to what, and policy compliance -- saying plainly which of "
              "these the records do not yet hold"),

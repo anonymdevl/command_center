@@ -4,19 +4,19 @@ exec(_src('p4.py'))
 # ---------------- V: OPS ----------------
 # Every figure is read when the screen opens (TILE_KPIS.ops in legacy/hydrate.js); the
 # footnotes say what each counts. Nothing about any one business is written here.
-doms=[("Sales & money owed","owed to us","sales"),
- ("Buying & suppliers","owed to suppliers","proc"),
- ("Stock & warehouses","value on hand","inv"),
- ("Engineering & installs","open jobs","eng"),
+doms=[("Sales and Payments","Accounts Receivable","sales"),
+ ("Buying and Suppliers","Accounts Payable","proc"),
+ ("Stock & Warehouses","Stock Value","inv"),
+ ("Project Insights","open jobs","eng"),
  ("Customer Service &amp; Issues","open complaints and service cases","cx"),
- ("Money in & out","payments and journals","fin"),
- ("People","everyone on the books","hr"),
- ("Systems & access","active ERPNext accounts","it"),
- ("Internal Audit","open alerts to review","aud")]
+ ("Finances","Payment Entries and Journal Entries","fin"),
+ ("People","Employees","hr"),
+ ("Systems and Access","active ERPNext accounts","it"),
+ ("Internal Audit","open alerts","aud")]
 dh=""
 for name,note,key in doms:
     dh+=f'''<div class="bk" data-dept="{key}" onclick="go(&#39;{key}&#39;)">
-<div class="khead"><div class="l">{name}</div><span class="flag f-ok">Live data</span></div>
+<div class="khead"><div class="l">{name}</div><span class="flag f-ok">Live Data</span></div>
 <div class="n">—</div><div class="v">{note}</div></div>'''
 
 # The front page (16 Nov 2026, the approved mockup's B over A): the area that most needs
@@ -26,7 +26,7 @@ for name,note,key in doms:
 # figures and the open alerts are read. It moves them, never copies or rebuilds them,
 # so everything hydrate.js and core.js write into a tile stays where it is.
 V_OPS=f'''<div class="topbar"><div><h3>Business Overview</h3>
-<div class="when">Nine areas · open any one of them</div></div></div>
+<div class="when"></div></div></div>
 <div class="ov" id="ov">
 <div class="ov-front"><div class="ov-lead" id="ov-lead"></div><div class="ov-sec" id="ov-sec"></div></div>
 <div class="ov-reg"><div class="ov-rows" id="ov-rows"><div class="ov-rh" aria-hidden="true">

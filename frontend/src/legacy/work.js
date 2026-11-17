@@ -44,8 +44,8 @@ export const WORK_VIEWS = new Set(["myday", "approvals", "delegation"]);
 /** Designed tile label -> figure key in api/work.summary().figures. */
 export const WORK_TILES = {
   myday: {
-    "Awaiting you": { key: "work_awaiting" },
-    "Due today": { key: "work_due_today" },
+    "Awaiting You": { key: "work_awaiting" },
+    "Due Today": { key: "work_due_today" },
     "Delegated Tasks Done": { key: "work_to_check" },
     "Overdue Delegated Tasks": { key: "work_unkept" },
   },
@@ -218,7 +218,7 @@ function today(root, data, opts) {
 
   const promises = sects.find((s) => /^promises|^work you handed out/i.test(s.textContent.trim()));
   if (promises) {
-    promises.textContent = "Work you handed out that is past its date";
+    promises.textContent = "Overdue Delegated Tasks";
     const old = promises.nextElementSibling;
     const table = tasksTable(data.late, { empty: "Nothing you handed out is past its date.", opts });
     if (old && (old.tagName === "TABLE" || old.classList.contains("work-table"))) old.replaceWith(table);
@@ -438,7 +438,7 @@ function tasksTable(rows, { withPriority = false, selectable = false, empty: non
   const boxes = [];
   let sync = () => {};
   if (selectable) head.append(el("th", "work-pick"));
-  ["What", "Given to", "By when", "Late by", ...(withPriority ? ["Priority"] : []), ""].forEach((h) => head.append(el("th", null, h)));
+  ["What", "Given to", "By when", "Late By", ...(withPriority ? ["Priority"] : []), ""].forEach((h) => head.append(el("th", null, h)));
   const thead = el("thead");
   thead.append(head);
   const tbody = el("tbody");

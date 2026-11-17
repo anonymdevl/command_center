@@ -238,7 +238,7 @@ def po_count(r):
 def po_drafts_value(r):
     rows = _po(r, {"docstatus": 0}, ["base_grand_total"])
     return (sum(float(x.get("base_grand_total") or 0) for x in rows),
-            f"{len(rows)} purchase orders never submitted")
+            f"{len(rows)} Purchase Orders in Draft")
 
 
 def po_drafts_oldest(r):
@@ -321,7 +321,7 @@ def po_spend_top14(r):
                  limit=14, order_by="base_grand_total desc")
     total = sum(float(x.get("base_grand_total") or 0) for x in rows)
     if not rows:
-        return None, "no purchase orders submitted"
+        return None, "no Purchase Order submitted"
     by = {}
     for x in rows:
         by[x.get("supplier")] = by.get(x.get("supplier"), 0.0) + float(x.get("base_grand_total") or 0)
@@ -446,7 +446,7 @@ def batches_near_expiry(r):
             ["Open each Item that expires, tick Has Batch No and Has Expiry Date, and save.",
              "When goods arrive (Purchase Receipt), enter the Batch No and its Expiry Date "
              "on each line.",
-             "Stock already on the shelf: give it a batch with its expiry date through a "
+             "Stock already in stock: give it a batch with its expiry date through a "
              "Stock Reconciliation."], "/app/item")
     today = frappe.utils.getdate(frappe.utils.today())
     edge = frappe.utils.getdate(frappe.utils.add_days(today, EXPIRY_DAYS))
@@ -510,7 +510,7 @@ def bank_cleared_pct(r):
                                       fields=["name"], limit=500)]
     if not banks:
         from command_center.guides import needs_setup
-        return None, "no bank accounts in ERPNext", None, needs_setup(
+        return None, "no Account with Account Type Bank", None, needs_setup(
             r.code, "No Account in ERPNext has Account Type Bank.",
             ["Open Chart of Accounts and click each bank account.",
              "Set Account Type to Bank and save.",
@@ -521,8 +521,8 @@ def bank_cleared_pct(r):
         total += r.count("Payment Entry", base)
         cleared += r.count("Payment Entry", {**base, "clearance_date": ["is", "set"]})
     if not total:
-        return None, "no payments through a bank account"
-    return round(100 * cleared / total, 4), f"of {total:,} bank payments matched to a statement"
+        return None, "no Payment Entry through a Bank Account"
+    return round(100 * cleared / total, 4), f"of {total:,} bank payments have a Clearance Date"
 
 
 # --------------------------------------------------------------------------- payroll
@@ -558,23 +558,23 @@ LIVE = {k.key: k for k in (
     Live("versions_total", "Changes logged", "count", versions_total, "/app/version"),
     Live("versions_business", "Changes on business documents", "count", versions_business, "/app/version"),
     Live("versions_earliest", "Earliest change logged", "date", versions_earliest, "/app/version?order_by=creation%20asc"),
-    Live("po_count", "Purchase orders", "count", po_count, "/app/purchase-order?docstatus=1"),
+    Live("po_count", "Purchase Orders", "count", po_count, "/app/purchase-order?docstatus=1"),
     Live("po_drafts_value", "Purchase orders never submitted", "currency", po_drafts_value, "/app/purchase-order?docstatus=0"),
     Live("po_drafts_oldest", "Oldest unsubmitted purchase order", "days", po_drafts_oldest, "/app/purchase-order?docstatus=0"),
     Live("po_cancelled", "Purchase orders withdrawn", "count", po_cancelled, "/app/purchase-order?docstatus=2"),
-    Live("po_longest_wait", "Longest wait for a purchase order", "days", po_longest_wait, "/app/purchase-order?docstatus=1"),
-    Live("po_spend_top14", "Spend on the 14 largest purchase orders", "currency", po_spend_top14,
-         "/app/purchase-order?docstatus=1", subset_of="the fourteen largest submitted purchase orders"),
-    Live("po_no_due_date", "Purchase orders with no due date", "count", po_no_due_date, "/app/purchase-order?docstatus=1"),
-    Live("postings_count", "Payments and journals", "count", postings_count, "/app/payment-entry?docstatus=1"),
+    Live("po_longest_wait", "Oldest Purchase Order To Receive", "days", po_longest_wait, "/app/purchase-order?docstatus=1"),
+    Live("po_spend_top14", "Top 14 Purchase Orders, Grand Total", "currency", po_spend_top14,
+         "/app/purchase-order?docstatus=1", subset_of="the 14 largest submitted Purchase Orders"),
+    Live("po_no_due_date", "Purchase Orders with No Required By", "count", po_no_due_date, "/app/purchase-order?docstatus=1"),
+    Live("postings_count", "Payment Entries and Journal Entries", "count", postings_count, "/app/payment-entry?docstatus=1"),
     Live("tasks_costed", "Open jobs with a cost", "count", tasks_costed, "/app/task"),
     Live("cases_past_due", "Cases past their promised time", "count", cases_past_due, "/app/issue"),
     Live("cases_owing", "Open cases from customers who owe us", "count", cases_owing, "",
          source="fact_case", reads_erp=False),
-    Live("batches_near_expiry", "Batches near expiry", "count", batches_near_expiry,
+    Live("batches_near_expiry", "Batches Near Expiry", "count", batches_near_expiry,
          "/app/batch?disabled=0"),
     Live("self_approved", "Approved by whoever raised them", "count", self_approved, "/app/version"),
-    Live("bank_cleared_pct", "Bank payments matched to a statement", "percent", bank_cleared_pct,
+    Live("bank_cleared_pct", "Bank Reconciled Payments", "percent", bank_cleared_pct,
          "/app/payment-entry?docstatus=1"),
     Live("payroll_last_run", "Last pay run", "date", payroll_last_run,
          "/app/salary-slip?docstatus=1"),

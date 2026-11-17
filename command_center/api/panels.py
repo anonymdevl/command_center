@@ -355,7 +355,7 @@ def _trend(ctx, fact, date_field, amount_field, where=None):
 
 
 # --------------------------------------------------------------------------- sales
-SO_STEPS = ["Open Sales Order, click New, choose the customer and add the items.",
+SO_STEPS = ["Open Sales Order, click New, choose the Customer and add the items.",
             "Submit the order when the customer confirms it.",
             "Deliver against it (Create, Delivery Note) and invoice it (Create, Sales Invoice)."]
 
@@ -363,7 +363,7 @@ SO_STEPS = ["Open Sales Order, click New, choose the customer and add the items.
 def sales_trend(ctx):
     out = _trend(ctx, "fact_sales_order", "transaction_date", "base_grand_total",
                  lambda t: [t.src_docstatus == 1])
-    return out or _guide(ctx, "No confirmed sales order in the last twelve months.", SO_STEPS,
+    return out or _guide(ctx, "No submitted Sales Order in the last twelve months.", SO_STEPS,
                          "/app/sales-order")
 
 
@@ -383,21 +383,21 @@ _DATE_OR_NAME = ("party", "oldest_due_after_matching")
 # (column, sign, customer wording, supplier wording). sign -1 is a reason the ledger is
 # higher than the invoices.
 REASONS = (
-    ("unmatched_payments", 1, "received but never matched to invoices",
-     "paid but never matched to their bills"),
-    ("invoices_not_updated", 1, "already paid or credited against invoices that still show it unpaid",
-     "already paid or credited against bills that still show it unpaid"),
-    ("unlinked_journals", 1, "of journal entries reducing the balance, not linked to any invoice",
-     "of journal entries reducing what we owe, not linked to any bill"),
-    ("unlinked_credit_notes", 1, "of credit notes never set against the original invoice",
-     "of debit notes never set against the original bill"),
-    ("other_unlinked", 1, "paid against orders or journal entries rather than invoices",
-     "paid against purchase orders or journal entries rather than bills"),
-    ("unlinked_debits", -1, "owed on journal entries or refunds that are on no invoice, such as opening balances",
-     "owed on journal entries or refunds that are on no bill, such as opening balances"),
+    ("unmatched_payments", 1, "unreconciled customer payments",
+     "unreconciled supplier payments"),
+    ("invoices_not_updated", 1, "already allocated against invoices whose Outstanding Amount was not updated",
+     "already allocated against Purchase Invoices whose Outstanding Amount was not updated"),
+    ("unlinked_journals", 1, "of Journal Entries reducing the balance with no Reference to an invoice",
+     "of Journal Entries reducing the payable with no Reference to a Purchase Invoice"),
+    ("unlinked_credit_notes", 1, "of Credit Notes with no Return Against",
+     "of Debit Notes with no Return Against"),
+    ("other_unlinked", 1, "allocated to Sales Orders or Journal Entries, not invoices",
+     "allocated to Purchase Orders or Journal Entries, not Purchase Invoices"),
+    ("unlinked_debits", -1, "on Journal Entries or refunds with no invoice, such as opening balances",
+     "on Journal Entries or refunds with no Purchase Invoice, such as opening balances"),
 )
 PARTY_WORDS = {"Customer": ("customer", "customers", "invoices"),
-               "Supplier": ("supplier", "suppliers", "bills")}
+               "Supplier": ("supplier", "suppliers", "Purchase Invoices")}
 
 
 def _positions(ctx, party_type):
@@ -463,7 +463,7 @@ def _summary(ctx, party_type, rows) -> str:
     tot = {k: _sum(rows, k) for k in POSITION_FIELDS if k not in _DATE_OR_NAME}
     why = _why(tot, cur, party_type)
     if abs(on_docs - net) < 0.5 and not why:
-        return f"{lead}, as the open {docs} say."
+        return f"{lead}, per Invoice Outstanding."
     return (f"{lead}. The open {docs} say {cur} {_amt(on_docs)}"
             + (f" because of: {why}." if why else "."))
 
@@ -535,15 +535,15 @@ def _ledger_table(ctx, party_types, top):
         if rows:
             tables += _ledger_rows(ctx, pt, rows, top[pt])
             notes.append(_summary(ctx, pt, rows))
-    head = "Customer" if party_types == ("Customer",) else "Customer or Supplier"
+    head = "Customer" if party_types == ("Customer",) else "Party"
     out = {"kind": "table", "rows": tables, "columns": _cols(head, *LEDGER_COLUMNS),
            "empty": ("No customer has a Customer Ledger Balance." if party_types == ("Customer",)
                      else "No customer or supplier has a Ledger Balance.")}
     if notes:
         out["subtitle"] = notes[0]
         out["note"] = " ".join(notes[1:]) + (" " if len(notes) > 1 else "") + (
-            "Ageing is after the payments not yet matched are set against the oldest open "
-            "items first. Each name opens its account in ERPNext's General Ledger.")
+            "Ageing is after unreconciled payments are set against the oldest open "
+            "items. Each name opens its General Ledger.")
     return out
 
 
@@ -594,18 +594,18 @@ def sales_ageing(ctx):
     top = ranked[:10]
     if not top:
         return {"kind": "stack", "parts": [{"label": l, "value": 0, "display": "0"} for l in
-                                           ("Under 1 month", "1–2 months", "2–3 months",
-                                            "Over 3 months")],
+                                           ("0-30 Days", "31-60 Days", "61-90 Days",
+                                            "Over 90 Days")],
                 "note": "No customer has a Customer Ledger Balance."}
     b = {k: sum(r[k] for r in top) for k in ("not_due", "d0_30", "d31_60", "d61_90", "d90_plus",
                                               "undated")}
-    parts = [("Under 1 month", b["not_due"] + b["d0_30"]), ("1–2 months", b["d31_60"]),
-             ("2–3 months", b["d61_90"]), ("Over 3 months", b["d90_plus"])]
+    parts = [("0-30 Days", b["not_due"] + b["d0_30"]), ("31-60 Days", b["d31_60"]),
+             ("61-90 Days", b["d61_90"]), ("Over 90 Days", b["d90_plus"])]
     total = sum(v for _, v in parts) or 1
     inside_amt = _sum(ranked, "inside_90")
     inside_n = sum(1 for r in ranked if r["inside_90"] > 0)
     note = (f"{round(100 * b['d90_plus'] / total)}% of what the {_word(len(top))} largest owe is beyond "
-            f"three months, after payments not yet matched are set against their oldest invoices. "
+            f"three months, after unreconciled payments are set against their oldest invoices. "
             f"{ctx.cur} {_short(inside_amt)} owed by {_plural(inside_n, 'customer')} is still inside "
             f"ninety days.")
     if b["undated"] >= 0.5:
@@ -633,9 +633,9 @@ def sales_not_despatched(ctx):
             {"text": _money(r["undelivered_value"]), "num": True},
             {"text": "None of it" if pct <= 0 else f"{pct:.0f}%", "tone": "dim"},
             {"ask": f"Why is the {r['customer']} order {r['src_name']} still open?",
-             "text": "Ask why"},
+             "text": "Ask Why"},
         ]})
-    return {"kind": "table", "rows": out, "empty": "Every order taken has been despatched."}
+    return {"kind": "table", "rows": out, "empty": "No Sales Order is To Deliver."}
 
 
 # --------------------------------------------------------------------------- buying (read live)
@@ -730,7 +730,7 @@ def proc_open(ctx):
     site = ctx.site()
     rows = []
     for r in still:
-        where = ("Still to receive" if _num(r.get("per_received")) < 100 else "Still to bill")
+        where = ("To Receive" if _num(r.get("per_received")) < 100 else "To Bill")
         rows.append({"cells": [
             {"text": r["name"], "drill": {"href": f"{site}/app/purchase-order/{r['name']}"}},
             {"text": r.get("supplier") or ""},
@@ -748,7 +748,7 @@ def proc_open(ctx):
 # --------------------------------------------------------------------------- stock
 STOCK_STEPS = ["Receive goods from suppliers with a Purchase Receipt (from the Purchase "
                "Order: Create, Purchase Receipt), choosing the warehouse they go into.",
-               "Stock already on the shelf: enter it once with a Stock Reconciliation, "
+               "Stock already in stock: enter it once with a Stock Reconciliation, "
                "giving the quantity and valuation rate per warehouse."]
 
 
@@ -759,7 +759,7 @@ def inv_where(ctx):
         by[r["warehouse"]] += _num(r["stock_value"])
     ranked = [kv for kv in sorted(by.items(), key=lambda kv: -kv[1]) if kv[1] > 0]
     if not ranked:
-        return _guide(ctx, "No stock with a value is recorded in ERPNext.", STOCK_STEPS,
+        return _guide(ctx, "No stock with a Valuation Rate is recorded in ERPNext.", STOCK_STEPS,
                       "/app/stock-entry/new")
     top, rest = ranked[:6], ranked[6:]
     out = [{"label": w, "value": v, "display": _money(v), "tone": "accent",
@@ -767,7 +767,7 @@ def inv_where(ctx):
            for w, v in top]
     if rest:
         v = sum(x for _, x in rest)
-        out.append({"label": "Other locations", "value": v, "display": _money(v), "tone": "dim",
+        out.append({"label": "Other Warehouses", "value": v, "display": _money(v), "tone": "dim",
                     "note": f"{len(rest)} more"})
     return _bars(out)
 
@@ -945,7 +945,7 @@ def fin_money_in(ctx):
     if out:
         out["subtitle"] = f"Monthly, {out['period']}"
         return out
-    return _guide(ctx, "No payment received in the last twelve months is recorded in ERPNext.",
+    return _guide(ctx, "No Payment Entry (Receive) in the last 12 months.",
                   ["Record each payment received with Payment Entry (from the Sales Invoice: "
                    "Create, Payment).", "Allocate it against the invoices it pays in the "
                    "References table, then Submit."], "/app/payment-entry/new")
@@ -953,9 +953,9 @@ def fin_money_in(ctx):
 
 def fin_working_capital(ctx):
     rows = []
-    for key, label, tone in (("ar_over_90", "Owed to us, over 3 months", "crit"),
-                             ("stock_value", "Stock in warehouses", "accent"),
-                             ("order_book", "Orders taken, not despatched", "accent")):
+    for key, label, tone in (("ar_over_90", "Accounts Receivable Over 90 Days", "crit"),
+                             ("stock_value", "Stock Value", "accent"),
+                             ("order_book", "Sales Orders To Deliver", "accent")):
         f = ctx.kpi(key)
         if f.get("value") is None:
             continue
@@ -964,10 +964,10 @@ def fin_working_capital(ctx):
     if not rows:
         return {"kind": "bars", "rows": [], "empty": "Nothing is tied up.", "note": ""}
     out = _bars(rows)
-    owed = rows[0]["value"] if rows[0]["label"].startswith("Owed") else 0
-    stock = next((r["value"] for r in rows if r["label"] == "Stock in warehouses"), 0)
-    out["note"] = (f"{ctx.cur} {_short(owed)} is owed to the business for over three months, "
-                   f"against {ctx.cur} {_short(stock)} held in stock." if owed and stock else "")
+    owed = rows[0]["value"] if rows[0]["label"].startswith("Accounts Receivable") else 0
+    stock = next((r["value"] for r in rows if r["label"] == "Stock Value"), 0)
+    out["note"] = (f"{ctx.cur} {_short(owed)} Accounts Receivable over 90 days, "
+                   f"against {ctx.cur} {_short(stock)} Stock Value." if owed and stock else "")
     return out
 
 
@@ -1053,7 +1053,7 @@ def sales_funnel(ctx):
     def seen(n):
         return "Not used at all" if not n else f"{n:,} in the whole system"
     stages = [
-        {"label": "Enquiries", "count": leads, "note": seen(leads),
+        {"label": "Leads", "count": leads, "note": seen(leads),
          "drill": {"href": f"{site}/app/lead"}},
         {"label": "Opportunities", "count": opps, "note": seen(opps),
          "drill": {"href": f"{site}/app/opportunity"}},
@@ -1061,7 +1061,7 @@ def sales_funnel(ctx):
          "display": f"{ctx.cur} {_money(q_val)}".strip() if quotes else None,
          "note": f"{len(quotes):,} against {len(orders):,} orders",
          "drill": {"href": f"{site}/app/quotation?docstatus=1"}},
-        {"label": "Orders", "count": len(orders),
+        {"label": "Sales Orders", "count": len(orders),
          "display": f"{ctx.cur} {_money(o_val)}".strip() if orders else None,
          "note": "", "drill": {"fact": "fact_sales_order", "filters": {"src_docstatus": 1}}},
     ]
@@ -1356,7 +1356,7 @@ def sales_discounts(ctx):
                       "pricing_rules"], parent="Sales Invoice", limit=20000)
     if not lines and not _count(ctx, "Sales Invoice Item", {"docstatus": 1,
                                                             "price_list_rate": [">", 0]}):
-        return _guide(ctx, "No invoice line carries a price-list price, so a discount "
+        return _guide(ctx, "No invoice line carries a Price List Rate, so a discount "
                            "cannot be told from a normal price.", PRICE_STEPS,
                       "/app/item-price")
     loose = [x for x in lines if not (x.get("pricing_rules") or "").strip()
@@ -1380,10 +1380,10 @@ def sales_discounts(ctx):
     ]} for x in loose[:12]]
     total = sum(x["given"] for x in loose)
     return {"kind": "table", "rows": rows,
-            "columns": _cols("Invoice", "Customer", "Product", "List price$", "Sold at$",
-                             "#Below list", "Given away$"),
+            "columns": _cols("Invoice", "Customer", "Item", "Price List Rate$", "Rate$",
+                             "#Below Price List", "Discount Amount$"),
             "empty": "No invoice line in the last twelve months was sold below its "
-                     "price-list price outside a pricing rule.",
+                     "Price List Rate outside a pricing rule.",
             "note": (f"{_plural(len(loose), 'line')} in the last twelve months, "
                      f"{ctx.cur} {_money(total)} below list in all."
                      if loose else "")}
@@ -1396,10 +1396,10 @@ def proc_checks(ctx):
     unpaid = ctx.rows("fact_purchase_invoice", ["src_name", "supplier", "outstanding_amount",
                                                 "due_date"],
                       lambda t: [t.src_docstatus == 1, t.outstanding_amount > 0])
-    cols = _cols("Invoice", "Supplier", "Owed$", "What is missing")
+    cols = _cols("Invoice", "Supplier", "Outstanding Amount$", "What Is Missing")
     if not unpaid:
         return {"kind": "table", "rows": [], "columns": cols,
-                "empty": "Nothing is owed to suppliers."}
+                "empty": "No unpaid Purchase Invoice."}
     names = sorted({u["src_name"] for u in unpaid})
     lines, heads = [], {}
     for i in range(0, len(names), 200):
@@ -1415,7 +1415,7 @@ def proc_checks(ctx):
             gaps[x["parent"]].add("No purchase order")
         if not x.get("purchase_receipt") and not int((heads.get(x["parent"]) or {}).get(
                 "update_stock") or 0):
-            gaps[x["parent"]].add("No goods receipt")
+            gaps[x["parent"]].add("No Purchase Receipt")
     flagged = sorted([u for u in unpaid if gaps.get(u["src_name"])],
                      key=lambda u: -_num(u["outstanding_amount"]))
     site = ctx.site()
@@ -1427,9 +1427,9 @@ def proc_checks(ctx):
     ]} for u in flagged[:12]]
     held = sum(_num(u["outstanding_amount"]) for u in flagged)
     return {"kind": "table", "rows": rows, "columns": cols,
-            "empty": "Every unpaid supplier invoice rests on a purchase order and a goods receipt.",
+            "empty": "Every unpaid Purchase Invoice has a Purchase Order and a Purchase Receipt.",
             "note": (f"{_word(len(flagged)).capitalize() if len(flagged) <= 20 else f'{len(flagged):,}'} of "
-                     f"{len(unpaid):,} unpaid supplier invoices, {ctx.cur} {_money(held)} between "
+                     f"{len(unpaid):,} unpaid Purchase Invoices, {ctx.cur} {_money(held)} between "
                      f"them, should be checked before they are paid." if flagged else "")}
 
 
@@ -1440,8 +1440,8 @@ def proc_performance(ctx):
                      ["parent", "purchase_order", "received_qty", "rejected_qty"],
                      parent="Purchase Receipt", limit=50000)
     if not lines:
-        return _guide(ctx, "No goods receipt in ERPNext is linked to a purchase order, so "
-                           "nothing says when an order actually arrived.",
+        return _guide(ctx, "No Purchase Receipt in ERPNext is linked to a Purchase Order, so "
+                           "nothing says when an order arrived.",
                       ["Open the Purchase Order when the goods arrive.",
                        "Click Create, then Purchase Receipt, so the receipt carries the order.",
                        "Enter any quantity turned away in Rejected Qty, then Submit."],
@@ -1489,7 +1489,7 @@ def proc_performance(ctx):
                      "tone": "ok" if on >= 90 else "med" if on >= 70 else "crit",
                      "drill": {"href": f"{site}/app/purchase-receipt?supplier={quote(sup or '')}"}})
     out = _bars(rows)
-    out["note"] = "Each order is on time when its first goods receipt is dated on or before the date the order asked for."
+    out["note"] = "On time: first Purchase Receipt on or before Required By."
     return out
 
 
@@ -1514,13 +1514,13 @@ def proc_advances(ctx):
     # credit by the ledger, so the note says both.
     ahead = [r for r in _positions(ctx, "Supplier") if r["in_credit"] > 0]
     ahead_note = (f" On the Supplier Ledger, {ctx.cur} {_money(_sum(ahead, 'in_credit'))} of it is really "
-                  f"ahead of the bills ({_plural(len(ahead), 'supplier')} in credit); the rest "
-                  f"pays bills it was never matched to." if pays else "")
+                  f"ahead of the Purchase Invoices ({_plural(len(ahead), 'supplier')} in credit); the rest "
+                  f"pays Purchase Invoices it was never matched to." if pays else "")
     return {"kind": "table", "rows": rows,
-            "columns": _cols("Supplier", "Payment", "Paid on", "Not yet matched$"),
-            "empty": "Every payment to a supplier is matched to an invoice.",
+            "columns": _cols("Supplier", "Payment", "Posting Date", "Unallocated Amount$"),
+            "empty": "No supplier payment has an Unallocated Amount.",
             "note": (f"{ctx.cur} {_money(total)} paid to {_plural(suppliers, 'supplier')} and "
-                     f"not yet matched to an invoice.{ahead_note} Match each to its invoice with "
+                     f"unreconciled.{ahead_note} Match each to its invoice with "
                      f"Payment Reconciliation once the goods are billed." if pays else "")}
 
 
@@ -1554,10 +1554,10 @@ def inv_not_moving(ctx):
     ]} for item, qty, value, d, days in idle[:12]]
     total = sum(x[2] for x in idle)
     out = {"kind": "table", "rows": rows,
-           "columns": _cols("Product", "#Held", "Value$", "Last moved", "Idle for"),
-           "empty": "Every product holding stock has moved in the last ninety days.",
+           "columns": _cols("Item", "#Held", "Value$", "Last Moved", "Idle For"),
+           "empty": "Every item in stock has moved in the last 90 days.",
            "note": (f"{_plural(len(idle), 'product')} holding stock {'has' if len(idle) == 1 else 'have'} "
-                    f"not moved in ninety days: {ctx.cur} {_money(total)} on the shelf."
+                    f"not moved in ninety days: {ctx.cur} {_money(total)} in stock."
                     if idle else "")}
     return out
 
@@ -1565,7 +1565,7 @@ def inv_not_moving(ctx):
 EXPIRY_STEPS = ["Open each Item that expires, tick Has Batch No and Has Expiry Date, and save.",
                 "When goods arrive (Purchase Receipt), enter the Batch No and its Expiry Date "
                 "on each line.",
-                "Stock already on the shelf: give it a batch with its expiry date through a "
+                "Stock already in stock: give it a batch with its expiry date through a "
                 "Stock Reconciliation."]
 
 
@@ -1592,8 +1592,8 @@ def inv_expiry(ctx):
     ]} for d, b in soon[:12]]
     gone = sum(1 for d, _ in soon if d < 0)
     return {"kind": "table", "rows": rows,
-            "columns": _cols("Batch", "Product", "#Quantity", "Expires", "When"),
-            "empty": "No batch holding stock expires in the next ninety days.",
+            "columns": _cols("Batch", "Item", "#Quantity", "Expiry Date", "When"),
+            "empty": "No Batch in stock expires in the next 90 days.",
             "note": (f"{_plural(len(soon), 'batch', 'batches')} holding stock expire within ninety days"
                      + (f"; {gone} already {'has' if gone == 1 else 'have'}." if gone else ".")
                      if soon else "")}
@@ -1854,14 +1854,14 @@ def _ahead(ctx, party_type, rows):
 def fin_suppliers_due(ctx):
     rows = [r for r in _positions(ctx, "Supplier") if r["owed"] > 0]
     if not rows and not ctx.rows("fact_purchase_invoice", ["src_name"], lambda t: [t.src_docstatus == 1]):
-        return _guide(ctx, "No supplier invoice is recorded in ERPNext.",
+        return _guide(ctx, "No Purchase Invoice is recorded in ERPNext.",
                       ["Record each supplier's bill as a Purchase Invoice (from the Purchase "
                        "Order or Receipt: Create, Purchase Invoice).",
                        "Check its Due Date against the supplier's payment terms, then Submit."],
                       "/app/purchase-invoice/new")
     today = ctx.as_of
-    bands = [("Overdue now", "crit"), ("Due in 7 days", "high"), ("Due in 8–30 days", "med"),
-             ("Due in 31–60 days", "accent"), ("Later", "dim")]
+    bands = [("Overdue", "crit"), ("Due in 7 Days", "high"), ("Due in 8–30 Days", "med"),
+             ("Due in 31–60 Days", "accent"), ("Later", "dim")]
 
     def band(due):
         d = frappe.utils.date_diff(due, today)
@@ -1877,10 +1877,10 @@ def fin_suppliers_due(ctx):
     coming = sum(a for due, a in _ahead(ctx, "Customer", customers) if due <= edge)
     undated = _sum(rows, "undated")
     out["note"] = ((f"{ctx.cur} {_money(sums[0] + sums[1] + sums[2])} is overdue or due to suppliers "
-                    f"within thirty days on the Supplier Ledger, after payments not yet matched are set "
-                    f"against the oldest bills; customers are due to pay {ctx.cur} {_money(coming)} "
+                    f"within thirty days on the Supplier Ledger, after unreconciled payments are set "
+                    f"against the oldest Purchase Invoices; customers are due to pay {ctx.cur} {_money(coming)} "
                     f"in the same thirty days."
-                    + (f" {ctx.cur} {_money(undated)} more is owed with no bill to date it."
+                    + (f" {ctx.cur} {_money(undated)} more is owed with no Purchase Invoice to date it."
                        if undated >= 0.5 else ""))
                    if rows else "No supplier has a Supplier Ledger Balance.")
     return out
@@ -1925,7 +1925,7 @@ def fin_cash(ctx):
         ]})
     total = sum(bal.get(a["name"], 0.0) for a in accounts)
     return {"kind": "table", "rows": rows,
-            "columns": _cols("Account", "Type", "Balance$", "Last matched to a statement"),
+            "columns": _cols("Account", "Account Type", "Balance$", "Last Clearance Date"),
             "note": f"{ctx.cur} {_money(total)} across {_plural(len(accounts), 'account')}, per the General Ledger."}
 
 
@@ -2024,7 +2024,7 @@ def fin_budget(ctx):
     rows.sort(key=lambda r: -r[0])
     out = _bars([r for _, r in rows[:10]])
     over = sum(1 for u, _ in rows if u > 100)
-    out["subtitle"] = f"{label}, spending against each budget line"
+    out["subtitle"] = f"{label}, actual against each Budget line"
     out["note"] = (f"{_plural(over, 'budget line')} already over budget." if over else
                    "No budget line is over budget so far this year.")
     return out
@@ -2053,9 +2053,9 @@ def fin_tax(ctx):
         {"text": _money(moved.get(n, 0.0)), "num": True, "tone": "mut"},
     ]} for n in sorted(names, key=lambda n: bal.get(n, 0.0))[:12]]
     return {"kind": "table", "rows": rows,
-            "columns": _cols("Tax account", "Owed now$", f"Added in {first:%B}$"),
-            "note": "What each tax account says is owed. ERPNext keeps the amounts, not the "
-                    "filing dates: put each filing date in the Calendar (Event) with a reminder."}
+            "columns": _cols("Tax Account", "Balance$", f"Added in {first:%B}$"),
+            "note": "General Ledger balance of each Tax Account. Put "
+                    "filing dates in Event with a reminder."}
 
 
 def fin_profit(ctx):
@@ -2064,18 +2064,18 @@ def fin_profit(ctx):
                                                  "base_cost_amount", "has_cost"],
                      lambda t: [t.src_docstatus == 1, t.posting_date >= since])
     if not lines:
-        return _guide(ctx, "No sales invoice in the last twelve months.",
+        return _guide(ctx, "No Sales Invoice in the last 12 months.",
                       ["Invoice each delivery with Sales Invoice (from the Delivery Note: "
                        "Create, Sales Invoice) and Submit it."], "/app/sales-invoice/new")
     if not any(l["has_cost"] for l in lines):
-        return _guide(ctx, "No invoice line carries the cost of what was sold, so margin "
+        return _guide(ctx, "No Sales Invoice line has a Valuation Rate, so Gross Profit "
                            "cannot be worked out.", STOCK_STEPS + [
                            "Sell from stock (Update Stock on the invoice, or a Delivery Note) "
                            "so each line takes its cost from the stock it came out of."],
                       "/app/stock-ledger")
     by = defaultdict(lambda: [0.0, 0.0, 0.0])
     for l in lines:
-        g = by[l["item_group"] or "No item group"]
+        g = by[l["item_group"] or "No Item Group"]
         if l["has_cost"]:
             g[0] += _num(l["base_net_amount"])
             g[1] += _num(l["base_cost_amount"])
@@ -2096,7 +2096,7 @@ def fin_profit(ctx):
     out = _bars(rows)
     total = sum(v[0] + v[2] for v in by.values())
     unc = sum(v[2] for v in by.values())
-    out["subtitle"] = "By product group, last twelve months"
+    out["subtitle"] = "By Item Group, last 12 months"
     out["note"] = (f"{_pct(unc, total)}% of sales in the period carry no cost and are left out of "
                    f"the margin rather than counted as pure profit." if unc else
                    "Every line sold in the period carries its cost.")
@@ -2166,13 +2166,13 @@ def hr_appraisals(ctx):
     seen = active & _employees(ctx, "Appraisal", {"docstatus": 1, "end_date": [">=", since]})
     site = ctx.site()
     out = _bars([
-        {"label": "Appraisals completed, last 12 months", "value": done, "display": f"{done:,}",
+        {"label": "Appraisals Submitted, Last 12 Months", "value": done, "display": f"{done:,}",
          "tone": "ok", "drill": {"href": f"{site}/app/appraisal?docstatus=1"}},
-        {"label": "Appraisals started, not completed", "value": started, "display": f"{started:,}",
+        {"label": "Appraisals in Draft", "value": started, "display": f"{started:,}",
          "tone": "high", "drill": {"href": f"{site}/app/appraisal?docstatus=0"}},
-        {"label": "Active staff not appraised in 12 months", "value": len(active - seen),
+        {"label": "Active Employees Not Appraised in 12 Months", "value": len(active - seen),
          "display": f"{len(active - seen):,} of {len(active):,}", "tone": "crit"},
-        {"label": "Training events held, last 12 months", "value": events, "display": f"{events:,}",
+        {"label": "Training Events, Last 12 Months", "value": events, "display": f"{events:,}",
          "tone": "accent", "drill": {"href": f"{site}/app/training-event"}},
     ])
     out["note"] = ""
@@ -2200,7 +2200,7 @@ def when_sales(ctx):
     orders = _n(ctx, "fact_sales_order", lambda t: [t.src_docstatus == 1])
     unpaid = _n(ctx, "fact_sales_invoice", lambda t: [t.src_docstatus == 1, t.outstanding_amount > 0])
     owing = _n(ctx, "fact_party_balance", lambda t: [t.party_type == "Customer", t.owed > 0])
-    return (f"{inv:,} invoices · {orders:,} orders · {unpaid:,} still open · "
+    return (f"{inv:,} Sales Invoices · {orders:,} Sales Orders · {unpaid:,} unpaid · "
             f"{owing:,} customer{'s' if owing != 1 else ''} with a Customer Ledger Balance")
 
 
@@ -2215,8 +2215,8 @@ def when_inv(ctx):
     rows = ctx.rows("fact_stock_balance", ["warehouse", "stock_value"])
     total = sum(_num(r["stock_value"]) for r in rows)
     places = len({r["warehouse"] for r in rows})
-    return (f"{ctx.cur} {_money(total)} held · {len(rows):,} product-location records "
-            f"across {_word(places)} place{'s' if places != 1 else ''}")
+    return (f"{ctx.cur} {_money(total)} Stock Value · {len(rows):,} Bin records "
+            f"across {_word(places)} warehouse{'s' if places != 1 else ''}")
 
 
 def when_eng(ctx):
@@ -2237,7 +2237,7 @@ def when_fin(ctx):
 def when_hr(ctx):
     people = _people(ctx)
     active = sum(1 for p in people if p["is_active"])
-    return f"{len(people):,} on the books · {active:,} active · pay is never read here"
+    return f"{len(people):,} Employees · {active:,} Active · pay is never read here"
 
 
 WHEN = {"sales": when_sales, "proc": when_proc, "inv": when_inv, "eng": when_eng, "cx": when_cx,
@@ -2352,7 +2352,7 @@ def find_hr(ctx):
         text += (f" The business employs {_plural(int(eng), 'engineer')}, against "
                  f"{_plural(int(jobs), 'open job')} past the promised date.")
     return [{"title": f"{_word(len(left)).capitalize() if len(left) <= 20 else len(left)} of "
-                      f"{len(people):,} on the books have left — {_pct(len(left), len(people))}%.",
+                      f"{len(people):,} Employees have status Left — {_pct(len(left), len(people))}%.",
              "text": text, "ask": "Who has left, from which departments, and how long did they stay?"}]
 
 
@@ -2374,17 +2374,17 @@ def _owed_finding(ctx, party_type):
     credit = [r for r in rows if r["in_credit"] > 0]
     held = (f"less {cur} {_amt(_sum(credit, 'in_credit'))} that {_plural(len(credit), one)} "
             f"{'holds' if len(credit) == 1 else 'hold'} in credit, which no "
-            f"{'invoice' if party_type == 'Customer' else 'bill'} can show" if credit else "")
+            f"{'invoice' if party_type == 'Customer' else 'Purchase Invoice'} can show" if credit else "")
     reasons = "; ".join(x for x in (_why(tot, cur, party_type), held) if x)
     text = (f"The difference: {reasons}. Until the payments are matched, "
-            f"every list of {'debtors' if party_type == 'Customer' else 'bills to pay'} drawn from "
+            f"every list of {'receivables' if party_type == 'Customer' else 'Purchase Invoices to pay'} drawn from "
             f"the {docs} is wrong by that much; the figures here use the General Ledger.")
     return {"title": title.replace("  ", " "), "text": text,
-            "ask": (f"Which customers have payments not matched to invoices, and how much does "
-                    f"each really owe?" if party_type == "Customer" else
-                    f"Which suppliers have payments not matched to bills, and how much do we "
-                    f"really owe each?"),
-            "ask_label": "Show me who"}
+            "ask": (f"Which customers have unreconciled payments, and what is "
+                    f"each Customer Ledger Balance?" if party_type == "Customer" else
+                    f"Which suppliers have unreconciled payments, and what is"
+                    f" each Supplier Ledger Balance?"),
+            "ask_label": "Show Me Who"}
 
 
 def _matching_guide(ctx, party_type):
@@ -2395,10 +2395,10 @@ def _matching_guide(ctx, party_type):
     if paid < 0.5:
         return None
     text = (f"{ctx.cur} {_amt(paid)} received from customers ({_plural(n, 'payment')}) was never "
-            f"matched to invoices. Matching them in ERPNext puts the invoices right:"
+            f"reconciled. Matching them in ERPNext puts the invoices right:"
             if party_type == "Customer" else
             f"{ctx.cur} {_amt(paid)} paid to suppliers ({_plural(n, 'payment')}) was never "
-            f"matched to their bills. Matching them in ERPNext puts the bills right:")
+            f"reconciled. Matching them in ERPNext puts the Purchase Invoices right:")
     return {"guide": payment_reconciliation(ctx.code, text.strip())}
 
 
@@ -2422,29 +2422,29 @@ _with_recommendations(FINDINGS)
 
 SCREENS = {
     "sales": {
-        "How sales have moved": sales_trend,
-        "Who owes us, and how long it has been": sales_ageing,
-        "Largest balances owed": sales_largest_owed,
-        "What each customer really owes": sales_ledger,
-        "Orders taken but not despatched": sales_not_despatched,
-        "From enquiry to order": sales_funnel,
-        "Discounts and price changes outside policy": sales_discounts,
+        "Sales Order Trends": sales_trend,
+        "Accounts Receivable Ageing": sales_ageing,
+        "Largest Customer Ledger Balances": sales_largest_owed,
+        "Customer Ledger Balance vs Invoice Outstanding": sales_ledger,
+        "Sales Orders To Deliver": sales_not_despatched,
+        "Sales Funnel": sales_funnel,
+        "Discounts Outside Pricing Rules": sales_discounts,
         "Promised Orders — Cover": _cover("sales"),
     },
     "proc": {
-        "Where the money goes": proc_money,
-        "How long each supplier takes": proc_lead,
-        "Orders still open": proc_open,
-        "Checks before we pay": proc_checks,
-        "Supplier performance": proc_performance,
-        "Money paid to suppliers in advance": proc_advances,
+        "Purchase Orders by Supplier": proc_money,
+        "Supplier Lead Time": proc_lead,
+        "Open Purchase Orders": proc_open,
+        "Purchase Invoice Checks": proc_checks,
+        "Supplier Performance": proc_performance,
+        "Unreconciled Supplier Payments": proc_advances,
         "Promised Orders — Cover": _cover("proc"),
     },
     "inv": {
-        "Where the value sits": inv_where,
+        "Stock Value by Warehouse": inv_where,
         "Reserved against what is available": inv_reserved,
-        "Stock that is not moving": inv_not_moving,
-        "Expiry": inv_expiry,
+        "Stock Ageing, No Movement 90 Days": inv_not_moving,
+        "Batch Expiry": inv_expiry,
         "Promised Orders — Cover": _cover("inv"),
     },
     "eng": {
@@ -2464,20 +2464,20 @@ SCREENS = {
         "Did we actually fix it": cx_fixed,
     },
     "fin": {
-        "Money coming in": fin_money_in,
-        "Working capital tied up": fin_working_capital,
-        "What we owe suppliers": fin_suppliers_due,
-        "Receivables and payables": fin_ledger,
-        "Cash and bank position": fin_cash,
-        "Budget against actual": fin_budget,
-        "Tax and statutory deadlines": fin_tax,
-        "Profit on what we sell": fin_profit,
+        "Payments Received": fin_money_in,
+        "Working Capital Tied Up": fin_working_capital,
+        "Accounts Payable Ageing": fin_suppliers_due,
+        "Accounts Receivable and Payable": fin_ledger,
+        "Bank and Cash Balances": fin_cash,
+        "Budget Variance": fin_budget,
+        "Tax Account Balances": fin_tax,
+        "Gross Profit by Item Group": fin_profit,
     },
     "hr": {
-        "Where people work": hr_departments,
-        "Where people are": hr_where,
-        "Departments are recorded inconsistently": hr_dupe_depts,
-        "Appraisals and training": hr_appraisals,
+        "Employees by Department": hr_departments,
+        "Employees by Branch and Status": hr_where,
+        "Duplicate Departments": hr_dupe_depts,
+        "Appraisals and Training": hr_appraisals,
     },
     "aud": {
         "Decisions taken": aud_decisions,

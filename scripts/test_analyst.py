@@ -404,7 +404,7 @@ tools.TOOLS.pop("_probe")
 # with the card (806, not 888 with the drafts counted).
 from command_center.kpi.registry import load_all as _load_all
 _defs = agent._definitions(_load_all())
-check("ar_count: Unpaid invoices = count of rows in fact_sales_invoice where "
+check("ar_count: Unpaid Sales Invoices = count of rows in fact_sales_invoice where "
       "outstanding_amount > 0 and src_docstatus = 1" in _defs,
       "the definitions do not state the unpaid-invoices rule: " + _defs[:300])
 check("users_active:" in _defs and "read straight from ERPNext" in _defs,

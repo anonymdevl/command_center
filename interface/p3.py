@@ -72,7 +72,7 @@ fh="".join(f'''<div class="hh-row" data-q="{k}"><span class="hh-sq" aria-hidden=
 <div class="hh-now">&mdash;</div><span class="flag f-dim hh-status">Reading</span></div>''' for k,nm in fams)
 
 V_HEALTH=f'''<div class="topbar"><div><h3>Business Health</h3>
-<div class="when">Six questions, asked of the business every morning</div></div></div>
+<div class="when"></div></div></div>
 <div class="hh-report"><div class="hh-verdict">
 <div class="hh-gauge"><div class="hh-ring" id="hh-ring"><div class="hh-ring-n" id="hh-score">&mdash;</div></div>
 <div class="hh-cap">Overall Business Health</div><div class="hh-delta" id="hh-delta" hidden></div></div>
@@ -82,16 +82,16 @@ It measures whether the records the business runs on can be trusted this week.</
 <div class="hh-tally" id="hh-count"></div>
 <p class="hh-trend" id="hh-trend">&nbsp;</p></div></div>
 <p class="hh-assure"><span class="hh-seal" aria-hidden="true"></span>Every figure here is counted from your own ERPNext records &mdash; nothing is estimated or made up.</p></div>
-<div class="hh-findings"><div class="hh-row hh-cols" aria-hidden="true"><span></span><span>The six questions, worst first</span>
-<span>Last 8 weeks</span><span>Now</span><span></span></div>
+<div class="hh-findings"><div class="hh-row hh-cols" aria-hidden="true"><span></span><span>The Six Questions, Worst First</span>
+<span>Last 8 Weeks</span><span>Now</span><span></span></div>
 <div class="hh-list" id="hh-rows">{fh}</div>
 <p class="hh-legend" id="hh-legend">Each square is one week, the last reading that week, oldest on the left; an outlined square is a week with nothing stored yet.</p></div>
-<div class="panel loads" id="loads"><div class="loads-h"><div><h4>The data behind these figures</h4>
+<div class="panel loads" id="loads"><div class="loads-h"><div><h4>Data Loads from ERPNext</h4>
 <p id="loads-sub">When each kind of record was last read from ERPNext</p></div>
-<button type="button" class="btn pri" id="loads-refresh">Refresh now</button></div>
+<button type="button" class="btn pri" id="loads-refresh">Refresh Now</button></div>
 <div id="loads-facts"><div class="home-wait">Reading the load history…</div></div>
-<button type="button" class="lnk loads-more" id="loads-more" aria-expanded="false">Show the load history</button>
+<button type="button" class="lnk loads-more" id="loads-more" aria-expanded="false">Show Load History</button>
 <div id="loads-hist" hidden></div></div>
-<div class="sect" style="margin-top:20px"><span>What is going wrong, largest first</span></div>
+<div class="sect" style="margin-top:20px"><span>Open Alerts, Largest First</span></div>
 <div class="alert-live-list"><div class="work-empty"><b>Reading the alerts&hellip;</b></div></div>
-<div class="note" id="hh-ask" hidden><h4>What you would be asked first</h4><ul></ul></div>'''
+<div class="note" id="hh-ask" hidden><h4>What You Would Be Asked First</h4><ul></ul></div>'''

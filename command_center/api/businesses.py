@@ -126,7 +126,7 @@ def get_visible_businesses():
 
     return {
         "businesses": rows,
-        "scopes": [{"code": "__all__", "label": "All businesses"}] + [
+        "scopes": [{"code": "__all__", "label": "All Businesses"}] + [
             {"code": r["business_code"], "label": r["business_name"]} for r in rows
         ],
     }

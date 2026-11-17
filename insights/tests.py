@@ -804,8 +804,8 @@ class PlatformEndToEnd(TransactionTestCase):
             sales = c.post("/api/method/command_center.api.panels.get",
                            json.dumps({"view": "sales", "business_code": "test_medical_ltd"}),
                            content_type="application/json").json()["message"]
-            self.assertEqual(sales["panels"]["Largest balances owed"]["kind"], "bars")
-            self.assertEqual(sales["panels"]["From enquiry to order"]["kind"], "unreachable")
+            self.assertEqual(sales["panels"]["Largest Customer Ledger Balances"]["kind"], "bars")
+            self.assertEqual(sales["panels"]["Sales Funnel"]["kind"], "unreachable")
             self.assertTrue(sales["unreachable"])
             live = c.post("/api/method/command_center.api.kpi.get",
                           json.dumps({"keys": ["po_count", "order_awaiting_stock"],
@@ -975,8 +975,8 @@ class LedgerArithmetic(TransactionTestCase):
              "unlinked_credit_notes": 0, "other_unlinked": 0, "unlinked_debits": 462067.85,
              "unexplained": 0}
         text = _why(r, "XYZ", "Customer")
-        self.assertTrue(text.startswith("XYZ 700,003 received but never matched to invoices"), text)
-        self.assertIn("XYZ 462,068 owed on journal entries", text)
+        self.assertTrue(text.startswith("XYZ 700,003 unreconciled customer payments"), text)
+        self.assertIn("XYZ 462,068 on Journal Entries", text)
         self.assertNotIn("disagree", text)
         self.assertIn("disagree by XYZ 5", _why({**r, "unexplained": 5}, "XYZ", "Customer"))
 
@@ -2252,7 +2252,7 @@ class SlowIsNotDown(TransactionTestCase):
                 mock.patch("time.sleep", lambda s: None), run_as("Administrator"):
             out = panels.get("proc", self.code)
             st = reach.status(self.code)
-        self.assertEqual(out["panels"]["Orders still open"]["kind"], "unreachable",
+        self.assertEqual(out["panels"]["Open Purchase Orders"]["kind"], "unreachable",
                          "the part not answered says so, calmly")
         self.assertEqual(self._status(), "Active")
         self.assertTrue(st["reachable"], "no banner for a slow read")
@@ -2387,7 +2387,7 @@ class NoAccessIsNotFailed(TransactionTestCase):
                          lambda: live.compute(["cases_equipment_down"], code, side_by_side=False))
         st = out["cases_equipment_down"]["data_status"]
         self.assertEqual(st["state"], "no_access")
-        self.assertIn("refused the API key", st["message"])
+        self.assertIn("refused this platform's API Key", st["message"])
         # a record type with no role on the list is still named, with Role Permission
         from command_center.guides import no_access
         from command_center.connectors.base import RemotePermissionDenied
@@ -2438,7 +2438,7 @@ class KnownDownFailsFast(TransactionTestCase):
             with run_as("Administrator"):
                 out = panels.get("proc", code)
         # the purchase-order panels read ERPNext live: they say so, without waiting
-        for title in ("Where the money goes", "How long each supplier takes", "Orders still open"):
+        for title in ("Purchase Orders by Supplier", "Supplier Lead Time", "Open Purchase Orders"):
             self.assertEqual(out["panels"][title]["kind"], "unreachable", title)
 
 
@@ -8151,7 +8151,8 @@ def frappe_rows(doctype, code):
 # The inventory of Business Health before the redesign, each with where it must still be.
 HEALTH_INVENTORY = (
     ("views.json", "<h3>Business Health</h3>", "the heading, as the sidebar says it"),
-    ("views.json", "Six questions, asked of the business every morning", "the line under the heading"),
+    ("views.json", '<h3>Business Health</h3>\n<div class="when"></div>',
+     "the line under the heading (its caption removed in the 17 Nov 2026 wording review)"),
     ("views.json", 'id="hh-score"', "Control Health's figure"),
     ("views.json", 'id="hh-trend"', "Control Health's note"),
     ("views.json", 'id="hh-say"', "the sentence: what is going badly"),
@@ -8167,15 +8168,15 @@ HEALTH_INVENTORY = (
     ("views.json", ">Overview</button>", "the Overview tab"),
     ("views.json", ">Detail</button>", "the Detail tab"),
     ("views.json", 'id="loads"', "the loads panel"),
-    ("views.json", "The data behind these figures", "the loads panel's heading"),
+    ("views.json", "Data Loads from ERPNext", "the loads panel's heading"),
     ("views.json", 'id="loads-refresh"', "Refresh Now"),
     ("views.json", 'id="loads-facts"', "when each kind of record was last read"),
     ("views.json", 'id="loads-more"', "Show the load history"),
     ("views.json", 'id="loads-hist"', "the load history"),
-    ("views.json", "What is going wrong, largest first", "the alerts' heading"),
+    ("views.json", "Open Alerts, Largest First", "the alerts' heading"),
     ("views.json", 'class="alert-live-list"', "the alert list"),
     ("views.json", 'id="hh-ask"', "What you would be asked first"),
-    ("views.json", "What you would be asked first", "its heading"),
+    ("views.json", "What You Would Be Asked First", "its heading"),
     ("home.js", 'score_deliver", "Delivering what we sold", "Can we deliver what we sold?"',
      "the six questions' figures, unchanged"),
     ("home.js", "export function renderHealthTiles", "the renderer"),
@@ -8191,7 +8192,7 @@ HEALTH_INVENTORY = (
     ("home.js", 'if (score >= 80) return { key: "ok", word: "Healthy"', "the bands, as the tones"),
     ("home.js", 'if (score >= 60) return { key: "med", word: "Watch"', "the bands, as the tones"),
     ("home.js", "One stated ratio: ", "each question's ratio, stated"),
-    ("home.js", "How it is scored", "Home's gauge explains itself"),
+    ("home.js", "How It Is Scored", "Home's gauge explains itself"),
     ("core.js", "function askFirst(root, alerts)", "What you would be asked first, filled"),
     ("core.js", 'root.querySelector("#hh-ask")', "What you would be asked first, filled"),
     ("loads.js", 'panel.querySelector("#loads-facts")', "the loads panel, filled"),
@@ -8517,7 +8518,7 @@ class ExecutiveSummary(TransactionTestCase):
         first = self._memo()
         self.assertEqual([v["key"] for v in first["vitals"]],
                          ["cash_in_month", "ar_total", "ap_total", "stock_value", "control_score"])
-        self.assertEqual(self._vital(first, "ar_total")["label"], "Owed to Us")
+        self.assertEqual(self._vital(first, "ar_total")["label"], "Accounts Receivable")
         ar = self._vital(first, "ar_total")
         self.assertTrue(ar["shown"])
         self.assertEqual(ar["figure"]["value"], 150000)          # the card's own figure

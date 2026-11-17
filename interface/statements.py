@@ -24,7 +24,7 @@ def fs_block():
     return (
         '<div class="fs" id="fs" data-lead="1">'
         '<div class="fs-head"><div class="fs-title"><b>Financial Statements</b>'
-        '<span id="fs-when">From the business&#39;s own ERPNext reports</span></div>'
+        '<span id="fs-when"></span></div>'
         '<div class="fs-tools">'
         f'<div class="fs-periods" role="group" aria-label="Period">{periods}</div>'
         '<div class="fs-custom" id="fs-custom" hidden>'

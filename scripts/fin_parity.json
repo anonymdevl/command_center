@@ -9,7 +9,7 @@
    "Key Ratios",
    "Last Month",
    "Last Year",
-   "Not yet measured",
+   "Not Yet Measured",
    "Overview",
    "PDF",
    "Profit and Loss",
@@ -89,27 +89,27 @@
   "explainer_links": 3,
   "figures": [
    [
-    "Owed to us",
+    "Accounts Receivable",
     "explain('ar')"
    ],
    [
-    "Unpaid invoices",
+    "Unpaid Sales Invoices",
     "explain('ar')"
    ],
    [
-    "Last full month",
+    "Invoiced, Last Full Month",
     "explain('rev')"
    ],
    [
-    "Best month",
+    "Best Month Invoiced",
     "explain('rev')"
    ],
    [
-    "Never issued",
+    "Draft Sales Invoices",
     "explain('drafts')"
    ],
    [
-    "Bank checks",
+    "Bank Reconciled",
     "explain('bank')"
    ]
   ],
@@ -126,12 +126,12 @@
    "fs-xlsx"
   ],
   "notes": [
-   "Money the business cannot presently use: debts over three months old, stock on the shelves and orders not yet despatched.",
-   "What the Supplier Ledger says we owe suppliers, by when it falls due. What is overdue and what falls due in the next 7, 30 and 60 days, after payments not yet matched are set against the oldest bills, against the cash customers are due to pay, so a payment run can be planned rather than guessed.",
-   "The General Ledger balance on every bank and cash account. Each balance is only as good as the last time the account was checked against the bank statement, so that date is shown beside it.",
-   "Spending against the budgets set in ERPNext. Each budget line is compared with what has been posted to it this year, so a breach shows before the money is spent rather than after.",
-   "What the General Ledger says is owed on each tax account. The amount due on the next VAT, withholding or PAYE filing is the balance on its account; the filing dates themselves are not kept in ERPNext.",
-   "What each product group earns over its cost, over the last twelve months. Margin needs the cost of each item against its selling price; lines sold with no recorded cost are counted separately rather than as pure profit."
+   "Receivables over 90 days, Stock Value and Sales Orders To Deliver.",
+   "Supplier Ledger Balance by Due Date: overdue, and due in 7, 30 and 60 days, after unreconciled payments are set against the oldest Purchase Invoices, against what customers are due to pay.",
+   "General Ledger balance of every Account with Account Type Bank or Cash, with its last Bank Reconciliation.",
+   "Actual against each Budget line for this Fiscal Year.",
+   "General Ledger balance of each Account with Account Type Tax. Filing dates are not kept in ERPNext.",
+   "Gross Profit by Item Group, last 12 months. Lines with no Valuation Rate are shown separately."
   ],
   "onclicks": [
    "explain('ar')",
@@ -151,52 +151,52 @@
   ],
   "panels": [
    [
-    "Money coming in",
+    "Payments Received",
     "Monthly",
     "explain('rev')",
     "t*:Overview"
    ],
    [
-    "Working capital tied up",
+    "Working Capital Tied Up",
     "",
     "explain('workingcap')",
     "t*:Overview"
    ],
    [
-    "Receivables and payables",
-    "Customer and Supplier Ledger Balances beside Invoice Outstanding",
+    "Accounts Receivable and Payable",
+    "Party Ledger Balance vs Invoice Outstanding",
     "explain('ledger')",
     "t*:Detail"
    ],
    [
-    "What we owe suppliers",
+    "Accounts Payable Ageing",
     "",
     "",
-    "t*:Not yet measured"
+    "t*:Not Yet Measured"
    ],
    [
-    "Cash and bank position",
+    "Bank and Cash Balances",
     "",
     "",
-    "t*:Not yet measured"
+    "t*:Not Yet Measured"
    ],
    [
-    "Budget against actual",
+    "Budget Variance",
     "",
     "",
-    "t*:Not yet measured"
+    "t*:Not Yet Measured"
    ],
    [
-    "Tax and statutory deadlines",
+    "Tax Account Balances",
     "",
     "",
-    "t*:Not yet measured"
+    "t*:Not Yet Measured"
    ],
    [
-    "Profit on what we sell",
+    "Gross Profit by Item Group",
     "",
     "",
-    "t*:Not yet measured"
+    "t*:Not Yet Measured"
    ]
   ],
   "tabbars": {
@@ -210,12 +210,12 @@
    "t*": [
     "Overview",
     "Detail",
-    "Not yet measured"
+    "Not Yet Measured"
    ]
   },
   "table_heads": [
    [
-    "Customer or Supplier",
+    "Party",
     "Invoice Outstanding",
     "Party Ledger Balance",
     "Difference",
@@ -230,12 +230,12 @@
  },
  "scripts": {
   "card_kpis_fin": {
-   "Bank checks": "bank_cleared_pct",
-   "Best month": "revenue_best_month",
-   "Last full month": "revenue_last_month",
-   "Never issued": "invoices_draft",
-   "Owed to us": "ar_total",
-   "Unpaid invoices": "ar_count"
+   "Accounts Receivable": "ar_total",
+   "Bank Reconciled": "bank_cleared_pct",
+   "Best Month Invoiced": "revenue_best_month",
+   "Draft Sales Invoices": "invoices_draft",
+   "Invoiced, Last Full Month": "revenue_last_month",
+   "Unpaid Sales Invoices": "ar_count"
   },
   "statements_buttons": [
    "Excel",
@@ -252,7 +252,7 @@
    "Revenue",
    "Gross Profit",
    "Net Profit",
-   "Cash & Bank",
+   "Bank and Cash",
    "Current Ratio",
    "neg",
    "fs-total",
