@@ -65,7 +65,7 @@ for rule in R.RULES:
 ar = {"ar_over_90": fig(6777143), "ar_total": fig(9177569),
       "largest_debt": fig(737544, group="HAIRASH ENTERPRISE")}
 f = R.ar_overdue(ar, P(threshold_amount=50000))
-check(f and f["title"] == "GHS 6.78M of the GHS 9.18M owed is more than three months late",
+check(f and f["title"] == "GHS 6.78M of Accounts Receivable (GHS 9.18M) is over 90 days late",
       f"ar_overdue title: {f and f['title']!r}")
 check(f and "74%" in f["why"] and "HAIRASH ENTERPRISE" in f["why"], f"ar_overdue why: {f and f['why']!r}")
 check(f and f["drill"]["filters"] == {"ageing_bucket": "90+"}, "ar_overdue must open the 90+ invoices")
@@ -74,7 +74,7 @@ check(R.ar_overdue(ar, P(threshold_amount=6777143)) is None, "ar_overdue raised 
 
 st = {"stock_short_products": fig(491, "count"), "stock_worst_shortfall": fig(39941, "quantity", group="SYR-5ML")}
 f = R.stock_shortfall(st, P())
-check(f and "491 products" in f["title"] and "SYR-5ML, 39,941 short" in f["why"],
+check(f and "491 items" in f["title"] and "SYR-5ML, 39,941 short" in f["why"],
       f"stock_shortfall: {f}")
 check(R.stock_shortfall({**st, "stock_short_products": fig(0, "count")}, P()) is None,
       "stock_shortfall raised with nothing short")
