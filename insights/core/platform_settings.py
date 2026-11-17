@@ -189,9 +189,45 @@ def _customers_of(u) -> list:
     return [c.name for c, _ in plans.clients_for_user(u.username)]
 
 
+# --- a delegate's own customer(s) (17 Nov 2026) ---------------------------------------
+# A delegate sees and changes only the people and businesses of their own customer(s)
+# (insights/core/plans.py): people who share a customer with them, or -- for a delegate
+# on no customer -- people on no customer; businesses they may see (plans.visible_codes).
+# The administrator sees everyone and every business. Someone outside is "not there" for
+# a delegate, in the same words as someone who does not exist.
+def _actor():
+    return _users._find(local.user)
+
+
+def _client_ids(username: str) -> set:
+    from insights.core import plans
+    return {c.pk for c, _ in plans.clients_for_user(username)}
+
+
+def may_see_person(me, u) -> bool:
+    """Whether the acting administrator or delegate may see (and so change) this person."""
+    if me is None or u is None:
+        return False
+    if me.is_superuser:
+        return True
+    if u.pk == me.pk:
+        return True
+    mine, theirs = _client_ids(me.username), _client_ids(u.username)
+    return bool(mine & theirs) if mine else not theirs
+
+
+def may_see_business(me, code: str) -> bool:
+    if me is None:
+        return False
+    if me.is_superuser:
+        return True
+    from insights.core import plans
+    return plans.may_see(me.username, code)
+
+
 def _get_person(username: str):
     u = _users._find(str(username or "").strip())
-    if u is None:
+    if u is None or not may_see_person(_actor(), u):
         _say("There is no one with that email on the platform.")
     return u
 
@@ -224,9 +260,11 @@ def _truthy(v) -> bool:
 
 @frappe.whitelist()
 def people():
+    """Everyone for the administrator; for a delegate, the people of their own
+    customer(s) only (may_see_person)."""
     me = _require("people", "keys")
     rows = _User().objects.prefetch_related("groups").order_by("first_name", "last_name", "username")
-    return [_person(u, me) for u in rows]
+    return [_person(u, me) for u in rows if may_see_person(me, u)]
 
 
 @frappe.whitelist(methods=["POST"])
@@ -491,7 +529,7 @@ def _business_model():
 
 def _get_business(name: str):
     b = _business_model().objects.filter(pk=str(name or "")).first()
-    if b is None:
+    if b is None or not may_see_business(_actor(), b.business_code):
         _say("There is no connected business by that name.")
     return b
 
@@ -544,8 +582,10 @@ def _business_row(b) -> dict:
 
 @frappe.whitelist()
 def businesses():
-    _require("businesses", "keys")
-    return [_business_row(b) for b in _business_model().objects.order_by("business_name")]
+    """Every business for the administrator; a delegate's own customer's for them."""
+    me = _require("businesses", "keys")
+    return [_business_row(b) for b in _business_model().objects.order_by("business_name")
+            if may_see_business(me, b.business_code)]
 
 
 def _access(code: str) -> dict:
@@ -603,7 +643,7 @@ def add_business(business_name: str = "", site_url: str = "", api_key: str = "",
     """Connect a business: registered (install.register_business, which reads its
     company and currency), then its access checked. If its ERPNext cannot be reached
     with what was typed, nothing is kept."""
-    _require("businesses")
+    me = _require("businesses")
     name = str(business_name or "").strip()
     if not name:
         _say("Type the business's name.")
@@ -620,15 +660,30 @@ def add_business(business_name: str = "", site_url: str = "", api_key: str = "",
         _say("A business with a very similar name is connected already. Choose another name.")
 
     from command_center import install
+    from insights.compat.db import forget_scope, unscoped
     try:
-        out = install.register_business(name, url, api_key, api_secret,
-                                        erpnext_company=str(erpnext_company or "").strip() or None)
+        # As the platform: the new business is no one's yet, so a delegate's own reads
+        # would not find it while it is being registered.
+        with unscoped():
+            out = install.register_business(name, url, api_key, api_secret,
+                                            erpnext_company=str(erpnext_company or "").strip() or None)
     except Exception as e:  # noqa: BLE001 -- said in words; the half-made record is removed
         why = _plain_failure(e)
         if B.objects.filter(pk=name).exists():
-            frappe.delete_doc("Connected Business", name, force=True)
+            with unscoped():
+                frappe.delete_doc("Connected Business", name, force=True)
         frappe.db.commit()
         _say(f"{name} was not connected. {why}")
+    # A delegate's new business is their own customer's (their first, as add_person).
+    if not me.is_superuser:
+        from insights.core import plans
+        mine = plans.clients_for_user(me.username)
+        if mine:
+            code_made = B.objects.filter(pk=out["business"]).values_list("business_code", flat=True).first()
+            plans._models().ClientBusiness.objects.get_or_create(
+                business_code=code_made, defaults={"client": mine[0][0]})
+            _audit(f"put {name} on the customer {mine[0][0].name}")
+            forget_scope()
     b = _get_business(out["business"])
     _audit(f"connected {name} at {url}", b, flag=1)
     return {"business": _business_row(b), "reads_as": out.get("reads_as"),
@@ -895,10 +950,12 @@ def credentials():
     people = list(_User().objects.prefetch_related("groups"))
     names = {u.username: _name(u) for u in people}
     protected = {u.username for u in people if _protected(u) and u.pk != me.pk}
+    outside = {u.username for u in people if not may_see_person(me, u)}
     biz = dict(_business_model().objects.values_list("business_code", "business_name"))
     return [_cred_row(c, names, biz) for c in
             CommandCenterSiteCredential.objects.order_by("user", "business_code")
-            if me.is_superuser or c.user not in protected]
+            if me.is_superuser or (c.user not in protected and c.user not in outside
+                                   and may_see_business(me, c.business_code))]
 
 
 def _may_change_key(me, username: str):
@@ -910,6 +967,8 @@ def _may_change_key(me, username: str):
     u = _users._find(username)
     if u is None:
         return
+    if not may_see_person(me, u):
+        _say("There is no one with that email on the platform.")
     if u.is_superuser:
         raise PermissionError("Only the platform's administrator can change an "
                               "administrator's keys.")
@@ -927,7 +986,7 @@ def set_credential(user: str = "", business_code: str = "", api_key: str = "",
     u = _get_person(user)
     _may_change_key(me, u.username)
     b = _business_model().objects.filter(business_code=str(business_code or "")).first()
-    if b is None:
+    if b is None or not may_see_business(me, b.business_code):
         _say("Choose a connected business.")
     api_key, api_secret = str(api_key or "").strip(), str(api_secret or "").strip()
     existing = frappe.db.get_value(CRED, {"user": u.username, "business_code": b.business_code})
@@ -957,6 +1016,8 @@ def remove_credential(name: str = ""):
     if c is None:
         _say("That key has been removed already.")
     _may_change_key(me, c.user)
+    if not may_see_business(me, c.business_code):
+        _say("That key has been removed already.")
     what = f"removed the ERPNext key of {c.user} for {c.business_code}"
     _audit(what, c, flag=3)
     frappe.delete_doc(CRED, c.pk, force=True)
@@ -973,6 +1034,8 @@ def test_credential(name: str = ""):
     if c is None:
         _say("That key has been removed.")
     _may_change_key(me, c.user)
+    if not may_see_business(me, c.business_code):
+        _say("That key has been removed.")
     b = _business_model().objects.filter(business_code=c.business_code).first()
     secret = frappe.get_doc(CRED, c.pk).get_password("api_secret", raise_exception=False)
     if b is None or not b.site_url or not (c.api_key and secret):

@@ -180,6 +180,12 @@ def _answer(entry, method, user, request, cookies, stats):
             local.form_dict = _dict(_args(request))
             local.request_ip = _ip(request)
             local.cookie_manager = cookies
+            # A business named by the call must be one of this person's (businesses.
+            # require_business; the data layer limits everything else they read). Before
+            # the call runs, for every endpoint, so none can forget it.
+            if user != "Guest" and local.form_dict.get("business_code"):
+                from command_center.api.businesses import require_business
+                require_business(str(local.form_dict.get("business_code")))
             result = _call(entry["fn"], dict(local.form_dict))
             response = _render_result(result, local.response)
     except PermissionError as e:

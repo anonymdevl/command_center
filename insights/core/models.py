@@ -127,6 +127,15 @@ class _Ledger(models.QuerySet):
     def delete(self):
         raise PermissionError("The usage ledger is never deleted from.")
 
+    def settle(self, **kw) -> int:
+        """The one change the ledger allows: an event still RUNNING (written when its
+        first tokens were spent, so a worker that dies mid-job leaves them on record)
+        closed with its outcome, count and tokens -- once. A closed row stays as it is."""
+        return models.QuerySet.update(self.filter(outcome=RUNNING), **kw)
+
+
+RUNNING = "running"
+
 
 class UsageEvent(models.Model):
     """One billable event, written once and never changed: an AI analyst question, an AI
@@ -174,6 +183,23 @@ class UsageEvent(models.Model):
 
     def delete(self, *args, **kwargs):
         raise PermissionError("The usage ledger is never deleted from.")
+
+
+class PlanSnapshot(models.Model):
+    """A customer's plan, limits and rates as they stood in a month (plans.statement):
+    kept up to date while the month runs, and never changed after it ends, so editing a
+    plan or a customer's rates later never rewrites a past month's statement."""
+
+    client_id = models.IntegerField(db_index=True)
+    period = models.CharField(max_length=7)
+    plan = models.CharField(max_length=40, default="custom")
+    limits = models.TextField(default="{}")
+    rates = models.TextField(default="{}")
+    taken = models.DateTimeField()
+
+    class Meta:
+        db_table = "insights_plan_snapshot"
+        unique_together = [("client_id", "period")]
 
 
 class PlanNotice(models.Model):

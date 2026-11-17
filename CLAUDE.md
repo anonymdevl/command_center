@@ -690,3 +690,43 @@ not an app on a client's ERPNext. `insights/` is a Django project (PLATFORM.md):
   `log_error` redacts keys, tokens and configured secrets (`runtime.redact`).
 - **Keys delegates** never see or change the keys of administrators or of anyone else
   with Settings access.
+
+## Client separation (17 Nov 2026)
+
+- **One rule:** `insights/core/plans.py visible_codes(user)`. An administrator (and the
+  platform itself: Administrator, Guest) sees every business; a person on customers sees
+  those customers' businesses plus any whose ERPNext let them in (`cc_sso_business`); a
+  person on no customer sees the businesses on no customer; an unknown name sees none.
+  **Deploying this: every manager must be on their customer (Settings -> Customers ->
+  people) or they see only the businesses on no customer.**
+- **Enforced where everything passes**, so no endpoint can forget it: the web layer
+  refuses (403) a `business_code` that is not the person's before the call runs
+  (`views._answer` -> `businesses.require_business`); the data layer limits every read of
+  a table with a `business_code` column (`compat/db.py business_scope`: get_all,
+  get_value, exists, count, set_value, delete, get_doc, `qb.from_`; rows of no business --
+  "" or "__all__" -- are the person's own only), so "__all__" means all of MY businesses
+  and `connector_for` finds no one else's; documents for another customer's business are
+  refused on insert/save. Nothing is limited for anyone who sees every business, so
+  single-customer behaviour is unchanged. No raw SQL in command_center (preflight).
+- **Shared caches** file "__all__" under `businesses.scope_tag` (`__all__~<digest>` for a
+  partial view): speed's figures and panels (never warmed by the scheduler), insight
+  explanations and history, starters.
+- **Settings delegates** see and change only their own customer's people and businesses
+  (`platform_settings.may_see_person` / `may_see_business`, inside `_get_person` /
+  `_get_business`); a business a delegate adds goes on their customer.
+- **Email:** alerts and the digest go to `notify.recipients(business_code)` -- that
+  business's own managers (and administrators) -- one message each (`mail.send_each`).
+  Scheduled reports go only to managers who may see the business (`reports.may_receive`,
+  checked when saved and again when sent); Send Now is refused for 120 s after a send.
+- **Billing:** `plans.client_for` is never None for a customer user ("__all__" bills
+  their own customer); `gate` checks every customer "__all__" touches
+  (`clients_touched`). A month's terms are kept in `PlanSnapshot` while it runs and
+  priced from it after (`terms_for`); an event's ledger row is written at its first
+  tokens (outcome "running"), kept current, settled at the end (`UsageEvent.settle`,
+  running rows only), and closed as "interrupted" by the daily run if its worker died.
+- **One data horizon per business:** `www/command_center._as_of(code)` (the earliest of
+  the person's businesses for "__all__"), used by the analyst, exports and reports; boot
+  sends `as_of_by[code]` and the interface reads `asOfFor(scope)` (api/boot.js).
+- **The analyst** never reads pay, accounts, roles, the error log or the change log
+  (`tools.DENIED_DOCTYPES`, matched without regard to case); its live reads use the
+  asker's own key where linked (connector_for's acting user), else the service account.

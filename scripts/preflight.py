@@ -1495,6 +1495,46 @@ check(not _extra_get,
 check(not sorted(set(GET_ALLOWED) - set(_gets)),
       f"GET_ALLOWED names endpoints that no longer allow GET (or moved): "
       f"{sorted(set(GET_ALLOWED) - set(_gets))} -- keep the list exact")
+# Client separation (17 Nov 2026): a person uses only their own customer's businesses.
+# One rule (insights/core/plans.py visible_codes), enforced where everything passes: the
+# web layer checks any business_code a call names before it runs; the data layer limits
+# every read of a business table (get_all, get_value, exists, count, get_doc, qb.from_);
+# raw SQL would go round it, so command_center has none on business tables.
+_views_src = open(os.path.join(ROOT, "insights", "core", "views.py")).read()
+_ans = _views_src.split("def _answer")[1].split("\ndef ")[0] if "def _answer" in _views_src else ""
+check("require_business(" in _ans and '_call(entry["fn"]' in _ans
+      and _ans.index("require_business(") < _ans.index('_call(entry["fn"]'),
+      "insights/core/views.py _answer no longer checks the call's business_code before the "
+      "call runs: any manager could read and act on any customer's business")
+_db_src = open(os.path.join(ROOT, "insights", "compat", "db.py")).read()
+for _fn in ("def get_all", "def exists", "def count", "def set_value", "def delete"):
+    _body = _db_src.split(_fn)[1].split("\n    def ")[0] if _fn in _db_src else ""
+    check("scoped(model" in _body,
+          f"insights/compat/db.py {_fn[4:]} no longer limits rows to the acting person's "
+          f"businesses (scoped): another customer's records would be read")
+check("scoped(model" in open(os.path.join(ROOT, "insights", "compat", "documents.py")).read(),
+      "insights/compat/documents.py get_doc no longer limits records to the person's businesses")
+_qb_src = open(os.path.join(ROOT, "insights", "compat", "qb.py")).read()
+check("def from_" in _qb_src and "business_scope()" in _qb_src.split("def from_")[1].split("\ndef ")[0],
+      "insights/compat/qb.py from_ no longer limits a business table to the person's businesses")
+_raw = []
+for _py in sorted(_Path(ROOT).joinpath("command_center").rglob("*.py")):
+    for _n, _line in enumerate(_py.read_text().splitlines(), 1):
+        if "frappe.db.sql(" in _line and "SET SESSION" not in _line:
+            _raw.append(f"{_py.relative_to(_Path(ROOT)).as_posix()}:{_n}")
+check(not _raw, f"raw SQL in the business logic goes round the per-customer limit on every "
+      f"business table: use frappe.get_all or frappe.qb instead: {_raw[:6]}")
+_ps = open(os.path.join(ROOT, "insights", "core", "platform_settings.py")).read()
+check("def _get_business" in _ps and "def _get_person" in _ps
+      and "may_see_business(_actor(), b.business_code)" in _ps.split("def _get_business")[1].split("\ndef ")[0]
+      and "may_see_person(_actor(), u)" in _ps.split("def _get_person")[1].split("\ndef ")[0],
+      "Settings must find only the delegate's own customer's businesses and people")
+_nt = open(os.path.join(ROOT, "command_center", "alerts", "notify.py")).read()
+check("def recipients(business_code" in _nt and "recipients(business_code)" in _nt
+      and "mail.send_each(" in _nt
+      and "recipients(code)" in open(os.path.join(ROOT, "command_center", "recommend", "daily.py")).read(),
+      "alert and digest emails must go to the business's own customer's managers, one message "
+      "each (alerts/notify.py recipients(business_code), mail.send_each)")
 _sso = open(os.path.join(ROOT, "command_center", "api", "sso.py")).read()
 _appr =_sso.split("def _approved")[1].split("\ndef ")[0] if "def _approved" in _sso else ""
 check("erp_members(" in _appr and "if email not in members:" in _appr

@@ -180,11 +180,8 @@ def _may_see(business_code, run_by=None, user=None, memo=None) -> bool:
         return True
     if not business_code or business_code == ALL:
         return bool(run_by) and _clients(user, memo) == _clients(run_by, memo)
-    try:
-        owner = p.client_of_business(business_code)
-    except Exception:
-        owner = None
-    return owner is None or owner.pk in _clients(user, memo)
+    # One business: the platform's one rule (insights/core/plans.py visible_codes).
+    return p.may_see(user, business_code)
 
 
 def _first_name(user) -> str:
@@ -555,7 +552,7 @@ def _run(report_id: str, code: str, business_code: str | None, user: str):
     with _Heartbeat(name, token):
         try:
             brief = BRIEF.format(title=title, business=_business(business_code),
-                                 sections=sections, as_of=_as_of())
+                                 sections=sections, as_of=_as_of(business_code))
             # A job, not a web request: room for a report's sixteen rounds. One AI report
             # on the usage ledger, counted when it is written -- never on reopening it.
             from command_center import metering
@@ -601,15 +598,32 @@ def check_schedule(doc):
     people = _recipients(doc.recipients)
     if not people:
         frappe.throw("Say who receives it: at least one person with an account on this site.")
-    allowed = set(frappe.get_all("User", filters={"name": ["in", people], "enabled": 1,
-                                                  "user_type": "System User"}, pluck="name"))
-    strangers = [p for p in people if p not in allowed]
+    strangers = [p for p in people if not may_receive(p, doc.business_code)]
     if strangers:
-        frappe.throw("These are not people with an account on this site, so the report "
-                     f"would leave the company: {', '.join(strangers)}")
+        frappe.throw("These are not managers of this business on the platform, so the "
+                     f"report would leave the company: {', '.join(strangers)}")
     doc.recipients = "\n".join(people)
     if not doc.run_as:
         doc.run_as = frappe.session.user
+
+
+def may_receive(person: str, business_code: str | None) -> bool:
+    """A scheduled report goes only to an enabled manager (or administrator) of the
+    platform who may see its business -- its customer's own people (insights/core/
+    plans.py visible_codes). Any account used to pass (every account read as a "System
+    User"), so another customer's manager, or anyone added at all, could be sent it."""
+    from command_center.api.businesses import ALLOWED_ROLES
+    if not person or not frappe.db.get_value("User", {"name": person, "enabled": 1}, "name"):
+        return False
+    if not ALLOWED_ROLES.intersection(frappe.get_roles(person)):
+        return False
+    p = _plans()
+    if p is None or not business_code or business_code == ALL:
+        return True
+    return p.may_see(person, business_code)
+
+
+SEND_NOW_GUARD = 120  # seconds: a second Send Now of the same schedule in this time is refused
 
 
 def next_run(doc, after=None):
@@ -678,6 +692,12 @@ def send_now(code: str, business_code: str | None = None):
     name = frappe.db.get_value(SCHEDULE, {"report": code, "business_code": _local_code(business_code)})
     if not name:
         frappe.throw("Set the schedule first, so there is a list to send it to.")
+    # A double click, or a second press while the first is being written, is one send:
+    # held for SEND_NOW_GUARD seconds (cache.add is atomic across workers).
+    if not frappe.cache().lock(f"cc:report:send_now:{name}", timeout=SEND_NOW_GUARD).acquire(
+            blocking=False):
+        frappe.throw("This report is being sent already. It will arrive in a few minutes; "
+                     "press Send Now again after that only if it has not.")
     frappe.enqueue("command_center.api.reports.send_scheduled", queue="long", timeout=1500,
                    schedule=name, enqueue_after_commit=True)
     return {"queued": True}
@@ -751,7 +771,7 @@ def _write_and_send(doc, written=None):
     title, sections = REPORTS[doc.report]
     heading = _title(title)
     brief = BRIEF.format(title=title, business=_business(doc.business_code),
-                         sections=sections, as_of=_as_of())
+                         sections=sections, as_of=_as_of(doc.business_code))
     result = agent.answer(brief, doc.business_code, max_steps=REPORT_STEPS, deadline=1200,
                           deep=True)
     if not result or not result.get("answer"):
@@ -766,15 +786,21 @@ def _write_and_send(doc, written=None):
     when = frappe.utils.format_date(frappe.utils.today(), "d MMM yyyy")
     lead = (answer.split("\n\n", 1)[0] or "")[:1200]
     esc = frappe.utils.escape_html
+    # Checked again at the send: someone who has since left the business's customer, or
+    # been deactivated, is not sent it.
+    to = [p for p in _recipients(doc.recipients) if may_receive(p, doc.business_code)]
+    if not to:
+        raise RuntimeError("no one on its list is still a manager of this business on the "
+                           "platform")
     with mail.about("report", doc.business_code):
         frappe.sendmail(
-            recipients=_recipients(doc.recipients),
+            recipients=to,
             subject=f"{heading} · {business} · {when}",
             message=branding.email_html(
                 f"<p><b>{esc(heading)}</b> · {esc(business)}</p>"
                 f"<p>{esc(lead)}</p>"
                 f"<p>The full report is attached. It was written from the records as at "
-                f"{esc(_as_of())}, with the permissions of "
+                f"{esc(_as_of(doc.business_code))}, with the permissions of "
                 f"{esc(frappe.utils.get_fullname(doc.run_as))}.</p>"
                 f"<p style='color:#777'>Sent by {esc(branding.branding()['product'])} on its "
                 f"{esc(describe(doc))} schedule.</p>", doc.business_code),

@@ -1621,6 +1621,13 @@ class SettingsDelegation(TransactionTestCase):
         with run_as("boss@test.com"), self.assertRaises(MailNotConfigured):
             frappe.sendmail(recipients=["a@test.com"], subject="Weekly", message="<p>x</p>")
         self.assertTrue(ErrorLog.objects.filter(title="Email not sent: email is not set up").exists())
+        # a@test.com: a manager of the business on the platform (reports.may_receive)
+        a = get_user_model().objects.create_user("a@test.com", "a@test.com", "a-long-test-pass-4")
+        a.groups.add(Group.objects.get(name="Insights Dashboard Manager"))
+        from insights.core.models import ConnectedBusiness
+        ConnectedBusiness.objects.create(name="Test Medical Ltd", business_name="Test Medical Ltd",
+                                         business_code="test_medical_ltd", status="Active",
+                                         is_local=0, site_url="https://erp.test")
         sched = CommandCenterReportSchedule.objects.create(
             name="rs-1", report="rp01", business_code="test_medical_ltd", enabled=1,
             recipients="a@test.com", run_as="boss@test.com")
@@ -1629,7 +1636,7 @@ class SettingsDelegation(TransactionTestCase):
                 mock.patch("command_center.ask.agent.answer", lambda *a, **k: stub), \
                 mock.patch("command_center.api.export.pdf_bytes", lambda *a, **k: b"%PDF"), \
                 mock.patch("command_center.api.export._business", lambda c: "Test Medical Ltd"), \
-                mock.patch("command_center.api.export._as_of", lambda: "15 Nov 2026"):
+                mock.patch("command_center.api.export._as_of", lambda code=None: "15 Nov 2026"):
             from command_center.api import reports
             with run_as("boss@test.com"):
                 reports.send_scheduled("rs-1")
@@ -6388,7 +6395,7 @@ class ReportRuns(TransactionTestCase):
         self.stubs = [mock.patch("command_center.ask.engine.analyst_enabled", lambda: True),
                       mock.patch("command_center.ask.agent.answer", answer),
                       mock.patch("command_center.api.export._business", lambda c: "Alpha Medical Ltd"),
-                      mock.patch("command_center.api.export._as_of", lambda: "15 Nov 2026")]
+                      mock.patch("command_center.api.export._as_of", lambda code=None: "15 Nov 2026")]
         for p in self.stubs:
             p.start()
 
@@ -6460,7 +6467,9 @@ class ReportRuns(TransactionTestCase):
         self.assertTrue(slot["latest"]["finished_label"].endswith("today"))
         self.assertTrue(slot["latest"]["mine"])
         # another business's screen has no run of it
-        self.assertEqual(self._ok("ama@a.test", "latest", business_code="biz_b")["runs"], {})
+        # another customer's business is refused outright (insights/test_separation.py)
+        self.assertEqual(self._call(self.users["ama@a.test"], "latest",
+                                    business_code="biz_b").status_code, 403)
         # the same person's colleague at the same customer sees it, by name
         seen = self._ok("kofi@a.test", "latest", business_code="biz_a")["runs"]["rp01"]["latest"]
         self.assertEqual((seen["run_by_name"], seen["mine"]), ("Ama", False))
@@ -6600,15 +6609,15 @@ class ReportRuns(TransactionTestCase):
         run = self._ok("ama@a.test", "generate", code="rp01", business_code="biz_a")["job_id"]
         self._work()
         bea = self.users["bea@b.test"]
-        self.assertEqual(self._ok(bea, "latest", business_code="biz_a")["runs"], {})
+        # another customer's business is refused outright (insights/test_separation.py)
+        self.assertEqual(self._call(bea, "latest", business_code="biz_a").status_code, 403)
         self.assertEqual(self._ok(bea, "status", job_id=run), {"state": "unknown"})
         r = self._call(bea, "open_run", run=run)
         self.assertIn(r.status_code, (403, 417))
         self.assertNotIn("Sales rose", r.content.decode())
         self.assertEqual(self._ok(bea, "mine"), {"ready": [], "running": []})
-        # her own Run of the same report is her own run, not ama's
-        own = self._ok(bea, "generate", code="rp01", business_code="biz_a")
-        self.assertNotEqual(own["job_id"], run)
+        # nor may she run a report of that business
+        self.assertEqual(self._call(bea, "generate", code="rp01", business_code="biz_a").status_code, 403)
         # the administrator sees every run; a signed-out visitor nothing
         self.assertEqual(self._ok(self.admin, "status", job_id=run)["state"], "done")
         self.assertIn(self._call(Client(), "latest", business_code="biz_a").status_code, (401, 403))
@@ -8306,8 +8315,8 @@ class SetPasswordLink(TransactionTestCase):
                  for i in range(20)]
         self.assertEqual(codes[-1], 429)
         self.assertIn("Too many attempts", c.get(path).content.decode(), "the real link too, while locked")
-        from django.core.cache import cache
-        cache.clear()
+        from insights.core.models import SignInCounter
+        SignInCounter.objects.all().delete()  # the counters are rows now (views.count_failure)
         self.assertEqual(Client().get(path).status_code, 200)
 
     def test_who_may_send_follows_the_reset_password_rules(self):

@@ -40,6 +40,90 @@ def _field_names(model) -> set:
     return {f.name for f in model._meta.concrete_fields} | {f.attname for f in model._meta.concrete_fields}
 
 
+# --- whose businesses ----------------------------------------------------------------
+# Every read of a table that has a business_code column, by anyone who may not see every
+# business, is limited here to the businesses they may see -- through get_all, get_value,
+# exists, count, get_doc and frappe.qb.from_, so no endpoint, screen, report, question or
+# export can forget to (17 Nov 2026: any manager could read and act on any business).
+# The rule is insights/core/plans.py visible_codes. Rows of no business ("" or "__all__":
+# a conversation over all businesses, a report run over all of them) are the person's own
+# only. The platform itself (Administrator: the scheduler and the command line; Guest:
+# the single sign-on), an administrator, and anyone who may see every business are not
+# limited at all, so for them nothing about a query changes.
+SCOPE_FIELD = "business_code"
+NO_BUSINESS = ("", "__all__")
+
+
+def business_scope():
+    """The business codes the acting person may read (a frozenset), or None for all.
+    Worked out once per person per unit of work (a request, a job, a thread)."""
+    from insights.compat.state import local
+    if getattr(local, "cc_scope_off", False):
+        return None
+    user = getattr(local, "user", None) or "Guest"
+    memo = getattr(local, "cc_scope", None)
+    if memo is not None and memo[0] == user:
+        return memo[1]
+    scope = _work_out_scope(user)
+    local.cc_scope = (user, scope)
+    return scope
+
+
+def _work_out_scope(user):
+    from insights.core.models import ConnectedBusiness
+    from insights.core.plans import visible_codes
+    codes = visible_codes(user)
+    if codes is None:
+        return None
+    every = set(ConnectedBusiness.objects.values_list("business_code", flat=True))
+    return None if every <= codes else frozenset(codes)
+
+
+def forget_scope():
+    """The person's customers or businesses changed in this unit of work: work it out
+    again at the next read."""
+    from insights.compat.state import local
+    local.__dict__.pop("cc_scope", None)
+
+
+class unscoped:
+    """`with unscoped():` -- reads as the platform, for an administrative step that
+    has already checked who may take it (registering a business a delegate adds)."""
+
+    def __enter__(self):
+        from insights.compat.state import local
+        self.was = getattr(local, "cc_scope_off", False)
+        local.cc_scope_off = True
+        return self
+
+    def __exit__(self, *exc):
+        from insights.compat.state import local
+        local.cc_scope_off = self.was
+        return False
+
+
+def _scope_q(model):
+    """The Q that limits a model's rows to the acting person's businesses, or None."""
+    if SCOPE_FIELD not in _field_names(model):
+        return None
+    scope = business_scope()
+    if scope is None:
+        return None
+    from django.db.models import Q
+
+    from insights.compat.state import local
+    q = Q(**{f"{SCOPE_FIELD}__in": sorted(scope)})
+    if "owner" in _field_names(model):
+        q |= (Q(**{f"{SCOPE_FIELD}__isnull": True}) | Q(**{f"{SCOPE_FIELD}__in": list(NO_BUSINESS)})) \
+            & Q(owner=getattr(local, "user", None) or "Guest")
+    return q
+
+
+def scoped(model, qs):
+    q = _scope_q(model)
+    return qs if q is None else qs.filter(q)
+
+
 # --- filters -> Django Q ------------------------------------------------------
 def to_q(model, filters):
     from django.db.models import Q
@@ -235,7 +319,7 @@ class Database:
             return users.get_all(doctype, filters=filters, fields=fields, order_by=order_by,
                                  limit=limit or limit_page_length or page_length, pluck=pluck)
         model = model_for(doctype)
-        qs = model.objects.filter(to_q(model, filters))
+        qs = scoped(model, model.objects.filter(to_q(model, filters)))
         if or_filters:
             from django.db.models import Q
             oq = Q()
@@ -301,14 +385,15 @@ class Database:
             model = model_for(doctype)
         except DoesNotExistError:
             return None
-        return model.objects.filter(to_q(model, filters)).values_list("pk", flat=True).first()
+        return scoped(model, model.objects.filter(to_q(model, filters))).values_list(
+            "pk", flat=True).first()
 
     def count(self, doctype, filters=None, **kw):
         if doctype in ("User", "Has Role"):
             from insights.compat import users
             return len(users.get_all(doctype, filters=filters, fields=["name"]))
         model = model_for(doctype)
-        return model.objects.filter(to_q(model, filters)).count()
+        return scoped(model, model.objects.filter(to_q(model, filters))).count()
 
     def get_single_value(self, doctype, fieldname, cache=False):
         from django.conf import settings
@@ -337,7 +422,8 @@ class Database:
             from insights.compat.state import local
             values.setdefault("modified", now_datetime())
             values.setdefault("modified_by", local.user)
-        qs = model.objects.filter(to_q(model, name if isinstance(name, (dict, list)) else {"name": name}))
+        qs = scoped(model, model.objects.filter(
+            to_q(model, name if isinstance(name, (dict, list)) else {"name": name})))
         n = qs.update(**values) if values else 0
         self._wrote(max(1, n))
 
@@ -347,7 +433,7 @@ class Database:
 
     def delete(self, doctype, filters=None):
         model = model_for(doctype)
-        n, _ = model.objects.filter(to_q(model, filters)).delete()
+        n, _ = scoped(model, model.objects.filter(to_q(model, filters))).delete()
         self._wrote(max(1, n))
 
     def bulk_insert(self, doctype, fields, values, ignore_duplicates=False, chunk_size=1000):

@@ -167,7 +167,10 @@ def _related_keys(k) -> list:
 
 # --------------------------------------------------------------------------- history
 def _hkey(code, key) -> str:
-    return f"{code or '__all__'}::{key}"
+    # "All businesses" is the person's own all (api/businesses.scope_tag): a history kept
+    # over every business is never shown to, or written by, someone who sees only some.
+    from command_center.api.businesses import scope_tag
+    return f"{scope_tag(code)}::{key}"
 
 
 def history(code, key) -> list:

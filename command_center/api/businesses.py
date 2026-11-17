@@ -32,8 +32,8 @@ def has_app_permission() -> bool:
     return bool(ALLOWED_ROLES.intersection(frappe.get_roles()))
 
 
-def require_manager():
-    """The platform is management-only.
+def require_manager(business_code: str | None = None):
+    """The platform is management-only -- and, given a business, one of this person's own.
 
     There is no general staff view, by design and by contract. A staff member's
     window into the business is ERPNext itself.
@@ -42,6 +42,55 @@ def require_manager():
         from command_center.branding import branding
         frappe.throw(f"{branding()['product']} is available to management only.",
                      frappe.PermissionError)
+    if business_code:
+        require_business(business_code)
+
+
+# --- whose businesses (17 Nov 2026) ----------------------------------------------------
+# A person may use only the businesses of their own customer(s) (insights/core/plans.py
+# visible_codes); an administrator sees all. Enforced in three places that everything
+# passes through, so no endpoint can forget it: the web layer checks any business_code a
+# call names (insights/core/views.py, before the call runs), the data layer limits every
+# read of a business table to the person's businesses (insights/compat/db.py
+# business_scope -- "__all__" therefore means all of MY businesses), and connector_for
+# finds no business the person may not see. A plain Frappe site has no customers: every
+# manager sees every business, as before.
+NOT_YOURS = "That business is not one of yours on this platform."
+
+
+def allowed_codes():
+    """The business codes the acting person may use, or None for every one."""
+    try:
+        from insights.compat.db import business_scope
+    except ImportError:  # a plain Frappe site: no customers
+        return None
+    return business_scope()
+
+
+def may_use(business_code: str | None) -> bool:
+    if not business_code or business_code == "__all__":
+        return True
+    codes = allowed_codes()
+    return codes is None or business_code in codes
+
+
+def require_business(business_code: str | None):
+    """Refuse (403) a business that is not one of the acting person's."""
+    if not may_use(business_code):
+        frappe.throw(NOT_YOURS, frappe.PermissionError)
+
+
+def scope_tag(business_code: str | None) -> str:
+    """What to file an answer under in a shared cache. One business: its code. "All
+    businesses": "__all__" -- or, for a person who sees only some of them, "__all__~"
+    and a digest of which, so their "all" is never another person's "all"."""
+    if business_code and business_code != "__all__":
+        return business_code
+    codes = allowed_codes()
+    if codes is None:
+        return "__all__"
+    import hashlib
+    return "__all__~" + hashlib.sha1(",".join(sorted(codes)).encode()).hexdigest()[:12]
 
 
 @frappe.whitelist()
@@ -105,9 +154,10 @@ def currency_for(business_code: str | None) -> str | None:
     if business_code and business_code != "__all__":
         return frappe.db.get_value("Connected Business",
                                    {"business_code": business_code}, "currency")
-    found = {c for (c,) in frappe.db.sql(
-        """select distinct currency from `tabConnected Business`
-           where status = 'Active' and ifnull(currency, '') != ''""")}
+    # Through get_all, so "all businesses" is all of this person's (compat business_scope).
+    found = {c for c in frappe.get_all("Connected Business",
+                                       filters={"status": "Active", "currency": ["is", "set"]},
+                                       pluck="currency") if c}
     return found.pop() if len(found) == 1 else None
 
 

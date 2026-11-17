@@ -1,6 +1,6 @@
 import React from "react";
 import { api } from "../api/client.js";
-import { boot, brand, clientBrand } from "../api/boot.js";
+import { asOfFor, boot, brand, clientBrand } from "../api/boot.js";
 import { shortDate } from "../format.js";
 import { tablesFrom } from "../exportTables.js";
 import ExportButton from "./ExportButton.jsx";
@@ -24,7 +24,7 @@ export default function ViewTools({ caption, scope }) {
 
     const client = clientBrand(scope);
     const head = printHead(caption, client?.display_name || biz, client?.logo_url,
-      `Figures as at ${shortDate(boot.as_of?.date) || "—"} · printed by ${boot.user?.name || ""} on ${
+      `Figures as at ${shortDate(asOfFor(scope)?.date) || "—"} · printed by ${boot.user?.name || ""} on ${
         new Date().toLocaleString("en-GB", {
           day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
         })}`);

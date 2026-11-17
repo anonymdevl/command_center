@@ -43,7 +43,7 @@ biz = types.ModuleType("command_center.api.businesses")
 biz.require_manager = lambda: None
 sys.modules["command_center.api.businesses"] = biz
 www = types.ModuleType("command_center.www.command_center")
-www._as_of = lambda: {"date": "2025-08-19"}
+www._as_of = lambda business_code=None: {"date": "2025-08-19"}
 sys.modules["command_center.www.command_center"] = www
 
 from openpyxl import load_workbook  # noqa: E402

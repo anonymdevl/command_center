@@ -560,7 +560,7 @@ def _dates(fact: str) -> list:
 def _as_of(business_code):
     try:
         from command_center.www.command_center import _as_of as boot_as_of
-        d = boot_as_of()
+        d = boot_as_of(business_code)
         return (d or {}).get("date") if isinstance(d, dict) else d
     except Exception:
         return None

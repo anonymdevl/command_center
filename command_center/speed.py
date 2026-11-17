@@ -12,7 +12,8 @@ thread and the scheduler see) under
 
   kind      "engine" (figures from the loaded facts), "live" (figures read from the
             business's ERPNext), "panels" (a screen's charts and tables)
-  business  the business asked about, or __all__
+  business  the business asked about, or __all__ (for a person who sees only some
+            businesses, __all__~<which>: api/businesses.scope_tag)
   scope     whose eyes the business's ERPNext answered: "local" (this site's own),
             "svc" (the platform's read-only account) or "u:<person>" when that person
             has linked their own key for it -- their site's permissions decide what they
@@ -165,13 +166,19 @@ def cached(kind: str, business_code, what, fn, kwargs: dict, complete=_always):
         _count(False)
         return fn(**kwargs)
     sc = scope(info)
-    key = (f"cc:fast:{kind}:{_code(business_code)}:{sc}:{epoch(business_code)}:"
+    # "All businesses" for a person who sees only some is theirs alone (scope_tag): never
+    # an answer made over every business, nor another customer's "all".
+    from command_center.api.businesses import scope_tag
+    tag = scope_tag(business_code)
+    key = (f"cc:fast:{kind}:{tag}:{sc}:{epoch(business_code)}:"
            f"{_digest([what, info['stamp']])}")
     ver = version(business_code)
     day = frappe.utils.today()
     c = frappe.cache()
     entry = c.get_value(key)
-    if kind != "engine":
+    if kind != "engine" and "~" not in tag:
+        # Warmed by the scheduler as the platform, which sees every business: never a
+        # partial "all", which it would fill with everyone's figures.
         _remember(info["code"], kind, sc, key, fn, kwargs, complete)
     if isinstance(entry, dict) and entry.get("day") == day:
         age = time.time() - entry.get("at", 0)

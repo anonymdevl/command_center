@@ -37,7 +37,8 @@ table or a tool."""
 
 def _cache_key(code, key) -> str:
     from command_center import speed
-    return f"cc:insight:explain:{code}:{key}:{speed.version(code)}"
+    from command_center.api.businesses import scope_tag
+    return f"cc:insight:explain:{scope_tag(code)}:{key}:{speed.version(code)}"
 
 
 def explain(key: str, business_code: str | None = None) -> dict:
