@@ -95,7 +95,7 @@ export const CARD_KPIS = {
     "Batches Near Expiry": "batches_near_expiry",
     // Stock in warehouses marked Transit or switched off (kpi/live_departments.py); the
     // guide when no warehouse is marked either way.
-    "Off warehouse": "stock_off_warehouse",
+    "Transit or Disabled Warehouses": "stock_off_warehouse",
   },
   eng: {
     // What customers waiting on late jobs owe us -- the money the work is holding up.

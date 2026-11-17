@@ -71,9 +71,9 @@ def ar_overdue(f, p):
     top = f["largest_debt"]
     share = (late["value"] / whole["value"] * 100) if whole.get("value") else 0
     return _finding(
-        f"{money(late)} of the {money(whole)} owed is more than three months late",
-        f"{share:.0f}% of the Customer Ledger Balance, after payments not yet matched "
-        f"are set against the oldest invoices. The largest single debtor is "
+        f"{money(late)} of Accounts Receivable ({money(whole)}) is over 90 days late",
+        f"{share:.0f}% of the Customer Ledger Balance, after unreconciled payments "
+        f"are set against the oldest Sales Invoices. The largest single debtor is "
         f"{(top.get('group') or {}).get('label') or 'unknown'}, at {money(top)}.",
         "Pick the three largest and agree payment dates this week.",
         late, "Finance")
@@ -86,9 +86,8 @@ def ar_unmatched(f, p):
     if (paid.get("value") or 0) <= _t(p, 'threshold_amount'):
         return None
     return _finding(
-        f"{money(paid)} received from customers ({_n(n):,} payments) was never matched "
-        f"to invoices",
-        f"Until it is, ERPNext's invoices show these customers owing money they have "
+        f"{money(paid)} of customer payments ({_n(n):,} Payment Entries) is unreconciled",
+        f"Until it is reconciled, the Sales Invoices show these customers owing money they have "
         f"paid: Sales Invoice Outstanding is {money(f['ar_open_invoices'])}, the Customer Ledger Balance "
         f"{money(f['ar_total'])}. Every list of debtors and every reminder drawn from the "
         f"invoices is wrong by that much.",
@@ -101,10 +100,9 @@ def ap_unmatched(f, p):
     if (paid.get("value") or 0) <= _t(p, 'threshold_amount'):
         return None
     return _finding(
-        f"{money(paid)} paid to suppliers ({_n(n):,} payments) was never matched to "
-        f"their bills",
-        f"Until it is, the bills show {money(f['ap_open_invoices'])} still to pay where the "
-        f"ledger says {money(f['ap_total'])}, and a payment run drawn from the bills would "
+        f"{money(paid)} of supplier payments ({_n(n):,} Payment Entries) is unreconciled",
+        f"Until it is reconciled, Purchase Invoice Outstanding is {money(f['ap_open_invoices'])} where the "
+        f"Supplier Ledger Balance is {money(f['ap_total'])}, and a payment run drawn from the Purchase Invoices would "
         f"pay some of them twice.",
         "Match them in ERPNext: Accounts, Payment Reconciliation, one supplier at a time.",
         paid, "Finance")
@@ -116,10 +114,10 @@ def stock_shortfall(f, p):
         return None
     worst = f["stock_worst_shortfall"]
     return _finding(
-        f"We have promised customers stock we do not physically have, across "
-        f"{_n(short):,} products",
+        f"Reserved Qty is above Actual Qty on "
+        f"{_n(short):,} items",
         f"Any of those orders can fail the moment the warehouse goes to pick it. The "
-        f"worst is {(worst.get('group') or {}).get('label') or 'one product'}, "
+        f"worst is {(worst.get('group') or {}).get('label') or 'one item'}, "
         f"{(worst.get('value') or 0):,.0f} short.",
         "Freeze new commitments on the worst lines until a count is done.",
         short, "Stock Manager", unit="products")
@@ -130,7 +128,7 @@ def orders_late(f, p):
     if _n(n) <= _t(p, 'threshold_count') or (value.get("value") or 0) <= _t(p, 'threshold_amount'):
         return None
     return _finding(
-        f"{_n(n):,} orders worth {money(value)} are past the delivery date we promised",
+        f"{_n(n):,} Sales Orders worth {money(value)} are past their Delivery Date",
         "Every day past the promise is a customer deciding whether to order again.",
         "Call the customers before they call you, and agree new dates.",
         value, "Sales")
@@ -141,7 +139,7 @@ def delivered_unbilled(f, p):
     if (value.get("value") or 0) <= _t(p, 'threshold_amount') or _n(n) <= _t(p, 'threshold_count'):
         return None
     return _finding(
-        f"{_n(n):,} orders were delivered but not invoiced, worth {money(value)}",
+        f"{_n(n):,} Sales Orders are To Bill: delivered, not invoiced, worth {money(value)}",
         "Goods that have left and are not billed are not owed to us, so nobody is "
         "chasing them.",
         "Raise the invoices, or say why each is not to be billed.",
@@ -168,9 +166,9 @@ def invoices_draft(f, p):
     if _n(n) <= _t(p, 'threshold_count'):
         return None
     return _finding(
-        f"{_n(n):,} invoices were written but never issued, worth {money(value)}",
+        f"{_n(n):,} Draft Sales Invoices, worth {money(value)}",
         "A draft is in nobody's figures: not owed, not revenue, not chased.",
-        "Issue them or cancel them.",
+        "Submit them or delete them.",
         value, "Finance")
 
 
@@ -179,12 +177,32 @@ def ap_overdue(f, p):
     if (late.get("value") or 0) <= _t(p, 'threshold_amount'):
         return None
     return _finding(
-        f"{money(late)} we owe suppliers is more than three months overdue",
+        f"{money(late)} of Accounts Payable is over 90 days overdue",
         f"Of {money(f['ap_total'])} on the Supplier Ledger in all, after payments "
-        f"not yet matched are set against the oldest bills. Suppliers this far "
+        f"that are unreconciled are set against the oldest Purchase Invoices. Suppliers this far "
         f"behind start holding deliveries.",
         "Agree a payment plan with the largest before supply is held.",
         late, "Finance")
+
+
+# What each alert is called on screen (17 Nov 2026), in ERPNext's words. The rule id is
+# the stored key -- on every Alert record and on each rule's thresholds and on/off
+# setting (Command Center Alert Rule), and in recommendations' twin_alert -- so it is
+# never renamed; only this label is.
+LABELS = {
+    "Overdue receivables": "Accounts Receivable Over 90 Days",
+    "Stock promised but not there": "Reserved Qty Above Actual Qty",
+    "Orders past their promised date": "Sales Orders Past Delivery Date",
+    "Delivered but not invoiced": "Sales Orders To Bill",
+    "Invoices never issued": "Draft Sales Invoices",
+    "Overdue supplier invoices": "Accounts Payable Over 90 Days",
+    "Customer payments not matched": "Unreconciled Customer Payments",
+    "Supplier payments not matched": "Unreconciled Supplier Payments",
+}
+
+
+def label(rule_id: str) -> str:
+    return LABELS.get(rule_id, rule_id)
 
 
 RULES = (

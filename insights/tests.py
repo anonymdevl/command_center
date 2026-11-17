@@ -5449,14 +5449,14 @@ class OrderCover(TransactionTestCase):
     def test_screens_figure_and_more_rows(self):
         for view in ("sales", "inv", "proc"):
             got = self.ok("command_center.api.panels.get", view=view)
-            p = got["panels"]["Promised Orders — Cover"]
+            p = got["panels"]["Sales Orders To Deliver — Stock and Purchase Orders"]
             self.assertEqual(p["kind"], "cover", view)
             self.assertEqual(p["summary"]["lines"], 6)
             self.assertEqual(len(p["rows"]), 6)
             self.assertEqual(p["rows"][0]["state"], "not_ordered", "most in need first")
             self.assertNotIn("guide", p, "one line is linked: nothing to teach")
             self.assertIn("is not ordered", p["note"])
-        self.assertEqual(got["panels"]["Promised Orders — Cover"]["default"], "needs")
+        self.assertEqual(got["panels"]["Sales Orders To Deliver — Stock and Purchase Orders"]["default"], "needs")
         fig = self.ok("command_center.api.kpi.get", keys=["order_book", "order_book_late"])
         self.assertEqual(fig["order_book"]["explained_by"], "order_cover")
         self.assertEqual(fig["order_book_late"]["explained_by"], "order_cover_late")
@@ -5479,7 +5479,7 @@ class OrderCover(TransactionTestCase):
         self.fake.cover = rows
         from django.core.cache import cache
         cache.clear()
-        p = self.ok("command_center.api.panels.get", view="sales")["panels"]["Promised Orders — Cover"]
+        p = self.ok("command_center.api.panels.get", view="sales")["panels"]["Sales Orders To Deliver — Stock and Purchase Orders"]
         self.assertIn("guide", p)
         self.assertIn("Create, then Purchase Order", " ".join(p["guide"]["steps"]))
         self.assertTrue(p["guide"]["href"].startswith("https://erp.test/app/sales-order"))
@@ -5493,7 +5493,7 @@ class OrderCover(TransactionTestCase):
         cache.clear()
         self.fake.down = True
         got = self.ok("command_center.api.panels.get", view="inv")
-        self.assertEqual(got["panels"]["Promised Orders — Cover"], {"kind": "unreachable"})
+        self.assertEqual(got["panels"]["Sales Orders To Deliver — Stock and Purchase Orders"], {"kind": "unreachable"})
         self.assertTrue(got.get("unreachable"))
         self.assertEqual(self.ok("command_center.api.coverage.summary"), {"kind": "unreachable"})
         self.assertEqual(self.ok("command_center.api.coverage.lines"), {"kind": "unreachable"})
