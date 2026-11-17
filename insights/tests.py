@@ -947,6 +947,28 @@ class LedgerArithmetic(TransactionTestCase):
         self.assertEqual((pos["ledger_balance"], pos["invoices_not_updated"], pos["unexplained"]),
                          (0, 0, 100))
 
+    def test_a_party_type_with_no_party_does_not_stop_the_load(self):
+        """GMS ACC-PAY-2025-01068: an Internal Transfer saved with party type Customer and
+        no customer. Its row reached the party balances as ("Customer", None), and sorting
+        None against a name failed every load from 17 Nov 2026 ("load failed")."""
+        from unittest import mock
+
+        from command_center.ingest import ledger
+        keys = ledger.party_keys({("Customer", "B"): 1, ("Customer", None): 2},
+                                 {(None, None): 3, ("Supplier", "A"): 4, (None, "C"): 5})
+        self.assertEqual(keys, [("Customer", "B"), ("Supplier", "A")])
+
+        gl = {("Customer", "B"): {"Sales Invoice": (100, 0)}}
+        allocations = {("Customer", None): {("Internal Transfer", None): 0.0},
+                       ("Customer", "B"): {}}
+        conn = mock.Mock(code="t")
+        with mock.patch.object(ledger, "changed_at", return_value=None), \
+                mock.patch.object(ledger, "read_ledger", return_value=(gl, {}, {})), \
+                mock.patch.object(ledger, "_invoices", return_value={}), \
+                mock.patch.object(ledger, "_allocations", return_value=allocations):
+            rows = ledger.PartyBalanceIngestor().extract(conn, as_of=self.AS_OF)
+        self.assertEqual([(r["party_type"], r["party"]) for r in rows], [("Customer", "B")])
+
     def test_panels_say_why(self):
         from command_center.api.panels import _why
         r = {"unmatched_payments": 700003, "invoices_not_updated": 496719, "unlinked_journals": 0,

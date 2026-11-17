@@ -265,12 +265,9 @@ class PartyBalanceIngestor(Ingestor):
         gl, unallocated, journals = read_ledger(conn)
         invoices = _invoices(conn.code)
         allocations = _allocations(conn.code)
-        parties = set(gl) | set(invoices) | set(unallocated) | set(journals) | set(allocations)
         rows = []
-        for key in sorted(parties):
+        for key in party_keys(gl, invoices, unallocated, journals, allocations):
             party_type, party = key
-            if not party:
-                continue
             pos = position(party_type, gl.get(key, {}), invoices.get(key, []),
                            allocations.get(key, {}), unallocated.get(key, []),
                            journals.get(key, []))
@@ -280,6 +277,22 @@ class PartyBalanceIngestor(Ingestor):
             row["src_modified"] = mark
             rows.append(row)
         return rows[:limit] if limit else rows
+
+
+def party_keys(*maps) -> list:
+    """The (party_type, party) keys of the maps that name a party, in order.
+
+    A document can carry a party type and no party: GMS ACC-PAY-2025-01068 is an Internal
+    Transfer saved with party type Customer and no customer. Since the payments' rows
+    include one for a payment matched to nothing (17 Nov 2026) it reached this load as
+    ("Customer", None), and sorting None against a name failed every load of the party
+    balances, so every figure on them said "load failed". A key with no party, or no
+    party type, belongs to no customer or supplier and is left out before anything is
+    compared."""
+    keys = set()
+    for m in maps:
+        keys.update(k for k in m if isinstance(k, tuple) and len(k) == 2 and k[0] and k[1])
+    return sorted(keys, key=lambda k: (str(k[0]), str(k[1])))
 
 
 def changed_at(conn):
