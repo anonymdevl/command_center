@@ -228,7 +228,13 @@ class Speed(TransactionTestCase):
 
         self.fake.latency = 0.02
         keys = sorted(live.LIVE)
+        from command_center.recommend import engine
         for code in (A, B):
+            # The finding boxes lead with the business's recommendations. Worked out first,
+            # so both readings below see the same stored ones: otherwise a refresh that falls
+            # inside the first (side-by-side) reading -- likelier on a busy machine -- makes
+            # the two differ for a reason that has nothing to do with reading side by side.
+            engine.ensure_fresh(code, force=True)
             with run_as("one@test.com"):
                 side = {v: panels.compute(v, code) for v in panels.SCREENS}
                 figs = live.compute(keys, code)
