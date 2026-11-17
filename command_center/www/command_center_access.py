@@ -45,6 +45,15 @@ REASONS = {
                          "Please contact your administrator.", False),
     "not_allowed": ("This account can't sign in this way",
                     "Please use the platform's own sign-in page.", False),
+    "own_account": ("This account can't sign in this way",
+                    "An account with your email already exists on the platform and wasn't "
+                    "set up through {business}'s ERPNext, so it doesn't open from there. "
+                    "Please use the platform's own sign-in page, or contact your "
+                    "administrator.", False),
+    "no_seat": ("There's no seat free for you yet",
+                "Your organisation has used all of the user seats on its plan. Please ask "
+                "your administrator to free or add a seat, then open the platform again "
+                "from ERPNext.", False),
     "failed": ("Something went wrong",
                "The sign-in couldn't be completed. Please try again; if it keeps "
                "happening, contact your administrator.", True),
@@ -78,5 +87,6 @@ def get_context(context):
     context.sentence = text[:1].upper() + text[1:]
     context.retry_url = retry_url
     context.erp_url = erp_url
-    context.own_sign_in = why in ("not_allowed", "not_setup", "unknown_business") or not erp_url
+    context.own_sign_in = why in ("not_allowed", "own_account", "not_setup",
+                                  "unknown_business") or not erp_url
     return context

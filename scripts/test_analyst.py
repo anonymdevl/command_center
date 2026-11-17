@@ -286,7 +286,12 @@ class _R:
         return self._b
 
 
-def _post(url, params=None, json=None, timeout=None):
+KEY_SENT = []
+
+
+def _post(url, params=None, headers=None, json=None, timeout=None):
+    # The key travels as Google's header, never in the address (17 Nov 2026).
+    KEY_SENT.append(((params or {}).get("key"), (headers or {}).get("x-goog-api-key"), url))
     posted.append(url.split("/models/")[1].split(":")[0])
     if "gemini-3.8-flash:" in url:
         return _R(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": "OK"}]}}]})
@@ -298,6 +303,9 @@ _cache.d.clear()
 frappe.conf.pop("command_center_analyst_model", None)
 gemini.PREFERRED["analyst"] = "gemini-2.5-flash"
 content, err = REAL_CHAT([{"role": "user", "parts": [{"text": "hi"}]}], None, "S")
+check(KEY_SENT and all(k is None and h == frappe.conf["command_center_gemini_key"]
+                       and "key=" not in u for k, h, u in KEY_SENT),
+      f"the Gemini key is sent as the x-goog-api-key header, never in the URL: {KEY_SENT[:2]}")
 check(err is None and posted == ["gemini-2.5-flash", "gemini-3.8-flash"],
       f"404 -> re-choose -> retry once: {posted}, {err}")
 check(gemini.analyst_model() == "gemini-3.8-flash", "the working model is remembered")
@@ -325,7 +333,7 @@ class _Q(_R):
         self.status_code, self._b, self.text = 429, {}, QUOTA
 
 
-def _post_q(url, params=None, json=None, timeout=None):
+def _post_q(url, params=None, headers=None, json=None, timeout=None):
     posted.append(url.split("/models/")[1].split(":")[0])
     if "gemini-3.8-flash-lite:" in url:
         return _R(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": "OK"}]}}]})
@@ -408,7 +416,7 @@ print("definitions:", len(_defs), "characters,", _defs.count("\n") + 1, "figures
 sent = []
 
 
-def _post2(url, params=None, json=None, timeout=None):
+def _post2(url, params=None, headers=None, json=None, timeout=None):
     import copy
     sent.append(copy.deepcopy(json["generationConfig"]))
     if "thinkingConfig" in json["generationConfig"]:
@@ -486,7 +494,7 @@ gemini.PREFERRED["analyst"] = "gemini-3.8-flash"
 asked, said = [], []
 
 
-def _post_stall(url, params=None, json=None, timeout=None):
+def _post_stall(url, params=None, headers=None, json=None, timeout=None):
     model = url.split("/models/")[1].split(":")[0]
     asked.append((model, timeout))
     if model == "gemini-3.8-flash":

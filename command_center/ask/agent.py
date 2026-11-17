@@ -420,7 +420,9 @@ class _statement_limit:
 
     def __enter__(self):
         try:
-            if getattr(frappe.db, "db_type", "mariadb") == "mariadb":
+            # Only where the database has it: insights.compat says "mariadb" on MySQL/
+            # MariaDB and its own vendor otherwise; an unknown layer gets no limit.
+            if getattr(frappe.db, "db_type", None) == "mariadb":
                 frappe.db.sql("SET SESSION max_statement_time = %s", (self.seconds,))
                 self.on = True
         except Exception:

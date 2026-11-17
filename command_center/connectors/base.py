@@ -58,6 +58,26 @@ class BusinessSlow(BusinessUnreachable):
     the next screen asks again as usual (16 Nov 2026)."""
 
 
+class WriteUnconfirmed(BusinessUnreachable):
+    """A write was sent and the business's ERPNext did not confirm it in time (no answer
+    within WRITE_TIMEOUT, or its proxy gave up: 502/504). It may have gone through: a
+    v14 submit of a large document can outlast the wait and still commit.
+
+    So this is NOT a failure to report as "it did not happen", and the action must not
+    be retried blindly -- a second insert is a second document, a second assignment a
+    second To-Do. Say what the message says (check in ERPNext before trying again), and
+    where a caller can, look for the record it was making before making another
+    (api/actions.py, the task flows: a To-Do with the same reference and owner).
+
+    A kind of BusinessUnreachable so every existing handler still catches it; callers
+    that can do better catch this first. The business is not marked Unreachable when it
+    answers the quick check straight after (RemoteConnector._gave_up)."""
+
+    def __init__(self, message: str = "", method: str | None = None):
+        super().__init__(message)
+        self.method = method
+
+
 class CredentialRequired(ConnectorError):
     """The acting person has no account of their own on the target site.
 

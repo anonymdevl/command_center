@@ -161,7 +161,33 @@ class _Writes(threading.local):
 _writes = _Writes()
 
 
+# Statements that never change a row. A statement that returns no result set used to
+# count as a write whatever it was, so the analyst's `SET SESSION max_statement_time`
+# (ask/agent.py, MariaDB only) counted as two writes and every question with a lookup
+# was rolled back as "a database write happened while answering" (17 Nov 2026).
+_READS = ("SELECT", "SHOW", "SET", "DESCRIBE", "DESC", "EXPLAIN")
+
+
+def is_write(sql: str) -> bool:
+    """Whether a statement may change data: anything but a read or a session setting.
+    A WITH ... starts a read or a write; it is a write unless what follows is a SELECT."""
+    text = re.sub(r"^(\s|/\*.*?\*/|--[^\n]*\n)+", "", str(sql or ""), flags=re.S)
+    word = (re.match(r"\(*\s*(\w+)", text) or [None, ""])[1].upper()
+    if word == "WITH":
+        return not re.search(r"\)\s*SELECT\b", text, re.I) or bool(
+            re.search(r"\b(INSERT|UPDATE|DELETE|REPLACE)\b", text, re.I))
+    return word not in _READS
+
+
 class Database:
+    @property
+    def db_type(self) -> str:
+        """Frappe's name for the database: "mariadb" on MySQL/MariaDB, else Django's
+        vendor ("sqlite", "postgresql"). The analyst's statement limit is MariaDB's own
+        (max_statement_time) and is set only where it exists."""
+        from django.db import connection
+        return "mariadb" if connection.vendor == "mysql" else connection.vendor
+
     @property
     def transaction_writes(self) -> int:
         return _writes.n
@@ -361,7 +387,8 @@ class Database:
         with connection.cursor() as cur:
             cur.execute(text, values or None)
             if cur.description is None:
-                self._wrote()
+                if is_write(text):
+                    self._wrote()
                 return []
             cols = [c[0] for c in cur.description]
             rows = cur.fetchall()

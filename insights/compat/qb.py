@@ -31,8 +31,9 @@ def _run(self, as_dict=False, pluck=None, debug=False, **kw):
     with connection.cursor() as cur:
         cur.execute(sql)
         if cur.description is None:
-            from insights.compat.db import db
-            db._wrote()
+            from insights.compat.db import db, is_write
+            if is_write(sql):
+                db._wrote()
             return []
         cols = [c[0] for c in cur.description]
         rows = cur.fetchall()

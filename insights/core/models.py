@@ -247,6 +247,22 @@ class SecurityEvent(models.Model):
         raise PermissionError("The security record is never deleted from.")
 
 
+class SignInCounter(models.Model):
+    """Failed sign-in counts for the lockouts (insights/core/views.py login_failed): one
+    row per counter (an account from an address, an address, an account), raised by a
+    single UPDATE ... SET n = n + 1, so the eight web threads failing at once each count
+    -- the cache's read-then-write lost attempts under load (17 Nov 2026). A row past
+    `expires` counts as nothing and is started again; maintenance prunes old ones. On
+    "aux", so a rolled-back request still counts its attempt."""
+
+    key = models.CharField(max_length=255, unique=True)
+    n = models.IntegerField(default=0)
+    expires = models.DateTimeField(db_index=True)
+
+    class Meta:
+        db_table = "insights_sign_in_counter"
+
+
 class _EmailLogQS(models.QuerySet):
     def update(self, **kw):
         raise PermissionError("The email log is never edited: a resend is a new entry.")

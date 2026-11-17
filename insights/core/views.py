@@ -31,6 +31,7 @@ from django.http import (FileResponse, Http404, HttpResponse, HttpResponseRedire
 from django.views.decorators.http import require_http_methods
 
 import frappe  # insights.compat
+from command_center.connectors.base import WriteUnconfirmed
 from insights.compat import WHITELIST, run_as
 from insights.core import timing
 from insights.compat.state import (AuthenticationError, DoesNotExistError, FrappeError,
@@ -189,6 +190,11 @@ def _answer(entry, method, user, request, cookies, stats):
         return _error(e, 404)
     except (ValidationError, FrappeError) as e:
         return _error(e, getattr(e, "http_status_code", 417))
+    except WriteUnconfirmed as e:
+        # A write the business's ERPNext did not confirm in time: it may have gone
+        # through. Said as it is (504, exc_type "WriteUnconfirmed"), never as the general
+        # failure -- that would invite pressing again and doing it twice.
+        return _error(e, 504)
     except Exception as e:  # noqa: BLE001 -- a raw traceback must never reach a screen
         frappe.log_error(title=f"API {method}", message=frappe.get_traceback())
         return _error(Exception("Something went wrong on the platform. It has been "
@@ -229,21 +235,61 @@ def _fail_keys(request, usr: str) -> tuple:
     return (f"login-fail:{usr}:{ip}", f"login-fail-ip:{ip}", f"login-fail-acct:{usr}")
 
 
+# The counters are rows of core.SignInCounter, each raised by one atomic UPDATE. They
+# were cache values read and then written back, and the web server runs eight threads:
+# two failures at once each read 4 and wrote 5, so a burst of guesses counted as fewer
+# than it was and the lockout came late (17 Nov 2026).
+def _counter():
+    from insights.core.models import SignInCounter
+    return SignInCounter
+
+
+def _now():
+    return datetime.datetime.now()
+
+
+def fail_count(key: str) -> int:
+    """How many failures a counter holds now (0 once its window has passed)."""
+    row = _counter().objects.filter(key=key[:255], expires__gt=_now()).values_list("n", flat=True).first()
+    return int(row or 0)
+
+
+def count_failure(key: str, minutes: int = LOCK_MINUTES) -> None:
+    """One more failure, atomically: a counter whose window has passed starts again at
+    0 (conditionally, so two threads cannot both restart it), then n = n + 1 in the
+    database; a counter not there yet is made, and if another thread made it first,
+    raised instead."""
+    from django.db import IntegrityError, transaction
+    from django.db.models import F
+    C, key = _counter(), key[:255]
+    now = _now()
+    until = now + datetime.timedelta(minutes=minutes)
+    C.objects.filter(key=key, expires__lte=now).update(n=0, expires=until)
+    if C.objects.filter(key=key).update(n=F("n") + 1, expires=until):
+        return
+    try:
+        with transaction.atomic(using="aux"):
+            C.objects.create(key=key, n=1, expires=until)
+    except IntegrityError:
+        C.objects.filter(key=key).update(n=F("n") + 1, expires=until)
+
+
+def clear_failures(*keys: str) -> None:
+    _counter().objects.filter(key__in=[k[:255] for k in keys]).delete()
+
+
 def login_locked(request, usr: str) -> bool:
-    from django.core.cache import cache
-    pair, ip, acct = (cache.get(k) or 0 for k in _fail_keys(request, usr))
+    pair, ip, acct = (fail_count(k) for k in _fail_keys(request, usr))
     return pair >= LOCK_AFTER or ip >= LOCK_AFTER_IP or acct >= LOCK_AFTER_ACCOUNT
 
 
 def login_failed(request, usr: str) -> None:
-    from django.core.cache import cache
     for k in _fail_keys(request, usr):
-        cache.set(k, (cache.get(k) or 0) + 1, timeout=LOCK_MINUTES * 60)
+        count_failure(k)
 
 
 def login_succeeded(request, usr: str) -> None:
-    from django.core.cache import cache
-    cache.delete(_fail_keys(request, usr)[0])
+    clear_failures(_fail_keys(request, usr)[0])
 
 
 def admin_login(request, extra_context=None):
@@ -355,14 +401,11 @@ def _link_locked(request) -> bool:
     """A set-password link counts its refusals against the address only (the sign-in
     pages' own counter, so Security -> Unlock clears it): never against the account, or
     anyone could lock a person out by forging links in their name."""
-    from django.core.cache import cache
-    return (cache.get(_fail_keys(request, "")[1]) or 0) >= LOCK_AFTER_IP
+    return fail_count(_fail_keys(request, "")[1]) >= LOCK_AFTER_IP
 
 
 def _link_failed(request) -> None:
-    from django.core.cache import cache
-    k = _fail_keys(request, "")[1]
-    cache.set(k, (cache.get(k) or 0) + 1, timeout=LOCK_MINUTES * 60)
+    count_failure(_fail_keys(request, "")[1])
 
 
 @require_http_methods(["GET", "POST"])

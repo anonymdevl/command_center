@@ -36,9 +36,17 @@ from command_center.connectors.base import (
     RequestRefused,
     CredentialRequired,
     RemotePermissionDenied,
+    WriteUnconfirmed,
 )
 
 TIMEOUT = 20
+# A write waits longer than a read: a submit of a large document on v14 (stock and GL
+# postings, the workflow's hooks) can take most of a minute and still succeed. A write
+# not confirmed in this time is WriteUnconfirmed -- it may have gone through -- never a
+# plain failure, and never retried.
+WRITE_TIMEOUT = 60
+UNCONFIRMED = ("{name}'s ERPNext did not confirm this in time. It may still have gone "
+               "through -- check in ERPNext before trying again.")
 # Paging and pacing for reads over REST. A peer is somebody's production ERPNext: a
 # 100,000-row get_list in one request would sit on one of its web workers for a minute
 # and come back as a timeout. So a large read is asked for in pages, with a pause
@@ -139,15 +147,18 @@ class RemoteConnector(BusinessConnector):
         headers = self._headers(for_write=write)
         data = _encode(params or {})
         post = write or len(urlencode(data)) > MAX_GET_QUERY
+        if write and timeout is None:
+            timeout = WRITE_TIMEOUT
         r = None
         started = time.perf_counter()
         try:
-            r = self._send(url, headers, data, post, write, timeout)
+            r = self._send(url, headers, data, post, write, timeout, method=method)
         finally:
             _count(started)
-        return self._answer(r, whole, doctype=(params or {}).get("doctype"), write=write)
+        return self._answer(r, whole, doctype=(params or {}).get("doctype"), write=write,
+                            method=method)
 
-    def _send(self, url, headers, data, post, write, timeout):
+    def _send(self, url, headers, data, post, write, timeout, method=None):
         import time
 
         r = None
@@ -166,7 +177,12 @@ class RemoteConnector(BusinessConnector):
                 if not write and attempt < RETRIES and _time_left(5 * (attempt + 1)):
                     time.sleep(2 * (attempt + 1))
                     continue
-                raise self._gave_up(str(e), f"{self.name} did not answer: {e}", write) from e
+                # A write that was sent and not answered may have been made; one that
+                # never connected was not (ConnectionError other than a read timeout).
+                sent = write and not (isinstance(e, requests.exceptions.ConnectionError)
+                                      and not isinstance(e, requests.exceptions.ReadTimeout))
+                raise self._gave_up(str(e), f"{self.name} did not answer: {e}", write,
+                                    unconfirmed=method if sent else None) from e
             # The far site is busy, not broken: wait as long as it asks (capped), retry.
             # Writes are never retried -- a second insert is a second document.
             if (r.status_code in (429, 502, 503, 504) and not write and attempt < RETRIES):
@@ -177,7 +193,7 @@ class RemoteConnector(BusinessConnector):
             break
         return r
 
-    def _answer(self, r, whole, doctype=None, write=False):
+    def _answer(self, r, whole, doctype=None, write=False, method=None):
         if r.status_code in (401, 403):
             said = _server_message(r)
             raise RemotePermissionDenied(
@@ -192,9 +208,13 @@ class RemoteConnector(BusinessConnector):
             if r.status_code >= 500 or r.status_code == 429:
                 # Broken or overloaded even after the retries: down, unless it answers
                 # the quick check (a proxy's 504 on one heavy query, one method's 500).
+                # A write its proxy gave up waiting on (502/504) may still be running
+                # on ERPNext, and commit: unconfirmed, not failed.
                 raise self._gave_up(f"HTTP {r.status_code}",
                                     f"{self.name} returned HTTP {r.status_code}"
-                                    + _server_message(r), write)
+                                    + _server_message(r), write,
+                                    unconfirmed=method if write and r.status_code in (502, 504)
+                                    else None)
             # It answered and refused this one request (a field its version lacks, a
             # filter it rejects): one figure's problem, not the business's.
             self._mark_reachable()
@@ -205,16 +225,29 @@ class RemoteConnector(BusinessConnector):
         body = r.json()
         return body if whole else body.get("message")
 
-    def _gave_up(self, error: str, message: str, write: bool = False) -> BusinessUnreachable:
-        """A read unanswered after its retries. Whether the business is down is asked
-        once, by the quick check: answered, this read was only slow (BusinessSlow, the
-        business stays as it is); not answered, the business is marked Unreachable.
+    def _gave_up(self, error: str, message: str, write: bool = False,
+                 unconfirmed: str | None = None) -> BusinessUnreachable:
+        """A request unanswered after its retries. Whether the business is down is asked
+        once, by the quick check: answered, this request was only slow (BusinessSlow,
+        the business stays as it is); not answered, the business is marked Unreachable.
         Inside a question nothing is marked and no check is spent (the analyst's
-        deadline), as before; a business already marked down is not checked again, and
-        a write is exactly one request -- it is recorded as before, never followed up."""
+        deadline); a business already marked down is not checked again.
+
+        A write is sent once, never retried. One that was sent and not answered
+        (`unconfirmed`: a timeout, a proxy's 502/504) may have been made, so it is
+        WriteUnconfirmed -- "check before trying again" -- not a failure; and the quick
+        check is made for it as for a read, so a slow submit never marks a business
+        that answers as Unreachable (17 Nov 2026: it did, for everyone)."""
         if _in_question():
             return BusinessUnreachable(message)
-        if not write and self.business.status != "Unreachable" and self._answers():
+        answers = self.business.status != "Unreachable" and self._answers()
+        if unconfirmed:
+            if not answers:
+                self._mark_unreachable(error)
+            return WriteUnconfirmed(UNCONFIRMED.format(name=self.name), method=unconfirmed)
+        if answers:
+            if write:
+                return BusinessUnreachable(message)  # refused there; the business is up
             return BusinessSlow(message + " (it answered a check straight after, so it is "
                                           "slow on this read, not down)")
         self._mark_unreachable(error)

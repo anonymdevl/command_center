@@ -155,8 +155,11 @@ def poll(ask_id: str, deep=0):
 
 @frappe.whitelist()
 def check_analyst():
-    """Is the analyst working on this site? Open in a browser while signed in:
-    /api/method/command_center.api.ask.check_analyst
+    """Is the analyst working on this site? From the server:
+    manage.py execute command_center.api.ask.check_analyst  (or Settings -> Claude -> Check)
+
+    POST only: it spends Claude requests, so it must not be something another site can
+    make a signed-in browser open (a GET carries no request token).
 
     Sends the model the real tool catalogue and a one-line question, so a declaration
     it will not accept, a wrong key or a retired model shows up here, in words. For
@@ -255,7 +258,8 @@ def answerable():
 @frappe.whitelist()
 def model_speeds():
     """How fast each Gemini model this key may use answers right now -- System Managers
-    only. Open while signed in: /api/method/command_center.api.ask.model_speeds
+    only. From the server: manage.py execute command_center.api.ask.model_speeds (POST
+    only over the web: each run spends requests from every model's daily allowance).
 
     One short request per model (each counts against that model's daily allowance), so
     a slow model can be told from a slow Google. Also lists which are marked slow or
@@ -277,7 +281,7 @@ def model_speeds():
     for name in names:
         t0 = time.monotonic()
         try:
-            r = requests.post(gemini.ENDPOINT.format(model=name), params={"key": gemini._key()},
+            r = requests.post(gemini.ENDPOINT.format(model=name), headers=gemini.key_header(),
                               json=body, timeout=40)
             status = r.status_code
         except requests.exceptions.Timeout:

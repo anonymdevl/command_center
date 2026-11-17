@@ -59,10 +59,32 @@ class ConnectedBusinessForm(_SecretsForm):
         model = models.ConnectedBusiness
         exclude = ("creation", "modified", "modified_by", "owner", "docstatus", "idx")
 
+    def clean(self):
+        """A new address on another server: the secret is typed again, never the stored
+        one sent there (platform_settings.update_business holds the same rule)."""
+        from insights.core.platform_settings import address_moved
+        data = super().clean()
+        old = self.instance.site_url if self.instance.pk else None
+        self.moved = address_moved(old, data.get("site_url"))
+        if self.moved and not data.get("api_secret"):
+            raise forms.ValidationError(
+                "The address is on another server now, so type the API secret again. The "
+                "stored secrets belong to the old address and are removed, never sent to "
+                "the new one.")
+        return data
+
 
 @admin.register(models.ConnectedBusiness)
 class ConnectedBusinessAdmin(_SecretsAdmin):
     form = ConnectedBusinessForm
+
+    def save_model(self, request, obj, form, change):
+        if change and getattr(form, "moved", False):
+            from insights.core.platform_settings import forget_for_move
+            forget_for_move(obj.pk, obj.business_code)
+            if not form.cleaned_data.get("sso_client_secret"):
+                obj.sso_client_id = None
+        super().save_model(request, obj, form, change)
     list_display = ("business_name", "business_code", "site_url", "status", "currency")
     search_fields = ("business_name", "business_code", "site_url")
     list_filter = ("status",)

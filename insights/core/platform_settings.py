@@ -636,11 +636,54 @@ def add_business(business_name: str = "", site_url: str = "", api_key: str = "",
             "access": _access(b.business_code)}
 
 
+def _origin(url) -> tuple:
+    from urllib.parse import urlsplit
+    p = urlsplit(str(url or "").strip())
+    try:
+        port = p.port
+    except ValueError:
+        port = None
+    return (p.scheme.lower(), (p.hostname or "").lower(),
+            port or {"https": 443, "http": 80}.get(p.scheme.lower()))
+
+
+def address_moved(old, new) -> bool:
+    """The business's address now points at another server (scheme, host or port): what
+    is stored for the old one -- the service key's secret, the sign-in's client secret,
+    the managers' own keys -- must never be sent there."""
+    return bool(str(old or "").strip()) and bool(str(new or "").strip()) \
+        and _origin(old) != _origin(new)
+
+
+def forget_for_move(name: str, code: str) -> list:
+    """Everything stored that belongs to a business's old address, removed: its API
+    secret, its sign-in (OAuth) client secret, and every person's own ERPNext key for
+    it. What was removed, in words, for the audit and the answer."""
+    from insights.core.models import CommandCenterSiteCredential, Secret
+    gone = []
+    n = Secret.objects.filter(doctype="Connected Business", docname=name,
+                              fieldname__in=["api_secret", "sso_client_secret"]).delete()[0]
+    if n:
+        gone.append("the stored secrets")
+    creds = list(CommandCenterSiteCredential.objects.filter(business_code=code)
+                 .values_list("pk", flat=True))
+    if creds:
+        Secret.objects.filter(doctype=CRED, docname__in=creds).delete()
+        CommandCenterSiteCredential.objects.filter(pk__in=creds).delete()
+        gone.append(f"{len(creds)} personal ERPNext key{'s' if len(creds) != 1 else ''}")
+    return gone
+
+
 @frappe.whitelist(methods=["POST"])
 def update_business(name: str = "", site_url: str = "", api_key: str = "",
                     api_secret: str = "", erpnext_company: str = ""):
     """Change a business's address, key or secret. A blank key or secret keeps the
-    current one; the secret is never shown back."""
+    current one; the secret is never shown back.
+
+    A new address on another server needs the key and secret typed again: the stored
+    ones (and the sign-in's client secret, and the managers' own keys) belong to the old
+    server and are removed, never sent to the new one (17 Nov 2026: a Businesses
+    delegate could point a business at their own server and receive them)."""
     _require("businesses")
     b = _get_business(name)
     if b.is_local:
@@ -648,6 +691,18 @@ def update_business(name: str = "", site_url: str = "", api_key: str = "",
     doc = frappe.get_doc("Connected Business", b.pk)
     changed = []
     url = _check_url(site_url) if str(site_url or "").strip() else None
+    moved = bool(url) and address_moved(doc.site_url, url)
+    if moved and not (str(api_key or "").strip() and str(api_secret or "").strip()):
+        _say("The new address is on another server, so type the API key and the API secret "
+             "of the read-only user there as well. The stored ones belong to the old "
+             "address and are never sent to a new one.")
+    if moved:
+        gone = forget_for_move(b.pk, b.business_code)
+        doc.sso_client_id = None
+        doc.sso_client_secret = None
+        changed.append("sign-in from ERPNext to be set up again for the new address")
+        if gone:
+            changed.append("removed " + " and ".join(gone) + " of the old address")
     if url and url != (doc.site_url or ""):
         doc.site_url = url
         changed.append(f"address to {url}")
@@ -833,26 +888,34 @@ def _cred_row(c, names: dict, businesses: dict) -> dict:
 
 @frappe.whitelist()
 def credentials():
-    """Everyone's keys for the administrator; managers' keys for a delegate."""
+    """Everyone's keys for the administrator; for a delegate, the keys of managers only:
+    never an administrator's, nor anyone else's with Settings access (their own, yes)."""
     me = _require("keys")
     from insights.core.models import CommandCenterSiteCredential
-    people = list(_User().objects.all())
+    people = list(_User().objects.prefetch_related("groups"))
     names = {u.username: _name(u) for u in people}
-    admins = {u.username for u in people if u.is_superuser}
+    protected = {u.username for u in people if _protected(u) and u.pk != me.pk}
     biz = dict(_business_model().objects.values_list("business_code", "business_name"))
     return [_cred_row(c, names, biz) for c in
             CommandCenterSiteCredential.objects.order_by("user", "business_code")
-            if me.is_superuser or c.user not in admins]
+            if me.is_superuser or c.user not in protected]
 
 
 def _may_change_key(me, username: str):
-    """A delegate manages the keys of managers, not of an administrator."""
+    """A delegate manages the keys of managers -- not an administrator's, and not anyone
+    else's with Settings access (as Settings -> User Management: only the administrator
+    changes those people). Their own key, yes."""
     if me.is_superuser:
         return
     u = _users._find(username)
-    if u is not None and u.is_superuser:
+    if u is None:
+        return
+    if u.is_superuser:
         raise PermissionError("Only the platform's administrator can change an "
                               "administrator's keys.")
+    if u.pk != me.pk and _grants(u):
+        raise PermissionError("Only the platform's administrator can change the keys of "
+                              "someone who has access to Settings.")
 
 
 @frappe.whitelist(methods=["POST"])

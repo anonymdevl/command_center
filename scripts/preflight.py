@@ -982,6 +982,21 @@ check("frappe.conf.get" in _gem,
 check("timeout=" in _gem,
       "gemini.py calls the API with no timeout, so a slow third party would hang the "
       "screen a manager is waiting on")
+# An API key never travels in an address (17 Nov 2026): a failed request's exception
+# prints its URL, and the error log kept the Gemini key that way. Google takes it as the
+# x-goog-api-key header; and every logged error is redacted (insights/compat/runtime.py).
+_key_in_url = []
+for _py in sorted(_Path(ROOT).joinpath("command_center").rglob("*.py")):
+    _src = _py.read_text()
+    for _m in re.finditer(r"""params\s*=\s*\{[^}]*["'](?:key|api_key)["']\s*:|[?&]key=\{""", _src):
+        _key_in_url.append(f"{_py.relative_to(_Path(ROOT)).as_posix()}:{_src[:_m.start()].count(chr(10)) + 1}")
+check(not _key_in_url,
+      f"an API key is sent in the address, where a failed request's exception (and so the "
+      f"error log) prints it -- send it as a header: {_key_in_url}")
+_rt = open(os.path.join(ROOT, "insights", "compat", "runtime.py")).read()
+_le = _rt.split("def log_error")[1].split("\ndef ")[0] if "def log_error" in _rt else ""
+check("message = redact(" in _le and "title = redact(" in _le, "insights/compat/runtime.py log_error no longer redacts keys and "
+      "secrets before writing the error log")
 check('"-latest"' in _gem or "not \"-latest\"" in _gem or "-latest" in _gem,
       "gemini.py should record why the model name is pinned rather than floating")
 check("DEFAULT_MODEL" in _gem and "-latest" not in _gem.split("DEFAULT_MODEL =")[1][:60],
@@ -1398,13 +1413,106 @@ for _py in sorted(_Path(ROOT).joinpath("command_center").rglob("*.py")):
         _guest.append(f"{_py.relative_to(_Path(ROOT)).as_posix()}:{_m.group(1)}")
 check(sorted(_guest) == ["command_center/api/sso.py:callback", "command_center/api/sso.py:start"],
       f"endpoints callable without signing in: {_guest}. Only api/sso.start and callback may be.")
+# HTML sinks in the interface (17 Nov 2026). Text from the server -- a business's
+# ERPNext's own error words among it -- was written into a <div> to strip its tags, and
+# an <img onerror> fires even on an element never attached. The interface builds
+# elements and sets textContent; markup is written only where it is our own, generated
+# at build time. Any other sink fails here: build elements instead, or (for a message)
+# use stripTags in api/client.js, which reads through an inert DOMParser document.
+HTML_SINKS_ALLOWED = {
+    # views.json, the designed screens generated at build time (views[viewKey])
+    ("frontend/src/components/LegacyView.jsx", "dangerouslySetInnerHTML={{ __html: html }}"),
+    # extras.json's explainers, drawers and drills, generated at build time
+    ("frontend/src/components/Drawer.jsx", "dangerouslySetInnerHTML={{ __html: content.html }}"),
+}
+_SINK = re.compile(r"(\.innerHTML\s*\+?=(?!=)|\.outerHTML\s*=(?!=)|insertAdjacentHTML\s*\(|"
+                   r"document\.write\s*\(|dangerouslySetInnerHTML=\{\{[^}]*\}\})")
+_sinks = []
+for _f in sorted(_Path(ROOT).joinpath("frontend", "src").rglob("*")):
+    if _f.suffix not in (".js", ".jsx", ".ts", ".tsx") or not _f.is_file():
+        continue
+    _rel = _f.relative_to(_Path(ROOT)).as_posix()
+    for _n, _line in enumerate(_f.read_text().splitlines(), 1):
+        if _line.lstrip().startswith(("//", "*", "/*")):
+            continue
+        for _m in _SINK.finditer(_line):
+            if (_rel, _m.group(0)) not in HTML_SINKS_ALLOWED:
+                _sinks.append(f"{_rel}:{_n}: {_m.group(0)}")
+check(not _sinks,
+      "HTML written into the page outside the build-time markup -- server text there runs "
+      "as script (an <img onerror> fires even on a detached element). Build elements and "
+      f"set textContent, or use stripTags (api/client.js): {_sinks[:6]}")
+_client = open(os.path.join(ROOT, "frontend", "src", "api", "client.js")).read()
+check("new DOMParser().parseFromString(text, \"text/html\")" in _client,
+      "api/client.js stripTags no longer reads server messages through DOMParser")
+
+# GET endpoints (17 Nov 2026). A GET carries no request token (Django's CSRF check skips
+# safe methods) and the session cookie is SameSite=Lax, so another site can make a
+# signed-in browser open any GET endpoint. About 25 writes once answered GET (create a
+# task, run a load, link a key, act on an alert) because the default was GET and POST.
+# The default is POST (insights/compat whitelist); an endpoint that allows GET must say
+# so itself, and only these may: the sign-on redirects, and read-only diagnostics
+# opened by address. A new one is added here only if it reads and spends nothing.
+GET_ALLOWED = {
+    "command_center/api/sso.py:start": "the sign-in link on the business's ERPNext",
+    "command_center/api/sso.py:callback": "where the business's ERPNext sends the person back",
+    "command_center/api/diagnostics.py:deployed": "read-only: which bundle is served",
+    "command_center/api/diagnostics.py:contains": "read-only: is a string in the bundle",
+    "command_center/api/export.py:pdf_diagnostics": "read-only: the PDF engine's fonts",
+}
+_compat_src = open(os.path.join(ROOT, "insights", "compat", "__init__.py")).read()
+check('DEFAULT_METHODS = ("POST",)' in _compat_src
+      and "methods or DEFAULT_METHODS" in _compat_src,
+      "insights/compat whitelist() no longer defaults to POST only: every endpoint that "
+      "does not name its methods would answer GET, which carries no CSRF token")
+_gets = {}
+for _base in ("command_center", "insights"):
+    for _py in sorted(_Path(ROOT).joinpath(_base).rglob("*.py")):
+        try:
+            _tree = ast.parse(_py.read_text())
+        except SyntaxError:
+            continue
+        for _fn in ast.walk(_tree):
+            if not isinstance(_fn, ast.FunctionDef):
+                continue
+            for _dec in _fn.decorator_list:
+                if not (isinstance(_dec, ast.Call) and getattr(_dec.func, "attr", "") == "whitelist"):
+                    continue
+                for _kw in _dec.keywords:
+                    if _kw.arg != "methods":
+                        continue
+                    try:
+                        _ms = [str(m).upper() for m in ast.literal_eval(_kw.value)]
+                    except Exception:
+                        _ms = ["GET"]  # not a literal: cannot be checked, so refused
+                    if "GET" in _ms:
+                        _gets[f"{_py.relative_to(_Path(ROOT)).as_posix()}:{_fn.name}"] = _ms
+_extra_get = sorted(set(_gets) - set(GET_ALLOWED))
+check(not _extra_get,
+      f"endpoints that answer GET but are not on preflight's GET_ALLOWED list: {_extra_get}. "
+      f"A GET is not checked for the request token, so a write (or anything that spends "
+      f"AI requests) must be POST only: drop GET from its methods=[...].")
+check(not sorted(set(GET_ALLOWED) - set(_gets)),
+      f"GET_ALLOWED names endpoints that no longer allow GET (or moved): "
+      f"{sorted(set(GET_ALLOWED) - set(_gets))} -- keep the list exact")
 _sso = open(os.path.join(ROOT, "command_center", "api", "sso.py")).read()
-_appr = _sso.split("def _approved")[1].split("\ndef ")[0] if "def _approved" in _sso else ""
+_appr =_sso.split("def _approved")[1].split("\ndef ")[0] if "def _approved" in _sso else ""
 check("erp_members(" in _appr and "if email not in members:" in _appr
       and "if not enabled:" in _appr and 'raise Refused("unreachable"' in _appr,
       "api/sso.py must let a person in only if the platform itself reads the access role on "
       "their ERPNext (ingest.erp_members), keep out an account paused here, and fail closed "
       "when that ERPNext cannot be asked")
+check("why = _not_ours(user, b.business_code)" in _appr and 'Refused("own_account"' in _appr
+      and "_seat_refusal(b.business_code, email)" in _appr,
+      "api/sso.py must open only an account the sign-in made itself for that business (or "
+      "its customer) -- never an administrator's, a Settings delegate's or a hand-added one "
+      "matched by email -- and must count the customer's seats for a newcomer")
+_grants_src = open(os.path.join(ROOT, "insights", "core", "platform_settings.py")).read()
+_grants_vals = re.findall(r'"(Settings: [^"]+)"', _grants_src.split("GRANTS = {")[1].split("}")[0]) \
+    if "GRANTS = {" in _grants_src else []
+check(len(_grants_vals) >= 3 and 'SETTINGS_GROUP_PREFIX = "Settings: "' in _sso,
+      "every Settings access group must start with sso.SETTINGS_GROUP_PREFIX, or single "
+      "sign-on could open a delegate's account")
 check("sso.sync_members" in open(os.path.join(ROOT, "command_center", "hooks.py")).read(),
       "hooks.py no longer runs api/sso.sync_members: a role taken away on a business's "
       "ERPNext would leave the platform open to that person")
@@ -1478,6 +1586,12 @@ if _node:
                  capture_output=True, text=True, timeout=120)
     check(_t.returncode == 0,
           "scripts/test_charts.mjs failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+    # The API client's error messages are plain text, read through an inert document,
+    # never written into the page (17 Nov 2026: an <img onerror> in an ERPNext message).
+    _t = _sp.run([_node, os.path.join(ROOT, "scripts", "test_client.mjs")],
+                 capture_output=True, text=True, timeout=120)
+    check(_t.returncode == 0,
+          "scripts/test_client.mjs failed:\n" + (_t.stdout + _t.stderr)[-1500:])
     # A screen's last answers (frontend/src/swr.js): shown only for the same person,
     # business and call, and the minute's refresh never piles up behind a slow request.
     _t = _sp.run([_node, os.path.join(ROOT, "scripts", "test_swr.mjs")],

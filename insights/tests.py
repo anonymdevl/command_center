@@ -1256,10 +1256,14 @@ class SettingsPage(TransactionTestCase):
         self.assertFalse(ConnectedBusiness.objects.filter(pk="Refusing Ltd").exists())
         self.assertFalse(Secret.objects.filter(docname="Refusing Ltd").exists())
 
-        # edit: a blank secret keeps the stored one, a new one replaces it
-        self._ok("update_business", name="Test Medical Ltd", site_url="https://erp2.test")
+        # edit: a blank secret keeps the stored one (the same server), a new one replaces
+        # it; another server needs both again (insights/test_security.py)
+        self.assertIn("type the API key and the API secret", self._refused(
+            "update_business", name="Test Medical Ltd", site_url="https://erp2.test"))
+        self._ok("update_business", name="Test Medical Ltd", site_url="https://erp.test/desk")
         self.assertEqual(documents.get_password("Connected Business", "Test Medical Ltd",
                                                 "api_secret"), self.SECRET)
+        self._ok("update_business", name="Test Medical Ltd", site_url="https://erp.test")
         self._ok("update_business", name="Test Medical Ltd", api_secret=self.SECRET + "-new")
         self.assertEqual(documents.get_password("Connected Business", "Test Medical Ltd",
                                                 "api_secret"), self.SECRET + "-new")

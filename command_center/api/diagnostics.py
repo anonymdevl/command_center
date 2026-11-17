@@ -23,7 +23,8 @@ MANIFEST = ("public", "command-center", ".vite", "manifest.json")
 PAGE = ("www", "command-center.html")
 
 
-@frappe.whitelist()
+# Read-only, opened by address in a browser: GET as well (preflight lists it).
+@frappe.whitelist(methods=["GET", "POST"])
 def deployed() -> dict:
     """The version, the served bundle, and whether known fixes are present."""
     require_manager()
@@ -97,7 +98,8 @@ def _read(base: str, *parts) -> str | None:
     return open(path, encoding="utf-8").read()
 
 
-@frappe.whitelist()
+# Read-only, opened by address in a browser: GET as well (preflight lists it).
+@frappe.whitelist(methods=["GET", "POST"])
 def contains(needle: str, where: str = "bundle") -> dict:
     """Is a given string present in the served bundle?
 

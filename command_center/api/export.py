@@ -801,7 +801,8 @@ PDF_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><style>
 </body></html>"""
 
 
-@frappe.whitelist()
+# Read-only, opened by address in a browser: GET as well (preflight lists it).
+@frappe.whitelist(methods=["GET", "POST"])
 def pdf_diagnostics():
     """What the server's PDF engine has to work with -- System Managers only, reads only.
 

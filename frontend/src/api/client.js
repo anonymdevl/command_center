@@ -19,12 +19,20 @@ function csrfToken() {
 }
 
 export class ApiError extends Error {
-  constructor(message, { status, method, exc } = {}) {
+  constructor(message, { status, method, exc, excType } = {}) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.method = method;
     this.exc = exc;
+    // The server's exception class. "WriteUnconfirmed" (HTTP 504): the business's ERPNext
+    // did not confirm a change in time and it may have gone through -- say so, and do
+    // not offer to do it again without checking (connectors/base.py WriteUnconfirmed).
+    this.excType = excType;
+  }
+
+  get unconfirmed() {
+    return this.excType === "WriteUnconfirmed";
   }
 }
 
@@ -73,6 +81,7 @@ export async function call(method, args = {}, { signal } = {}) {
       status: res.status,
       method,
       exc: body?.exc,
+      excType: body?.exc_type,
     });
   }
   return body.message;
@@ -145,10 +154,23 @@ function serverMessage(body) {
   return null;
 }
 
-function stripTags(s) {
-  const d = document.createElement("div");
-  d.innerHTML = s;
-  return (d.textContent || "").trim();
+/**
+ * The text of a server message, without its markup. The message can carry a business's
+ * ERPNext's own words (connectors/remote.py copies them in), so it is never written into
+ * this page: an <img onerror> fires even on an element that is never attached. DOMParser
+ * builds an inert document instead -- no script runs, no handler fires, nothing loads.
+ */
+export function stripTags(s) {
+  const text = String(s ?? "");
+  if (typeof DOMParser !== "undefined") {
+    try {
+      const doc = new DOMParser().parseFromString(text, "text/html");
+      return (doc.body?.textContent || "").trim();
+    } catch {
+      /* fall through to the plain-text way */
+    }
+  }
+  return text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 /* ---------------------------------------------------------------------------
