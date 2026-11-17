@@ -35,43 +35,43 @@ export const CARD_KPIS = {
   // Home. "Money in, month" read GHS 0 because it was a month measured from today on a
   // dataset that ends in 2025; it is now the last full month the data covers, named.
   command: {
-    "Money in, month": "cash_in_month",
-    "Owed to us": "ar_total",
-    "Days to get paid": "days_to_pay",
+    "Payments Received": "cash_in_month",
+    "Accounts Receivable": "ar_total",
+    "Average Days Late": "days_to_pay",
     Waiting: "order_book_count",
-    "Past due": "order_book_late",
-    "Stock we hold": "stock_value",
+    "Overdue Sales Orders": "order_book_late",
+    "Stock Value": "stock_value",
   },
   sales: {
-    "Owed to us": "ar_total",
-    "Unpaid invoices": "ar_count",
-    "Not despatched": "order_book",
-    "Last full month": "revenue_last_month",
-    "Best month": "revenue_best_month",
-    "Never issued": "invoices_draft",
+    "Accounts Receivable": "ar_total",
+    "Unpaid Sales Invoices": "ar_count",
+    "To Deliver": "order_book",
+    "Invoiced, Last Full Month": "revenue_last_month",
+    "Best Month Invoiced": "revenue_best_month",
+    "Draft Sales Invoices": "invoices_draft",
   },
   fin: {
-    "Owed to us": "ar_total",
-    "Unpaid invoices": "ar_count",
-    "Last full month": "revenue_last_month",
-    "Best month": "revenue_best_month",
-    "Never issued": "invoices_draft",
+    "Accounts Receivable": "ar_total",
+    "Unpaid Sales Invoices": "ar_count",
+    "Invoiced, Last Full Month": "revenue_last_month",
+    "Best Month Invoiced": "revenue_best_month",
+    "Draft Sales Invoices": "invoices_draft",
     // Bank payments carrying the clearance date ERPNext's bank reconciliation sets.
-    "Bank checks": "bank_cleared_pct",
+    "Bank Reconciled": "bank_cleared_pct",
   },
   // The two concentration cards are shares of all submitted supplier spend, which is
   // what their labels say. "Spend, top 14" is the fourteen largest purchase orders
   // themselves (read live, the same fourteen "Where the money goes" draws), never
   // spend_total, which is all of it.
   proc: {
-    "Top supplier": "supplier_top_share",
-    "Top 2 suppliers": "supplier_top2_share",
+    "Top Supplier": "supplier_top_share",
+    "Top 2 Suppliers": "supplier_top2_share",
     // Read straight from ERPNext's purchase orders (kpi/live.py): no fact loads them yet.
-    "Purchase orders": "po_count",
-    "Longest wait": "po_longest_wait",
-    "Spend, top 14": "po_spend_top14",
+    "Purchase Orders": "po_count",
+    "Longest Wait": "po_longest_wait",
+    "Top 14 Purchase Orders": "po_spend_top14",
     // Submitted orders with no promised date, or one equal to the order date.
-    "No due date": "po_no_due_date",
+    "No Required By Date": "po_no_due_date",
   },
   // Systems and Access: the accounts and roles themselves, read from ERPNext.
   it: {
@@ -83,16 +83,16 @@ export const CARD_KPIS = {
     "Last refreshed": "last_refreshed",
   },
   inv: {
-    "Stock we hold": "stock_value",
-    "Reserved, unavail.": "stock_reserved_qty",
+    "Stock Value": "stock_value",
+    "Reserved Qty": "stock_reserved_qty",
     // "Lines promised" means lines with something reserved against them, not every
     // stock line, so stock_lines is not that figure -- stock_lines_promised is.
-    "Lines promised": "stock_lines_promised",
-    "Worst shortfall": "stock_worst_shortfall",
+    "Lines with Reserved Qty": "stock_lines_promised",
+    "Worst Shortfall": "stock_worst_shortfall",
     // Batches holding stock that expire within ninety days; the set-up guide when no
     // batch carries an expiry date at all, which is a different statement from none
     // expiring.
-    "Near expiry": "batches_near_expiry",
+    "Batches Near Expiry": "batches_near_expiry",
     // Stock in warehouses marked Transit or switched off (kpi/live_departments.py); the
     // guide when no warehouse is marked either way.
     "Off warehouse": "stock_off_warehouse",
@@ -112,7 +112,7 @@ export const CARD_KPIS = {
   hr: {
     // Two different cards, two different figures. Both were mapped to headcount, which
     // would have shown the same number twice under labels that mean different things.
-    "On the books": "people_total",
+    "All Employees": "people_total",
     Active: "headcount",
     Departments: "departments",
     Left: "people_left",
@@ -181,24 +181,24 @@ export const CARD_KPIS = {
  */
 export const TILE_KPIS = {
   ops: {
-    "Sales & money owed": { key: "ar_total" },
-    "Buying & suppliers": { key: "ap_total" },
-    "Stock & warehouses": { key: "stock_value" },
-    "Engineering & installs": { key: "tasks_open", unit: "tasks" },
+    "Sales and Payments": { key: "ar_total" },
+    "Buying and Suppliers": { key: "ap_total" },
+    "Stock & Warehouses": { key: "stock_value" },
+    "Project Insights": { key: "tasks_open", unit: "tasks" },
     "Customer Service & Issues": { key: "cases_open", unit: "open cases" },
     People: { key: "people_total", unit: "employees" },
     // Payment entries plus journals, counted live: the facts hold neither, and
     // cash_applied is money in only, so it would be half of what the label says.
-    "Money in & out": { key: "postings_count", unit: "postings" },
+    "Finances": { key: "postings_count", unit: "entries" },
     // The active ERPNext accounts, and the open alerts Internal Audit would raise.
-    "Systems & access": { key: "users_active", unit: "accounts" },
+    "Systems and Access": { key: "users_active", unit: "accounts" },
     "Internal Audit": { key: "alerts_open", unit: "open alerts" },
   },
   // Home's three hero tiles (the approved mockup's layout, 18 Oct 2026).
   command: {
-    "Sales & money owed": { key: "ar_total" },
-    "Buying & suppliers": { key: "ap_total" },
-    "Stock & warehouses": { key: "stock_value" },
+    "Sales and Payments": { key: "ar_total" },
+    "Buying and Suppliers": { key: "ap_total" },
+    "Stock & Warehouses": { key: "stock_value" },
   },
   // Today and Outstanding Tasks: legacy/work.js WORK_TILES, from the manager's own queue.
   myday: {},
@@ -222,12 +222,12 @@ export const TILE_KPIS = {
   // shortfall nothing is on order for; install -- the order's linked project still open;
   // payment -- an invoice raised against the order still unpaid.
   sales: {
-    "Awaiting stock": { key: "order_awaiting_stock" },
-    "Awaiting purchase": { key: "order_awaiting_purchase" },
-    "Awaiting despatch": { key: "order_awaiting_despatch" },
-    "Awaiting invoice": { key: "order_awaiting_invoice" },
-    "Awaiting install": { key: "order_awaiting_install" },
-    "Awaiting payment": { key: "order_awaiting_payment" },
+    "Awaiting Stock": { key: "order_awaiting_stock" },
+    "Awaiting Purchase Order": { key: "order_awaiting_purchase" },
+    "Awaiting Delivery Note": { key: "order_awaiting_despatch" },
+    "Awaiting Sales Invoice": { key: "order_awaiting_invoice" },
+    "Awaiting Installation": { key: "order_awaiting_install" },
+    "Awaiting Payment": { key: "order_awaiting_payment" },
   },
 };
 

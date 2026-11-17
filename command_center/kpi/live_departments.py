@@ -288,7 +288,7 @@ def stock_off_warehouse(r):
     total = sum(num(x["stock_value"]) for x in held)
     value = sum(num(x["stock_value"]) for x in held if x["warehouse"] in off)
     if not classified:
-        return (None, "no warehouse is marked as not for sale", None, setup(
+        return (None, "no Warehouse has Warehouse Type Transit", None, setup(
             r, "ERPNext does not say which of your locations goods are not sold from.",
             ["Open Warehouse and pick each location that is not a store: goods in "
              "transit, a holding or adjustment location, damaged or returned goods.",
@@ -385,15 +385,15 @@ def eng_money_held(r):
 
 
 FIGURES = {k.key: k for k in (
-    Live("order_awaiting_stock", "Orders awaiting stock", "count", order_awaiting_stock,
+    Live("order_awaiting_stock", "Sales Orders Awaiting Stock", "count", order_awaiting_stock,
          "/app/sales-order?status=To%20Deliver%20and%20Bill", source="fact_sales_order"),
-    Live("order_awaiting_purchase", "Orders awaiting purchase", "count", order_awaiting_purchase,
+    Live("order_awaiting_purchase", "Sales Orders Awaiting Purchase Order", "count", order_awaiting_purchase,
          "/app/purchase-order", source="fact_sales_order"),
     Live("order_awaiting_install", "Orders awaiting installation", "count",
          order_awaiting_install, "/app/project?status=Open", source="fact_sales_order"),
-    Live("order_awaiting_payment", "Orders awaiting payment", "count", order_awaiting_payment,
+    Live("order_awaiting_payment", "Sales Orders Awaiting Payment", "count", order_awaiting_payment,
          "/app/sales-invoice?status=Overdue", source="fact_sales_invoice"),
-    Live("stock_off_warehouse", "Stock outside a sellable warehouse", "currency",
+    Live("stock_off_warehouse", "Stock in Transit or Disabled Warehouses", "currency",
          stock_off_warehouse, "/app/warehouse", source="fact_stock_balance"),
     Live("cases_equipment_down", "Open cases with equipment down", "count", cases_equipment_down,
          "/app/issue", source="fact_case"),

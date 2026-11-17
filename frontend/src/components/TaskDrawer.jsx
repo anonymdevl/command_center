@@ -61,7 +61,7 @@ export default function TaskDrawer({ task, scope }) {
             </span>
             <span className={`dw-chip${t.priority === "High" ? " dw-c-high" : ""}`}>{t.priority || "Medium"} Priority</span>
             {t.late_days > 0 ? (
-              <span className="dw-chip dw-c-crit">Late by {count(t.late_days)} day{t.late_days === 1 ? "" : "s"}</span>
+              <span className="dw-chip dw-c-crit">Late By {count(t.late_days)} day{t.late_days === 1 ? "" : "s"}</span>
             ) : null}
             {t.sent_back > 0 ? (
               <span className="dw-chip dw-c-high">Sent back {count(t.sent_back)} time{t.sent_back === 1 ? "" : "s"}</span>

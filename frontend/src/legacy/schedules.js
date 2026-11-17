@@ -22,7 +22,7 @@ export function renderSchedules(root, data) {
     cell.style.color = "";
     const says = document.createElement("span");
     says.className = s?.enabled ? "sch-on" : "sch-off";
-    says.textContent = s ? s.says : "Not scheduled";
+    says.textContent = s ? s.says : "Not Scheduled";
     if (s?.last_status) says.title = s.last_status;
     const edit = document.createElement("button");
     edit.type = "button";

@@ -275,7 +275,7 @@ c = r["cash_in_month"]
 check(c["value"] == 375, f"cash_in_month: July receipts are 300+50+25 unmatched, got {c['value']}")
 check(c["period"]["from"] == "2025-07-01" and c["period"]["to"] == "2025-07-31",
       f"cash_in_month: last full month should be July 2025, got {c['period']}")
-check(c["note"] == "July 2025, every payment received", f"cash_in_month note: {c['note']!r}")
+check(c["note"] == "July 2025, every Payment Entry (Receive)", f"cash_in_month note: {c['note']!r}")
 check(c["drill"]["filters"]["posting_date"] == ["between", ["2025-07-01", "2025-07-31"]],
       f"cash_in_month: the drill must carry the window, got {c['drill']['filters']}")
 
@@ -301,7 +301,7 @@ check(r["invoices_draft"]["value"] == 1 and "5,000.00" in r["invoices_draft"]["n
       f"invoices_draft: {r['invoices_draft']}")
 
 s1, s2 = r["supplier_top_share"], r["supplier_top2_share"]
-check(abs(s1["value"] - 57) < 1e-9 and s1["note"] == "CYNSEL, of all supplier spend",
+check(abs(s1["value"] - 57) < 1e-9 and s1["note"] == "CYNSEL, of all Purchase Invoices",
       f"supplier_top_share: CYNSEL 57%, got {s1['value']} / {s1['note']!r}")
 check(abs(s2["value"] - 95) < 1e-9 and s2["note"] == "CYNSEL and MEDI"
       and s2["drill"]["filters"]["supplier"] == ["in", ["CYNSEL", "MEDI"]],

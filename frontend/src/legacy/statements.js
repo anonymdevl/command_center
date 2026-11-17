@@ -171,7 +171,7 @@ function whenLine(box, res) {
   const w = box.querySelector("#fs-when");
   if (!w || !res) return;
   if (res.state !== "ok") {
-    w.textContent = "From the business's own ERPNext reports";
+    w.textContent = "";
     return;
   }
   const at = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
@@ -244,14 +244,14 @@ function cards(row, res) {
     c.net_profit?.margin === null || c.net_profit?.margin === undefined
       ? "No revenue in the period" : `Margin ${pct(c.net_profit.margin)}`,
     (c.net_profit?.value ?? 0) < 0 ? "down" : "flat", 0, "Revenue less every cost");
-  add("Cash & Bank", moneyInto(c.cash?.value),
+  add("Bank and Cash", moneyInto(c.cash?.value),
     `As at ${pretty(c.cash?.as_at)}${c.cash?.compare !== null && c.cash?.compare !== undefined
       ? ` · was ${figure(c.cash.compare, cur)}` : ""}`, "flat", 1,
-    "Every account typed Bank or Cash in ERPNext, on the balance sheet");
+    "Accounts with Account Type Bank or Cash");
   const cr = c.current_ratio?.value;
   add("Current Ratio", (n) => { n.textContent = cr === null || cr === undefined ? "—" : cr.toFixed(2); },
     cr === null || cr === undefined ? "No current liabilities recorded"
-      : cr < 1 ? "Short-term debts exceed short-term assets" : "Short-term assets cover short-term debts",
+      : cr < 1 ? "Current Liabilities exceed Current Assets" : "Current Assets cover Current Liabilities",
     cr !== null && cr !== undefined && cr < 1 ? "down" : "flat", 4,
     "Current assets for every unit of current liabilities");
 }

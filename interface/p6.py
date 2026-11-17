@@ -4,43 +4,43 @@ exec(_src('p5.py'))
 V_MYDAY=f'''<div class="topbar"><div><h3>Today</h3>
 <div class="when">Only what is waiting on you</div></div></div>
 <div class="grid" style="grid-template-columns:repeat(4,1fr)">
-<div class="bk" onclick="go('approvals')"><div class="n">—</div><div class="l">Awaiting you</div><div class="v">&nbsp;</div></div>
-<div class="bk" data-opens="figure"><div class="n">—</div><div class="l">Due today</div><div class="v">on your own list</div></div>
+<div class="bk" onclick="go('approvals')"><div class="n">—</div><div class="l">Awaiting You</div><div class="v">&nbsp;</div></div>
+<div class="bk" data-opens="figure"><div class="n">—</div><div class="l">Due Today</div><div class="v">on your own list</div></div>
 <div class="bk" onclick="go('delegation')"><div class="n">—</div><div class="l">Delegated Tasks Done</div><div class="v">awaiting your review</div></div>
 <div class="bk" onclick="go('delegation')"><div class="n">—</div><div class="l">Overdue Delegated Tasks</div><div class="v">assigned by you, past their due date</div></div></div>
-<div class="sect">Awaiting you</div>
+<div class="sect">Awaiting You</div>
 <div class="work-list"><div class="work-empty"><b>Reading what is waiting on you&hellip;</b></div></div>
-<div class="sect" style="margin-top:20px">Work you handed out that is past its date</div>
+<div class="sect" style="margin-top:20px">Overdue Delegated Tasks</div>
 <div class="work-table"></div>'''
 
 V_REPORTS=f'''<div class="topbar"><div><h3>Reports</h3>
-<div class="when">Nine reports · built from the records, never typed up by hand</div></div></div>
-<table class="dt"><thead><tr><th>Report</th><th>Checked against</th><th>Schedule</th><th>Last run</th><th></th></tr></thead><tbody>
+<div class="when"></div></div></div>
+<table class="dt"><thead><tr><th>Report</th><th>Checked Against</th><th>Schedule</th><th>Last Run</th><th></th></tr></thead><tbody>
 <tr><td><b>Executive Summary</b><div style="font-size:var(--fs-2xs);color:var(--mut)">What moved, what is wrong, what needs deciding</div></td>
-<td style="color:var(--mut)">The alert and task records</td><td style="color:var(--mut)">Not scheduled</td>
-<td><span class="tag t-dr" data-last="rp01">Not run yet</span></td><td><button class="btn" data-report="rp01" onclick="runReport(&#39;rp01&#39;)">Run</button></td></tr>
-<tr><td><b>Sales and Payments</b><div style="font-size:var(--fs-2xs);color:var(--mut)">Orders, invoicing, collections, who owes what, discounts, biggest customers</div></td>
-<td style="color:var(--mut)">Customer account balances</td><td style="color:var(--mut)">Not scheduled</td>
-<td><span class="tag t-dr" data-last="rp05">Not run yet</span></td><td><button class="btn" data-report="rp05" onclick="runReport(&#39;rp05&#39;)">Run</button></td></tr>
-<tr><td><b>Buying and stock</b><div style="font-size:var(--fs-2xs);color:var(--mut)">Open orders, suppliers, availability, ageing, money tied up</div></td>
-<td style="color:var(--mut)">Stock and supplier balances</td><td style="color:var(--mut)">Not scheduled</td>
-<td><span class="tag t-dr" data-last="rp06">Not run yet</span></td><td><button class="btn" data-report="rp06" onclick="runReport(&#39;rp06&#39;)">Run</button></td></tr>
-<tr><td><b>Weekly management report</b></td><td style="color:var(--mut)">Each area's own numbers</td>
-<td style="color:var(--mut)">Not scheduled</td><td><span class="tag t-dr" data-last="rp02">Not run yet</span></td><td><button class="btn" data-report="rp02" onclick="runReport(&#39;rp02&#39;)">Run</button></td></tr>
-<tr><td><b>Monthly report</b></td><td style="color:var(--mut)">The accounts</td><td style="color:var(--mut)">Not scheduled</td>
-<td><span class="tag t-dr" data-last="rp03">Not run yet</span></td><td><button class="btn" data-report="rp03" onclick="runReport(&#39;rp03&#39;)">Run</button></td></tr>
+<td style="color:var(--mut)">The alert and task records</td><td style="color:var(--mut)">Not Scheduled</td>
+<td><span class="tag t-dr" data-last="rp01">Not Run Yet</span></td><td><button class="btn" data-report="rp01" onclick="runReport(&#39;rp01&#39;)">Run</button></td></tr>
+<tr><td><b>Sales and Payments</b><div style="font-size:var(--fs-2xs);color:var(--mut)">Sales Orders, Sales Invoices, Accounts Receivable, discounts, top customers</div></td>
+<td style="color:var(--mut)">Customer Ledger Balances</td><td style="color:var(--mut)">Not Scheduled</td>
+<td><span class="tag t-dr" data-last="rp05">Not Run Yet</span></td><td><button class="btn" data-report="rp05" onclick="runReport(&#39;rp05&#39;)">Run</button></td></tr>
+<tr><td><b>Buying and Stock</b><div style="font-size:var(--fs-2xs);color:var(--mut)">Open Purchase Orders, suppliers, Projected Qty, Stock Ageing, working capital</div></td>
+<td style="color:var(--mut)">Stock Balance and Supplier Ledger Balances</td><td style="color:var(--mut)">Not Scheduled</td>
+<td><span class="tag t-dr" data-last="rp06">Not Run Yet</span></td><td><button class="btn" data-report="rp06" onclick="runReport(&#39;rp06&#39;)">Run</button></td></tr>
+<tr><td><b>Weekly Management Report</b></td><td style="color:var(--mut)">Each area's own numbers</td>
+<td style="color:var(--mut)">Not Scheduled</td><td><span class="tag t-dr" data-last="rp02">Not Run Yet</span></td><td><button class="btn" data-report="rp02" onclick="runReport(&#39;rp02&#39;)">Run</button></td></tr>
+<tr><td><b>Monthly Report</b></td><td style="color:var(--mut)">The accounts</td><td style="color:var(--mut)">Not Scheduled</td>
+<td><span class="tag t-dr" data-last="rp03">Not Run Yet</span></td><td><button class="btn" data-report="rp03" onclick="runReport(&#39;rp03&#39;)">Run</button></td></tr>
 <tr><td><b>Engineering</b></td><td style="color:var(--mut)">Job costs against the accounts</td>
-<td style="color:var(--mut)">Not scheduled</td><td><span class="tag t-dr" data-last="rp07">Not run yet</span></td><td><button class="btn" data-report="rp07" onclick="runReport(&#39;rp07&#39;)">Run</button></td></tr>
+<td style="color:var(--mut)">Not Scheduled</td><td><span class="tag t-dr" data-last="rp07">Not Run Yet</span></td><td><button class="btn" data-report="rp07" onclick="runReport(&#39;rp07&#39;)">Run</button></td></tr>
 <tr><td><b>People</b><div style="font-size:var(--fs-2xs);color:var(--mut)">Headcount, recruitment, attendance, payroll status</div></td>
-<td style="color:var(--mut)">The HR records</td><td style="color:var(--mut)">Not scheduled</td>
-<td><span class="tag t-dr" data-last="rp08">Not run yet</span></td><td><button class="btn" data-report="rp08" onclick="runReport(&#39;rp08&#39;)">Run</button></td></tr>
-<tr><td><b>Compliance and audit</b></td><td style="color:var(--mut)">The compliance records</td>
-<td style="color:var(--mut)">Not scheduled</td><td><span class="tag t-dr" data-last="rp09">Not run yet</span></td><td><button class="btn" data-report="rp09" onclick="runReport(&#39;rp09&#39;)">Run</button></td></tr>
-<tr><td><b>Board report</b></td><td style="color:var(--mut)">The accounts and the risk records</td>
-<td style="color:var(--mut)">On request</td><td><span class="tag t-dr" data-last="rp04">Not run yet</span></td><td><button class="btn" data-report="rp04" onclick="runReport(&#39;rp04&#39;)">Run</button></td></tr>
+<td style="color:var(--mut)">The HR records</td><td style="color:var(--mut)">Not Scheduled</td>
+<td><span class="tag t-dr" data-last="rp08">Not Run Yet</span></td><td><button class="btn" data-report="rp08" onclick="runReport(&#39;rp08&#39;)">Run</button></td></tr>
+<tr><td><b>Compliance and Audit</b></td><td style="color:var(--mut)">The compliance records</td>
+<td style="color:var(--mut)">Not Scheduled</td><td><span class="tag t-dr" data-last="rp09">Not Run Yet</span></td><td><button class="btn" data-report="rp09" onclick="runReport(&#39;rp09&#39;)">Run</button></td></tr>
+<tr><td><b>Board Report</b></td><td style="color:var(--mut)">The accounts and the risk records</td>
+<td style="color:var(--mut)">On Request</td><td><span class="tag t-dr" data-last="rp04">Not Run Yet</span></td><td><button class="btn" data-report="rp04" onclick="runReport(&#39;rp04&#39;)">Run</button></td></tr>
 </tbody></table>
 <div id="rpout"></div>
-<div class="note"><h4>How these reports are written</h4><ul>
+<div class="note"><h4>How These Reports Are Written</h4><ul>
 <li>Each report is written from current data when you run it: every figure comes from the loaded records or
 from ERPNext's own reports, and the report lists <b>what it checked</b>. Where the records do not hold
 something a report should cover, it says so rather than leaving it out.</li>

@@ -59,7 +59,7 @@ export default function SettingsBusinesses() {
                     <span className="st-sub">{b.erpnext_company}</span>
                   ) : null}
                 </td>
-                <td className="st-dim">{b.is_local ? "This platform" : b.site_url || "Not set"}</td>
+                <td className="st-dim">{b.is_local ? "This Platform" : b.site_url || "Not set"}</td>
                 <td>
                   <span className={`tag ${STATUS_TAG[b.status] || "t-dr"}`}>{b.status}</span>
                 </td>

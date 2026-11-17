@@ -79,7 +79,7 @@ def no_access(business_code, error=None, doctype: str | None = None) -> dict:
     `error` is the connector's RemotePermissionDenied (its .doctype and .status)."""
     doctype = doctype or getattr(error, "doctype", None)
     if getattr(error, "status", None) == 401:
-        text = ("The business's ERPNext refused the API key this platform reads with: it "
+        text = ("The business's ERPNext refused this platform's API Key: it "
                 "may have been revoked or changed there.")
         steps = ["On that ERPNext, open the platform's API user and generate a new API key "
                  "and secret under API Access.",
@@ -109,8 +109,8 @@ def no_access(business_code, error=None, doctype: str | None = None) -> dict:
 RECONCILE_STEPS = [
     "In ERPNext open Accounts, then Payment Reconciliation.",
     "Choose the Company, the Party Type (Customer or Supplier) and the Party.",
-    "Press Get Unreconciled Entries: the payments not yet matched are listed on one side, "
-    "the open invoices on the other.",
+    "Press Get Unreconciled Entries: unreconciled payments on one side, "
+    "open invoices on the other.",
     "Press Allocate to set each payment against the invoices it pays (oldest first, or "
     "as the remittance says), check the amounts, then press Reconcile.",
     "Repeat for the next customer or supplier. The invoices' outstanding amounts then "

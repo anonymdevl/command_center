@@ -358,8 +358,8 @@ def risk_obligations(ctx):
 
 
 # --------------------------------------------------------------------------- overview
-AREAS = (("fact_sales_invoice", "Sales & money owed"), ("fact_purchase_invoice", "Buying & suppliers"),
-         ("fact_stock_balance", "Stock & warehouses"), ("fact_task", "Engineering & installs"),
+AREAS = (("fact_sales_invoice", "Sales and Payments"), ("fact_purchase_invoice", "Buying and Suppliers"),
+         ("fact_stock_balance", "Stock & Warehouses"), ("fact_task", "Project Insights"),
          ("fact_case", "Customer Service & Issues"), ("fact_person", "People"))
 
 

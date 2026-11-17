@@ -99,7 +99,7 @@ V_SEARCH=f'''<div class="topbar"><div><h3>Find anything</h3>
 <div id="sout"></div>'''
 
 V_ASK=f'''<div class="topbar"><div><h3>Ask AI</h3>
-<div class="when">Answers come from the records, and always say which ones</div></div></div>
+<div class="when"></div></div></div>
 <div class="askbox"><svg class="askbox-i" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 3.5l1.7 4.8 4.8 1.7-4.8 1.7L11 16.5l-1.7-4.8L4.5 10l4.8-1.7z"/><path d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg><input id="askin" placeholder="Ask anything about the business — in your own words" autocomplete="off"
  onkeyup="if(event.key==='Enter')runSearch(this.value)"></div>
 <div class="sugg" id="asksugg">
@@ -109,6 +109,6 @@ V_ASK=f'''<div class="topbar"><div><h3>Ask AI</h3>
 </div>
 <div class="askconvs" id="askconvs" hidden></div>
 <div id="sout2"></div>
-<div class="note"><h4>Two things worth watching</h4><ul>
+<div class="note"><h4>Two Things Worth Watching</h4><ul>
 <li>It shows <b>what it checked</b>, step by step as it works, and lists every lookup under the answer. Every figure comes from the records or from ERPNext's own reports.</li>
 <li>It reads; it never writes. <b>It has no way to create, change, approve or delete anything in ERPNext</b> — every action on these screens is yours, taken as you.</li></ul></div>'''

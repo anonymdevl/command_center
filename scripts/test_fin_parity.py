@@ -91,7 +91,7 @@ def markup_inventory(html):
                           for t in re.findall(r"<table[^>]*>(.*?)</table>", html, re.S)]
     inv["buttons"] = sorted(set(_text(b) for b in re.findall(r"<button[^>]*>(.*?)</button>", html)))
     inv["notes"] = [_text(t) for t in re.findall(r'<div class="thin">(.*?)</div>', html, re.S)]
-    inv["explainer_links"] = len(re.findall(r"what is this\?", html))
+    inv["explainer_links"] = len(re.findall(r"what is this\?", html, re.I))
     return inv
 
 

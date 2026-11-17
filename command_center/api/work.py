@@ -77,7 +77,7 @@ def _key_guide(code, name) -> dict:
                   "Give both to a platform administrator, who adds them for you under "
                   "Settings → ERPNext API Keys.",
                   "Open this screen again: what is waiting on you appears here."],
-                 "/app/user", label="Open your user in ERPNext")
+                 "/app/user", label="Open Your User in ERPNext")
 
 
 def _unreachable(code, e) -> dict:
@@ -128,11 +128,11 @@ def _summary(src, business_code):
 
     site = src.site()
     figures = {
-        "work_awaiting": _fig("work_awaiting", "Awaiting you", len(approvals),
+        "work_awaiting": _fig("work_awaiting", "Awaiting You", len(approvals),
                               (f"{currency} {value:,.0f} involved".strip() if value else
                                "nothing with a value on it") + first_ap,
                               site + "/app/workflow-action?status=Open", now),
-        "work_due_today": _fig("work_due_today", "Due today", len(due_today),
+        "work_due_today": _fig("work_due_today", "Due Today", len(due_today),
                                "on your own list, today or earlier"
                                + (f" · showing the first {MINE_CAP:,}" if mine.capped else ""),
                                f"{site}/app/todo?status=Open&allocated_to={user}", now),

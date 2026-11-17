@@ -48,7 +48,7 @@ balance and the proposed amount, and it is waiting for the <b>Finance Manager</b
 V_APPROVALS=f'''<div class="topbar"><div><h3>Approvals</h3>
 <div class="when">Reading what is waiting on you&hellip;</div></div></div>
 <div class="work-list"><div class="work-empty"><b>Reading your approvals&hellip;</b></div></div>
-<div class="note"><h4>Where the decision is actually enforced</h4><ul>
+<div class="note"><h4>Where the Decision Is Enforced</h4><ul>
 <li>Approving here drives the approval inside ERPNext. The control lives in the system that holds the
 money, not in this dashboard.</li>
 <li>Every decision is taken in ERPNext under your own account, so the document&#39;s own history records
@@ -62,7 +62,7 @@ V_DELEG=f'''<div class="topbar"><div><h3>Outstanding Tasks</h3>
 <div class="bk"><div class="n">—</div><div class="l">Late</div><div class="v">past the date you set</div></div>
 <div class="bk"><div class="n">—</div><div class="l">Sent Back More Than Once</div><div class="v">you rejected the work twice or more</div></div>
 <div class="bk"><div class="n">—</div><div class="l">High Priority</div><div class="v">marked high priority</div></div></div>
-<div class="note"><h4>Where the work actually happens</h4><ul>
+<div class="note"><h4>Where the Work Happens</h4><ul>
 <li>This platform is for management. <b>The people you hand work to do not need a login here.</b></li>
 <li>Each task is a To-Do in ERPNext, where they already work: ERPNext notifies them, and they mark it done there.
 You hand work out, move it, withdraw it or change its date here, and accept it or send it back when it is done.</li></ul></div>'''

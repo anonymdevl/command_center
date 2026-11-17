@@ -186,7 +186,7 @@ export function InsightBody({ s, scope, openDrawer, extra = null, tiles = null, 
               ) : null}
               {href ? (
                 <a className="dw-btn" href={href} target="_blank" rel="noreferrer">
-                  Open The Records In ERPNext ↗
+                  Open the Records in ERPNext ↗
                 </a>
               ) : null}
             </div>
@@ -368,8 +368,8 @@ function BridgeBars({ b, cur }) {
 
 const BY = {
   gap: ["The largest differences", "Difference"],
-  unmatched: ["Most money not matched", "Not matched"],
-  d90_plus: ["Most over 90 days", "Over 90 days"],
+  unmatched: ["Most Unreconciled", "Not matched"],
+  d90_plus: ["Most over 90 days", "Over 90 Days"],
   in_credit: ["Most in credit", "In credit"],
 };
 
@@ -414,7 +414,7 @@ function Unmatched({ u, cur }) {
   if (!u.count) return null;
   return (
     <div className="ins-block">
-      <h6>Payments not matched, by age</h6>
+      <h6>Unreconciled Payments, by Age</h6>
       <Chips cur={cur} chips={[
         { label: `Recent, ${u.timing_days} days or less (timing)`, value: u.recent.total, unit: "currency" },
         { label: `Older (process)`, value: u.old.total, unit: "currency", state: u.old.total ? "bad" : "ok" },
@@ -445,15 +445,15 @@ function Unmatched({ u, cur }) {
 
 function Ageing({ a, cur }) {
   const spec = {
-    type: "bar", title: "Owed, by age after matching", unit: cur,
+    type: "bar", title: "Ledger Balance, by Age After Reconciling", unit: cur,
     labels: a.buckets.map((b) => b.label), series: [{ name: cur, values: a.buckets.map((b) => b.value) }],
   };
   return (
     <div className="ins-block">
-      <h6>By age, after payments not yet matched are set against the oldest</h6>
-      <Chart spec={spec} title="Owed, by age after matching" />
+      <h6>By age, after unreconciled payments are set against the oldest</h6>
+      <Chart spec={spec} title="Ledger Balance, by Age After Reconciling" />
       {a.invoices_over_90 ? (
-        <p className="ins-mut">Aged as the invoices stand, {cur} {exact(a.invoices_over_90)} of {cur} {exact(a.invoices_total)} looks over 90 days.</p>
+        <p className="ins-mut">Invoice Outstanding by Due Date, {cur} {exact(a.invoices_over_90)} of {cur} {exact(a.invoices_total)} looks over 90 days.</p>
       ) : null}
     </div>
   );

@@ -240,21 +240,21 @@ def reconcile(business_code: str | None = None):
     f_total, f_count = _fact_sum(
         "Command Center Fact Sales Invoice", "outstanding_amount", conn.code,
         extra={"src_docstatus": 1, "unpaid_only": True})
-    checks.append(_check("Outstanding receivables", src_total, f_total))
-    checks.append(_check("Unpaid invoice count", src_count, f_count, money=False))
+    checks.append(_check("Sales Invoice Outstanding", src_total, f_total))
+    checks.append(_check("Unpaid Sales Invoice Count", src_count, f_count, money=False))
 
     src_rev = _source_sum(conn, "Sales Invoice Item", "base_net_amount", {"docstatus": 1},
                           parent="Sales Invoice")
     f_rev, _ = _fact_sum("Command Center Fact Sales Invoice Line",
                          "base_net_amount", conn.code,
                          extra={"src_docstatus": 1})
-    checks.append(_check("Invoiced revenue (lines)", src_rev, f_rev))
+    checks.append(_check("Sales Invoiced (Lines)", src_rev, f_rev))
 
     src_alloc = _source_sum(conn, "Payment Entry Reference", "allocated_amount",
                             {"docstatus": 1}, parent="Payment Entry")
     f_alloc, _ = _fact_sum("Command Center Fact Payment Allocation",
                            "allocated_amount", conn.code)
-    checks.append(_check("Cash applied to documents", src_alloc, f_alloc))
+    checks.append(_check("Payments Allocated", src_alloc, f_alloc))
 
     return {"business": conn.code,
             "all_reconciled": all(c["reconciled"] for c in checks),

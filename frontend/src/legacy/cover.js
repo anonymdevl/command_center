@@ -26,7 +26,7 @@ export function drawCover(panel, spec, { openDrawer, scope } = {}) {
   const rows = spec.rows || [];
   const s = spec.summary || {};
   if (!rows.length) {
-    box.append(el("div", "thin", spec.empty || "Every confirmed order has been delivered in full."));
+    box.append(el("div", "thin", spec.empty || "Every submitted Sales Order has been delivered in full."));
     return true;
   }
   const state = { filter: box.dataset.filter || spec.default || "all", extra: {}, cur, spec,
@@ -237,7 +237,7 @@ function lineDrawer(r, state) {
   row("Sales Order", link(r.order, r.order_href));
   row("Customer", r.customer);
   row("Item", link(r.item_code, r.item_href));
-  row("Ordered On", shortDate(r.ordered_on));
+  row("Transaction Date", shortDate(r.ordered_on));
   row("Promised For", r.deliver_by ? `${shortDate(r.deliver_by)}${r.late_to_customer
     ? ` · ${count(r.days_late)} days late` : ""}` : "No date set");
   row("Ordered", `${qty(r.ordered)}${unit}`);
@@ -329,7 +329,7 @@ function chain(c, unit) {
     `Goods receipt · ${shortDate(x.date) || "—"} · ${qty(x.qty)}${unit}`)));
   (c.invoices || []).forEach((x) => docs.append(li(link(x.name, x.href),
     `Supplier invoice${x.received_on_it ? ", stock received on it" : ""} · ${shortDate(x.date) || "—"} · ${qty(x.qty)}${unit}`)));
-  if (!docs.children.length) docs.append(li("No goods receipt or supplier invoice yet", ""));
+  if (!docs.children.length) docs.append(li("No Purchase Receipt or Purchase Invoice yet", ""));
   card.append(docs);
   return card;
 }

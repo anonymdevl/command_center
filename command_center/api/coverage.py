@@ -80,10 +80,10 @@ def panel(ctx, view: str) -> dict:
     if not s["lines"]:
         from command_center.api.panels import SO_STEPS, _guide
         if not _orders_on_record(ctx):
-            return _guide(ctx, "No confirmed sales order is recorded in ERPNext yet.",
+            return _guide(ctx, "No submitted Sales Order is recorded in ERPNext yet.",
                           SO_STEPS, "/app/sales-order")
         return {"kind": "cover", "states": s["states"], "rows": [], "summary": s,
-                "empty": "Every confirmed order has been delivered in full.", "note": ""}
+                "empty": "Every submitted Sales Order has been delivered in full.", "note": ""}
     by = {}
     for l in _ranked(got["lines"]):
         by.setdefault(l["state"], []).append(l)

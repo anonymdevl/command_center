@@ -65,10 +65,10 @@ RETRY_MINUTES = 60                   # between a failed attempt and the next
 MAX_WORDS = 130
 LOCK = "cc:summary:writing:{}"
 
-VITALS = (("cash_in_month", "Money In"),
-          ("ar_total", "Owed to Us"),
-          ("ap_total", "We Owe"),
-          ("stock_value", "Stock Held"),
+VITALS = (("cash_in_month", "Payments Received"),
+          ("ar_total", "Accounts Receivable"),
+          ("ap_total", "Accounts Payable"),
+          ("stock_value", "Stock Value"),
           (health.CONTROL, "Overall Business Health"))
 QUESTION_KEYS = tuple(k for k, _q in QUESTIONS)
 FIGURE_KEYS = tuple(k for k, _l in VITALS) + QUESTION_KEYS
@@ -436,18 +436,18 @@ def fallback(data: dict) -> str:
     m = by.get("cash_in_month")
     if m:
         period = m["what"].split("(")[-1].rstrip(")") if "(" in m["what"] else "the last full month"
-        out.append(f"Money in came to {m['text']} in {period}" + (f", {m['change']}" if m["change"] else "")
+        out.append(f"Payments received came to {m['text']} in {period}" + (f", {m['change']}" if m["change"] else "")
                    + ".")
     pos = []
     if by.get("ar_total"):
-        pos.append(f"customers owe {by['ar_total']['text']}")
+        pos.append(f"Accounts Receivable is {by['ar_total']['text']}")
     if by.get("ap_total"):
-        pos.append(f"we owe suppliers {by['ap_total']['text']}")
+        pos.append(f"Accounts Payable is {by['ap_total']['text']}")
     if pos:
         out.append(("On the Customer and Supplier Ledgers, " + " and ".join(pos)) + (
             f"; stock held is {by['stock_value']['text']} at cost." if by.get("stock_value") else "."))
     elif by.get("stock_value"):
-        out.append(f"Stock held is {by['stock_value']['text']} at cost.")
+        out.append(f"Stock Value is {by['stock_value']['text']}.")
     h = by.get(health.CONTROL)
     if h:
         out.append(f"Overall Business Health is {h['text']}" + (f", {h['change']}" if h["change"] else "")

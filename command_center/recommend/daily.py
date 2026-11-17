@@ -33,12 +33,12 @@ DIGEST_PARENT = "__cc_rec_digest"
 TOP = 5
 # Headline figures the brief may compare with yesterday: the same ones the cards show.
 BRIEF_FIGURES = (("ar_total", "Accounts Receivable (Customer Ledger Balance)"),
-                 ("ar_over_90", "Of which more than 90 days late"),
+                 ("ar_over_90", "Of Which Over 90 Days"),
                  ("ap_total", "Accounts Payable (Supplier Ledger Balance)"),
-                 ("cash_in_month", "Money received, last full month"),
-                 ("revenue_last_month", "Invoiced, last full month"),
-                 ("order_book_late", "Orders past their promised date, still to deliver"),
-                 ("stock_value", "Stock held, at cost"))
+                 ("cash_in_month", "Payments Received, Last Full Month"),
+                 ("revenue_last_month", "Invoiced, Last Full Month"),
+                 ("order_book_late", "Sales Orders Past Delivery Date, To Deliver"),
+                 ("stock_value", "Stock Value"))
 
 
 def _get(parent, code) -> dict:

@@ -23,7 +23,7 @@ import { WAITING } from "./reach.js";
 
 const SCORES = [
   ["score_deliver", "Delivering what we sold", "Can we deliver what we sold?"],
-  ["score_paid", "Getting paid", "Are we getting paid?"],
+  ["score_paid", "Getting Paid", "Are we getting paid?"],
   ["score_paperwork", "Paperwork finished", "Is the paperwork finished?"],
   ["score_approvals", "The right people approving", "Were the right people asked?"],
   ["score_records", "Clean records", "Are our records clean?"],
@@ -416,7 +416,7 @@ function loadDebts(panel, scope, onOpen) {
   delete panel.dataset.loaded;
   // The rows on show are for the band before: while this one is read, none are.
   rows.textContent = "";
-  rows.append(el("div", "home-wait", "Reading the receivables…"));
+  rows.append(el("div", "home-wait", "Reading Accounts Receivable…"));
   const latest = () => debtSeq.get(panel) === seq && panel.dataset.scope === scope
     && document.body.contains(panel);
   api.homeDebtors({ business_code: scope, mode })
@@ -428,7 +428,7 @@ function loadDebts(panel, scope, onOpen) {
       setText(panel, "#debt-n", `${count(d.customers)} customer${d.customers === 1 ? "" : "s"}`);
       rows.textContent = "";
       if (!d.rows.length) {
-        rows.append(el("div", "home-wait", mode === "all" ? "Nobody owes us anything." : "Nothing in this band."));
+        rows.append(el("div", "home-wait", mode === "all" ? "No customer has a Customer Ledger Balance." : "Nothing in this band."));
         return;
       }
       d.rows.forEach((r) => rows.append(debtRow(r, d.currency, onOpen)));
@@ -448,7 +448,7 @@ function loadDebts(panel, scope, onOpen) {
 function debtRow(r, currency, onOpen) {
   const row = el("button", "debt-row");
   row.type = "button";
-  row.title = `Open what ${r.customer} owes`;
+  row.title = `Open ${r.customer}'s Customer Ledger Balance`;
   const who = el("span", "debt-who");
   who.append(el("span", "av2", initials(r.customer)));
   const name = el("span", "debt-name");
@@ -461,12 +461,12 @@ function debtRow(r, currency, onOpen) {
   const amt = el("span", "debt-amt");
   const inv = el("span", "debt-a");
   // What the open invoices say, then what the ledger says is really owed.
-  inv.append(el("b", null, exact(r.on_invoices ?? r.invoiced, { decimals: 0 })), el("small", null, "On invoices"));
+  inv.append(el("b", null, exact(r.on_invoices ?? r.invoiced, { decimals: 0 })), el("small", null, "Invoice Outstanding"));
   const owed = el("span", "debt-a");
   owed.append(el("b", null, exact(r.owed, { decimals: 0 })), el("small", null, `Customer Ledger Balance${currency ? `, ${currency}` : ""}`));
   amt.append(inv, el("span", "debt-arrow", "→"), owed);
   row.append(who, days, amt);
-  row.onclick = () => onOpen?.({ label: `${r.customer}: what they owe`, drill: r.drill });
+  row.onclick = () => onOpen?.({ label: `${r.customer}: Customer Ledger Balance`, drill: r.drill });
   return row;
 }
 
@@ -567,7 +567,7 @@ function gauge(root, figures) {
       const open = list.hidden;
       list.hidden = !open;
       how.setAttribute("aria-expanded", String(open));
-      how.textContent = open ? "Hide how it is scored" : "How it is scored";
+      how.textContent = open ? "Hide How It Is Scored" : "How It Is Scored";
     };
   }
 }

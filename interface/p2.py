@@ -86,48 +86,48 @@ _HOME_TILES = "".join(
     f'<div class="hd">{desc}</div><div class="v">&nbsp;</div>'
     f'<div class="n">—</div></div>'
     for label, desc, go in (
-        ("Sales &amp; money owed", "Still to be collected from customers.", "sales"),
-        ("Buying &amp; suppliers", "What we still owe our suppliers.", "proc"),
-        ("Stock &amp; warehouses", "Value of goods on our shelves.", "inv")))
+        ("Sales and Payments", "Accounts Receivable (Customer Ledger Balance)", "sales"),
+        ("Buying and Suppliers", "Accounts Payable (Supplier Ledger Balance)", "proc"),
+        ("Stock &amp; Warehouses", "Stock Value (Stock Balance)", "inv")))
 
 V_COMMAND=f'''<div class="topbar"><div><h3 class="hello" id="greet">Good morning</h3>
 <div class="when">Here is where the business stands this morning.</div></div></div>
 <div class="grid hero-row">{_HOME_TILES}</div>
-<div class="mbrief" id="mbrief"><div class="mb-tag">Morning brief</div>
+<div class="mbrief" id="mbrief"><div class="mb-tag">Morning Brief</div>
 <h4 id="mb-h">Reading what needs your attention…</h4><div class="mb-chips" id="mb-chips"></div></div>
-<div class="sect"><span>Top actions</span><span class="lnk" onclick="go('brief')">See every recommendation →</span></div>
+<div class="sect"><span>Top Actions</span><span class="lnk" onclick="go('brief')">All Recommendations →</span></div>
 <div class="rec-live-list" data-rec="top"><div class="work-empty"><b>Working out what to do first&hellip;</b></div></div>
-<div class="panel debt" id="debt"><div class="debt-h"><div><h4>Largest amounts owed <span class="debt-n" id="debt-n"></span></h4>
+<div class="panel debt" id="debt"><div class="debt-h"><div><h4>Largest Receivables <span class="debt-n" id="debt-n"></span></h4>
 <p>Customers with the most still to collect, by Customer Ledger Balance</p></div>
 <div class="segc" role="tablist" aria-label="Which debts">
 <button type="button" class="on" data-mode="all" role="tab" aria-selected="true">All</button>
 <button type="button" data-mode="overdue" role="tab" aria-selected="false">Overdue</button>
-<button type="button" data-mode="over90" role="tab" aria-selected="false">Over 90 days</button></div></div>
+<button type="button" data-mode="over90" role="tab" aria-selected="false">Over 90 Days</button></div></div>
 <div class="debt-cols"><span>Customer</span><span>Waiting</span><span>Invoice Outstanding → Customer Ledger Balance</span></div>
-<div class="debt-rows" id="debt-rows"><div class="home-wait">Reading the receivables…</div></div></div>
+<div class="debt-rows" id="debt-rows"><div class="home-wait">Reading Accounts Receivable…</div></div></div>
 <div class="counts">
 <div class="count dark" onclick="go('cx')"><span class="count-i" aria-hidden="true">●</span><b id="cnt-cases">—</b><span>customer issues open</span></div>
 <div class="count" onclick="go('eng')"><span class="count-i" aria-hidden="true">●</span><b id="cnt-late">—</b><span>jobs past their date</span></div></div>
 <div class="grid home-pair">
-<div class="panel gauge-p" id="gauge"><div class="gp-h"><div><h4>Business health</h4><p>The six questions of Business Health, combined</p></div></div>
+<div class="panel gauge-p" id="gauge"><div class="gp-h"><div><h4>Business Health</h4></div></div>
 <div class="gauge" id="gauge-v"><div class="home-wait">Working it out…</div></div>
-<button type="button" class="lnk gauge-how" id="gauge-how" aria-expanded="false">How it is scored</button>
+<button type="button" class="lnk gauge-how" id="gauge-how" aria-expanded="false">How It Is Scored</button>
 <ul class="gauge-parts" id="gauge-parts" hidden></ul></div>
-<div class="panel topc" id="topc"><div class="gp-h"><div><h4>Top customers</h4><p id="topc-sub">Share of sales, last twelve months</p></div></div>
-<div class="topc-bar" id="topc-bar"></div><ul class="topc-l" id="topc-l"><li class="home-wait">Reading the sales…</li></ul></div></div>
+<div class="panel topc" id="topc"><div class="gp-h"><div><h4>Top Customers</h4><p id="topc-sub">Share of Sales Invoiced, last 12 months</p></div></div>
+<div class="topc-bar" id="topc-bar"></div><ul class="topc-l" id="topc-l"><li class="home-wait">Reading Sales Invoices…</li></ul></div></div>
 <div class="banner">Every figure here is read from the business&#39;s own ERPNext. Assign, Request evidence
 and Escalate hand the work to a colleague in that ERPNext, from you: assigned on the document when it is about
 one, otherwise as a To-Do, and ERPNext notifies them. Nothing else in a business record changes.</div>
-<div class="sect"><span>The numbers this morning</span></div>
+<div class="sect"><span>This Morning's Figures</span></div>
 <div class="kpis" style="grid-template-columns:repeat(6,1fr)">
-{kpi("Money in, month","—","","","flat")}
-{kpi("Owed to us","—","","","flat","","go('sales')")}
-{kpi("Days to get paid","—","","","flat")}
+{kpi("Payments Received","—","","","flat")}
+{kpi("Accounts Receivable","—","","","flat","","go('sales')")}
+{kpi("Average Days Late","—","","","flat")}
 {kpi("Waiting","—","","","flat","","go('sales')")}
-{kpi("Past due","—","","","flat","","go('sales')")}
-{kpi("Stock we hold","—","","","flat","","go('health')")}
+{kpi("Overdue Sales Orders","—","","","flat","","go('sales')")}
+{kpi("Stock Value","—","","","flat","","go('health')")}
 </div>
-<div class="sect"><span>Needs your attention</span><span class="lnk" onclick="go('brief')">Open the full brief →</span></div>
+<div class="sect"><span>Needs Your Attention</span><span class="lnk" onclick="go('brief')">Executive Summary →</span></div>
 <div class="alert-live-list"><div class="work-empty"><b>Reading the alerts&hellip;</b></div></div>'''
 
 # ---------------- V: BRIEF ----------------

@@ -28,7 +28,7 @@ import { boot } from "../api/boot.js";
 
 // Used until the server's list arrives, or if it cannot be fetched.
 const FALLBACK = [
-  { q: "Who owes us the most, and how long have they owed it?", area: "Money owed" },
+  { q: "Which customers have the largest Customer Ledger Balance, and how old is it?", area: "Accounts Receivable" },
   { q: "How did sales trend over the last 12 months, and where are we heading?", area: "Sales" },
   { q: "Which suppliers do we depend on most?", area: "Buying" },
 ];
@@ -322,7 +322,7 @@ export default function AskBar({ scope, openDrawer }) {
               <b>Could not answer that.</b> <span>{error}</span>
               <div className="ap-acts">
                 <button className="ap-act" type="button" onClick={() => ask(pending)}>
-                  Try again
+                  Try Again
                 </button>
                 <button className="ap-act" type="button" onClick={reset}>
                   New question

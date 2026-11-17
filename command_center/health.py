@@ -57,7 +57,7 @@ WEEK_AGO = (5, 9)         # "about seven days ago": the stored reading nearest s
 # it was read from when there is no count to give.
 COUNTED = {
     "score_deliver": ("stock_lines_promised", "promised stock line", "promised stock lines",
-                      "the stock balance and the sales orders"),
+                      "Stock Balance and Sales Orders"),
     "score_paid": (None, None, None, "Customer Ledger Balances"),
     "score_paperwork": ("invoices_written", "sales invoice written", "sales invoices written",
                         "the sales invoices"),

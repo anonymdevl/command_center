@@ -254,7 +254,7 @@ class Speed(TransactionTestCase):
     def test_known_down_is_said_at_once_even_with_kept_answers(self):
         from insights.core.models import ConnectedBusiness
         kept, _ = self._post("panels.get", view="proc", business_code=A)
-        self.assertEqual(kept["panels"]["Orders still open"]["kind"], "table")
+        self.assertEqual(kept["panels"]["Open Purchase Orders"]["kind"], "table")
         self._figure("po_count", A)
         ConnectedBusiness.objects.filter(business_code=A).update(status="Unreachable")
 
@@ -265,7 +265,7 @@ class Speed(TransactionTestCase):
             out, _ = self._post("panels.get", view="proc", business_code=A)
             fig, _ = self._post("kpi.get", keys=["po_count", "ar_open_invoices"], business_code=A)
             self.assertLess(time.perf_counter() - t, 5)
-        self.assertEqual(out["panels"]["Orders still open"]["kind"], "unreachable")
+        self.assertEqual(out["panels"]["Open Purchase Orders"]["kind"], "unreachable")
         self.assertTrue(out.get("unreachable"))
         self.assertEqual(fig["po_count"]["data_status"]["state"], "unreachable")
         self.assertIsNotNone(fig["ar_open_invoices"]["value"], "loaded figures still show")

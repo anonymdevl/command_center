@@ -7,35 +7,35 @@ V_FIN=f'''<div class="topbar"><div><h3>Finances</h3>
 <div class="when">General Ledger</div></div></div>
 {fs_block()}
 <div class="kpis six ribbon">
-{kpi("Owed to us","—","","","flat","","ar")}
-{kpi("Unpaid invoices","—","","","flat","","ar")}
-{kpi("Last full month","—","","","flat","","rev")}
-{kpi("Best month","—","","","flat","","rev")}
-{kpi("Never issued","—","","","flat","","drafts")}
-{kpi("Bank checks","—","","","flat","","bank")}
+{kpi("Accounts Receivable","—","","","flat","","ar")}
+{kpi("Unpaid Sales Invoices","—","","","flat","","ar")}
+{kpi("Invoiced, Last Full Month","—","","","flat","","rev")}
+{kpi("Best Month Invoiced","—","","","flat","","rev")}
+{kpi("Draft Sales Invoices","—","","","flat","","drafts")}
+{kpi("Bank Reconciled","—","","","flat","","bank")}
 </div>
 <div class="two">
-{panel("Money coming in", trend0(155),
+{panel("Payments Received", trend0(155),
  "Monthly","rev")}
-{panel("Working capital tied up",
- bars0()+thin("Money the business cannot presently use: debts over three months old, stock on the shelves and orders not yet despatched."),
+{panel("Working Capital Tied Up",
+ bars0()+thin("Receivables over 90 days, Stock Value and Sales Orders To Deliver."),
  "","workingcap")}
 </div>
 {warn0()}
 {warn0()}
-{panel("Receivables and payables",
- '<div class="dt-scroll">'+dtable(["Customer or Supplier",("Invoice Outstanding$",True),("Party Ledger Balance$",True),("Difference$",True),"Why",
+{panel("Accounts Receivable and Payable",
+ '<div class="dt-scroll">'+dtable(["Party",("Invoice Outstanding$",True),("Party Ledger Balance$",True),("Difference$",True),"Why",
  ("Not Yet Due",True),("1–30 Days",True),("31–60 Days",True),("61–90 Days",True),("Over 90 Days",True)])+'</div>',
- "Customer and Supplier Ledger Balances beside Invoice Outstanding","ledger")}
+ "Party Ledger Balance vs Invoice Outstanding","ledger")}
 <div class="two">
-{panel("What we owe suppliers", thin("<b>What the Supplier Ledger says we owe suppliers, by when it falls due.</b> What is overdue and what falls due in the next 7, 30 and 60 days, after payments not yet matched are set against the oldest bills, against the cash customers are due to pay, so a payment run can be planned rather than guessed."))}
-{panel("Cash and bank position", thin("<b>The General Ledger balance on every bank and cash account.</b> Each balance is only as good as the last time the account was checked against the bank statement, so that date is shown beside it."))}
+{panel("Accounts Payable Ageing", thin("<b>Supplier Ledger Balance by Due Date:</b> overdue, and due in 7, 30 and 60 days, after unreconciled payments are set against the oldest Purchase Invoices, against what customers are due to pay."))}
+{panel("Bank and Cash Balances", thin("<b>General Ledger balance of every Account with Account Type Bank or Cash, with its last Bank Reconciliation.</b>"))}
 </div>
 <div class="two">
-{panel("Budget against actual", thin("<b>Spending against the budgets set in ERPNext.</b> Each budget line is compared with what has been posted to it this year, so a breach shows before the money is spent rather than after."))}
-{panel("Tax and statutory deadlines", thin("<b>What the General Ledger says is owed on each tax account.</b> The amount due on the next VAT, withholding or PAYE filing is the balance on its account; the filing dates themselves are not kept in ERPNext."))}
+{panel("Budget Variance", thin("<b>Actual against each Budget line for this Fiscal Year.</b>"))}
+{panel("Tax Account Balances", thin("<b>General Ledger balance of each Account with Account Type Tax.</b> Filing dates are not kept in ERPNext."))}
 </div>
-{panel("Profit on what we sell", thin("<b>What each product group earns over its cost, over the last twelve months.</b> Margin needs the cost of each item against its selling price; lines sold with no recorded cost are counted separately rather than as pure profit."))}'''
+{panel("Gross Profit by Item Group", thin("<b>Gross Profit by Item Group, last 12 months.</b> Lines with no Valuation Rate are shown separately."))}'''
 
 # ============ HR ============
 # People Lookup and Leave are not chart panels: frontend/src/legacy/people.js draws them
@@ -46,21 +46,21 @@ def pp_section(key, title, sub):
             f'<span>{sub}</span></div></div><div class="pp-body"></div></div>')
 
 HR_LOOKUP = pp_section("lookup", "People Lookup",
-    "Search anyone on the books, then open their profile")
+    "Search Employees, then open their profile")
 HR_LEAVE = ('<div class="two">'
-    + pp_section("away", "Away Today and This Week", "Approved leave, from the leave applications")
-    + pp_section("pending", "Waiting for Approval", "Leave requests not yet approved, longest wait first")
+    + pp_section("away", "Away Today and This Week", "Approved Leave Applications")
+    + pp_section("pending", "Waiting for Approval", "Open Leave Applications, longest wait first")
     + '</div>'
-    + pp_section("balances", "Leave Balances", "Every active person, by leave type, as ERPNext counts it")
+    + pp_section("balances", "Leave Balances", "Employee Leave Balance, by Leave Type")
     + pp_section("bydept", "Leave Taken by Department", "Days taken this year, to date"))
 
 V_HR=f'''<div class="topbar"><div><h3>HR &amp; Payroll</h3>
-<div class="when">Everyone on the books · pay is never read here</div></div></div>
+<div class="when">All Employees · pay is never read here</div></div></div>
 <div class="banner"><b>Pay is never read by this screen.</b> It shows people by department, branch and
 standing, and when payroll was last run &mdash; never what anyone is paid. Salary records stay in ERPNext,
 under its own permissions.</div>
 <div class="kpis six">
-{kpi("On the books","—","","","flat","","head")}
+{kpi("All Employees","—","","","flat","","head")}
 {kpi("Active","—","","","flat","","head")}
 {kpi("Left","—","","","flat","","turnover")}
 {kpi("Departments","—","","","flat","","depts")}
@@ -74,10 +74,10 @@ under its own permissions.</div>
 <button class="tab" onclick="tab(this,&#39;thr&#39;,3)">Detail</button></div>
 <div class="tabpane on" data-g="thr" data-i="0">
 <div class="two">
-{panel("Where people work", bars0(),
- "By department","depts")}
-{panel("Where people are", bars0()
- +'<div style="margin-top:12px">'+stacked([("Active",0,"var(--ok)"),("Inactive",0,"var(--med)"),("Left",0,"var(--crit)")])+'</div>',"By branch, and standing","head")}
+{panel("Employees by Department", bars0(),
+ "","depts")}
+{panel("Employees by Branch and Status", bars0()
+ +'<div style="margin-top:12px">'+stacked([("Active",0,"var(--ok)"),("Inactive",0,"var(--med)"),("Left",0,"var(--crit)")])+'</div>',"","head")}
 </div>
 {warn0()}
 </div>
@@ -89,10 +89,10 @@ under its own permissions.</div>
 </div>
 <div class="tabpane" data-g="thr" data-i="3">
 <div class="two">
-{panel("Departments are recorded inconsistently",
+{panel("Duplicate Departments",
  '<ul class="bul"></ul>'
  +thin("Departments whose names suggest the same department typed twice. Headcount by department cannot be counted reliably until they are merged."),"","depts")}
-{panel("Appraisals and training", thin("<b>Reviews completed and training held, over the last twelve months.</b> For engineers working on medical equipment, a lapsed review or certificate is a compliance matter, not an HR nicety."))}
+{panel("Appraisals and Training", thin("<b>Reviews completed and training held, over the last twelve months.</b> For engineers working on medical equipment, a lapsed review or certificate is a compliance matter, not an HR nicety."))}
 </div>
 </div>'''
 

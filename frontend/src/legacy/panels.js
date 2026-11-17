@@ -32,11 +32,11 @@ export const PANEL_VIEWS = new Set(["sales", "proc", "inv", "eng", "cx", "fin", 
 // orders, say), which the chart says, rather than of the business's whole. money: the
 // rows are amounts in the business's currency (a donut's total then says so).
 const COMPOSITION = {
-  "Where the value sits": { shares: true, money: true },
-  "Where people work": { shares: true },
-  "Where people are": { shares: true },
+  "Stock Value by Warehouse": { shares: true, money: true },
+  "Employees by Department": { shares: true },
+  "Employees by Branch and Status": { shares: true },
   "What they are complaining about": { shares: true },
-  "Where the money goes": { shares: "shown", money: true },
+  "Purchase Orders by Supplier": { shares: "shown", money: true },
 };
 
 // The designed marks a panel draws its answer into.
@@ -481,7 +481,7 @@ function renderFindings(root, findings, failed) {
     if (f.text) w.append(document.createTextNode(` ${f.text}`));
     if (f.ask) {
       const acts = el("div", "acts");
-      const b = el("button", "btn", f.ask_label || "Ask about it");
+      const b = el("button", "btn", f.ask_label || "Ask About It");
       b.type = "button";
       b.addEventListener("click", () => window.ask2?.(f.ask));
       acts.append(b);

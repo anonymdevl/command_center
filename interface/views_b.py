@@ -3,33 +3,33 @@ exec(_src('views_a.py'))
 
 # ============ PROCUREMENT ============
 V_PROC=f'''<div class="topbar"><div><h3>Buying and Suppliers</h3>
-<div class="when">Purchase orders and the suppliers they go to</div></div></div>
+<div class="when"></div></div></div>
 <div class="kpis six">
-{kpi("Purchase orders","—","","","flat","","po")}
-{kpi("Spend, top 14","—","","","flat","","spend")}
-{kpi("Top supplier","—","","","flat","","supp")}
-{kpi("Top 2 suppliers","—","","","flat","","supp")}
-{kpi("Longest wait","—","","","flat","","lead")}
-{kpi("No due date","—","","","flat","","nodate")}
+{kpi("Purchase Orders","—","","","flat","","po")}
+{kpi("Top 14 Purchase Orders","—","","","flat","","spend")}
+{kpi("Top Supplier","—","","","flat","","supp")}
+{kpi("Top 2 Suppliers","—","","","flat","","supp")}
+{kpi("Longest Wait","—","","","flat","","lead")}
+{kpi("No Required By Date","—","","","flat","","nodate")}
 </div>
 <div class="two">
-{panel("Where the money goes", bars0(),
- "Fourteen largest orders","supp")}
-{panel("How long each supplier takes", bars0(),
- "Average days from order to promised delivery · click for every order","lead")}
+{panel("Purchase Orders by Supplier", bars0(),
+ "14 largest Purchase Orders","supp")}
+{panel("Supplier Lead Time", bars0(),
+ "Average days, Transaction Date to Required By","lead")}
 </div>
 {warn0()}
 <div class="two">
-{panel("Orders still open",
- dtable(["Order","Supplier",("Value$",True),"Where it is"])
- +thin("Which of the fourteen largest orders are still to be received or billed."))}
-{panel("Checks before we pay",
+{panel("Open Purchase Orders",
+ dtable(["Order","Supplier",("Value$",True),"Status"])
+ +thin("Which of the 14 largest are still To Receive or To Bill."))}
+{panel("Purchase Invoice Checks",
  thin("<b>Supplier invoices still to be paid, checked against the order and the goods received.</b> "
- "Each unpaid supplier invoice should rest on a purchase order and a goods receipt; any that does not is listed here before it is paid."))}
+ "Each unpaid Purchase Invoice should rest on a purchase order and a Purchase Receipt; any that does not is listed here before it is paid."))}
 </div>
 <div class="two">
-{panel("Supplier performance", thin("<b>Delivered on time, and goods turned away, per supplier.</b> Each goods receipt is compared with the date its purchase order asked for, so a supplier that is always late shows up before the next order is placed."))}
-{panel("Money paid to suppliers in advance", thin("<b>Payments to suppliers not yet matched to an invoice.</b> Advances paid before the goods arrive are a normal exposure for an importer; this is how much is out there, and with whom."))}
+{panel("Supplier Performance", thin("<b>Delivered on time, and goods turned away, per supplier.</b> Each Purchase Receipt is compared with the date its purchase order asked for, so a supplier that is always late shows up before the next order is placed."))}
+{panel("Unreconciled Supplier Payments", thin("<b>Supplier payments with an Unallocated Amount, by supplier.</b> Advances before goods arrive are normal for an importer."))}
 </div>
 {warn0()}
 {cover0()}'''
@@ -44,26 +44,26 @@ def stock_section(key, title):
             f'<b>{title}</b></div></div><div class="pp-body"></div></div>')
 
 V_INV=f'''<div class="topbar"><div><h3>Stock &amp; Warehouses</h3>
-<div class="when">What is held, where, and what is promised against it</div></div></div>
+<div class="when"></div></div></div>
 <div class="kpis six">
-{kpi("Stock we hold","—","","","flat","","stockval")}
+{kpi("Stock Value","—","","","flat","","stockval")}
 {kpi("Off warehouse","—","","","flat","","recon")}
-{kpi("Reserved, unavail.","—","","","flat","","over")}
-{kpi("Worst shortfall","—","","","flat","","worst")}
-{kpi("Lines promised","—","","","flat","","reserved")}
-{kpi("Near expiry","—","","","flat","","expiry")}
+{kpi("Reserved Qty","—","","","flat","","over")}
+{kpi("Worst Shortfall","—","","","flat","","worst")}
+{kpi("Lines with Reserved Qty","—","","","flat","","reserved")}
+{kpi("Batches Near Expiry","—","","","flat","","expiry")}
 </div>
 <div class="two">
-{panel("Where the value sits", bars0(),
- "By location","stockval")}
+{panel("Stock Value by Warehouse", bars0(),
+ "","stockval")}
 {panel("Reserved against what is available",
- dtable(["Product","Where",("Reserved",True),("Available",True),("Short by",True)]),"Where the promise exceeds the stock","over")}
+ dtable(["Item","Where",("Reserved Qty",True),("Available",True),("Short By",True)]),"Where the promise exceeds the stock","over")}
 </div>
 {warn0()}
 {cover0()}
 <div class="two">
-{panel("Stock that is not moving", thin("<b>Products holding stock that have not moved in ninety days.</b> Every product is aged by its last stock movement, with the value still sitting on the shelf."))}
-{panel("Expiry", thin("<b>Batches that expire soon, or already have.</b> Batch expiry dates drive near-expiry warnings and first-expiry-first-out picking. For a medical supplier this is the panel that matters most."))}
+{panel("Stock Ageing, No Movement 90 Days", thin("<b>Products holding stock that have not moved in ninety days.</b> Every product is aged by its last stock movement, with the value still sitting in stock."))}
+{panel("Batch Expiry", thin("<b>Batches that expire soon, or already have.</b> Batch expiry dates drive near-expiry warnings and first-expiry-first-out picking. For a medical supplier this is the panel that matters most."))}
 </div>
 {stock_section("balance", "Stock Balance")}
 {stock_section("movements", "Stock Movements")}'''

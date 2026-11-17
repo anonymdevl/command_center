@@ -253,7 +253,7 @@ class _Ctx:
             "Enter the year's name, its start date and its end date (for a calendar year, "
             "1 January to 31 December), and save.",
             "If the business keeps more than one company, add each company to the year's "
-            "Companies table."], "/app/fiscal-year/new", label="Add the fiscal year in ERPNext"))
+            "Companies table."], "/app/fiscal-year/new", label="Add the Fiscal Year in ERPNext"))
 
     def accounts(self) -> dict:
         """The chart of accounts: name -> root type, account type, parent. {} when it
@@ -369,7 +369,7 @@ def _refused_guide(ctx, what, message):
             "In ERPNext, open Accounting, then Fiscal Year, and add the year these dates fall "
             "in, with its start and end dates.",
             "Then open the period here again."], "/app/fiscal-year/new",
-            label="Add the fiscal year in ERPNext")
+            label="Add the Fiscal Year in ERPNext")
     if "account" in low and ("chart" in low or "not found" in low or "root" in low):
         return guide(ctx.code, f"{ctx.name}'s chart of accounts is not set up for {what}."
                      + (f" ERPNext said: {said}" if said else ""), [
@@ -899,14 +899,14 @@ def _bs(ctx, span):
 
 # --------------------------------------------------------------------------- the ratios
 RATIO_MEANING = {
-    "current_ratio": "What the business owns that turns into cash within a year, for every "
-                     "unit it must pay within a year.",
-    "quick_ratio": "The same, leaving out stock, which takes longest to turn into cash.",
+    "current_ratio": "Current Assets divided by Current Liabilities"
+                     ".",
+    "quick_ratio": "The same, leaving out Stock.",
     "gross_margin": "Of every unit of revenue, what is left after the cost of the goods sold.",
     "net_margin": "Of every unit of revenue, what is left after every cost.",
-    "debt_to_equity": "What the business owes for every unit the owners have in it.",
-    "working_capital": "Short-term assets less short-term debts: the cushion that pays the "
-                       "bills.",
+    "debt_to_equity": "Total Liabilities divided by Total Equity.",
+    "working_capital": "Current Assets less Current Liabilities"
+                       ".",
 }
 
 
@@ -920,14 +920,14 @@ def ratios(pl: dict, bs: dict) -> list[dict]:
     cur = ca / cl if cl > 0 else None
     add("current_ratio", "Current Ratio", cur, "ratio",
         "Cannot be worked out: no current liabilities are recorded." if cur is None else
-        "Below 1: more falls due within a year than the business has coming in to meet it."
-        if cur < 1 else "Between 1 and 1.5: short-term debts are covered, thinly."
-        if cur < 1.5 else "Short-term debts are covered with room to spare.")
+        "Below 1: Current Liabilities exceed Current Assets."
+        if cur < 1 else "Between 1 and 1.5: Current Liabilities are covered, thinly."
+        if cur < 1.5 else "Current Liabilities are covered with room to spare.")
     quick = (ca - bs["inventory"]) / cl if cl > 0 else None
     add("quick_ratio", "Quick Ratio", quick, "ratio",
         "Cannot be worked out: no current liabilities are recorded." if quick is None else
-        "Below 1: without selling stock, short-term debts could not all be met."
-        if quick < 1 else "Short-term debts could be met without selling stock.")
+        "Below 1: without Stock, Current Liabilities could not all be met."
+        if quick < 1 else "Current Liabilities could be met without Stock.")
     gm = pl.get("gross_margin")
     add("gross_margin", "Gross Margin", gm, "pct",
         "Cannot be worked out: " + ("no revenue in the period." if not pl.get("income") or
@@ -949,8 +949,8 @@ def ratios(pl: dict, bs: dict) -> list[dict]:
         "Mostly financed by the owners.")
     wc = ca - cl
     add("working_capital", "Working Capital", wc, "money",
-        "Negative: short-term debts are more than short-term assets." if wc < 0 else
-        "Positive: short-term assets more than cover short-term debts.")
+        "Negative: Current Liabilities exceed Current Assets." if wc < 0 else
+        "Positive: Current Assets exceed Current Liabilities.")
     return out
 
 

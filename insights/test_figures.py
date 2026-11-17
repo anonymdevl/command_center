@@ -247,7 +247,7 @@ class MoneyInIsEveryReceipt(_Business):
         self.load("fact_payment_allocation")
         f = self.figures("cash_in_month", "cash_applied")["cash_in_month"]
         self.assertEqual(f["value"], 1800.0, "1,200 is only the part matched to invoices")
-        self.assertIn("every payment received", f["note"])
+        self.assertIn("every Payment Entry (Receive)", f["note"])
         from insights.core.models import CommandCenterFactPaymentAllocation as PA
         rows = PA.objects.filter(business_code=CODE, src_name="PE-1")
         self.assertEqual(sorted(float(r.payment_amount) for r in rows), [0.0, 1000.0])
@@ -638,7 +638,7 @@ class BankTransfersCountOnce(_Business):
         from insights.compat import run_as
         with run_as("Administrator"):
             value, note = bank_cleared_pct(_Reader(CODE))[:2]
-        self.assertEqual(note, "of 3 bank payments matched to a statement", "the transfer was counted twice")
+        self.assertEqual(note, "of 3 bank payments have a Clearance Date", "the transfer was counted twice")
         self.assertAlmostEqual(value, 100 * 2 / 3, places=3)
 
 

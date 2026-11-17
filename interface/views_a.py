@@ -12,7 +12,7 @@ exec(_src('data.py'))
 
 def panel(title, body, sub="", explain=""):
     od=f''' onclick="explain('{explain}')"''' if explain else ''
-    h=f'<div class="ph{" clickable" if explain else ""}"{od}><div><b>{title}</b>{f"<span>{sub}</span>" if sub else ""}</div>{"<span class=pmore>what is this? →</span>" if explain else ""}</div>'
+    h=f'<div class="ph{" clickable" if explain else ""}"{od}><div><b>{title}</b>{f"<span>{sub}</span>" if sub else ""}</div>{"<span class=pmore>What Is This? →</span>" if explain else ""}</div>'
     return f'<div class="panel">{h}{body}</div>'
 
 def thin(t): return f'<div class="thin">{t}</div>'
@@ -54,45 +54,45 @@ def cover0():
     what covers it. Empty until the business answers; the same panel on Sales, Buying and
     Stock."""
     return panel("Promised Orders — Cover", '<div class="cover"></div>',
-                 "Every open order line, and what covers it", "cover")
+                 "Every open Sales Order line, and what covers it", "cover")
 
 V_SALES=f'''<div class="topbar"><div><h3>Sales and Payments</h3>
-<div class="when">Invoices, orders and what is still unpaid</div></div></div>
+<div class="when"></div></div></div>
 <div class="kpis six">
-{kpi("Last full month","—","","","flat","","rev")}
-{kpi("Best month","—","","","flat","","rev")}
-{kpi("Owed to us","—","","","flat","","ar")}
-{kpi("Unpaid invoices","—","","","flat","","ar")}
-{kpi("Not despatched","—","","","flat","","openorders")}
-{kpi("Never issued","—","","","flat","","drafts")}
+{kpi("Invoiced, Last Full Month","—","","","flat","","rev")}
+{kpi("Best Month Invoiced","—","","","flat","","rev")}
+{kpi("Accounts Receivable","—","","","flat","","ar")}
+{kpi("Unpaid Sales Invoices","—","","","flat","","ar")}
+{kpi("To Deliver","—","","","flat","","openorders")}
+{kpi("Draft Sales Invoices","—","","","flat","","drafts")}
 </div>
 <div class="two">
-{panel("How sales have moved","<div style='padding:0 0 4px'>"+trend0(160)+"</div>",
- "Monthly, from confirmed orders","rev")}
-{panel("Who owes us, and how long it has been",
- stacked([("Under 1 month",0,"var(--ok)"),("1–2 months",0,"var(--med)"),("2–3 months",0,"var(--high)"),("Over 3 months",0,"var(--crit)")])
- +thin("How the money owed by the ten largest balances is spread by age, after payments not yet matched are set against the oldest invoices."),
- "Ten largest balances","ar")}
+{panel("Sales Order Trends","<div style='padding:0 0 4px'>"+trend0(160)+"</div>",
+ "Monthly, submitted Sales Orders","rev")}
+{panel("Accounts Receivable Ageing",
+ stacked([("0-30 Days",0,"var(--ok)"),("31-60 Days",0,"var(--med)"),("61-90 Days",0,"var(--high)"),("Over 90 Days",0,"var(--crit)")])
+ +thin("Customer Ledger Balance by age, after unreconciled payments are set against the oldest invoices."),
+ "Top 10 by Customer Ledger Balance","ar")}
 </div>
 <div class="two">
-{panel("From enquiry to order", funnel([("Enquiries",0,0,""),
+{panel("Sales Funnel", funnel([("Leads",0,0,""),
  ("Opportunities",0,0,""),("Quotations",0,0,""),
  ("Orders",0,0,"")]),
- "Whole history","funnel")}
-{panel("Largest balances owed", bars0(),
- "Ten largest Customer Ledger Balances","ar")}
+ "All Time","funnel")}
+{panel("Largest Customer Ledger Balances", bars0(),
+ "Top 10","ar")}
 </div>
 {warn0()}
 {warn0()}
-{panel("What each customer really owes",
+{panel("Customer Ledger Balance vs Invoice Outstanding",
  '<div class="dt-scroll">'+dtable(["Customer",("Sales Invoice Outstanding$",True),("Customer Ledger Balance$",True),("Difference$",True),"Why",
  ("Not Yet Due",True),("1–30 Days",True),("31–60 Days",True),("61–90 Days",True),("Over 90 Days",True)])+'</div>',
  "Customer Ledger Balance beside Sales Invoice Outstanding","ledger")}
-{panel("Where orders are held up",
- '<div class="grid six">'+"".join(tile0(l,"openorders") for l in ["Awaiting stock","Awaiting purchase",
- "Awaiting despatch","Awaiting invoice","Awaiting install","Awaiting payment"])+'</div>',
- "Click any box for the orders behind it","openorders")}
+{panel("Where Sales Orders Are Held Up",
+ '<div class="grid six">'+"".join(tile0(l,"openorders") for l in ["Awaiting Stock","Awaiting Purchase Order",
+ "Awaiting Delivery Note","Awaiting Sales Invoice","Awaiting Installation","Awaiting Payment"])+'</div>',
+ "","openorders")}
 {cover0()}
-{panel("Orders taken but not despatched",
- dtable(["Order","Customer",("Value$",True),"Despatched",""]))}
-{panel("Discounts and price changes outside policy", thin("<b>Invoice lines sold below their price-list price with no pricing rule behind them.</b> A discount given by a pricing rule is policy; one typed in by hand is not."),"","discount")}'''
+{panel("Sales Orders To Deliver",
+ dtable(["Order","Customer",("Value$",True),"Delivered",""]))}
+{panel("Discounts Outside Pricing Rules", thin("<b>Sales Invoice lines below Price List Rate with no Pricing Rule.</b>"),"","discount")}'''
