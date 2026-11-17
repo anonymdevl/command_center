@@ -774,7 +774,6 @@ li{margin:4px 0}
 ol.recs{list-style:decimal}
 ul.recs{list-style:disc}
 ol.recs li,ul.recs li{margin:0 0 5px;padding-left:2px;page-break-inside:avoid}
-p.proj{padding:9px 13px;border-left:3px solid #a85a0a;background:#fbf5ec;border-radius:0 8px 8px 0}
 strong,b{font-weight:700}
 em{color:#3b3f47}
 table{border-collapse:collapse;width:100%;margin:8px 0 14px;font-size:8pt;page-break-inside:auto}

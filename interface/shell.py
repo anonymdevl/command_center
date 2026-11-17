@@ -1466,4 +1466,7 @@ td.work-acts .btn{margin:0 4px 0 0}
 .md .md-recs li::before,.md li.md-rec::before,.md li.md-proj::before{content:none;display:none}
 .rp-body .md p.md-rec{position:static;background:none;border:0;border-radius:0;padding:0;color:inherit}
 .rp-body .md p.md-rec::before{content:none;display:none}
+/* The Projection paragraph too: body text, its label in bold, no box (as the PDF). */
+.rp-body .md p.md-proj{position:static;background:none;border:0;border-radius:0;padding:0;color:inherit}
+.rp-body .md p.md-proj::before{content:none;display:none}
 """

@@ -305,6 +305,7 @@ check('<td class="n">636,675</td>' in _pol2 and '<td class="n">2025</td>' in _po
       "a bare figure of five digits or more gets its thousands separators; a year does not")
 check('<div class="keep"><h2>Cash</h2><p>Text.</p></div>' in _pol2, "a heading is kept on the page with what follows it")
 check('<ol class="recs">' in _pol2 and "<h1>" not in _pol2, "the Recommendations list is set off; a body h1 becomes h2")
+check("p.proj{" not in export.PAGE_CSS, "a Projection reads as body text: no tinted box or accent bar in the PDF")
 _rt = export.report_text
 check(_rt.tidy("## Weekly Management Report — Gigmann Medical Supplies Ltd, November 2026\n\nText.",
                "Weekly management report", "Gigmann Medical Supplies Ltd").strip() == "Text.",
