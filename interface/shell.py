@@ -1508,4 +1508,8 @@ td.work-acts .amenu{margin-left:2px}
    the platform does not have; an administrator now emails a set-password link instead. */
 body.cc-signin .auth-forgot{display:block;color:var(--ink2)}
 body.cc-signin .auth-forgot b{font-weight:var(--fw-semibold);color:var(--ink)}
+
+/* Add Person's password choices: one per line, so three never wrap two-and-one. */
+.st-choice[role="radiogroup"]{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:4px 0 8px}
+.st-choice[role="radiogroup"] .st-check{margin:0}
 """
