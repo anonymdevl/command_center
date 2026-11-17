@@ -2782,11 +2782,11 @@ table.dt td.dt-w3 > .dt-tx{min-width:26ch;max-width:44ch;display:-webkit-box;-we
    ====================================================================== */
 .logo,.auth-mark{color:var(--surface)}
 .cc-lens{display:block;width:72%;height:72%;overflow:visible}
-/* The trend line and its nodes in the accent chosen under Appearance, as the old mark's
-   ring was; the lens and bars keep the tile's plain colour. */
-.cc-lens .cc-lens-a{stroke:color-mix(in srgb,var(--accent) 72%,var(--surface))}
+/* The four bars inside the lens in the accent chosen under Appearance (as the old mark's
+   ring was); the lens, the trend line and its nodes keep the tile's plain colour. */
+.cc-lens .cc-lens-b{fill:color-mix(in srgb,var(--accent) 72%,var(--surface))}
 /* Ink is the no-colour accent: there the line is simply the mark's own colour. */
-[data-accent="ink"] .cc-lens .cc-lens-a{stroke:currentColor}
+[data-accent="ink"] .cc-lens .cc-lens-b{fill:currentColor}
 /* The Settings slots are always a light ground, whatever the theme: show the mark as it
    sits on one. */
 .st-logo-box .logo{width:44px;height:44px;border-radius:13px}
