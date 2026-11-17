@@ -2952,5 +2952,6 @@ body.cc-signin .auth-forgot b{font-weight:var(--fw-semibold);color:var(--ink)}
 body.cc-signin .sg-card{border-color:var(--line2);box-shadow:var(--shadow),var(--shadow2)}
 body.cc-signin .auth-forgot{display:flex;flex-direction:column;gap:1px}
 body.cc-signin .auth-forgot>span{color:var(--mut)}
-body.cc-signin .auth-only{margin-top:6px;font-size:var(--fs-2xs);font-weight:var(--fw-semibold);
- letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+body.cc-signin .auth-only{color:var(--mut)}
+/* The same thin "|" as the footer's, between short items on one line. */
+body.cc-signin .auth-sep{font-style:normal;color:var(--dim);margin:0 8px}
