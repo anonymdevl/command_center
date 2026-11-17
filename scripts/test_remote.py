@@ -56,12 +56,31 @@ def _answer(method, url, headers, params, body=None):
     if m == "frappe.client.get_list":
         start = int(params.get("limit_start") or 0)
         n = int(params.get("limit_page_length") or 20)
-        return _R(200, {"message": ROWS[start:start + n]})
+        rows = _ordered(_filtered(ROWS, params.get("filters")), params.get("order_by"))
+        return _R(200, {"message": rows[start:start + n]})
     if m == "frappe.client.get_count":
         return _R(200, {"message": len(ROWS)})
     if m == "frappe.desk.form.load.getdoctype":
         return _R(200, {"docs": [{"name": "Sales Invoice", "fields": [{"fieldname": "customer"}]}]})
     return _R(200, {"message": {"ok": True}})
+
+
+def _filtered(rows, filters):
+    """As ERPNext filters: a dict or [doctype, field, op, value] rows; =, <, >, in."""
+    f = json.loads(filters) if isinstance(filters, str) else (filters or {})
+    conds = ([(k, *(v if isinstance(v, list) else ["=", v])) for k, v in f.items()]
+             if isinstance(f, dict) else [tuple(x[-3:]) for x in f])
+    ops = {"=": lambda a, b: a == b, "<": lambda a, b: a < b, ">": lambda a, b: a > b,
+           "in": lambda a, b: a in b}
+    return [r for r in rows if all(ops[op](r.get(k), v) for k, op, v in conds if op in ops)]
+
+
+def _ordered(rows, order_by):
+    keys = [(p.split()[0], (p.split() + ["asc"])[1].lower() == "desc")
+            for p in (order_by or "").split(",") if p.strip()]
+    for field, desc in reversed(keys):
+        rows = sorted(rows, key=lambda r: r.get(field) or "", reverse=desc)
+    return rows
 
 
 class _Exc(Exception):
@@ -132,15 +151,41 @@ rows = conn.get_list("Sales Invoice", fields=["name", "modified"], limit=100000,
                      order_by="modified asc")
 check(len(rows) == len(ROWS) and rows[-1]["name"] == ROWS[-1]["name"],
       f"every row comes back: {len(rows)} of {len(ROWS)}")
-check(len(calls) == 3 and [int(c["params"]["limit_start"]) for c in calls] == [0, 500, 1000],
-      f"in pages of 500 by limit_start: {[c['params'].get('limit_start') for c in calls]}")
+# By key, not by position (17 Nov 2026): each page after the first starts after the last
+# row of the one before -- the rows with its modified stamp and a later name, then the
+# later stamps -- so the walk is one request for the first page and two for each after.
+check(len(calls) == 5 and not calls[1]["params"].get("limit_start"),
+      f"in pages of 500 by (modified, name): {[c['params'].get('limit_start') for c in calls]}")
 check(len(sleeps) == 2 and all(s == 0.25 for s in sleeps), f"with a pause between pages: {sleeps}")
+check([r["name"] for r in rows] == [r["name"] for r in ROWS], "in order, each row once")
+# 1a. A document saved while the walk is under way moves to the end; by position, the
+#     row that slid into the page already read was lost. By key, none is.
+reset()
+saved = {"done": False}
+real = requests.get
+
+
+def _saving(url, headers=None, params=None, timeout=None):
+    got = real(url, headers=headers, params=params, timeout=timeout)
+    if not saved["done"] and "get_list" in url:
+        saved["done"] = True
+        ROWS[10]["modified"] = "2026-11-14 23:59:59"  # saved after the first page was read
+    return got
+
+
+requests.get = _saving
+rows = conn.get_list("Sales Invoice", fields=["name", "modified"], limit=100000,
+                     order_by="modified asc")
+requests.get = real
+check(len({r["name"] for r in rows}) == len(ROWS),
+      f"a save mid-walk loses no document: {len({r['name'] for r in rows})} of {len(ROWS)}")
+ROWS[10]["modified"] = "2026-11-14 10:00:10"
 # 1b. A screen's read a person is waiting for (speed.interactive) skips the pause for
 #     its first pages; a system read (a load) never does.
 frappe.local.cc_interactive = True
 reset()
 conn.get_list("Sales Invoice", fields=["name", "modified"], limit=100000)
-check(len(calls) == 3 and not sleeps, f"a screen's read is not paced: {sleeps}")
+check(len(calls) == 5 and not sleeps, f"a screen's read is not paced: {sleeps}")
 reset()
 conn.as_system().get_list("Sales Invoice", fields=["name", "modified"], limit=100000)
 check(len(sleeps) == 2, f"a load is paced even while a screen is being read: {sleeps}")
@@ -148,7 +193,7 @@ del frappe.local.cc_interactive
 frappe.conf["command_center_remote_page"] = 1000
 reset()
 conn.get_list("Sales Invoice", limit=100000)
-check(len(calls) == 2, "the page size is a site setting")
+check(len(calls) == 3, "the page size is a site setting")
 frappe.conf.pop("command_center_remote_page")
 
 # 2. A small or grouped read is one request; the parent doctype travels as `parent`.

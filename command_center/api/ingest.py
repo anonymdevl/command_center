@@ -54,7 +54,10 @@ def load_business(conn, facts=None, full: bool = False, limit: int | None = None
     person who asked for it (raise_errors), who should see the failure.
     """
     from command_center.ingest.base import resolve_as_of
+    from command_center.ingest.company import scoped
 
+    # One company of an ERPNext that keeps several (ingest/company.py); unchanged for one.
+    conn = scoped(conn)
     as_of = resolve_as_of(conn)
     names = facts or list(INGESTORS)
     out = []
@@ -225,7 +228,8 @@ def reconcile(business_code: str | None = None):
     if not code:
         frappe.throw("No business is registered yet.")
     # Building a derived table is a system act. See BusinessConnector.as_system.
-    conn = connector_for(code).as_system()
+    from command_center.ingest.company import scoped
+    conn = scoped(connector_for(code).as_system())
 
     checks = []
 
@@ -299,10 +303,11 @@ def source_figures(business_code: str, as_of) -> dict:
     -- the read-only service account every load uses -- so like is compared with like.
     Reads only, every one an aggregate or a count, except the open sales orders, whose
     undelivered value has to be worked out per order."""
+    from command_center.ingest.company import scoped
     from command_center.ingest.operations import CLOSED_ORDER
     from command_center.kpi.live_departments import grouped_read
 
-    conn = connector_for(business_code).as_system()
+    conn = scoped(connector_for(business_code).as_system())
     total = lambda dt, field, f, parent=None: _source_sum(conn, dt, field, f, parent)  # noqa: E731
     count = lambda dt, f=None: int(conn.get_count(dt, f or {}) or 0)  # noqa: E731
     over_90 = frappe.utils.add_days(as_of, -90)
@@ -336,12 +341,15 @@ def source_figures(business_code: str, as_of) -> dict:
                      "unallocated_amount": [">", 0]}
         out[f"{party_type.lower()}_unmatched"] = total("Payment Entry", "unallocated_amount", unmatched)
         out[f"{party_type.lower()}_unmatched_count"] = count("Payment Entry", unmatched)
+    from command_center.ingest import order_lines
     orders = conn.get_list("Sales Order",
                            filters={"docstatus": 1, "status": ["not in", sorted(CLOSED_ORDER)]},
-                           fields=["name", "base_grand_total", "per_delivered"],
+                           fields=["name", "base_grand_total", "base_net_total", "per_delivered",
+                                   "per_billed"],
                            order_by="name asc", limit=500000)
-    out["order_book"] = sum(round(max(float(o.get("base_grand_total") or 0) * (
-        1 - min(float(o.get("per_delivered") or 0), 100.0) / 100.0), 0), 2) for o in orders)
+    # Line by line, as the fact is (never value times ERPNext's delivered percentage).
+    left = order_lines.order_values(conn, order_lines.SALES, orders, "per_delivered")
+    out["order_book"] = round(sum(v["left"] for v in left.values()), 2)
     out["order_book_count"] = len(orders)
     return out
 
@@ -349,7 +357,8 @@ def source_figures(business_code: str, as_of) -> dict:
 def changed_since(business_code: str, doctypes, since) -> dict:
     """How many records of each doctype were changed in the business's ERPNext after
     `since` -- the reconciliation check's first explanation for a difference."""
-    conn = connector_for(business_code).as_system()
+    from command_center.ingest.company import scoped
+    conn = scoped(connector_for(business_code).as_system())
     out = {}
     for dt in doctypes:
         try:

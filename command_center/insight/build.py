@@ -45,7 +45,8 @@ FLOW_FACTS = {"fact_sales_invoice_line", "fact_payment_allocation", "fact_purcha
 FACT_WORDS = {
     "fact_sales_invoice": "the business's Sales Invoices",
     "fact_sales_invoice_line": "the item lines of the business's Sales Invoices",
-    "fact_payment_allocation": "the business's Payment Entries, as matched to documents",
+    "fact_payment_allocation": "the business's Payment Entries, each with what it was matched to "
+                               "(a payment matched to nothing too)",
     "fact_purchase_invoice": "the business's Purchase Invoices (supplier bills)",
     "fact_purchase_invoice_line": "the item lines of the business's Purchase Invoices",
     "fact_stock_balance": "ERPNext's stock balance per item and warehouse",
@@ -67,7 +68,10 @@ MEASURE_WORDS = {
     "unmatched_payment_count": "number of payments not matched",
     "stock_value": "stock value at cost", "available_qty": "quantity free to sell",
     "reserved_qty": "quantity reserved", "ordered_qty": "quantity on order",
-    "undelivered_value": "value still to deliver", "unbilled_value": "value still to invoice",
+    "undelivered_value": "value still to deliver, line by line",
+    "unbilled_value": "value still to invoice, line by line",
+    "delivered_unbilled_value": "value delivered and not yet invoiced, line by line",
+    "payment_amount": "amount of the payment (each payment once)",
     "days_to_pay": "days paid after the due date", "days_late": "days late",
     "days_open": "days open", "tenure_days": "days employed",
 }

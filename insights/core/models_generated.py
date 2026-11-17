@@ -191,6 +191,7 @@ class CommandCenterFactPaymentAllocation(DocModel):
     against_name = models.CharField(max_length=140, null=True, blank=True, db_index=True)
     allocated_amount = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
     base_paid_amount = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    payment_amount = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
     unallocated_amount = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
     days_to_pay = models.IntegerField(null=True, blank=True, default=0)
 
@@ -369,6 +370,7 @@ class CommandCenterFactSalesOrder(DocModel):
     base_grand_total = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
     undelivered_value = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
     unbilled_value = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
+    delivered_unbilled_value = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
     per_delivered = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
     per_billed = models.DecimalField(max_digits=21, decimal_places=9, null=True, blank=True, default=0)
     as_of_date = models.DateField(null=True, blank=True)

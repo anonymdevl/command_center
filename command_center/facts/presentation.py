@@ -134,7 +134,7 @@ PRESENTATION = {
             {"key": "days_late", "label": "Days late", "type": "days"},
             {"key": "base_grand_total", "label": "Order value", "type": "currency"},
             {"key": "undelivered_value", "label": "Still to deliver", "type": "currency"},
-            {"key": "per_delivered", "label": "Delivered", "type": "percent"},
+            {"key": "per_delivered", "label": "Delivered (of quantity)", "type": "percent"},
             {"key": "status", "label": "Status", "type": "text"},
         ],
     },

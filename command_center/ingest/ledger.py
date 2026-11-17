@@ -175,12 +175,7 @@ def match_and_age(items: list, balance: float, as_of) -> dict:
     if credit < 0:
         out["undated"] = -credit
         credit = 0.0
-    remaining = []
-    for d, a in rows:
-        take = min(a, credit)
-        credit -= take
-        if a - take > CENT:
-            remaining.append((d, a - take))
+    remaining = set_off(rows, credit)
     for d, a in remaining:
         if d is None:
             out["undated"] += a
@@ -197,6 +192,34 @@ def match_and_age(items: list, balance: float, as_of) -> dict:
     dated = [d for d, _ in remaining if d]
     out["oldest"] = min(dated) if dated else None
     return out
+
+
+def set_off(rows: list, credit: float) -> list:
+    """Credits set against the items in the order given (oldest first): [(key, what is
+    left of it)] for the items not wholly paid. The one statement of "payments not
+    matched pay the oldest items first" -- the ageing above and the orders awaiting
+    payment (kpi/live_departments) both use it."""
+    remaining = []
+    for key, a in rows:
+        take = min(a, max(credit, 0.0))
+        credit -= take
+        if a - take > CENT:
+            remaining.append((key, a - take))
+    return remaining
+
+
+def unpaid_by_ledger(invoices: list, owed: float, other_debits: float = 0.0) -> dict:
+    """{invoice: what is still unpaid on it by the ledger} for one customer.
+
+    invoices: [(name, date, outstanding)] its open invoices (by due date); owed: its
+    positive ledger balance; other_debits: what it owes on no invoice, taken as owed
+    before any invoice is. What the invoices hold beyond the ledger is credit not yet
+    matched to them, set against the oldest first, as the ageing does: an invoice
+    "outstanding" that the ledger says is paid is not unpaid."""
+    rows = sorted(((getdate(d) if d else dt.date.min, n), flt(a))
+                  for n, d, a in invoices if flt(a) > CENT)
+    credit = sum(a for _, a in rows) + max(flt(other_debits), 0.0) - max(flt(owed), 0.0)
+    return {key[1]: _r(a) for key, a in set_off(rows, credit)}
 
 
 def row_for(party_type: str, party: str, pos: dict, as_of) -> dict:

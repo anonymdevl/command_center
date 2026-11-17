@@ -29,6 +29,7 @@
   "base_grand_total",
   "undelivered_value",
   "unbilled_value",
+  "delivered_unbilled_value",
   "col_prog",
   "per_delivered",
   "per_billed",
@@ -178,12 +179,19 @@
    "fieldname": "undelivered_value",
    "fieldtype": "Currency",
    "label": "Not yet delivered",
-   "description": "Order value less the delivered share. The promise still outstanding."
+   "description": "Still to deliver, valued line by line: each line's quantity not yet delivered times its net rate, with the order's taxes in proportion. Never the order value times ERPNext's delivered percentage, which is a share of quantity."
   },
   {
    "fieldname": "unbilled_value",
    "fieldtype": "Currency",
-   "label": "Not yet invoiced"
+   "label": "Not yet invoiced",
+   "description": "Not yet invoiced, line by line: each line's amount less what has been billed against it."
+  },
+  {
+   "fieldname": "delivered_unbilled_value",
+   "fieldtype": "Currency",
+   "label": "Delivered, not invoiced",
+   "description": "Delivered and not yet invoiced, line by line: the delivered part of each line's amount less what has been billed against it."
   },
   {
    "fieldname": "col_prog",
@@ -192,7 +200,7 @@
   {
    "fieldname": "per_delivered",
    "fieldtype": "Percent",
-   "label": "Delivered %"
+   "label": "Delivered % (of quantity)"
   },
   {
    "fieldname": "per_billed",
