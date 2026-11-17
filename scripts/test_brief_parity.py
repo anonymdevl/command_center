@@ -61,7 +61,7 @@ HOOKS = (
     ("recommend.js", "brief(root, data.brief);", "the Daily Brief at its top"),
     ("recommend.js", 'const head = el("div", "rec-area", areas[key]);', "grouped by area"),
     ("recommend.js", "`${count(recs.length)} open, most money at stake first`", "the count beside the heading"),
-    ("recommend.js", 'list.append(el("div", "rec-area", "Recently closed"));', "Recently Closed"),
+    ("recommend.js", 'group.append(el("div", "rec-area", "Recently closed"));', "Recently Closed"),
     ("recommend.js", "if (data.what_worked) list.append(worked(data.what_worked));", "What Worked"),
     ("recommend.js", "`What Worked${w.period ? ` — ${w.period}` : \"\"}`", "What Worked's heading"),
     ("recommend.js", 'btn(steps.hidden ? "What To Do" : "Hide Steps", "btn pri"', "What To Do"),
@@ -76,7 +76,7 @@ HOOKS = (
     ("alerts.js", 'export const ALERT_VIEWS = new Set(["command", "brief", "health", "risk"]);',
      "the alerts are drawn here"),
     ("alerts.js", 'btn("Assign", "btn pri"', "Assign"),
-    ("alerts.js", 'btn("Ask AI about this", "btn"', "Ask AI about this"),
+    ("alerts.js", 'btn("Ask AI", "btn"', "Ask AI"),
     ("alerts.js", '["Request evidence", () => fire("cc-action", { kind: "evidence"', "Request evidence"),
     ("alerts.js", '["Escalate", () => fire("cc-action", { kind: "escalate"', "Escalate"),
     ("alerts.js", '["Open the records", records, false]', "Open the records"),
@@ -98,6 +98,15 @@ HOOKS = (
     ("App.jsx", "{!settings && !plan ? <ViewTools caption={captionOf(view)} scope={scope} /> : null}",
      "the buttons on every screen"),
 )
+
+# Changed since BASE_REF on purpose, each with what it was there: (file, text now) -> text
+# then. The thing is still done; only its words or its place moved (17 Nov 2026: the AI
+# button says "Ask AI", and each area of recommendations is drawn as its own group).
+WAS = {
+    ("recommend.js", 'group.append(el("div", "rec-area", "Recently closed"));'):
+        'list.append(el("div", "rec-area", "Recently closed"));',
+    ("alerts.js", 'btn("Ask AI", "btn"'): 'btn("Ask AI about this", "btn"',
+}
 # What the memo's code may never touch: the screen below it.
 MEMO_MUST_NOT = ("rec-live-list", "alert-live-list", "rec-brief", "rec-sub", "brief-when", ".alert:not",
                  "innerHTML", "insertAdjacentHTML", "outerHTML")
@@ -197,7 +206,7 @@ def main() -> int:
             got = subprocess.run(["git", "show", f"{BASE_REF}:{'/'.join(parts)}"], cwd=ROOT,
                                  capture_output=True, text=True, timeout=30)
             old_files[name] = got.stdout if got.returncode == 0 else ""
-        stale = [f"{n}: {w}" for n, t, w in HOOKS if t not in old_files[n]]
+        stale = [f"{n}: {w}" for n, t, w in HOOKS if WAS.get((n, t), t) not in old_files[n]]
         if stale:
             problems.append(f"HOOKS is not the code at {BASE_REF}: {stale}")
         else:

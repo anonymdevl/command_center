@@ -62,7 +62,7 @@ export default function Records({ scope, title, fact, filters, subset, explained
 
   // Explain This: for a figure, the analyst on the drawer's own numbers (api/insight);
   // for any other set of records, the question goes to the analyst in the bar -- the
-  // same path as every "Ask AI about this" on the screens.
+  // same path as every "Ask AI" on the screens.
   const explain = async () => {
     if (!kpi) {
       drawer.onClose?.();

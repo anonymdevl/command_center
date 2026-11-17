@@ -14,6 +14,19 @@
 // window, the main column wider than itself, and the innermost elements past its edge
 // that are not inside a box of their own that scrolls. Any of them fails the check.
 //
+// Every table cell is checked too (17 Nov 2026: on a phone, Today's "What" column ran over
+// "Given to", and so did most tables): a cell whose content is wider than the cell while
+// the cell does not clip, or a block inside a cell narrower than its own text that does
+// not clip, paints over the next column and fails. Measured with the sample text as it
+// is as well as with ?long=1, because the long strings put every cell in the widest band
+// and hid the fault in the other two.
+//
+// And the phone's Back button (17 Nov 2026: Back with a drawer open left the platform for
+// the site before it): at 375 wide it opens the menu and presses Back (the menu closes),
+// chooses Outstanding Tasks from the menu, opens a task and presses Back (the drawer closes,
+// the list is still there), opens it again and closes it with its X, and presses Back once
+// more, which must be the screen before -- not the page the browser had open first.
+//
 // It also fails when fewer screens were walked than there are, so a preview that stops
 // rendering cannot pass by measuring nothing. Needs Google Chrome (or CHROME=<path>);
 // without one it says it was skipped and exits 0 -- preflight prints that line.
@@ -96,9 +109,10 @@ async function browser() {
 let failed = 0;
 const b = await browser();
 try {
-  for (const w of widths) {
+  for (const [w, long] of widths.flatMap((x) => [[x, true], [x, false]])) {
+    const at = `${w}px${long ? "" : " (sample text)"}`;
     await b.send("Emulation.setDeviceMetricsOverride", { width: w, height: 900, deviceScaleFactor: 1, mobile: true });
-    const url = `http://127.0.0.1:${port}/preview.html?phone=1&long=1&admin=1&theme=light&w=${w}#command`;
+    const url = `http://127.0.0.1:${port}/preview.html?phone=1${long ? "&long=1" : ""}&admin=1&theme=light&w=${w}#command`;
     await b.send("Page.navigate", { url });
     let raw = null;
     for (let i = 0; i < 240 && !raw; i++) {
@@ -109,7 +123,7 @@ try {
     }
     if (!raw) {
       failed += 1;
-      console.log(`FAIL at ${w}px: the preview wrote no measurement in two minutes.`);
+      console.log(`FAIL at ${at}: the preview wrote no measurement in two minutes.`);
       continue;
     }
     const got = JSON.parse(raw);
@@ -121,16 +135,87 @@ try {
     const sections = got.walked.filter((v) => v.startsWith("settings/")).length;
     if (screens < SCREENS || sections < SETTINGS) {
       failed += 1;
-      console.log(`FAIL at ${w}px: walked ${screens} screens and ${sections} Settings sections, `
+      console.log(`FAIL at ${at}: walked ${screens} screens and ${sections} Settings sections, `
         + `expected ${SCREENS} and ${SETTINGS}.`);
     }
+    let wide = 0;
+    let spilt = 0;
     for (const [name, r] of Object.entries(got.report)) {
       failed += 1;
-      console.log(`FAIL at ${w}px, ${name}: page ${r.page}px and main column ${r.main}px too wide`);
-      r.offenders.forEach((o) => console.log(`    ${o}`));
+      if (r.page > 0 || r.main > 0 || r.offenders.length) {
+        wide += 1;
+        console.log(`FAIL at ${at}, ${name}: page ${r.page}px and main column ${r.main}px too wide`);
+        r.offenders.forEach((o) => console.log(`    ${o}`));
+      }
+      if (r.spilled) {
+        spilt += 1;
+        console.log(`FAIL at ${at}, ${name}: ${r.spilled} table cell(s) paint past their own box`);
+        r.cells.forEach((o) => console.log(`    ${o}`));
+      }
     }
-    console.log(`${w}px: ${screens} screens and ${sections} Settings sections walked, `
-      + `${Object.keys(got.report).length} too wide`);
+    console.log(`${at}: ${screens} screens and ${sections} Settings sections walked, `
+      + `${wide} too wide, ${spilt} with cells running into the next`);
+  }
+  // Back, at a phone's width, from a page the browser had open before the platform.
+  {
+    await b.send("Emulation.setDeviceMetricsOverride", { width: 375, height: 800, deviceScaleFactor: 1, mobile: true });
+    await b.send("Page.navigate", { url: "about:blank" });
+    await sleep(300);
+    await b.send("Page.navigate", { url: `http://127.0.0.1:${port}/preview.html?theme=light#command` });
+    let ready = false;
+    for (let i = 0; i < 120 && !ready; i++) {
+      await sleep(500);
+      const r = await b.send("Runtime.evaluate", {
+        expression: "!!document.querySelector('#cc-main h1, #cc-main h2, #cc-main .card')", returnByValue: true });
+      ready = !!r.result?.result?.value;
+    }
+    const steps = await b.send("Runtime.evaluate", { awaitPromise: true, returnByValue: true, expression: `(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const out = [];
+      const say = (ok, what) => out.push([ok, what]);
+      const back = async () => { history.back(); await wait(900); };
+      const drawerOn = () => !!document.querySelector(".drawer.on");
+      const navOn = () => !!document.querySelector(".shell.navopen");
+      try {
+        await wait(600);
+        document.querySelector(".menu-b").click();
+        await wait(400);
+        say(navOn(), "the menu opens");
+        await back();
+        say(!navOn() && location.hash === "#command", "Back closes the menu and stays on the screen (" + location.hash + ")");
+        document.querySelector(".menu-b").click();
+        await wait(400);
+        const item = [...document.querySelectorAll(".nav .navi")].find((n) => n.textContent.trim().startsWith("Outstanding Tasks"));
+        item.click();
+        await wait(1800);
+        say(!navOn() && location.hash === "#delegation", "choosing Outstanding Tasks from the menu (" + location.hash + ")");
+        const row = () => document.querySelector("#cc-main tr.work-row");
+        row().click();
+        await wait(700);
+        say(drawerOn(), "a task's drawer opens");
+        await back();
+        say(!drawerOn() && location.hash === "#delegation" && !!row(), "Back closes the drawer and the list is still there (" + location.hash + ")");
+        row().click();
+        await wait(700);
+        document.querySelector(".drawer.on .dw-x").click();
+        await wait(900);
+        say(!drawerOn(), "X closes the drawer");
+        await back();
+        await wait(900);
+        say(location.protocol.startsWith("http") && location.hash === "#command", "the next Back is the screen before (" + location.href + ")");
+      } catch (e) {
+        say(false, "the Back walk stopped: " + e);
+      }
+      return out;
+    })()` });
+    const got = steps.result?.result?.value || [[false, "the Back walk never finished: Back left the platform"]];
+    got.forEach(([ok, what]) => {
+      if (!ok) {
+        failed += 1;
+        console.log(`FAIL, Back on a phone: ${what}`);
+      }
+    });
+    console.log(`Back on a phone: ${got.filter(([ok]) => ok).length} of ${got.length} steps as they should be`);
   }
 } finally {
   b.close();
@@ -140,4 +225,4 @@ if (failed) {
   console.log(`${failed} phone layout problem(s)`);
   process.exit(1);
 }
-console.log("phone layout: nothing wider than the screen");
+console.log("phone layout: nothing wider than the screen, no cell past its own box");

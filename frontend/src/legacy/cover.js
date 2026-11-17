@@ -295,7 +295,7 @@ function lineDrawer(r, state) {
     a.rel = "noopener";
     acts.append(a);
   }
-  const ask = el("button", "btn", "Ask About This Order");
+  const ask = el("button", "btn", "Ask AI");
   ask.type = "button";
   ask.addEventListener("click", () => {
     state.openDrawer?.(null);

@@ -15,6 +15,7 @@ import { LicenceBanner } from "./components/PlanBadge.jsx";
 import nav from "./legacy/nav.json";
 import { CORE_VIEWS } from "./legacy/core.js";
 import { restore } from "./askHistory.js";
+import { stack, useLayer } from "./backstack.js";
 
 /**
  * Views that have become components. Everything else renders its generated
@@ -48,20 +49,40 @@ export default function App() {
   // drawers of the same kind one after the other -- Explain This on one figure, then
   // another figure; Back -- are two drawers, never the first one's state (its
   // explanation, tab, search, sort) under the second one's title.
+  // Each drawer is also an entry in the browser's history (backstack.js): the browser's
+  // Back closes the top one and leaves the screen as it was; the drawer's own Back, X,
+  // Escape and the scrim take its entry off again, so the next Back goes to the screen
+  // before. `{ replace: true }` swaps the top drawer's content in place (a profile that
+  // has finished loading), so Back never returns to its "Reading…".
   const [drawerStack, setDrawerStack] = useState([]);
   const top = drawerStack.length ? drawerStack[drawerStack.length - 1] : null;
   const drawer = top ? top.content : null;
-  const setDrawer = useCallback((content) => {
-    setDrawerStack((s) => (content == null ? [] : [...s, { id: nextDrawerId(), content }].slice(-20)));
+  const setDrawer = useCallback((content, { replace = false } = {}) => {
+    if (content == null) {
+      stack().closeKind("drawer", "first");
+      return;
+    }
+    if (replace && stack().depth()) {
+      setDrawerStack((s) => (s.length ? [...s.slice(0, -1), { ...s[s.length - 1], id: nextDrawerId(), content }] : s));
+      return;
+    }
+    const id = nextDrawerId();
+    // Closed (by Back, or by its own controls): it and every drawer above it go.
+    stack().open(() => setDrawerStack((s) => {
+      const at = s.findIndex((e) => e.first === id);
+      return at < 0 ? s : s.slice(0, at);
+    }), "drawer");
+    setDrawerStack((s) => [...s, { id, first: id, content }].slice(-20));
   }, []);
-  const drawerBack = useCallback(() => setDrawerStack((s) => s.slice(0, -1)), []);
-  // Phones: the sidebar is a drawer, open only while choosing a screen.
+  const drawerBack = useCallback(() => stack().closeKind("drawer", "last"), []);
+  // Phones: the sidebar is a drawer, open only while choosing a screen; Back closes it too.
   const [navOpen, setNavOpen] = useState(false);
+  useLayer(navOpen, () => setNavOpen(false), "menu");
   // Another business: a drawer open on the last one's records goes with it, as the screen
   // does (LegacyView is keyed by the business, below).
   const changeScope = useCallback((s) => {
     setScope(s);
-    setDrawerStack([]);
+    stack().closeKind("drawer", "first");
   }, []);
 
   // The person's latest conversation with the AI, back after a refresh or a sign-in, so
@@ -77,18 +98,20 @@ export default function App() {
       // "Find anything" and "Ask the business" are one screen now. An old link should
       // land on it rather than on "no screen called search".
       if (k === "search") k = "ask";
-      if (k) setView(k);
+      // Back to the first screen, whose address may have had no #key.
+      setView(k || "command");
     };
     apply();
     window.addEventListener("hashchange", apply);
     return () => window.removeEventListener("hashchange", apply);
   }, []);
 
+  // A screen is its own history entry, so the browser's Back returns to the screen before
+  // (it replaced the one entry there was, and Back left the platform). Open drawers and the
+  // menu close first and take their entries with them (backstack.js).
   const go = (key) => {
     setView(key);
-    setDrawer(null);
-    setNavOpen(false);
-    window.history.replaceState(null, "", `#${key}`);
+    stack().screen(key);
     const main = document.getElementById("cc-main");
     if (main) main.scrollTop = 0;
   };

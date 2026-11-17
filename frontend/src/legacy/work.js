@@ -383,7 +383,7 @@ function approvalCard(a, currency) {
                                 state: a.state, state_field: a.state_field, modified: a.modified,
                                 title: `${a.doctype} — ${a.title}` })));
   });
-  acts.append(btn("Ask AI about this", "btn", () => fire("cc-ask", {
+  acts.append(btn("Ask AI", "btn", () => fire("cc-ask", {
     question: `${a.doctype} ${a.name} (${a.title}) is waiting for my approval. `
       + "What should I know before I decide?" })));
   card.append(acts);

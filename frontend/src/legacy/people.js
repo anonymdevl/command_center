@@ -147,7 +147,8 @@ async function openProfile(employee, name, state) {
     res = { kind: "failed", message: e?.message };
   }
   if (!document.body.contains(wait)) return; // closed, or another profile opened
-  openDrawer({ node: profileNode(res, state, name || employee) });
+  // In the place of "Reading…", so Back never returns to it.
+  openDrawer({ node: profileNode(res, state, name || employee) }, { replace: true });
 }
 
 function profileNode(res, state, name) {

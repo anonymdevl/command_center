@@ -29,6 +29,8 @@ export default function Drawer({ content, entry = null, onClose, onBack = null, 
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => {
+      // A dialog open over the drawer takes Escape (and Back) first: only it closes.
+      if (document.querySelector(".dlg-scrim")) return;
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowLeft" && e.altKey && onBack) onBack();
     };

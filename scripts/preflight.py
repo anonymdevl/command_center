@@ -1541,6 +1541,30 @@ check("def _get_business" in _ps and "def _get_person" in _ps
       and "may_see_business(_actor(), b.business_code)" in _ps.split("def _get_business")[1].split("\ndef ")[0]
       and "may_see_person(_actor(), u)" in _ps.split("def _get_person")[1].split("\ndef ")[0],
       "Settings must find only the delegate's own customer's businesses and people")
+# User Management says no more than it must (17 Nov 2026, "You're too chatty with the
+# interface"): the Administrator column is Yes or No with nothing under it, and the page
+# has no hint paragraphs, sub-lines of explanation or a description under Settings.
+_sp_jsx = (_Path(ROOT) / "frontend" / "src" / "components" / "SettingsPeople.jsx").read_text()
+_admin_cell = _sp_jsx.split("function AdminCell", 1)[-1].split("\n}\n", 1)[0]
+check("function AdminCell" in _sp_jsx and "st-sub" not in _admin_cell and "settings_words" not in _sp_jsx,
+      "Settings -> User Management: the Administrator column says Yes, and nothing under it")
+check("dlg-hint" not in _sp_jsx and 'sub="' not in _sp_jsx,
+      "Settings -> User Management: no hint paragraphs or explanatory sub-lines; headings, "
+      "labels, buttons and a short result only")
+check('className="when"' not in (_Path(ROOT) / "frontend" / "src" / "components" / "Settings.jsx").read_text(),
+      "Settings: the heading alone, no description under it")
+check('"settings_words"' not in _ps,
+      "platform_settings._person must not send a sentence of Settings sections for the table")
+# The AI button is "Ask AI" wherever it is (17 Nov 2026), never "Ask AI about this".
+_re_ask = re.compile(r"Ask (AI )?about this\b", re.I)
+_ask_long = []
+for _d in ("frontend/src", "interface", "command_center"):
+    for _f in (_Path(ROOT) / _d).rglob("*"):
+        if (_f.is_file() and _f.suffix in (".js", ".jsx", ".py", ".json", ".html")
+                and "public" not in _f.parts and "node_modules" not in _f.parts
+                and _re_ask.search(_f.read_text(errors="ignore"))):
+            _ask_long.append(_f.relative_to(_Path(ROOT)).as_posix())
+check(not _ask_long, f"the AI button says 'Ask AI', not 'Ask AI about this': {_ask_long[:6]}")
 # User Management (17 Nov 2026): an administrator's account is seen by administrators
 # only -- the list, the pickers (the same list) and the keys -- never by a delegate.
 _msp = _ps.split("def may_see_person")[1].split("\ndef ")[0] if "def may_see_person" in _ps else ""
@@ -1727,8 +1751,18 @@ check("let openMenu = null" in (_fe / "legacy" / "actions.js").read_text(),
 # scrolls sideways on a phone. test_phone.mjs measures them; these keep the rules named.
 _shell_py = open(os.path.join(ROOT, "interface", "shell.py")).read()
 for _rule in (".main{overflow-wrap:anywhere}", ".chip{max-width:100%;white-space:normal}",
-              "table.dt td{white-space:nowrap}", ".main{overflow-x:hidden}"):
+              "table.dt td{white-space:nowrap}", ".main{overflow-x:hidden}",
+              # a text cell's block clips at its ceiling, at TABLE TEXT's own weight
+              "table.dt td:is(.dt-w1,.dt-w2,.dt-w3) > .dt-tx{display:block;min-width:0;white-space:nowrap;\n"
+              "  overflow:hidden;text-overflow:ellipsis}"):
     check(_rule in _shell_py, f"interface/shell.py PHONE, EVERY SCREEN lost {_rule!r}")
+# The phone's text-cell rules must not be lighter than TABLE TEXT's ceilings: a phone rule
+# "td > .dt-tx" lost to "td.dt-w2 > .dt-tx{max-width:34ch}", and one-line text ran over the
+# next column on most tables (17 Nov 2026).
+_phone_css = _shell_py.split("PHONE, EVERY SCREEN", 1)[-1]
+check("table.dt td > .dt-tx{" not in _phone_css,
+      "interface/shell.py PHONE, EVERY SCREEN: a 'table.dt td > .dt-tx' rule is lighter than "
+      "TABLE TEXT's 'td.dt-wN > .dt-tx' ceilings and loses to them; give it their weight")
 # The screens' small pure parts (money across unit boundaries, data-go, the stale line).
 if _node:
     _t = _sp.run([_node, os.path.join(ROOT, "scripts", "test_screens.mjs")],

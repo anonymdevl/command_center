@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { boot, brand } from "../api/boot.js";
+import { useLayer } from "../backstack.js";
 
 /**
  * Put a piece of work on someone's desk, from wherever it was noticed.
@@ -169,6 +170,8 @@ export default function ActionDialog({ scope }) {
   const [pickBiz, setPickBiz] = useState(false);
   const [unsure, setUnsure] = useState(false);
   const first = useRef(null);
+  // Back closes the dialog, not the screen under it (backstack.js).
+  useLayer(Boolean(req), () => setReq(null), "dialog");
 
   useEffect(() => {
     const open = (e) => {

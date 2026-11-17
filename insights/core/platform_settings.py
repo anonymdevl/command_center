@@ -179,20 +179,10 @@ def _person(u, me) -> dict:
             "joined": u.date_joined, "is_me": u.pk == me.pk,
             "settings_access": _grants(u), "protected": _protected(u),
             # Anyone with Settings access, in any section, is a kind of administrator:
-            # User Management says Yes for them and names the sections (17 Nov 2026).
+            # User Management says Yes for them, and only Yes -- which sections is
+            # settings_access, shown in Manage (17 Nov 2026).
             "settings_admin": bool(u.is_superuser) or bool(_grants(u)),
-            "settings_words": settings_words(u),
             "customers": _customers_of(u)}
-
-
-def settings_words(u) -> str:
-    """What a person may open in Settings, in the screen's words: "All of Settings" for an
-    administrator, "Settings: User Management, ERPNext API Keys" for a delegate, "" for
-    anyone else."""
-    if u.is_superuser:
-        return "All of Settings"
-    given = _grants(u)
-    return ("Settings: " + ", ".join(GRANT_WORDS[k] for k in given)) if given else ""
 
 
 def _customers_of(u) -> list:

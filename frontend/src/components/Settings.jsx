@@ -66,17 +66,13 @@ export default function Settings() {
     return tabs.some((t) => t[0] === want) ? want : tabs[0]?.[0];
   });
   const Section = (tabs.find((t) => t[0] === tab) || tabs[0])?.[2];
-  const everything = tabs.length === TABS.length;
+  // The heading alone: no sentence about who sees this screen or what is recorded
+  // (17 Nov 2026, "too chatty"), least of all to a manager given a section of it.
   return (
     <div className="settings">
       <div className="topbar">
         <div>
           <h3>Settings</h3>
-          <div className="when">
-            {everything
-              ? "Who can sign in, the businesses the platform reads, the keys and email it uses, and the product's branding. Only administrators, and managers given a section of it, see this screen; every change is recorded under Changes."
-              : "The parts of Settings the platform's administrator has given you. Every change you make is recorded."}
-          </div>
         </div>
       </div>
       {tabs.length > 1 ? (
