@@ -37,6 +37,10 @@ from command_center.api.businesses import require_manager
 ACCEPTED_TAG = "Accepted"
 SEND_BACK = "Command Center Task Send Back"
 CHECK_DAYS = 14
+# How much is read, and said when it is not all (17 Nov 2026: the caps were silent).
+APPROVALS_CAP = 300     # documents per workflow, at the steps this person may take
+HANDED_OUT_CAP = 1000   # To-Dos handed out, open and done-to-check, each
+MINE_CAP = 500          # the manager's own open To-Dos
 VALUE_FIELDS = ("base_grand_total", "grand_total", "base_total", "total", "amount",
                 "total_amount", "paid_amount")
 
@@ -93,17 +97,17 @@ def summary(business_code: str | None = None):
         return {"available": False, "reason": guide_["text"], "guide": guide_}
     from command_center.connectors.base import BusinessUnreachable
     try:
-        return _summary(src, _code(business_code))
+        return _summary(src, _src_code(src, business_code))
     except BusinessUnreachable as e:
         return _unreachable(getattr(getattr(src, "conn", None), "code", None) or business_code, e)
 
 
 def _summary(src, business_code):
     user = src.me()
-    approvals = _approvals(user, src)
-    handed = _handed_out(user, src)
-    mine = _mine(user, src)
-    now = getdate(today())
+    now = business_today(business_code)
+    approvals = _approvals(user, src, now)
+    handed = _handed_out(user, src, now)
+    mine = _mine(user, src, now)
 
     open_ = [t for t in handed if t["status"] == "Open"]
     late = [t for t in open_ if t["late_days"] > 0]
@@ -117,40 +121,56 @@ def _summary(src, business_code):
     value = sum(a["value"] or 0 for a in approvals)
     oldest = max((t["late_days"] for t in late), default=0)
     currency = src.currency(business_code)
+    # Said, never silent, when a cap was reached: the tiles and the lists name it.
+    first = f" · showing the first {HANDED_OUT_CAP:,}" if handed.capped else ""
+    first_ap = (f" · only the oldest {APPROVALS_CAP:,} at each step were read"
+                if approvals.capped else "")
 
     site = src.site()
     figures = {
         "work_awaiting": _fig("work_awaiting", "Awaiting you", len(approvals),
-                              f"{currency} {value:,.0f} involved".strip() if value else
-                              "nothing with a value on it",
-                              site + "/app/workflow-action?status=Open"),
+                              (f"{currency} {value:,.0f} involved".strip() if value else
+                               "nothing with a value on it") + first_ap,
+                              site + "/app/workflow-action?status=Open", now),
         "work_due_today": _fig("work_due_today", "Due today", len(due_today),
-                               "on your own list, today or earlier",
-                               f"{site}/app/todo?status=Open&allocated_to={user}"),
+                               "on your own list, today or earlier"
+                               + (f" · showing the first {MINE_CAP:,}" if mine.capped else ""),
+                               f"{site}/app/todo?status=Open&allocated_to={user}", now),
         "work_to_check": _fig("work_to_check", "Delegated Tasks Done", len(check),
-                              f"awaiting your review · done in the last {CHECK_DAYS} days",
-                              f"{site}/app/todo?status=Closed&assigned_by={user}"),
+                              f"awaiting your review · done in the last {CHECK_DAYS} days"
+                              + first, f"{site}/app/todo?status=Closed&assigned_by={user}",
+                              now),
         "work_unkept": _fig("work_unkept", "Overdue Delegated Tasks", len(late),
-                            f"assigned by you · oldest {_age(oldest)} late" if late
-                            else "assigned by you · none past its date",
-                            f"{site}/app/todo?status=Open&assigned_by={user}"),
-        "work_open": _fig("work_open", "Still Open", len(open_), "work you handed out",
-                          f"{site}/app/todo?status=Open&assigned_by={user}"),
-        "work_late": _fig("work_late", "Late", len(late), "past the date you set",
-                          f"{site}/app/todo?status=Open&assigned_by={user}"),
-        "work_high": _fig("work_high", "High Priority", len(high), "marked high priority",
-                          f"{site}/app/todo?status=Open&priority=High&assigned_by={user}"),
+                            (f"assigned by you · oldest {_age(oldest)} late" if late
+                             else "assigned by you · none past its date") + first,
+                            f"{site}/app/todo?status=Open&assigned_by={user}", now),
+        "work_open": _fig("work_open", "Still Open", len(open_), "work you handed out" + first,
+                          f"{site}/app/todo?status=Open&assigned_by={user}", now),
+        "work_late": _fig("work_late", "Late", len(late), "past the date you set" + first,
+                          f"{site}/app/todo?status=Open&assigned_by={user}", now),
+        "work_high": _fig("work_high", "High Priority", len(high),
+                          "marked high priority" + first,
+                          f"{site}/app/todo?status=Open&priority=High&assigned_by={user}", now),
         "work_reopened": _fig("work_reopened", "Sent Back More Than Once", len(reopened),
-                              "you rejected the work twice or more",
-                              f"{site}/app/todo?status=Open&assigned_by={user}"),
+                              "you rejected the work twice or more" + first,
+                              f"{site}/app/todo?status=Open&assigned_by={user}", now),
     }
     # Each tile filters the list on Outstanding Tasks (legacy/work.js), and Today's two
     # open it filtered the same way.
     for key, f in TILE_FILTERS.items():
         figures[key]["filter"] = f
+    # Every row says which business it is in, and every action on it sends that business
+    # (legacy/work.js, TaskDrawer.jsx): never the screen's scope (actions._business).
+    for row in [*approvals, *handed, *mine]:
+        row["business_code"] = business_code
     return {"available": True, "user": user, "today": str(now), "currency": currency,
-            "approvals": approvals, "open": open_, "late": late, "check": check,
-            "mine": mine, "figures": figures}
+            "business_code": business_code,
+            "approvals": list(approvals), "open": open_, "late": late, "check": check,
+            "mine": list(mine), "figures": figures,
+            "limits": {"handed_out": HANDED_OUT_CAP if handed.capped else None,
+                       "mine": MINE_CAP if mine.capped else None,
+                       "approvals": APPROVALS_CAP if approvals.capped else None,
+                       "approvals_in": list(approvals.capped_in)}}
 
 
 @frappe.whitelist()
@@ -158,66 +178,92 @@ def review(todo: str, verdict: str, note: str = "", business_code: str | None = 
     """The manager's verdict on work they handed out and the assignee closed.
 
     accept   tags the To-Do Accepted, so it leaves "Delegated Tasks Done", and records a
-             comment saying so.
-    return   reopens it, with the manager's reason as a comment the assignee sees.
+             comment saying so (no mention: nobody is notified).
+    return   reopens it, with the manager's reason as a comment that MENTIONS the person,
+             so ERPNext notifies them -- the same path as every other change that tells
+             them (actions._tell). It used to be a plain comment, so nobody knew.
 
-    On a business on another site, made there under the manager's own key, so that
-    site records them as the person who did it.
+    The business is the task's own (actions._business): "All businesses" is refused. On a
+    business on another site, made there under the manager's own key, so that site
+    records them as the person who did it. Every comment is escaped (actions._note_html,
+    _mention_html): the note is the manager's words, never markup.
     """
+    from command_center.api import actions
+
     require_manager()
     if verdict not in ("accept", "return"):
         frappe.throw("The verdict is accept or return.")
     if verdict == "return" and not (note or "").strip():
         frappe.throw("Say what is still needed, so they know what to do.")
-    src, guide_ = _source(business_code)
+    code = actions._business(business_code)
+    src, guide_ = _source(code)
     if not src:
         frappe.throw(guide_["text"])
-    if isinstance(src, _Remote):
-        out = _review_remote(src, todo, verdict, note)
-    else:
-        out = _review_local(todo, verdict, note)
+    with actions._says_why():
+        if isinstance(src, _Remote):
+            out = _review_remote(src, todo, verdict, note)
+        else:
+            out = _review_local(actions._conn(code), todo, verdict, note)
     if verdict == "return":
-        out["sent_back"] = _record_send_back(_code(business_code), todo, note)
+        out["sent_back"] = _record_send_back(code, todo, note)
     return out
 
 
-def _review_local(todo, verdict, note):
+def _review_local(conn, todo, verdict, note):
+    from command_center.api import actions
+
     doc = frappe.get_doc("ToDo", todo)
     if doc.assigned_by != frappe.session.user:
         frappe.throw("Only the person who handed this out can accept it or send it back.",
                      frappe.PermissionError)
     doc.check_permission("write")
     who = frappe.utils.get_fullname(frappe.session.user)
+    note = (note or "").strip()
     if verdict == "accept":
         from frappe.desk.doctype.tag.tag import add_tag
         add_tag(ACCEPTED_TAG, "ToDo", doc.name)
-        doc.add_comment("Comment", f"Accepted by {who}." + (f" {note}" if note else ""))
+        conn.comment("ToDo", doc.name,
+                     actions._note_html(f"Accepted by {who}." + (f" {note}" if note else "")))
         return {"ok": True, "status": doc.status}
     doc.status = "Open"
     doc.save()
-    doc.add_comment("Comment", f"Sent back by {who}: {note.strip()}")
-    return {"ok": True, "status": doc.status}
+    return {"ok": True, "status": doc.status,
+            **_tell_sent_back(conn, todo, doc.allocated_to, who, note)}
 
 
 def _review_remote(src, todo, verdict, note):
+    from command_center.api import actions
+
     conn = src.conn
     me = src.me()
-    row = conn.get_list("ToDo", filters={"name": todo}, fields=["name", "assigned_by", "status"],
-                        limit=1)
+    row = conn.get_list("ToDo", filters={"name": todo},
+                        fields=["name", "assigned_by", "status", "allocated_to"], limit=1)
     if not row or row[0].get("assigned_by") != me:
         frappe.throw("Only the person who handed this out can accept it or send it back.",
                      frappe.PermissionError)
     who = src.fullname(me)
+    note = (note or "").strip()
     if verdict == "accept":
         conn._call("frappe.desk.doctype.tag.tag.add_tag",
                    {"tag": ACCEPTED_TAG, "dt": "ToDo", "dn": todo}, write=True)
-        text, status = f"Accepted by {who}." + (f" {note}" if note else ""), row[0].get("status")
-    else:
-        conn.set_value("ToDo", todo, "status", "Open")
-        text, status = f"Sent back by {who}: {note.strip()}", "Open"
-    # Through the form's own comment endpoint: inserting a Comment needs System Manager.
-    conn.comment("ToDo", todo, text)
-    return {"ok": True, "status": status}
+        # Through the form's own comment endpoint: inserting a Comment needs System Manager.
+        conn.comment("ToDo", todo,
+                     actions._note_html(f"Accepted by {who}." + (f" {note}" if note else "")))
+        return {"ok": True, "status": row[0].get("status")}
+    conn.set_value("ToDo", todo, "status", "Open")
+    return {"ok": True, "status": "Open",
+            **_tell_sent_back(conn, todo, row[0].get("allocated_to"), who, note)}
+
+
+def _tell_sent_back(conn, todo, user, who, note) -> dict:
+    """The Send Back comment, mentioning the person so ERPNext tells them; whether it did."""
+    from command_center.api import actions
+
+    name, mentionable = actions._person(conn, user)
+    notified, notice = actions._tell(conn, {"doctype": "ToDo", "name": todo}, user, name,
+                                     mentionable, f"Sent back by {who}: {note}",
+                                     f"their To-Do {todo}", "it was sent back")
+    return {"to": user, "to_name": name, "notified": notified, "notice": notice}
 
 
 @frappe.whitelist()
@@ -231,13 +277,16 @@ def task(todo: str, business_code: str | None = None):
     if not src:
         frappe.throw(guide_["text"])
     me = src.me()
-    rows = _todos({"name": todo}, src, limit=1, extra=["assigned_by"])
+    code = _src_code(src, business_code)
+    rows = _todos({"name": todo}, src, limit=1, extra=["assigned_by"],
+                  day=business_today(code))
     if not rows or rows[0].get("assigned_by") != me:
         frappe.throw("Only the person who handed this out can open it here.",
                      frappe.PermissionError)
     t = rows[0]
+    t["business_code"] = code
     t["assigned_by_name"] = src.fullname(me)
-    t["sent_back"] = _sent_back([t], src, _code(business_code)).get(t["name"], 0)
+    t["sent_back"] = _sent_back([t], src, code).get(t["name"], 0)
     t["document"] = ({**t["reference"], "url": src.url(t["reference"]["doctype"],
                                                        t["reference"]["name"])}
                      if t["reference"] else None)
@@ -257,20 +306,40 @@ def task(todo: str, business_code: str | None = None):
 
 
 # ---------------------------------------------------------------------------
-def _approvals(user, src):
-    out = []
+class _Rows(list):
+    """A list that says whether a cap cut it short (and, for approvals, where)."""
+    capped = False
+    capped_in: tuple = ()
+
+
+def _approvals(user, src, day=None):
+    """Every document waiting at a workflow step this person may take now.
+
+    Finished is not waiting: a document whose every step left to this person, from its
+    submitted state, is the plain cancellation -- an action named Cancel that leads to a
+    cancelled state (Document Status 2) -- is left out (Gigmann, 16 Nov 2026: an Approved
+    Payment Entry whose only way on was Cancel sat in "Awaiting you"). Anything else keeps
+    it here with its button, including steps that lead to Document Status 2 under another
+    name (Reject, Approve Cancellation) and a step named Cancel that leads anywhere else
+    (Cancel -> Withdrawn, Document Status 0). When the workflow's states cannot be read,
+    a step named Cancel is taken as the plain cancellation only on a submitted document
+    (docstatus 1). See _plain_cancel.
+    """
+    day = day or getdate(today())
+    out = _Rows()
+    capped = []
     roles = src.roles(user)
     for wf in src.workflows():
         field = wf.get("workflow_state_field") or "workflow_state"
-        # A document waits on this person only where they can move it forward. A step
-        # whose only way on is Cancel (an approved, submitted document: "Approved by
-        # CEO" -> Cancelled) is finished, not waiting -- every approver who may cancel
-        # would otherwise see every approved document as theirs to decide.
-        ends = _cancel_states(src.states(wf["name"]))
-        states = {t["state"] for t in src.transitions(wf["name"])
-                  if (roles is None or t["allowed"] in roles)
-                  and not _cancels(t.get("action"), t.get("next_state"), ends)}
-        if not states:
+        states = src.states(wf["name"]) or {}
+        steps = [t for t in src.transitions(wf["name"])
+                 if roles is None or t.get("allowed") in roles]
+        # Asked for only where some step is more than the plain cancellation; with the
+        # states unknown that cannot be told per state, so every state is asked for and
+        # each document decides (its docstatus, below).
+        asked = {t["state"] for t in steps
+                 if not _plain_cancel(t.get("action"), t.get("next_state"), states)}
+        if not asked:
             continue
         has, title_field = src.fields(wf["document_type"])
         vfield = next((f for f in VALUE_FIELDS if f in has), None)
@@ -279,13 +348,16 @@ def _approvals(user, src):
             [f for f in (vfield, tfield) if f]
         try:
             docs = src.list(wf["document_type"],
-                            filters={field: ["in", list(states)], "docstatus": ["<", 2]},
-                            fields=fields, order_by="creation asc", limit=100)
+                            filters={field: ["in", sorted(asked)], "docstatus": ["<", 2]},
+                            fields=fields, order_by="creation asc", limit=APPROVALS_CAP + 1)
         except Exception:
             continue  # not readable by this person
+        if len(docs) > APPROVALS_CAP:
+            capped.append(wf["document_type"])
+            docs = docs[:APPROVALS_CAP]
         for d in docs:
             actions = [a for a, nxt in src.actions(wf["document_type"], d)
-                       if not _cancels(a, nxt, ends)]
+                       if not _plain_cancel(a, nxt, states, d.get("docstatus"))]
             if not actions:
                 continue
             out.append({
@@ -293,28 +365,34 @@ def _approvals(user, src):
                 "name": d["name"],
                 "title": (d.get(tfield) if tfield else None) or d["name"],
                 "state": d.get(field),
+                # What the card shows is what a decision is checked against
+                # (actions.apply_workflow_action: refused if it has moved on).
+                "state_field": field,
+                "modified": str(d.get("modified")) if d.get("modified") else None,
                 "actions": list(dict.fromkeys(actions)),
                 "value": float(d.get(vfield) or 0) if vfield else None,
                 "raised_by": src.fullname(d.get("owner")),
                 "raised": str(d.get("creation"))[:10],
-                "waiting_days": date_diff(today(), d.get("modified")),
+                "waiting_days": date_diff(day, d.get("modified")),
                 "url": src.url(wf["document_type"], d["name"]),
             })
     out.sort(key=lambda a: -(a["waiting_days"] or 0))
+    out.capped, out.capped_in = bool(capped), tuple(capped)
     return out
 
 
-def _cancel_states(states):
-    """The workflow's states that cancel the document (Document Status 2)."""
-    return {name for name, ds in (states or {}).items() if str(ds) == "2"}
-
-
-def _cancels(action, next_state, ends):
-    """A transition that only cancels the document: it leads to a cancelled state, or
-    (when the states could not be read) is the action named Cancel."""
-    if next_state and next_state in ends:
-        return True
-    return not ends and (action or "").strip().lower() == "cancel"
+def _plain_cancel(action, next_state, states, docstatus=None) -> bool:
+    """The plain cancellation of a submitted document: the action named Cancel AND it leads
+    to a cancelled state (Document Status 2). Any other name -- Reject, Approve
+    Cancellation -- is a decision, wherever it leads; Cancel leading anywhere but a
+    cancelled state (Withdrawn, Document Status 0) is one too. Without the workflow's
+    states (`states` empty), the name decides, and only on a submitted document
+    (`docstatus` 1); not knowing the document either (None), it is not assumed."""
+    if (action or "").strip().lower() != "cancel":
+        return False
+    if states:
+        return str(states.get(next_state)) == "2"
+    return docstatus is not None and str(docstatus) == "1"
 
 
 # Tile figure -> the filter it puts on Outstanding Tasks' list (legacy/work.js).
@@ -324,10 +402,33 @@ TILE_FILTERS = {"work_open": "open", "work_late": "late", "work_high": "high",
 
 
 def _code(business_code):
-    """The business a task belongs to: the one asked for, else the default."""
+    """The business the screens READ when none is named (All businesses): the default.
+    Never for a write -- a write names the record's own business (actions._business)."""
     from command_center.api.businesses import default_business_code
     return business_code if business_code and business_code != "__all__" \
         else default_business_code()
+
+
+def _src_code(src, business_code):
+    """The business a source reads: its connector's, else the one asked for."""
+    return getattr(getattr(src, "conn", None), "code", None) or _code(business_code)
+
+
+def business_today(code=None):
+    """Today where the business is: its Connected Business time zone when one is set,
+    else the platform's. A due date is late from midnight in the business's own day, not
+    the server's -- Accra and the UTC server agree, a business in another zone does not."""
+    code = _code(code)
+    tz = frappe.db.get_value("Connected Business", {"business_code": code}, "timezone") \
+        if code else None
+    if tz:
+        try:
+            import datetime as _dt
+            from zoneinfo import ZoneInfo
+            return _dt.datetime.now(ZoneInfo(str(tz).strip())).date()
+        except Exception:
+            pass
+    return getdate(today())
 
 
 def _record_send_back(code, todo, note) -> int:
@@ -361,7 +462,8 @@ def _sent_back(open_, src, code) -> dict:
         rows = src.list("Comment", filters={"reference_doctype": "ToDo",
                                             "reference_name": ["in", names],
                                             "comment_type": "Comment",
-                                            "content": ["like", "Sent back by %"]},
+                                            # plain (older) or after the mention (now)
+                                            "content": ["like", "%Sent back by %"]},
                         fields=["reference_name"], limit=5000)
     except Exception:
         rows = []
@@ -376,17 +478,21 @@ def _sent_back(open_, src, code) -> dict:
     return times
 
 
-def _todos(filters, src, limit=200, extra=None):
+def _todos(filters, src, limit=None, extra=None, day=None):
+    """To-Dos as the screens show them, at most `limit` (HANDED_OUT_CAP); `.capped` says
+    there were more."""
+    limit = limit or HANDED_OUT_CAP
     rows = src.list("ToDo", filters=filters,
                     fields=["name", "description", "status", "priority", "date",
                             "allocated_to", "assigned_by", "reference_type",
                             "reference_name", "modified", "modified_by", "creation",
                             "_user_tags"],
-                    order_by="date asc", limit=limit)
-    now = getdate(today())
+                    order_by="date asc", limit=limit + 1)
+    now = day or getdate(today())
     me = src.me() if rows else None
-    out = []
-    for r in rows:
+    out = _Rows()
+    out.capped = len(rows) > limit
+    for r in rows[:limit]:
         r = frappe._dict(r)
         text = frappe.utils.strip_html(r.description or "").strip()
         first, _, rest = text.partition("\n")
@@ -403,7 +509,7 @@ def _todos(filters, src, limit=200, extra=None):
             "reference": ({"doctype": r.reference_type, "name": r.reference_name}
                           if r.reference_type and r.reference_name else None),
             "closed_on": str(r.modified)[:10] if r.status == "Closed" else None,
-            "accepted": ACCEPTED_TAG in (r._user_tags or ""),
+            "accepted": ACCEPTED_TAG in _tags(r._user_tags),
             "closed_by_you": r.status == "Closed" and bool(me) and r.modified_by == me,
             "url": src.url("ToDo", r.name),
             "created": str(r.creation)[:10] if r.creation else None,
@@ -414,19 +520,28 @@ def _todos(filters, src, limit=200, extra=None):
     return out
 
 
-def _handed_out(user, src):
-    since = add_days(today(), -CHECK_DAYS)
-    open_ = _todos({"assigned_by": user, "status": "Open", "allocated_to": ["!=", user]}, src)
+def _tags(value) -> set:
+    """A document's _user_tags as its exact tags: ERPNext keeps them as ",A,B". A tag
+    "Not Accepted" or "Accepted?" is not Accepted (it used to be a substring test)."""
+    return {t.strip() for t in str(value or "").split(",") if t.strip()}
+
+
+def _handed_out(user, src, day=None):
+    since = add_days(day or getdate(today()), -CHECK_DAYS)
+    open_ = _todos({"assigned_by": user, "status": "Open", "allocated_to": ["!=", user]}, src,
+                   day=day)
     closed = _todos({"assigned_by": user, "status": "Closed", "allocated_to": ["!=", user],
-                     "modified": [">=", since]}, src)
+                     "modified": [">=", str(since)]}, src, day=day)
     # Closed by the manager (actions.close_task) is not done by the assignee, so it is
     # not work to check. ERPNext's own record says who closed it: modified_by, the
     # manager's login there (src.me()), the same on v14, v15 and v16.
-    return open_ + [t for t in closed if not t["closed_by_you"]]
+    out = _Rows(open_ + [t for t in closed if not t["closed_by_you"]])
+    out.capped = open_.capped or closed.capped
+    return out
 
 
-def _mine(user, src):
-    return _todos({"allocated_to": user, "status": "Open"}, src, limit=100)
+def _mine(user, src, day=None):
+    return _todos({"allocated_to": user, "status": "Open"}, src, limit=MINE_CAP, day=day)
 
 
 # ---------------------------------------------------------------------------
@@ -507,12 +622,27 @@ class _Remote:
     def roles(self, user):
         # The person's roles there, when that site lets them read their own; None means
         # "not known", and the far site's own get_transitions then decides per document.
+        # Plus the roles every user holds without a Has Role row, as frappe.get_roles
+        # adds them (automatic_roles): a step allowed to "All" is theirs too.
+        if user == "Administrator":
+            return None   # every role
         try:
             rows = self.conn.get_list("Has Role", filters={"parent": user, "parenttype": "User"},
                                       fields=["role"], limit=500, parent_doctype="User")
-            return {r["role"] for r in rows} or None
         except Exception:
             return None
+        got = {r.get("role") for r in rows or [] if r.get("role")}
+        if not got:
+            return None
+        return got | automatic_roles(self._user_type(user))
+
+    def _user_type(self, user):
+        try:
+            rows = self.conn.get_list("User", filters={"name": user}, fields=["user_type"],
+                                      limit=1)
+        except Exception:
+            return None
+        return (rows[0].get("user_type") if rows else None) or None
 
     def currency(self, business_code):
         from command_center.api.businesses import currency_for
@@ -598,6 +728,17 @@ class _Remote:
         return self.conn.desk_url(doctype, name)
 
 
+def automatic_roles(user_type) -> set:
+    """The roles frappe.get_roles gives every signed-in user with no Has Role row: All and
+    Guest on v14-v16, and Desk User for a desk (System User) account on v15 and v16 -- a
+    harmless extra on v14, where no step can be allowed to a role that does not exist.
+    A user type not read is taken as a desk user: managers are."""
+    roles = {"All", "Guest"}
+    if user_type in (None, "", "System User"):
+        roles.add("Desk User")
+    return roles
+
+
 COMMENT_FIELDS = ["name", "comment_type", "content", "comment_email", "owner", "creation"]
 SHOWN_COMMENTS = {None, "", "Comment", "Info", "Assigned", "Assignment Completed", "Edit",
                   "Attachment", "Shared", "Workflow"}
@@ -618,11 +759,11 @@ def _comments(rows, src):
     return out
 
 
-def _fig(key, label, value, note, href):
+def _fig(key, label, value, note, href, day=None):
     # The shape of a KPI result, so the designed tiles hydrate through the same renderer.
     return {"key": key, "label": label, "value": value, "unit": "count",
             "direction": "neutral", "currency": None, "note": note,
-            "as_of": {"date": today(), "basis": "today"}, "basis": None,
+            "as_of": {"date": str(day or today()), "basis": "today"}, "basis": None,
             "drill": {"href": href}, "data_status": {"state": "live"}}
 
 
