@@ -45,6 +45,13 @@ def configured() -> bool:
     return bool(_key())
 
 
+def key_header() -> dict:
+    """The key as Google's header, never in the address: an address is what a failed
+    request's exception prints, and that went into the error log with the key in it
+    (17 Nov 2026)."""
+    return {"x-goog-api-key": _key() or ""}
+
+
 def _key() -> str | None:
     return frappe.conf.get("command_center_gemini_key")
 
@@ -121,7 +128,8 @@ def choose_model(listed: list, kind: str) -> str | None:
 def _discover(kind: str) -> str | None:
     import requests
     try:
-        r = requests.get(f"{BASE}/models", params={"key": _key(), "pageSize": 200}, timeout=10)
+        r = requests.get(f"{BASE}/models", params={"pageSize": 200}, headers=key_header(),
+                         timeout=10)
         if r.status_code != 200:
             return None
         name = choose_model(r.json().get("models") or [], kind)
@@ -178,7 +186,8 @@ def _listed() -> list:
     if cached:
         return cached
     try:
-        r = requests.get(f"{BASE}/models", params={"key": _key(), "pageSize": 200}, timeout=10)
+        r = requests.get(f"{BASE}/models", params={"pageSize": 200}, headers=key_header(),
+                         timeout=10)
         models = (r.json().get("models") or []) if r.status_code == 200 else []
     except Exception:
         models = []
@@ -269,7 +278,7 @@ def _post(kind: str, body: dict, timeout: int):
         REPLY_WAIT if "tools" in body else WRITE_WAIT)
 
     def send(model, cap):
-        return requests.post(ENDPOINT.format(model=model), params={"key": _key()}, json=body,
+        return requests.post(ENDPOINT.format(model=model), headers=key_header(), json=body,
                              timeout=max(3, min(cap, remaining() - 1)))
 
     model = model_for(kind)

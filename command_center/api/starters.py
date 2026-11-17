@@ -59,7 +59,8 @@ def starters(business_code: str | None = None):
     """Four to six questions to start with, for this person and this business."""
     require_manager()
     areas = areas_for(frappe.get_roles())
-    key = f"cc_starters::{business_code or '__all__'}::{'.'.join(areas)}"
+    from command_center.api.businesses import scope_tag
+    key = f"cc_starters::{scope_tag(business_code)}::{'.'.join(areas)}"
     cached = frappe.cache().get_value(key)
     if cached:
         return cached

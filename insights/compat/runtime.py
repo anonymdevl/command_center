@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+import re
+
 import concurrent.futures
 import contextlib
 import time
@@ -169,12 +171,50 @@ def get_traceback(*a, **k) -> str:
     return _tb.format_exc()
 
 
+# Secrets that may sit in an exception's text: a key in an address (?key=...), an
+# Authorization header (token key:secret, Bearer ...), and the shapes of the AI keys.
+# Whatever matches is replaced before anything is logged (17 Nov 2026: a Gemini request
+# that failed printed its address, key and all, into the error log).
+_SECRET_PATTERNS = (
+    (re.compile(r"(?i)([?&;](?:key|api_key|apikey|token|access_token|refresh_token|"
+                r"client_secret|secret|password|pwd)=)[^&\s'\"<>]+"), r"\1[redacted]"),
+    (re.compile(r"(?i)(\btoken\s+)[A-Za-z0-9._\-]{6,}:[A-Za-z0-9._\-]{6,}"), r"\1[redacted]"),
+    (re.compile(r"(?i)(\bbearer\s+)[A-Za-z0-9._~+/\-]{8,}=*"), r"\1[redacted]"),
+    (re.compile(r"(?i)(x-goog-api-key['\"]?\s*[:=]\s*['\"]?)[^'\"\s,}]+"), r"\1[redacted]"),
+    (re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}"), "sk-ant-[redacted]"),
+    (re.compile(r"AIza[0-9A-Za-z_\-]{20,}"), "AIza[redacted]"),
+)
+# Configured secrets, matched by value wherever they appear.
+_SECRET_CONF = ("command_center_anthropic_key", "command_center_gemini_key", "secret_key",
+                "encryption_key")
+
+
+def redact(text) -> str:
+    """`text` with every key, token and secret it carries replaced by [redacted]."""
+    out = str(text if text is not None else "")
+    if not out:
+        return out
+    try:
+        from insights.compat import conf
+        values = [str(conf.get(k) or "") for k in _SECRET_CONF]
+        values.append(str((conf.get("mail") or {}).get("password") or "")
+                      if isinstance(conf.get("mail"), dict) else "")
+        for v in values:
+            if len(v) >= 8 and v in out:
+                out = out.replace(v, "[redacted]")
+    except Exception:
+        pass
+    for pattern, repl in _SECRET_PATTERNS:
+        out = pattern.sub(repl, out)
+    return out
+
+
 def log_error(title=None, message=None, reference_doctype=None, reference_name=None, **kw):
     """Recorded outside the request's transaction: a rollback after an error must not
-    erase the record of it."""
+    erase the record of it. Keys and secrets in the text are redacted first (redact)."""
     import logging
-    title = str(title or "Error")[:255]
-    message = str(message if message is not None else get_traceback())
+    title = redact(str(title or "Error"))[:255]
+    message = redact(str(message if message is not None else get_traceback()))
     logging.getLogger("insights").warning("%s: %s", title, message[:2000])
     try:
         from insights.core.models import ErrorLog

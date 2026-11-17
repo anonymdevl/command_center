@@ -47,12 +47,22 @@ flags = _dict()
 WHITELIST: dict = {}
 
 
+# POST only unless an endpoint names its methods. A GET is not checked for the request
+# token (Django's CSRF protection skips safe methods) and the session cookie is SameSite
+# Lax, so another site could make a signed-in manager's browser fetch any GET endpoint:
+# a write that answered GET (create a task, run a load, link a key) could be made in
+# their name from a link or an <img>. GET is for the few read-only diagnostics opened
+# by address in a browser and the single sign-on redirects; each says methods=[...]
+# itself, and preflight holds the list (scripts/preflight.py, "GET endpoints").
+DEFAULT_METHODS = ("POST",)
+
+
 def whitelist(allow_guest=False, methods=None, xss_safe=False):
     """Register a function callable as /api/method/<module>.<name>."""
     def wrap(fn):
         WHITELIST[f"{fn.__module__}.{fn.__name__}"] = {
             "fn": fn, "allow_guest": bool(allow_guest),
-            "methods": [m.upper() for m in (methods or ["GET", "POST"])]}
+            "methods": [m.upper() for m in (methods or DEFAULT_METHODS)]}
         fn.whitelisted = True
         return fn
     return wrap

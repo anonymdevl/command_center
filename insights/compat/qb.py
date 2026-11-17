@@ -31,8 +31,9 @@ def _run(self, as_dict=False, pluck=None, debug=False, **kw):
     with connection.cursor() as cur:
         cur.execute(sql)
         if cur.description is None:
-            from insights.compat.db import db
-            db._wrote()
+            from insights.compat.db import db, is_write
+            if is_write(sql):
+                db._wrote()
             return []
         cols = [c[0] for c in cur.description]
         rows = cur.fetchall()
@@ -55,8 +56,36 @@ def _table(t):
     return DocType(t) if isinstance(t, str) else t
 
 
+def _model_of(table_name: str):
+    from insights.core.models import DOCTYPE_MODELS
+    by_table = getattr(_model_of, "cache", None)
+    if by_table is None:
+        by_table = {m._meta.db_table: m for m in DOCTYPE_MODELS.values()}
+        _model_of.cache = by_table
+    return by_table.get(table_name)
+
+
 def from_(t):
-    return _dialect().from_(_table(t))
+    """SELECT ... FROM a table, limited to the acting person's businesses when the table
+    has a business_code column and they may not see every one (db.business_scope)."""
+    t = _table(t)
+    q = _dialect().from_(t)
+    model = _model_of(getattr(t, "_table_name", "")) if isinstance(t, Table) else None
+    if model is None:
+        return q
+    from insights.compat.db import NO_BUSINESS, SCOPE_FIELD, _field_names, business_scope
+    if SCOPE_FIELD not in _field_names(model):
+        return q
+    scope = business_scope()
+    if scope is None:
+        return q
+    from insights.compat.state import local
+    col = t.field(SCOPE_FIELD)
+    cond = col.isin(sorted(scope) or ["\x00"])
+    if "owner" in _field_names(model):
+        cond = cond | ((col.isnull() | col.isin(list(NO_BUSINESS)))
+                       & (t.field("owner") == (getattr(local, "user", None) or "Guest")))
+    return q.where(cond)
 
 
 def into(t):

@@ -26,16 +26,28 @@ SEVERITY = {"crit": "Critical", "high": "High", "med": "Medium", "info": "For in
 NOTIFY = ("crit", "high")
 
 
-def recipients() -> list[str]:
-    """Every active manager and administrator with an email address."""
+def recipients(business_code: str | None = None) -> list[str]:
+    """The active managers and administrators with an email address who may see this
+    business: its customer's people, never another customer's (17 Nov 2026: every
+    manager on the platform was sent every business's alerts and digest). Without a
+    business: those who may see every business."""
     from command_center.api.businesses import ALLOWED_ROLES
+    try:
+        from insights.core.plans import visible_codes
+    except ImportError:  # a plain Frappe site: no customers, every manager sees all
+        visible_codes = None
     out = []
     for u in frappe.get_all("User", filters={"enabled": 1}, fields=["name", "email"]):
         if u.name in ("Administrator", "Guest"):
             continue
         email = u.get("email") or u.name
-        if "@" in (email or "") and ALLOWED_ROLES.intersection(frappe.get_roles(u.name)):
-            out.append(email)
+        if "@" not in (email or "") or not ALLOWED_ROLES.intersection(frappe.get_roles(u.name)):
+            continue
+        if visible_codes is not None:
+            codes = visible_codes(u.name)
+            if codes is not None and (not business_code or business_code not in codes):
+                continue
+        out.append(email)
     return sorted(set(out))
 
 
@@ -66,9 +78,9 @@ def notify(business_code: str, docs: list) -> str:
     docs = [d for d in docs if d.severity in NOTIFY]
     if not docs:
         return ""
-    to = recipients()
+    to = recipients(business_code)
     if not to:
-        text = "Not emailed: no manager has an email address."
+        text = "Not emailed: no manager of this business has an email address."
         _record(docs, text)
         return text
     name = frappe.db.get_value("Connected Business", {"business_code": business_code},
@@ -82,8 +94,8 @@ def notify(business_code: str, docs: list) -> str:
     n = len(docs)
     try:
         with mail.about("alert", business_code):
-            frappe.sendmail(
-                recipients=to,
+            sent = mail.send_each(
+                to,
                 subject=f"{n} new alert{'s' if n != 1 else ''} · {name}",
                 message=branding.email_html(
                     f"<p>The alert rules raised {n} new alert{'s' if n != 1 else ''} for "
@@ -99,6 +111,7 @@ def notify(business_code: str, docs: list) -> str:
         text = f"Not emailed: {str(e)[:200]}"
         _record(docs, text)
         return text
-    text = f"Emailed to {len(to)} manager{'s' if len(to) != 1 else ''}."
+    text = (f"Emailed to {sent} manager{'s' if sent != 1 else ''}."
+            + (f" {len(to) - sent} could not be sent." if sent < len(to) else ""))
     _record(docs, text)
     return text

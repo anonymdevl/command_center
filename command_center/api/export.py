@@ -56,9 +56,11 @@ def _business(business_code) -> str:
     return "All businesses"
 
 
-def _as_of() -> str:
+def _as_of(business_code=None) -> str:
+    """The data horizon of the business a document is about (www.command_center._as_of):
+    never another business's."""
     from command_center.www.command_center import _as_of as boot_as_of
-    d = boot_as_of() or {}
+    d = boot_as_of(business_code) or {}
     return d.get("date") or "not loaded"
 
 
@@ -251,7 +253,7 @@ def brand_header(title: str, business_code: str | None = None, kicker: str = "",
         + (f'<div class="tb-sub">{escape_html(subtitle)}</div>' if subtitle else "")
         + '<table class="tb-facts"><tr>'
         f'<td><span>Business</span>{escape_html(business)}</td>'
-        f'<td><span>Period</span>{escape_html(period or "Figures as at " + _pretty_date(_as_of()))}</td>'
+        f'<td><span>Period</span>{escape_html(period or "Figures as at " + _pretty_date(_as_of(business_code)))}</td>'
         f'<td><span>Requested by</span>{escape_html(who)}</td>'
         f'<td><span>Generated</span>{escape_html(when)}</td>'
         '</tr></table></div>')
@@ -669,7 +671,7 @@ def brand_rows_head(title: str, business_code, note: str | None = None,
     lead = client if b["look"] != "platform" else f"{b['product']} · {client}"
     return [[title],
             [f"{lead} · "
-             f"{period or 'figures as at ' + _as_of()} · "
+             f"{period or 'figures as at ' + _as_of(business_code)} · "
              f"exported by {frappe.utils.get_fullname(frappe.session.user)} on "
              f"{frappe.utils.format_datetime(frappe.utils.now_datetime(), 'd MMM yyyy, HH:mm')}"
              + (f" · {note}" if note else "")],
@@ -801,7 +803,8 @@ PDF_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><style>
 </body></html>"""
 
 
-@frappe.whitelist()
+# Read-only, opened by address in a browser: GET as well (preflight lists it).
+@frappe.whitelist(methods=["GET", "POST"])
 def pdf_diagnostics():
     """What the server's PDF engine has to work with -- System Managers only, reads only.
 

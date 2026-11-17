@@ -203,6 +203,16 @@ def daily() -> dict:
     clear_sessions()
     done["sessions"] = "cleared expired"
     try:
+        from insights.core.models import SignInCounter
+        import datetime as _dt
+
+        from insights.core.views import _now
+        done["sign_in_counters_pruned"] = SignInCounter.objects.filter(
+            expires__lt=_now() - _dt.timedelta(days=1)).delete()[0]
+    except Exception as e:  # recorded, and the rest of the upkeep still runs
+        frappe.log_error(title="Platform upkeep: sign-in counters", message=frappe.get_traceback())
+        done["sign_in_counters_pruned"] = f"failed: {e}"
+    try:
         done["backup"] = backup()
     except Exception as e:  # recorded, and the rest of the upkeep still counts
         frappe.log_error(title="Platform backup", message=str(e))

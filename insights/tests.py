@@ -1224,7 +1224,9 @@ class SettingsPage(TransactionTestCase):
         get_user_model().objects.filter(username="second@test.com").update(is_superuser=False)
         U = get_user_model()
         self.assertEqual(U.objects.filter(is_superuser=True, is_active=True).count(), 1)
-        with mock.patch.object(ps, "_require_admin", lambda: U.objects.get(username="second@test.com")):
+        # (an administrator demoted mid-call: past the check, and still finding the others)
+        with mock.patch.object(ps, "_require_admin", lambda: U.objects.get(username="second@test.com")), \
+                mock.patch.object(ps, "may_see_person", lambda me, u: True):
             with run_as("second@test.com"), self.assertRaises(ValidationError) as e:
                 ps.set_admin("boss@test.com", 0)
         self.assertIn("last active administrator", str(e.exception))
@@ -1256,10 +1258,14 @@ class SettingsPage(TransactionTestCase):
         self.assertFalse(ConnectedBusiness.objects.filter(pk="Refusing Ltd").exists())
         self.assertFalse(Secret.objects.filter(docname="Refusing Ltd").exists())
 
-        # edit: a blank secret keeps the stored one, a new one replaces it
-        self._ok("update_business", name="Test Medical Ltd", site_url="https://erp2.test")
+        # edit: a blank secret keeps the stored one (the same server), a new one replaces
+        # it; another server needs both again (insights/test_security.py)
+        self.assertIn("type the API key and the API secret", self._refused(
+            "update_business", name="Test Medical Ltd", site_url="https://erp2.test"))
+        self._ok("update_business", name="Test Medical Ltd", site_url="https://erp.test/desk")
         self.assertEqual(documents.get_password("Connected Business", "Test Medical Ltd",
                                                 "api_secret"), self.SECRET)
+        self._ok("update_business", name="Test Medical Ltd", site_url="https://erp.test")
         self._ok("update_business", name="Test Medical Ltd", api_secret=self.SECRET + "-new")
         self.assertEqual(documents.get_password("Connected Business", "Test Medical Ltd",
                                                 "api_secret"), self.SECRET + "-new")
@@ -1469,7 +1475,8 @@ class SettingsDelegation(TransactionTestCase):
                                              "password2": "hijack-long-pass-9"}),
                          ("reset_password", {"set_later": 1}),
                          ("update_person", {"full_name": "Someone Else"})):
-            self._as(self.manager, fn, 403, username="boss@test.com", **args)
+            # an administrator is not there for a delegate at all (test_user_management.py)
+            self._as(self.manager, fn, 417, username="boss@test.com", **args)
         boss = U.objects.get(username="boss@test.com")
         self.assertTrue(boss.is_superuser and boss.is_active and boss.check_password("a-long-test-pass-5"))
         self.assertEqual(boss.first_name, "")
@@ -1485,7 +1492,8 @@ class SettingsDelegation(TransactionTestCase):
         self._as(self.manager, "reset_password", username="manager@test.com",
                  password="my-own-long-pass-8", password2="my-own-long-pass-8")
         listed = {x["username"]: x for x in self._as(self.manager, "people")}
-        self.assertTrue(listed["boss@test.com"]["protected"])
+        self.assertNotIn("boss@test.com", listed)
+        self.assertTrue(listed["ama@test.com"]["protected"])
         self.assertEqual(listed["ama@test.com"]["settings_access"], ["businesses"])
         self._as(self.manager, "businesses", 403)
         self._as(self.manager, "claude", 403)
@@ -1505,10 +1513,11 @@ class SettingsDelegation(TransactionTestCase):
         self.assertEqual([c["user"] for c in self._as(self.manager, "credentials")],
                          ["manager@test.com"])
         self.assertEqual(len(self._ok("credentials")), 2)
-        self._as(self.manager, "set_credential", 403, user="boss@test.com",
+        # an administrator is not there for a delegate (test_user_management.py)
+        self._as(self.manager, "set_credential", 417, user="boss@test.com",
                  business_code="test_medical_ltd", api_key="evil", api_secret="evil")
-        self._as(self.manager, "remove_credential", 403, name=boss_key["name"])
-        self._as(self.manager, "test_credential", 403, name=boss_key["name"])
+        self._as(self.manager, "remove_credential", 417, name=boss_key["name"])
+        self._as(self.manager, "test_credential", 417, name=boss_key["name"])
         self.assertTrue(self._as(self.manager, "test_credential", name=mine["name"])["ok"])
         self._as(self.manager, "add_business", 403, business_name="Other Ltd",
                  site_url="https://erp.other", api_key="k", api_secret="s")
@@ -1617,6 +1626,13 @@ class SettingsDelegation(TransactionTestCase):
         with run_as("boss@test.com"), self.assertRaises(MailNotConfigured):
             frappe.sendmail(recipients=["a@test.com"], subject="Weekly", message="<p>x</p>")
         self.assertTrue(ErrorLog.objects.filter(title="Email not sent: email is not set up").exists())
+        # a@test.com: a manager of the business on the platform (reports.may_receive)
+        a = get_user_model().objects.create_user("a@test.com", "a@test.com", "a-long-test-pass-4")
+        a.groups.add(Group.objects.get(name="Insights Dashboard Manager"))
+        from insights.core.models import ConnectedBusiness
+        ConnectedBusiness.objects.create(name="Test Medical Ltd", business_name="Test Medical Ltd",
+                                         business_code="test_medical_ltd", status="Active",
+                                         is_local=0, site_url="https://erp.test")
         sched = CommandCenterReportSchedule.objects.create(
             name="rs-1", report="rp01", business_code="test_medical_ltd", enabled=1,
             recipients="a@test.com", run_as="boss@test.com")
@@ -1625,7 +1641,7 @@ class SettingsDelegation(TransactionTestCase):
                 mock.patch("command_center.ask.agent.answer", lambda *a, **k: stub), \
                 mock.patch("command_center.api.export.pdf_bytes", lambda *a, **k: b"%PDF"), \
                 mock.patch("command_center.api.export._business", lambda c: "Test Medical Ltd"), \
-                mock.patch("command_center.api.export._as_of", lambda: "15 Nov 2026"):
+                mock.patch("command_center.api.export._as_of", lambda code=None: "15 Nov 2026"):
             from command_center.api import reports
             with run_as("boss@test.com"):
                 reports.send_scheduled("rs-1")
@@ -6384,7 +6400,7 @@ class ReportRuns(TransactionTestCase):
         self.stubs = [mock.patch("command_center.ask.engine.analyst_enabled", lambda: True),
                       mock.patch("command_center.ask.agent.answer", answer),
                       mock.patch("command_center.api.export._business", lambda c: "Alpha Medical Ltd"),
-                      mock.patch("command_center.api.export._as_of", lambda: "15 Nov 2026")]
+                      mock.patch("command_center.api.export._as_of", lambda code=None: "15 Nov 2026")]
         for p in self.stubs:
             p.start()
 
@@ -6456,7 +6472,9 @@ class ReportRuns(TransactionTestCase):
         self.assertTrue(slot["latest"]["finished_label"].endswith("today"))
         self.assertTrue(slot["latest"]["mine"])
         # another business's screen has no run of it
-        self.assertEqual(self._ok("ama@a.test", "latest", business_code="biz_b")["runs"], {})
+        # another customer's business is refused outright (insights/test_separation.py)
+        self.assertEqual(self._call(self.users["ama@a.test"], "latest",
+                                    business_code="biz_b").status_code, 403)
         # the same person's colleague at the same customer sees it, by name
         seen = self._ok("kofi@a.test", "latest", business_code="biz_a")["runs"]["rp01"]["latest"]
         self.assertEqual((seen["run_by_name"], seen["mine"]), ("Ama", False))
@@ -6596,15 +6614,15 @@ class ReportRuns(TransactionTestCase):
         run = self._ok("ama@a.test", "generate", code="rp01", business_code="biz_a")["job_id"]
         self._work()
         bea = self.users["bea@b.test"]
-        self.assertEqual(self._ok(bea, "latest", business_code="biz_a")["runs"], {})
+        # another customer's business is refused outright (insights/test_separation.py)
+        self.assertEqual(self._call(bea, "latest", business_code="biz_a").status_code, 403)
         self.assertEqual(self._ok(bea, "status", job_id=run), {"state": "unknown"})
         r = self._call(bea, "open_run", run=run)
         self.assertIn(r.status_code, (403, 417))
         self.assertNotIn("Sales rose", r.content.decode())
         self.assertEqual(self._ok(bea, "mine"), {"ready": [], "running": []})
-        # her own Run of the same report is her own run, not ama's
-        own = self._ok(bea, "generate", code="rp01", business_code="biz_a")
-        self.assertNotEqual(own["job_id"], run)
+        # nor may she run a report of that business
+        self.assertEqual(self._call(bea, "generate", code="rp01", business_code="biz_a").status_code, 403)
         # the administrator sees every run; a signed-out visitor nothing
         self.assertEqual(self._ok(self.admin, "status", job_id=run)["state"], "done")
         self.assertIn(self._call(Client(), "latest", business_code="biz_a").status_code, (401, 403))
@@ -8829,8 +8847,8 @@ class SetPasswordLink(TransactionTestCase):
                  for i in range(20)]
         self.assertEqual(codes[-1], 429)
         self.assertIn("Too many attempts", c.get(path).content.decode(), "the real link too, while locked")
-        from django.core.cache import cache
-        cache.clear()
+        from insights.core.models import SignInCounter
+        SignInCounter.objects.all().delete()  # the counters are rows now (views.count_failure)
         self.assertEqual(Client().get(path).status_code, 200)
 
     def test_who_may_send_follows_the_reset_password_rules(self):

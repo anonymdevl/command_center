@@ -49,6 +49,8 @@ class _R:
 def _answer(method, url, headers, params, body=None):
     calls.append({"method": method, "url": url, "auth": headers["Authorization"],
                   "params": params, "body": body})
+    if RAISE:
+        raise RAISE.pop(0)
     if script:
         code = script.pop(0)
         return _R(code, headers={"Retry-After": "1"})
@@ -69,9 +71,24 @@ class _Exc(Exception):
 
 
 requests = types.ModuleType("requests")
+timeouts = []
 requests.get = lambda url, headers=None, params=None, timeout=None: _answer("GET", url, headers, params or {})
-requests.post = lambda url, headers=None, data=None, json=None, timeout=None: _answer("POST", url, headers, json if json is not None else (data or {}), body="json" if json is not None else "form")
+
+
+def _post(url, headers=None, data=None, json=None, timeout=None):
+    timeouts.append(timeout)
+    return _answer("POST", url, headers, json if json is not None else (data or {}),
+                   body="json" if json is not None else "form")
+
+
+requests.post = _post
 requests.RequestException = _Exc
+# requests' own shapes: a read timeout means the request was sent; a connection error
+# (a connect timeout among them) means it never arrived.
+requests.exceptions = types.SimpleNamespace(
+    ConnectionError=type("ConnectionError", (_Exc,), {}),
+    ReadTimeout=type("ReadTimeout", (_Exc,), {}))
+RAISE = []  # exceptions to raise before answering normally
 sys.modules["requests"] = requests
 
 import time as _time  # noqa: E402
@@ -188,7 +205,11 @@ try:
     check(False, "a failed write raises")
 except Exception:
     pass
-check(len(calls) == 1, "a write is never retried: a second insert is a second document")
+_writes_sent = [c for c in calls if c["url"].endswith("frappe.client.insert")]
+check(len(_writes_sent) == 1, "a write is never retried: a second insert is a second document")
+check(not any(isinstance(w[-1], dict) and w[-1].get("status") == "Unreachable"
+              for w in frappe.writes),
+      f"a write refused by a business that answers the quick check marks nothing: {frappe.writes}")
 
 # 5. Credentials: a person's own key for their reads and writes; the service account
 #    for a system read, which never writes; no service key, no system read.
@@ -294,7 +315,75 @@ try:
     conn.assign("Task", "TASK-0001", ["ama@example.com"])
 except Exception:
     pass
-check(len(calls) == 1, f"an assignment is never retried: {len(calls)} calls")
+check(sum(c["url"].endswith("assign_to.add") for c in calls) == 1,
+      f"an assignment is never retried: {len(calls)} calls")
+
+# 9b. A write that ERPNext does not confirm in time (17 Nov 2026). It waits WRITE_TIMEOUT
+#     (60 s: a v14 submit of a big document can take most of a minute), is never
+#     retried, and comes back as WriteUnconfirmed -- "it may have gone through, check
+#     before trying again" -- not as a plain failure; the quick check is made as for a
+#     read, and a business that answers it is never marked Unreachable.
+from command_center.connectors.base import WriteUnconfirmed  # noqa: E402
+from command_center.connectors import remote as _remote  # noqa: E402
+
+
+def _unreachable_marked():
+    return any(isinstance(w[-1], dict) and w[-1].get("status") == "Unreachable"
+               for w in frappe.writes)
+
+
+check(_remote.WRITE_TIMEOUT >= 60, f"a write waits about a minute: {_remote.WRITE_TIMEOUT}")
+_cred_was = creds.user_cred
+creds.user_cred = {"api_key": "mine", "api_secret": "s"}
+for label, setup in (("a read timeout", lambda: RAISE.append(requests.exceptions.ReadTimeout("read timed out"))),
+                     ("a proxy's 504", lambda: script.append(504)),
+                     ("a proxy's 502", lambda: script.append(502))):
+    reset()
+    timeouts.clear()
+    biz.status = "Active"
+    setup()
+    got = None
+    try:
+        conn.insert({"doctype": "ToDo", "description": "x"})
+    except Exception as e:  # noqa: BLE001
+        got = e
+    check(isinstance(got, WriteUnconfirmed) and "may still have gone through" in str(got)
+          and "check in ERPNext before trying again" in str(got),
+          f"{label} on a write: unconfirmed, not failed: {type(got).__name__}: {got}")
+    check(sum(c["url"].endswith("frappe.client.insert") for c in calls) == 1,
+          f"{label}: the write is sent once")
+    check(any(c["url"].endswith("frappe.auth.get_logged_user") for c in calls),
+          f"{label}: the quick check is made")
+    check(not _unreachable_marked() and biz.status == "Active",
+          f"{label}: a business that answers the check is not marked Unreachable: {frappe.writes}")
+    check(timeouts and timeouts[-1] == _remote.WRITE_TIMEOUT,
+          f"{label}: the write waited WRITE_TIMEOUT: {timeouts}")
+# Down altogether (the check is not answered either): still unconfirmed, and marked down.
+reset()
+biz.status = "Active"
+RAISE.extend([requests.exceptions.ReadTimeout("read timed out"),
+              requests.exceptions.ConnectionError("refused")])
+try:
+    conn.insert({"doctype": "ToDo", "description": "x"})
+    got = None
+except Exception as e:  # noqa: BLE001
+    got = e
+check(isinstance(got, WriteUnconfirmed) and _unreachable_marked(),
+      f"a write unconfirmed by a business that is down: unconfirmed, and marked down: {got!r}")
+# Never connected: the write was not made -- a failure, not "may have gone through".
+reset()
+biz.status = "Active"
+RAISE.extend([requests.exceptions.ConnectionError("connection refused"),
+              requests.exceptions.ConnectionError("refused")])
+try:
+    conn.insert({"doctype": "ToDo", "description": "x"})
+    got = None
+except Exception as e:  # noqa: BLE001
+    got = e
+check(got is not None and not isinstance(got, WriteUnconfirmed),
+      f"a write that never reached ERPNext is a plain failure: {got!r}")
+biz.status = "Active"
+creds.user_cred = _cred_was
 # The comment that mentions someone goes through the form's own endpoint, which any
 # reader of the record may use; v14/v15 need comment_email and comment_by.
 reset()

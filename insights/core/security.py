@@ -492,7 +492,7 @@ def _lockouts() -> list:
             if key in seen:
                 continue
             seen.add(key)
-            n = cache.get(key) or 0
+            n = views.fail_count(key)
             if n >= limit:
                 out.append({"kind": kind, "ip": a, "username": u, "failures": n,
                             "what": {"pair": f"{u} from {a}", "ip": f"Every account from {a}",
@@ -542,8 +542,7 @@ def unlock(kind: str = "", username: str = "", ip: str = ""):
             at__gte=now() - _dt.timedelta(minutes=views.LOCK_MINUTES + 1))
             .values_list("ip", flat=True).distinct()[:500]]
         what = f"{username} from every address"
-    for k in keys:
-        cache.delete(k)
+    views.clear_failures(*keys)
     _event(kind="unlock", outcome="done", username=username, ip=ip if kind != "account" else "",
            actor=me.username, note=f"unlocked {what}")
     _audit(f"Security: unlocked sign-in for {what}")

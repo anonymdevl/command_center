@@ -227,7 +227,7 @@ def send_digest(code, force: bool = False) -> dict:
         return state
     new = [r for r in recs if r.get("first_seen") and (not last or r["first_seen"] > last)]
     rest = [r for r in recs if r not in new][:TOP]
-    to = recipients()
+    to = recipients(code)  # this business's own managers only (alerts/notify.py)
     if not to:
         state.update({"at": stamp, "ok": False, "says": "Not sent: no manager has an email address."})
         _put(DIGEST_PARENT, code, state)
@@ -251,8 +251,8 @@ def send_digest(code, force: bool = False) -> dict:
                else f"{len(recs)} open recommendation{'s' if len(recs) != 1 else ''} · {name}")
     try:
         with mail.about("digest", code):
-            frappe.sendmail(
-                recipients=to, subject=subject,
+            mail.send_each(  # one message each: nobody sees who else it went to
+                to, subject=subject,
                 message=(f"<p>What the figures of {esc(name)} say is worth doing today.</p>"
                          + "".join(parts)
                          + "<p>Open the platform's Home screen to mark each one done, not "

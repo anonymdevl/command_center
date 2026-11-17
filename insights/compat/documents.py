@@ -111,9 +111,10 @@ class Document(_dict):
 
     # load / reload
     def _load(self, name):
-        from insights.compat.db import model_for
+        from insights.compat.db import model_for, scoped
         model = model_for(self.doctype)
-        row = model.objects.filter(pk=name).values().first()
+        # Another customer's record is not there for this person (db.business_scope).
+        row = scoped(model, model.objects.filter(pk=name)).values().first()
         if row is None:
             raise DoesNotExistError(f"{self.doctype} {name} not found")
         self.update({k: to_plain(v) for k, v in row.items()})
@@ -139,6 +140,7 @@ class Document(_dict):
         self.setdefault("owner", local.user)
         self["modified_by"] = local.user
         self.setdefault("docstatus", 0)
+        self._check_scope()  # never a record for another customer's business
         self.run_method("before_insert")
         self.run_method("validate")
         self.run_method("before_save")
@@ -168,6 +170,7 @@ class Document(_dict):
                 self._before = None
         self["modified"] = now_datetime()
         self["modified_by"] = local.user
+        self._check_scope()
         self.run_method("validate")
         self.run_method("before_save")
         from insights.compat.db import db, model_for
@@ -201,7 +204,21 @@ class Document(_dict):
         return self.as_dict()
 
     def check_permission(self, ptype="read"):
+        """A record of a business that is not one of the acting person's is refused
+        (insights/compat/db.py business_scope); everything else is the business logic's
+        own checks, as before."""
+        self._check_scope()
         return True
+
+    def _check_scope(self):
+        code = self.get("business_code")
+        if not code or code in ("", "__all__"):
+            return
+        from insights.compat.db import business_scope
+        scope = business_scope()
+        if scope is not None and code not in scope:
+            from insights.compat.state import PermissionError as _Refused
+            raise _Refused("That business is not one of yours on this platform.")
 
     # internals
     def _columns(self, model) -> dict:

@@ -15,7 +15,7 @@
 import { api } from "../api/client.js";
 import { renderMarkdown } from "./markdown.js";
 import { tablesFrom } from "../exportTables.js";
-import { boot, brand, clientBrand } from "../api/boot.js";
+import { asOfFor, boot, brand, clientBrand } from "../api/boot.js";
 import { shortDate } from "../format.js";
 
 const POLL_MS = 3000;
@@ -283,7 +283,7 @@ function render(box, r, run) {
   title.append(
     el("span", "rp-kick", "Management Report"),
     el("b", "", r.title),
-    el("span", "rp-for", `Prepared for ${forName} · figures as at ${shortDate(boot.as_of?.date) || "—"}`),
+    el("span", "rp-for", `Prepared for ${forName} · figures as at ${shortDate(asOfFor(scope)?.date) || "—"}`),
     el("span", "rp-sub", `${written} · ${r.model || "the analyst"} · reads only`),
   );
   head.append(title);

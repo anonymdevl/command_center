@@ -48,6 +48,7 @@ from insights.compat import users as _users
 from insights.compat.state import PermissionError, ValidationError, local
 
 CONFIG_KEY = "plans"
+RUNNING_OUTCOME = "running"  # insights.core.models.RUNNING: an event not yet settled
 MANAGER = "Insights Dashboard Manager"
 SSO_MARK = "cc_sso_business"  # command_center.api.sso.MARK
 DUE_SOON_DAYS = 30
@@ -289,6 +290,59 @@ def rates_of(c) -> dict:
                         for k in METER}}
 
 
+# --- the terms in force in a month (17 Nov 2026) ---------------------------------------
+def _terms(c) -> dict:
+    """What prices a customer's month: the plan's name, the limits and the rates."""
+    r = rates_of(c)
+    return {"plan": c.plan, "limits": limits_of(c),
+            "rates": {"currency": r["currency"], "base_fee": str(r["base_fee"]),
+                      "overage": {k: str(v) for k, v in r["overage"].items()}}}
+
+
+def snapshot(c, period: str | None = None) -> None:
+    """Keep the customer's terms for this month: written while the month runs (every day,
+    and just before the administrator changes a plan, a customer or the prices), never
+    after it ends -- so a past month's statement keeps the terms it had."""
+    period = period or period_of()
+    if period != period_of():
+        return
+    t = _terms(c)
+    _models().PlanSnapshot.objects.update_or_create(
+        client_id=c.pk, period=period,
+        defaults={"plan": t["plan"], "limits": json.dumps(t["limits"]),
+                  "rates": json.dumps(t["rates"]), "taken": now()})
+
+
+def snapshot_all() -> None:
+    for c in _models().ClientAccount.objects.all():
+        try:
+            snapshot(c)
+        except Exception:
+            frappe.log_error(title=f"Plans: terms not kept for {c.name}",
+                             message=frappe.get_traceback())
+
+
+def terms_for(c, period: str) -> dict:
+    """The terms a month is priced at: for a month that has ended, those kept for it
+    (snapshot); for this month, or a past one with nothing kept (before 17 Nov 2026),
+    today's -- and it says which."""
+    if period < period_of():
+        snap = _models().PlanSnapshot.objects.filter(client_id=c.pk, period=period).first()
+        if snap is not None:
+            r = _loads(snap.rates)
+            over = r.get("overage") or {}
+            limits = {k: _limit(v) for k, v in _loads(snap.limits).items() if k in METER}
+            plan = catalogue().get(snap.plan) or catalogue()["custom"]
+            return {"plan_name": plan["name"], "limits": {k: limits.get(k) for k in METER},
+                    "rates": {"currency": str(r.get("currency") or ""),
+                              "base_fee": _money(r.get("base_fee") or 0),
+                              "overage": {k: _money(over.get(k) or 0) for k in METER}},
+                    "kept": True}
+    plan = catalogue().get(c.plan) or catalogue()["custom"]
+    return {"plan_name": plan["name"], "limits": limits_of(c), "rates": rates_of(c),
+            "kept": period >= period_of()}
+
+
 def _sso_users(codes) -> set:
     from insights.core.models import DefaultValue
     if not codes:
@@ -343,6 +397,49 @@ def clients_for_user(username: str) -> list:
     return sorted(found.values(), key=lambda x: x[0].name)
 
 
+def visible_codes(username) -> frozenset | None:
+    """The businesses a person may see and act on: None means every one.
+
+    The one rule (17 Nov 2026), read by the data layer (insights/compat/db.py
+    business_scope) and by every check (command_center/api/businesses.py):
+      an administrator (active superuser), and the platform itself (Administrator, a
+        signed-out visitor -- whose only calls are the single sign-on's), see all;
+      a person on one or more customers sees those customers' businesses, and any
+        business whose ERPNext let them in (single sign-on's cc_sso_business mark);
+      a person on no customer sees the businesses that are on no customer (the platform
+        as it was before customers existed);
+      anyone else -- a name with no account -- sees nothing."""
+    from django.contrib.auth import get_user_model
+
+    from insights.core.models import ConnectedBusiness, DefaultValue
+    if not username or username in ("Administrator", "Guest"):
+        return None
+    U = get_user_model()
+    u = U.objects.filter(username__iexact=username).first() or \
+        U.objects.filter(email__iexact=username).first()
+    if u is None:
+        return frozenset()
+    if u.is_superuser and u.is_active:
+        return None
+    M = _models()
+    mine = clients_for_user(u.username)
+    codes = set(M.ClientBusiness.objects.filter(client_id__in=[c.pk for c, _ in mine])
+                .values_list("business_code", flat=True)) if mine else set()
+    codes |= set(DefaultValue.objects.filter(parent__iexact=u.username, defkey=SSO_MARK)
+                 .values_list("defvalue", flat=True))
+    if not mine and not codes:
+        on_a_customer = M.ClientBusiness.objects.values_list("business_code", flat=True)
+        codes = set(ConnectedBusiness.objects.exclude(business_code__in=on_a_customer)
+                    .values_list("business_code", flat=True))
+    return frozenset(c for c in codes if c)
+
+
+def may_see(username, business_code) -> bool:
+    """One business, by the same rule."""
+    codes = visible_codes(username)
+    return codes is None or business_code in codes
+
+
 def client_of_business(business_code):
     M = _models()
     if not business_code or business_code == "__all__":
@@ -351,13 +448,46 @@ def client_of_business(business_code):
     return cb.client if cb else None
 
 
+def _primary(mine: list):
+    """Of a person's customers, the one an event over several businesses is billed to:
+    the first they are an Account Manager of, else their first."""
+    return next((c for c, role in mine if role == "manager"), mine[0][0]) if mine else None
+
+
+def clients_touched(business_code=None, user=None) -> list:
+    """The customers whose licence and allowance an AI event goes against: one business,
+    its customer; "all businesses" (or none named), the customers of the businesses this
+    person may see -- so a paused licence is never gone round by asking about "all"
+    (17 Nov 2026). A person on a customer always has one."""
+    c = client_of_business(business_code)
+    if c is not None:
+        return [c]
+    user = user or frappe.session.user
+    out = {}
+    if not business_code or business_code == "__all__":
+        codes = visible_codes(user)
+        if codes:
+            for cb in _models().ClientBusiness.objects.filter(
+                    business_code__in=list(codes)).select_related("client"):
+                out[cb.client.pk] = cb.client
+    for c2, _ in clients_for_user(user):
+        out.setdefault(c2.pk, c2)
+    return sorted(out.values(), key=lambda x: x.name)
+
+
 def client_for(business_code=None, user=None):
-    """The customer an event is billed to: the business's, else the person's only one."""
+    """The customer an event is billed to: the business's; for "all businesses" or none,
+    the person's own (their first Account Manager customer, else their first) -- never
+    nobody for a person who is on a customer, so no use of theirs goes unbilled."""
     c = client_of_business(business_code)
     if c is not None:
         return c
-    mine = clients_for_user(user or frappe.session.user)
-    return mine[0][0] if len(mine) == 1 else None
+    user = user or frappe.session.user
+    mine = clients_for_user(user)
+    if mine:
+        return _primary(mine)
+    touched = clients_touched(business_code, user)
+    return touched[0] if len(touched) == 1 else None
 
 
 # --- the licence --------------------------------------------------------------------------
@@ -498,6 +628,12 @@ def record(meter: str, quantity: int = 1, business_code=None, user=None, model: 
         cache_write_tokens=int(t.get("cache_write") or 0), requests=int(t.get("requests") or 0),
         model=str(model or "")[:80], est_cost=cost, cost_currency=COST_CURRENCY if cost is not None else "",
         outcome=outcome[:20], ref=str(ref or "")[:140], note=str(note or "")[:255], corrects=corrects)
+    if c is not None and not _models().PlanSnapshot.objects.filter(
+            client_id=c.pk, period=ev.period).exists():
+        try:
+            snapshot(c, ev.period)
+        except Exception:
+            frappe.log_error(title="Plans: terms not kept", message=frappe.get_traceback())
     if c is not None and meter in METER and int(quantity or 0) > 0:
         try:
             _allowance_notices(c, meter)
@@ -506,15 +642,32 @@ def record(meter: str, quantity: int = 1, business_code=None, user=None, model: 
     return ev
 
 
+STALE_RUNNING_HOURS = 3
+
+
+def _token_fields(ev) -> dict:
+    t = ev["tokens"]
+    cost = estimate(ev["model"], t) if any(int(t.get(k) or 0) for k in PRICE_KEYS) else None
+    return {"input_tokens": int(t["input"]), "output_tokens": int(t["output"]),
+            "cache_read_tokens": int(t["cache_read"]), "cache_write_tokens": int(t["cache_write"]),
+            "requests": int(t["requests"]), "model": str(ev["model"] or "")[:80], "est_cost": cost,
+            "cost_currency": COST_CURRENCY if cost is not None else ""}
+
+
 @contextmanager
 def event(meter: str, business_code=None, ref: str = "", note: str = "", count: bool = True):
-    """Around anything that may call Claude: its tokens are gathered here (meter_tokens)
-    and written as ONE row when it ends -- a quantity of 1 if it succeeded (ev["ok"]) and
-    counts, else 0 with the tokens it spent. Nothing at all is written for an attempt
-    that called no model and did not succeed."""
+    """Around anything that may call Claude: ONE row in the ledger -- a quantity of 1 if it
+    succeeded (ev["ok"]) and counts, else 0 with the tokens it spent. Nothing at all is
+    written for an attempt that called no model and did not succeed.
+
+    The row is written when the first tokens are spent (outcome "running"), its tokens
+    kept current after every reply (meter_tokens), and settled when the work ends -- so
+    a question whose browser gave up, or a report whose worker died, still leaves what it
+    spent on record (17 Nov 2026: the row was written only at the end, so it was lost).
+    A row still running hours later is closed as "interrupted" by the daily run."""
     ev = {"meter": meter, "business_code": business_code, "ok": False, "count": count,
           "model": "", "tokens": {k: 0 for k in (*PRICE_KEYS, "requests")}, "ref": ref,
-          "note": note, "user": _user()}
+          "note": note, "user": _user(), "row": None}
     outer = getattr(local, "cc_meter", None)
     local.cc_meter = ev
     try:
@@ -522,24 +675,41 @@ def event(meter: str, business_code=None, ref: str = "", note: str = "", count: 
     finally:
         local.cc_meter = outer
         spent = any(ev["tokens"][k] for k in PRICE_KEYS)
-        if ev["ok"] or spent:
-            try:
-                record(meter, 1 if (ev["ok"] and count) else 0, business_code, ev["user"],
-                       ev["model"], ev["tokens"], outcome="ok" if ev["ok"] else "failed",
-                       ref=ev["ref"], note=ev["note"])
-            except Exception:
-                frappe.log_error(title="Plans: usage not recorded",
-                                 message=f"{json.dumps(ev, default=str)}\n\n{frappe.get_traceback()}")
+        n = 1 if (ev["ok"] and count) else 0
+        try:
+            if ev["row"] is not None:
+                _models().UsageEvent.objects.filter(pk=ev["row"]).settle(
+                    quantity=n, outcome="ok" if ev["ok"] else "failed", **_token_fields(ev))
+                c = client_for(business_code, ev["user"])
+                if c is not None and n and meter in METER:
+                    _allowance_notices(c, meter)
+            elif ev["ok"] or spent:
+                record(meter, n, business_code, ev["user"], ev["model"], ev["tokens"],
+                       outcome="ok" if ev["ok"] else "failed", ref=ev["ref"], note=ev["note"])
+        except Exception:
+            frappe.log_error(title="Plans: usage not recorded",
+                             message=f"{json.dumps(ev, default=str)}\n\n{frappe.get_traceback()}")
 
 
 def meter_tokens(model: str = "", **t):
     """One Claude response's tokens (ask/claude.py, after every reply). Inside an event
-    they add to it; outside one they are written at once, so none escape."""
+    they add to it and are on record at once (the event's running row); outside one they
+    are written as a row of their own, so none escape."""
     ev = getattr(local, "cc_meter", None)
     if ev is not None:
         for k in (*PRICE_KEYS, "requests"):
             ev["tokens"][k] += int(t.get(k) or 0)
         ev["model"] = model or ev["model"]
+        try:
+            if ev["row"] is None:
+                ev["row"] = record(ev["meter"], 0, ev["business_code"], ev["user"], ev["model"],
+                                   ev["tokens"], outcome=RUNNING_OUTCOME, ref=ev["ref"],
+                                   note=ev["note"]).pk
+            else:
+                _models().UsageEvent.objects.filter(pk=ev["row"]).settle(**_token_fields(ev))
+        except Exception:
+            frappe.log_error(title="Plans: usage not recorded as it was spent",
+                             message=frappe.get_traceback())
         return
     record(TOKENS_ONLY, 0, None, None, model, t, outcome="ok", note="Claude call outside a billable event")
 
@@ -549,18 +719,17 @@ ALLOWANCE_USED = "This month's AI allowance is used up — your administrator ca
 
 
 def gate(meter: str, business_code=None, user=None) -> str | None:
-    """None if this may go ahead; else the sentence to show. Only AI work is ever gated."""
-    c = client_for(business_code, user or _user())
-    if c is None:
-        return None
-    lic = licence(c)
-    if lic["paused"]:
-        return banner(c, lic)
-    inc = limits_of(c).get(meter)
-    if inc is None or c.allow_overage:
-        return None
-    if used(c)[meter] >= inc:
-        return ALLOWANCE_USED
+    """None if this may go ahead; else the sentence to show. Only AI work is ever gated.
+    Over "all businesses", every customer it touches must allow it (clients_touched)."""
+    for c in clients_touched(business_code, user or _user()):
+        lic = licence(c)
+        if lic["paused"]:
+            return banner(c, lic)
+        inc = limits_of(c).get(meter)
+        if inc is None or c.allow_overage:
+            continue
+        if used(c)[meter] >= inc:
+            return ALLOWANCE_USED
     return None
 
 
@@ -636,10 +805,15 @@ def daily():
     for c in M.ClientAccount.objects.all():
         try:
             _snapshot(c, today)
+            snapshot(c)
             _licence_reminders(c, today)
         except Exception:
             frappe.log_error(title=f"Plans: daily run failed for {c.name}",
                              message=frappe.get_traceback())
+    # An event still running hours later lost its worker: it keeps the tokens it spent,
+    # counts nothing, and says so.
+    M.UsageEvent.objects.filter(at__lt=now() - _dt.timedelta(hours=STALE_RUNNING_HOURS)).settle(
+        outcome="interrupted", note="The work stopped before it finished (the worker ended).")
     # The 1st (or the first run after it): last month's statements are ready to review.
     if today.day <= 5 and M.ClientAccount.objects.exists():
         first, _ = period_bounds(period)
@@ -693,9 +867,10 @@ def statement(c, period: str, money: bool = False) -> dict:
     """A month's usage for a customer. With money (the administrator's): for each meter,
     included = its limit (unlimited: nothing over), over = max(0, used - included),
     amount = over x the overage rate; total = base fee + every amount."""
-    lim, got = limits_of(c), used(c, period)
+    terms = terms_for(c, period)
+    lim, got = terms["limits"], used(c, period)
     lines = []
-    r = rates_of(c) if money else None
+    r = terms["rates"] if money else None
     total = r["base_fee"] if money else None
     for key, label, how, unit in METERS:
         n, inc = got[key], lim.get(key)
@@ -710,7 +885,7 @@ def statement(c, period: str, money: bool = False) -> dict:
         lines.append(line)
     lic = licence(c)
     out = {"client": c.name, "client_id": c.pk, "licensed_to": c.licensed_to or c.name,
-           "plan": (catalogue().get(c.plan) or catalogue()["custom"])["name"],
+           "plan": terms["plan_name"], "terms_kept": terms["kept"],
            "period": period, "period_label": period_label(period), "lines": lines,
            "licence": lic, "businesses": _business_names(c),
            "complete": period < period_of(), "generated": now().strftime("%Y-%m-%d %H:%M")}
@@ -1150,9 +1325,14 @@ def _truthy(v) -> bool:
 def save_customer(id=None, name: str = "", licensed_to: str = "", plan: str = "custom",
                   limits=None, licence_start=None, renewal_date=None, grace_days=30,
                   allow_overage=1, rates=None, businesses=None, notes: str = ""):
-    """Add or change a customer. limits/rates: JSON; businesses: the business codes."""
+    """Add or change a customer. limits/rates: JSON; businesses: the business codes.
+    This month's terms are kept first (snapshot), as the daily run keeps them."""
     _require_admin()
     M = _models()
+    if id not in (None, "", 0, "0"):
+        was = M.ClientAccount.objects.filter(pk=id).first() if str(id).isdigit() else None
+        if was is not None:
+            snapshot(was)
     name = " ".join(str(name or "").split())
     if not name:
         _say("Type the customer's name.")
@@ -1320,6 +1500,7 @@ def save_plan(code: str = "", name: str = "", summary: str = "", refresh: str = 
               base_fee=None, overage=None):
     """Change a tier: its words, limits, features and default rates."""
     _require_admin()
+    snapshot_all()  # this month's terms as they stood, before the tier changes
     if code not in PLANS:
         _say("Choose a plan.")
     feats = frappe.parse_json(features) if isinstance(features, str) and features.strip().startswith("[") \

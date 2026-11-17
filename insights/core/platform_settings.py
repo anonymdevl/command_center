@@ -178,7 +178,21 @@ def _person(u, me) -> dict:
             "has_password": u.has_usable_password(), "last_login": u.last_login,
             "joined": u.date_joined, "is_me": u.pk == me.pk,
             "settings_access": _grants(u), "protected": _protected(u),
+            # Anyone with Settings access, in any section, is a kind of administrator:
+            # User Management says Yes for them and names the sections (17 Nov 2026).
+            "settings_admin": bool(u.is_superuser) or bool(_grants(u)),
+            "settings_words": settings_words(u),
             "customers": _customers_of(u)}
+
+
+def settings_words(u) -> str:
+    """What a person may open in Settings, in the screen's words: "All of Settings" for an
+    administrator, "Settings: User Management, ERPNext API Keys" for a delegate, "" for
+    anyone else."""
+    if u.is_superuser:
+        return "All of Settings"
+    given = _grants(u)
+    return ("Settings: " + ", ".join(GRANT_WORDS[k] for k in given)) if given else ""
 
 
 def _customers_of(u) -> list:
@@ -189,9 +203,49 @@ def _customers_of(u) -> list:
     return [c.name for c, _ in plans.clients_for_user(u.username)]
 
 
+# --- a delegate's own customer(s) (17 Nov 2026) ---------------------------------------
+# A delegate sees and changes only the people and businesses of their own customer(s)
+# (insights/core/plans.py): people who share a customer with them, or -- for a delegate
+# on no customer -- people on no customer; businesses they may see (plans.visible_codes).
+# The administrator sees everyone and every business. Someone outside is "not there" for
+# a delegate, in the same words as someone who does not exist.
+def _actor():
+    return _users._find(local.user)
+
+
+def _client_ids(username: str) -> set:
+    from insights.core import plans
+    return {c.pk for c, _ in plans.clients_for_user(username)}
+
+
+def may_see_person(me, u) -> bool:
+    """Whether the acting administrator or delegate may see (and so change) this person."""
+    if me is None or u is None:
+        return False
+    if me.is_superuser:
+        return True
+    if u.pk == me.pk:
+        return True
+    # An administrator's account is the administrators' alone to see, as in ERPNext: never
+    # listed to a delegate, never found by one (17 Nov 2026).
+    if u.is_superuser:
+        return False
+    mine, theirs = _client_ids(me.username), _client_ids(u.username)
+    return bool(mine & theirs) if mine else not theirs
+
+
+def may_see_business(me, code: str) -> bool:
+    if me is None:
+        return False
+    if me.is_superuser:
+        return True
+    from insights.core import plans
+    return plans.may_see(me.username, code)
+
+
 def _get_person(username: str):
     u = _users._find(str(username or "").strip())
-    if u is None:
+    if u is None or not may_see_person(_actor(), u):
         _say("There is no one with that email on the platform.")
     return u
 
@@ -224,9 +278,11 @@ def _truthy(v) -> bool:
 
 @frappe.whitelist()
 def people():
+    """Everyone for the administrator; for a delegate, the people of their own
+    customer(s) only (may_see_person)."""
     me = _require("people", "keys")
     rows = _User().objects.prefetch_related("groups").order_by("first_name", "last_name", "username")
-    return [_person(u, me) for u in rows]
+    return [_person(u, me) for u in rows if may_see_person(me, u)]
 
 
 @frappe.whitelist(methods=["POST"])
@@ -491,7 +547,7 @@ def _business_model():
 
 def _get_business(name: str):
     b = _business_model().objects.filter(pk=str(name or "")).first()
-    if b is None:
+    if b is None or not may_see_business(_actor(), b.business_code):
         _say("There is no connected business by that name.")
     return b
 
@@ -544,8 +600,10 @@ def _business_row(b) -> dict:
 
 @frappe.whitelist()
 def businesses():
-    _require("businesses", "keys")
-    return [_business_row(b) for b in _business_model().objects.order_by("business_name")]
+    """Every business for the administrator; a delegate's own customer's for them."""
+    me = _require("businesses", "keys")
+    return [_business_row(b) for b in _business_model().objects.order_by("business_name")
+            if may_see_business(me, b.business_code)]
 
 
 def _access(code: str) -> dict:
@@ -603,7 +661,7 @@ def add_business(business_name: str = "", site_url: str = "", api_key: str = "",
     """Connect a business: registered (install.register_business, which reads its
     company and currency), then its access checked. If its ERPNext cannot be reached
     with what was typed, nothing is kept."""
-    _require("businesses")
+    me = _require("businesses")
     name = str(business_name or "").strip()
     if not name:
         _say("Type the business's name.")
@@ -620,15 +678,30 @@ def add_business(business_name: str = "", site_url: str = "", api_key: str = "",
         _say("A business with a very similar name is connected already. Choose another name.")
 
     from command_center import install
+    from insights.compat.db import forget_scope, unscoped
     try:
-        out = install.register_business(name, url, api_key, api_secret,
-                                        erpnext_company=str(erpnext_company or "").strip() or None)
+        # As the platform: the new business is no one's yet, so a delegate's own reads
+        # would not find it while it is being registered.
+        with unscoped():
+            out = install.register_business(name, url, api_key, api_secret,
+                                            erpnext_company=str(erpnext_company or "").strip() or None)
     except Exception as e:  # noqa: BLE001 -- said in words; the half-made record is removed
         why = _plain_failure(e)
         if B.objects.filter(pk=name).exists():
-            frappe.delete_doc("Connected Business", name, force=True)
+            with unscoped():
+                frappe.delete_doc("Connected Business", name, force=True)
         frappe.db.commit()
         _say(f"{name} was not connected. {why}")
+    # A delegate's new business is their own customer's (their first, as add_person).
+    if not me.is_superuser:
+        from insights.core import plans
+        mine = plans.clients_for_user(me.username)
+        if mine:
+            code_made = B.objects.filter(pk=out["business"]).values_list("business_code", flat=True).first()
+            plans._models().ClientBusiness.objects.get_or_create(
+                business_code=code_made, defaults={"client": mine[0][0]})
+            _audit(f"put {name} on the customer {mine[0][0].name}")
+            forget_scope()
     b = _get_business(out["business"])
     _audit(f"connected {name} at {url}", b, flag=1)
     return {"business": _business_row(b), "reads_as": out.get("reads_as"),
@@ -636,11 +709,54 @@ def add_business(business_name: str = "", site_url: str = "", api_key: str = "",
             "access": _access(b.business_code)}
 
 
+def _origin(url) -> tuple:
+    from urllib.parse import urlsplit
+    p = urlsplit(str(url or "").strip())
+    try:
+        port = p.port
+    except ValueError:
+        port = None
+    return (p.scheme.lower(), (p.hostname or "").lower(),
+            port or {"https": 443, "http": 80}.get(p.scheme.lower()))
+
+
+def address_moved(old, new) -> bool:
+    """The business's address now points at another server (scheme, host or port): what
+    is stored for the old one -- the service key's secret, the sign-in's client secret,
+    the managers' own keys -- must never be sent there."""
+    return bool(str(old or "").strip()) and bool(str(new or "").strip()) \
+        and _origin(old) != _origin(new)
+
+
+def forget_for_move(name: str, code: str) -> list:
+    """Everything stored that belongs to a business's old address, removed: its API
+    secret, its sign-in (OAuth) client secret, and every person's own ERPNext key for
+    it. What was removed, in words, for the audit and the answer."""
+    from insights.core.models import CommandCenterSiteCredential, Secret
+    gone = []
+    n = Secret.objects.filter(doctype="Connected Business", docname=name,
+                              fieldname__in=["api_secret", "sso_client_secret"]).delete()[0]
+    if n:
+        gone.append("the stored secrets")
+    creds = list(CommandCenterSiteCredential.objects.filter(business_code=code)
+                 .values_list("pk", flat=True))
+    if creds:
+        Secret.objects.filter(doctype=CRED, docname__in=creds).delete()
+        CommandCenterSiteCredential.objects.filter(pk__in=creds).delete()
+        gone.append(f"{len(creds)} personal ERPNext key{'s' if len(creds) != 1 else ''}")
+    return gone
+
+
 @frappe.whitelist(methods=["POST"])
 def update_business(name: str = "", site_url: str = "", api_key: str = "",
                     api_secret: str = "", erpnext_company: str = ""):
     """Change a business's address, key or secret. A blank key or secret keeps the
-    current one; the secret is never shown back."""
+    current one; the secret is never shown back.
+
+    A new address on another server needs the key and secret typed again: the stored
+    ones (and the sign-in's client secret, and the managers' own keys) belong to the old
+    server and are removed, never sent to the new one (17 Nov 2026: a Businesses
+    delegate could point a business at their own server and receive them)."""
     _require("businesses")
     b = _get_business(name)
     if b.is_local:
@@ -648,6 +764,18 @@ def update_business(name: str = "", site_url: str = "", api_key: str = "",
     doc = frappe.get_doc("Connected Business", b.pk)
     changed = []
     url = _check_url(site_url) if str(site_url or "").strip() else None
+    moved = bool(url) and address_moved(doc.site_url, url)
+    if moved and not (str(api_key or "").strip() and str(api_secret or "").strip()):
+        _say("The new address is on another server, so type the API key and the API secret "
+             "of the read-only user there as well. The stored ones belong to the old "
+             "address and are never sent to a new one.")
+    if moved:
+        gone = forget_for_move(b.pk, b.business_code)
+        doc.sso_client_id = None
+        doc.sso_client_secret = None
+        changed.append("sign-in from ERPNext to be set up again for the new address")
+        if gone:
+            changed.append("removed " + " and ".join(gone) + " of the old address")
     if url and url != (doc.site_url or ""):
         doc.site_url = url
         changed.append(f"address to {url}")
@@ -833,26 +961,38 @@ def _cred_row(c, names: dict, businesses: dict) -> dict:
 
 @frappe.whitelist()
 def credentials():
-    """Everyone's keys for the administrator; managers' keys for a delegate."""
+    """Everyone's keys for the administrator; for a delegate, the keys of managers only:
+    never an administrator's, nor anyone else's with Settings access (their own, yes)."""
     me = _require("keys")
     from insights.core.models import CommandCenterSiteCredential
-    people = list(_User().objects.all())
+    people = list(_User().objects.prefetch_related("groups"))
     names = {u.username: _name(u) for u in people}
-    admins = {u.username for u in people if u.is_superuser}
+    protected = {u.username for u in people if _protected(u) and u.pk != me.pk}
+    outside = {u.username for u in people if not may_see_person(me, u)}
     biz = dict(_business_model().objects.values_list("business_code", "business_name"))
     return [_cred_row(c, names, biz) for c in
             CommandCenterSiteCredential.objects.order_by("user", "business_code")
-            if me.is_superuser or c.user not in admins]
+            if me.is_superuser or (c.user not in protected and c.user not in outside
+                                   and may_see_business(me, c.business_code))]
 
 
 def _may_change_key(me, username: str):
-    """A delegate manages the keys of managers, not of an administrator."""
+    """A delegate manages the keys of managers -- not an administrator's, and not anyone
+    else's with Settings access (as Settings -> User Management: only the administrator
+    changes those people). Their own key, yes."""
     if me.is_superuser:
         return
     u = _users._find(username)
-    if u is not None and u.is_superuser:
+    if u is None:
+        return
+    if not may_see_person(me, u):
+        _say("There is no one with that email on the platform.")
+    if u.is_superuser:
         raise PermissionError("Only the platform's administrator can change an "
                               "administrator's keys.")
+    if u.pk != me.pk and _grants(u):
+        raise PermissionError("Only the platform's administrator can change the keys of "
+                              "someone who has access to Settings.")
 
 
 @frappe.whitelist(methods=["POST"])
@@ -864,7 +1004,7 @@ def set_credential(user: str = "", business_code: str = "", api_key: str = "",
     u = _get_person(user)
     _may_change_key(me, u.username)
     b = _business_model().objects.filter(business_code=str(business_code or "")).first()
-    if b is None:
+    if b is None or not may_see_business(me, b.business_code):
         _say("Choose a connected business.")
     api_key, api_secret = str(api_key or "").strip(), str(api_secret or "").strip()
     existing = frappe.db.get_value(CRED, {"user": u.username, "business_code": b.business_code})
@@ -894,6 +1034,8 @@ def remove_credential(name: str = ""):
     if c is None:
         _say("That key has been removed already.")
     _may_change_key(me, c.user)
+    if not may_see_business(me, c.business_code):
+        _say("That key has been removed already.")
     what = f"removed the ERPNext key of {c.user} for {c.business_code}"
     _audit(what, c, flag=3)
     frappe.delete_doc(CRED, c.pk, force=True)
@@ -910,6 +1052,8 @@ def test_credential(name: str = ""):
     if c is None:
         _say("That key has been removed.")
     _may_change_key(me, c.user)
+    if not may_see_business(me, c.business_code):
+        _say("That key has been removed.")
     b = _business_model().objects.filter(business_code=c.business_code).first()
     secret = frappe.get_doc(CRED, c.pk).get_password("api_secret", raise_exception=False)
     if b is None or not b.site_url or not (c.api_key and secret):

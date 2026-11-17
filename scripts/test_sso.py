@@ -187,6 +187,16 @@ def erp_members(code, role):
     return set(ERP_MEMBERS["who"])
 
 
+# Customers and their seats (insights/core/plans.py): gms and gms2 are one customer's.
+PLANS = {"seat_refusal": None}
+_plans = types.ModuleType("insights.core.plans")
+_CUSTOMER = types.SimpleNamespace(pk=1)
+_plans.client_of_business = lambda code: _CUSTOMER if code in ("gms", "gms2") else None
+_plans.seat_refusal = lambda c, email: PLANS["seat_refusal"]
+sys.modules["insights.core.plans"] = _plans
+import insights.core as _insights_core  # noqa: E402
+_insights_core.plans = _plans
+
 _ing = types.ModuleType("command_center.api.ingest")
 _ing.erp_members = erp_members
 sys.modules["command_center.api.ingest"] = _ing
@@ -416,6 +426,51 @@ sso.callback(code="c1", state=state)
 check(ERP_MEMBERS["asked"][-1] == "Intelligence Layer", "the access role is a site setting")
 frappe.conf.pop("command_center_sso_role")
 
+# 19a. A business's ERPNext vouches for an email; it does not own the platform's
+#      accounts (17 Nov 2026). It may open only an account this sign-in made for this
+#      business (or another of the same customer) -- never an administrator's, never one
+#      with Settings access, never one added by hand -- whatever that ERPNext says.
+seed()
+USERS["delegate@gigmann.com"] = {"enabled": 1, "email": "delegate@gigmann.com",
+                                 "roles": ["Insights Dashboard Manager", "Settings: People"]}
+MARKS["delegate@gigmann.com"] = ["gms"]
+USERS["other@gigmann.com"] = {"enabled": 1, "email": "other@gigmann.com",
+                              "roles": ["Insights Dashboard Manager"]}
+MARKS["other@gigmann.com"] = ["elsewhere"]
+USERS["sister@gigmann.com"] = {"enabled": 1, "email": "sister@gigmann.com",
+                               "roles": ["Insights Dashboard Manager"]}
+MARKS["sister@gigmann.com"] = ["gms2"]
+for who, why in (("admin@ultrasoft.com", "an administrator's account"),
+                 ("hand@gigmann.com", "set up on the platform directly"),
+                 ("delegate@gigmann.com", "Settings access"),
+                 ("other@gigmann.com", "set up on the platform directly")):
+    state, _ = begin()
+    ERP["email"] = who
+    ERP_MEMBERS["who"] = {who}
+    sso.callback(code="c1", state=state)
+    check(refused("own_account") and frappe.local.login_manager.who is None,
+          f"{who}: an existing account not made by this sign-in is never opened by it")
+    check(any(why in (m or "") for _, m in frappe.logged),
+          f"{who}: the refusal says why ({why}): {frappe.logged}")
+state, _ = begin()
+ERP["email"] = "sister@gigmann.com"
+ERP_MEMBERS["who"] = {"sister@gigmann.com"}
+sso.callback(code="c1", state=state)
+check(frappe.local.login_manager.who == "sister@gigmann.com",
+      "an account this sign-in made for another business of the same customer is opened")
+
+# 19b. A newcomer takes one of the customer's seats: none free, no account is made.
+seed()
+state, _ = begin()
+ERP["email"] = "late@gigmann.com"
+ERP_MEMBERS["who"] = {"late@gigmann.com"}
+PLANS["seat_refusal"] = "Gigmann has used all 5 of its user seats."
+sso.callback(code="c1", state=state)
+check(refused("no_seat") and "late@gigmann.com" not in USERS,
+      "a newcomer beyond the customer's seats is refused and gets no account")
+PLANS["seat_refusal"] = None
+seed()
+
 # 19. The access page: fixed wording per reason, the business named from the platform's
 #     own record, "Try again" only where trying again can help, and nothing from the
 #     address shown -- an unknown reference reads as the general message.
@@ -455,6 +510,10 @@ check(c.heading == "Something went wrong" and "script" not in c.sentence,
 c = show("no_role", business=None, ref="R2")
 check(c.sentence.startswith("Your account on your company's ERPNext") and c.own_sign_in,
       f"without a business it still reads well, and offers the platform sign-in: {c.sentence}")
+c = show("own_account", ref="R3")
+check(c.own_sign_in and not c.retry_url, "own account: points to the platform's own sign-in")
+c = show("no_seat", ref="R4")
+check("seats" in c.sentence and not c.retry_url, "no seat: says so, no retry")
 frappe.db.get_value = get_value
 
 print(f"sso: {passed} passed, {failed} failed")

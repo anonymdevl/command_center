@@ -152,7 +152,11 @@ def _boot(user: str) -> dict:
         "site": frappe.local.site,
         "businesses": scope.get("businesses", []),
         "scopes": scope.get("scopes", []),
+        # The data horizon of all this person's businesses together (the earliest), and of
+        # each one (as_of_by[code]): one business's date is never shown for another.
         "as_of": _as_of(),
+        "as_of_by": {b["business_code"]: _as_of(b["business_code"])
+                     for b in scope.get("businesses", [])},
         # Which AI model answers, so the question bar names the right one while it waits.
         "ai": _ai(),
         # The Settings sections this person may open ([] = no Settings in the sidebar):
@@ -181,9 +185,11 @@ def _plan(user: str):
 
 
 def _clients() -> dict:
+    """Each of this person's businesses' co-brand -- not another customer's."""
     from command_center import branding
+    from command_center.api.businesses import may_use
     try:
-        return branding.clients()
+        return {code: v for code, v in branding.clients().items() if may_use(code)}
     except Exception:
         return {}
 
@@ -216,23 +222,29 @@ def _initials(fullname: str) -> str:
     return "".join(p[0] for p in parts[:2]).upper() or "?"
 
 
-def _as_of():
-    """The date the figures describe, which is not necessarily today.
+def _as_of(business_code=None):
+    """The date the figures describe, which is not necessarily today -- for one business,
+    or (none, "__all__") for every business this person sees: the earliest of their
+    dates, so "as at" is true of all of them.
 
     Read from the ingest state rather than assumed, because on a restored or
     archived dataset the two differ by months and every ageing figure depends on
-    which one is meant.
+    which one is meant. It used to read whichever business's state came first, so one
+    business's date was printed for another (17 Nov 2026).
     """
-    row = frappe.get_all("Command Center Ingest State",
-                         filters={"fact": "fact_sales_invoice"},
-                         fields=["as_of_date", "last_run", "status"],
-                         limit=1)
-    if not row:
+    filters = {"fact": "fact_sales_invoice"}
+    if business_code and business_code != "__all__":
+        filters["business_code"] = business_code
+    rows = frappe.get_all("Command Center Ingest State", filters=filters,
+                          fields=["as_of_date", "last_run", "status"], limit=500)
+    if not rows:
         return None
+    dated = [r for r in rows if r.as_of_date]
+    row = min(dated, key=lambda r: str(r.as_of_date)) if dated else rows[0]
     return {
-        "date": str(row[0].as_of_date) if row[0].as_of_date else None,
-        "last_run": str(row[0].last_run) if row[0].last_run else None,
-        "status": row[0].status,
+        "date": str(row.as_of_date) if row.as_of_date else None,
+        "last_run": str(row.last_run) if row.last_run else None,
+        "status": row.status,
     }
 
 

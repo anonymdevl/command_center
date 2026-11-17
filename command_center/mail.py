@@ -30,3 +30,23 @@ def about(kind: str, business: str | None = None):
         yield
     finally:
         frappe.local.cc_mail = prev
+
+
+def send_each(to, **kw) -> int:
+    """One message per person, so nobody sees who else it went to (17 Nov 2026: an
+    alert or digest went to every manager in one To: header). Every address is tried;
+    a failure for one does not stop the rest. The number sent is returned; if none was
+    sent, the first failure is raised, as frappe.sendmail would have raised it. Email
+    not set up at all is raised at once (there is no point trying the rest)."""
+    sent, first = 0, None
+    for addr in dict.fromkeys(a for a in (to or []) if a):
+        try:
+            frappe.sendmail(recipients=[addr], **kw)
+            sent += 1
+        except Exception as e:  # noqa: BLE001 -- the mail layer has logged why
+            if type(e).__name__ == "MailNotConfigured":
+                raise
+            first = first or e
+    if not sent and first is not None:
+        raise first
+    return sent

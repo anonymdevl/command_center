@@ -659,3 +659,85 @@ not an app on a client's ERPNext. `insights/` is a Django project (PLATFORM.md):
   as `invite` without its body. The page is `views.set_password` (`/command-center-set-password`),
   sharing the sign-in frame `www/_signin.html` with the sign-in page.
 - `manage.py test insights` (in preflight) is the end-to-end check; keep it passing.
+
+## Security fixes (17 Nov 2026)
+
+- **POST unless named.** `insights/compat` whitelist defaults to POST; a GET carries no
+  CSRF token and the session cookie is SameSite=Lax, so any GET endpoint can be opened
+  by another site in a signed-in browser. Only the sign-on redirects and three read-only
+  diagnostics allow GET (preflight `GET_ALLOWED`); anything that writes or spends AI
+  requests is POST only (`check_analyst`, `model_speeds`: `manage.py execute`).
+- **Single sign-on opens only its own accounts** (`sso._not_ours`): one it made for that
+  business or another of the same customer (`cc_sso_business`), never an administrator's,
+  a Settings delegate's or a hand-added one, and a newcomer takes a customer seat.
+- **Server text is never HTML.** `api/client.js stripTags` reads through DOMParser;
+  preflight fails any other `innerHTML`/`dangerouslySetInnerHTML` outside the build-time
+  markup (`HTML_SINKS_ALLOWED`); `scripts/test_client.mjs`.
+- **A business moved to another server** (scheme, host, port) needs its key and secret
+  typed again; its stored secrets, OAuth client and the managers' own keys for it are
+  removed (`platform_settings.address_moved` / `forget_for_move`, also in /admin).
+- **Writes are counted as writes.** compat `db.db_type` is "mariadb" on MySQL only;
+  `SET`/`SELECT`/`SHOW` never count toward `transaction_writes` (`db.is_write`), so the
+  analyst's write guard fires on real writes only.
+- **A write not confirmed in time** (60 s, `remote.WRITE_TIMEOUT`; a read timeout or a
+  proxy's 502/504) is `connectors.base.WriteUnconfirmed`: HTTP 504, exc_type
+  "WriteUnconfirmed", "it may have gone through -- check before trying again"; the quick
+  check runs and a business that answers is never marked Unreachable. Callers that make
+  To-Dos should look for the one they were making before making another.
+- **Lockout counters** are `core.SignInCounter` rows raised by one atomic UPDATE
+  (`views.count_failure`), not cache read-then-write.
+- **No key in a URL, none in the log.** Gemini takes `x-goog-api-key`; compat
+  `log_error` redacts keys, tokens and configured secrets (`runtime.redact`).
+- **Keys delegates** never see or change the keys of administrators or of anyone else
+  with Settings access.
+
+## Client separation (17 Nov 2026)
+
+- **One rule:** `insights/core/plans.py visible_codes(user)`. An administrator (and the
+  platform itself: Administrator, Guest) sees every business; a person on customers sees
+  those customers' businesses plus any whose ERPNext let them in (`cc_sso_business`); a
+  person on no customer sees the businesses on no customer; an unknown name sees none.
+  **Deploying this: every manager must be on their customer (Settings -> Customers ->
+  people) or they see only the businesses on no customer.**
+- **Enforced where everything passes**, so no endpoint can forget it: the web layer
+  refuses (403) a `business_code` that is not the person's before the call runs
+  (`views._answer` -> `businesses.require_business`); the data layer limits every read of
+  a table with a `business_code` column (`compat/db.py business_scope`: get_all,
+  get_value, exists, count, set_value, delete, get_doc, `qb.from_`; rows of no business --
+  "" or "__all__" -- are the person's own only), so "__all__" means all of MY businesses
+  and `connector_for` finds no one else's; documents for another customer's business are
+  refused on insert/save. Nothing is limited for anyone who sees every business, so
+  single-customer behaviour is unchanged. No raw SQL in command_center (preflight).
+- **Shared caches** file "__all__" under `businesses.scope_tag` (`__all__~<digest>` for a
+  partial view): speed's figures and panels (never warmed by the scheduler), insight
+  explanations and history, starters.
+- **Settings delegates** see and change only their own customer's people and businesses
+  (`platform_settings.may_see_person` / `may_see_business`, inside `_get_person` /
+  `_get_business`); a business a delegate adds goes on their customer.
+- **Email:** alerts and the digest go to `notify.recipients(business_code)` -- that
+  business's own managers (and administrators) -- one message each (`mail.send_each`).
+  Scheduled reports go only to managers who may see the business (`reports.may_receive`,
+  checked when saved and again when sent); Send Now is refused for 120 s after a send.
+- **Billing:** `plans.client_for` is never None for a customer user ("__all__" bills
+  their own customer); `gate` checks every customer "__all__" touches
+  (`clients_touched`). A month's terms are kept in `PlanSnapshot` while it runs and
+  priced from it after (`terms_for`); an event's ledger row is written at its first
+  tokens (outcome "running"), kept current, settled at the end (`UsageEvent.settle`,
+  running rows only), and closed as "interrupted" by the daily run if its worker died.
+- **One data horizon per business:** `www/command_center._as_of(code)` (the earliest of
+  the person's businesses for "__all__"), used by the analyst, exports and reports; boot
+  sends `as_of_by[code]` and the interface reads `asOfFor(scope)` (api/boot.js).
+- **The analyst** never reads pay, accounts, roles, the error log or the change log
+  (`tools.DENIED_DOCTYPES`, matched without regard to case); its live reads use the
+  asker's own key where linked (connector_for's acting user), else the service account.
+
+## User Management (17 Nov 2026)
+
+- Anyone with Settings access in any section is a kind of administrator: the list's
+  Administrator column says **Yes** for them, with the sections on a second line and as
+  a tooltip (`platform_settings._person` `settings_admin` / `settings_words`; "All of
+  Settings" for an administrator). The separate Settings column is folded into it.
+- Administrator accounts are seen by administrators only: `may_see_person` hides them
+  from every delegate, so User Management, the people pickers (the same list) and ERPNext
+  API Keys never list them, and naming one is answered as "no one with that email". The
+  boot payload carries no list of people. `insights/test_user_management.py`.

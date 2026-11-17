@@ -27,6 +27,23 @@ function accessWords(p) {
   return (p.settings_access || []).map((k) => GRANT_LABEL[k] || k).join(", ");
 }
 
+/**
+ * Anyone with Settings access, in any section, is a kind of administrator: the list says
+ * Yes for them, and names what they may open underneath (the server's own words,
+ * platform_settings._person settings_words) -- "All of Settings" for an administrator.
+ */
+function AdminCell({ p }) {
+  const yes = p.settings_admin ?? (p.is_admin || (p.settings_access || []).length > 0);
+  if (!yes) return <span className="st-dim">No</span>;
+  const words = p.settings_words || (p.is_admin ? "All of Settings" : `Settings: ${accessWords(p)}`);
+  return (
+    <span title={words}>
+      <span className="tag t-ok">Yes</span>
+      <span className="st-sub">{words}</span>
+    </span>
+  );
+}
+
 /** Everyone who can sign in: who manages, who administers, who is switched off. */
 export default function SettingsPeople() {
   const { data, error, loading, reload } = useApi(() => settingsApi.people(), []);
@@ -37,7 +54,8 @@ export default function SettingsPeople() {
   if (error) return <Failed error={error} onRetry={reload} what="the people" />;
   const rows = data || [];
   const managers = rows.filter((p) => p.active && p.is_manager).length;
-  // The administrator sees everything here; someone given People sees managers only.
+  // The administrator sees everyone here; someone given User Management sees the people of
+  // their own customer, never an administrator (the server leaves them out).
   const meAdmin = rows.some((p) => p.is_me && p.is_admin);
   const admins = rows.filter((p) => p.active && p.is_admin).length;
 
@@ -60,7 +78,6 @@ export default function SettingsPeople() {
             <th>Person</th>
             <th>Manager</th>
             <th>Administrator</th>
-            <th>Settings</th>
             <th>Status</th>
             <th>Last sign-in</th>
             <th aria-label="Actions" />
@@ -75,8 +92,7 @@ export default function SettingsPeople() {
                 <span className="st-sub">{p.email}{p.customers?.length ? ` · ${p.customers.join(", ")}` : ""}</span>
               </td>
               <td>{p.is_manager ? <span className="tag t-ok">Yes</span> : <span className="st-dim">No</span>}</td>
-              <td>{p.is_admin ? <span className="tag t-ok">Yes</span> : <span className="st-dim">No</span>}</td>
-              <td>{accessWords(p) ? accessWords(p) : <span className="st-dim">No</span>}</td>
+              <td><AdminCell p={p} /></td>
               <td>
                 {p.active ? <span className="tag t-ok">Active</span> : <span className="tag t-dr">Deactivated</span>}
                 {!p.has_password ? <span className="st-sub">No password yet</span> : null}
@@ -322,7 +338,8 @@ function ManagePerson({ meAdmin, person, onClose, onDone }) {
       <dl className="st-facts" style={{ marginTop: 14 }}>
         <dt>Status</dt><dd>{p.active ? "Active" : "Deactivated: cannot sign in"}</dd>
         <dt>Manager</dt><dd>{p.is_manager ? "Yes: can use the platform" : "No"}</dd>
-        <dt>Administrator</dt><dd>{p.is_admin ? "Yes: can open all of Settings" : "No"}</dd>
+        <dt>Administrator</dt><dd>{p.is_admin ? "Yes: can open all of Settings"
+          : (p.settings_access || []).length ? `Yes, for part of Settings: ${accessWords(p)}` : "No"}</dd>
         <dt>Settings</dt><dd>{accessWords(p) || "No access"}</dd>
         <dt>Password</dt><dd>{p.has_password ? "Set" : "Not set"}</dd>
         <dt>Last sign-in</dt><dd>{when(p.last_login)}</dd>

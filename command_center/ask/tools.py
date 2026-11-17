@@ -50,7 +50,28 @@ DENIED_DOCTYPES = {
     # signed in from where, server code, console runs. Never the analyst's to read.
     "Security Event", "Security Finding", "Security Incident", "Security Check",
     "Server Script", "Console Log", "Activity Log", "Access Log", "Authentication Log",
+    # People's pay, and who is who (17 Nov 2026). The analyst may read through the
+    # business's read-only service account when the asker has no key of their own, so
+    # nothing here may depend on that account's permissions: pay is never the analyst's
+    # (people.py shows payroll as status only, names hidden), nor accounts and roles,
+    # the error log (tracebacks) or the change log (old values of any record, pay among
+    # them).
+    "Salary Slip", "Salary Detail", "Salary Structure", "Salary Structure Assignment",
+    "Salary Component", "Salary Withholding", "Additional Salary", "Payroll Entry",
+    "Payroll Employee Detail", "Payroll Settings", "Employee Incentive", "Retention Bonus",
+    "Gratuity", "Employee Benefit Application", "Employee Benefit Claim",
+    "Employee Tax Exemption Declaration", "Employee Tax Exemption Proof Submission",
+    "Income Tax Slab", "Employee Other Income", "Bank Account",
+    "User", "Has Role", "User Permission", "Role Profile", "Module Profile",
+    "Error Log", "Version", "Deleted Document", "Personal Data Download Request",
 }
+# Doctype names are matched without regard to case or spacing: a site finds "salary
+# slip" as readily as "Salary Slip".
+_DENIED = {" ".join(d.lower().split()) for d in DENIED_DOCTYPES}
+
+
+def denied(doctype) -> bool:
+    return " ".join(str(doctype or "").lower().split()) in _DENIED
 
 MAX_ROWS = 50          # records handed to the model in one call
 MAX_GROUPS = 200       # grouped rows in one call
@@ -162,7 +183,7 @@ def _far(call):
 
 
 def _doctype_allowed(doctype: str, business_code=None) -> str:
-    if doctype in DENIED_DOCTYPES:
+    if denied(doctype):
         raise ToolError(f"{doctype} holds credentials or system configuration and is not "
                         f"available to the assistant.")
     if _remote(business_code):

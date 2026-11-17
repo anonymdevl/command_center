@@ -16,7 +16,12 @@ sign in (they usually already are), ERPNext tells us who they are, and then:
        says: the platform's administrator can always stop one person.
 
 A person who passes and has no account here gets one on the spot: a System User with
-Insights Dashboard Manager, no password, no email. So adding someone is giving them the
+Insights Dashboard Manager, no password, no email -- if their customer has a seat free
+(plans.seat_refusal, as Settings -> User Management counts them). An account that
+already exists is opened only if this sign-in made it, for this business or another of
+the same customer (the cc_sso_business mark): never an administrator's, never one with
+Settings access, never one added by hand (17 Nov 2026: matching on the email alone let
+whoever can set an email address on that ERPNext become any platform account). So adding someone is giving them the
 role in their own ERPNext -- nothing to do on this platform (Michael, 14 Nov 2026:
 "must Samuel come to me for a bench command to add a user? doesn't make sense").
 
@@ -66,6 +71,9 @@ TIMEOUT = 15
 ACCESS_ROLE = "Executive Insights"
 MARK = "cc_sso_business"
 NEVER_TOUCHED = ("Administrator", "Guest")
+# Settings access is a group per section ("Settings: Businesses", ...), seen as a role
+# (insights/core/platform_settings.py GRANTS).
+SETTINGS_GROUP_PREFIX = "Settings: "
 ACCESS_PAGE = "/command-center-access"
 ACCESS_KEY = "cc:sso:refused:"
 
@@ -219,12 +227,62 @@ def _approved(profile: dict, b) -> str:
         if not enabled:
             raise Refused("paused", f"The platform account for {email} has been paused. Ask the "
                           f"platform's administrator.")
+        why = _not_ours(user, b.business_code)
+        if why:
+            raise Refused("own_account", why)
     else:
+        why = _seat_refusal(b.business_code, email)
+        if why:
+            raise Refused("no_seat", why)
         user = _provision(email, profile)
     if ROLE not in frappe.get_roles(user):
         frappe.get_doc("User", user).add_roles(ROLE)
     _mark(user, b.business_code)
     return user
+
+
+def _not_ours(user: str, code: str) -> str | None:
+    """Why this sign-in may not open an account that already exists here, or None.
+
+    A business's ERPNext vouches for an email address; it does not own the platform's
+    accounts. So it may open only an account this sign-in made itself for that business
+    (or for another business of the same customer) -- marked cc_sso_business -- never
+    one made by hand, an administrator's, or anyone's with Settings access. Matching on
+    the email alone let whoever can set an email address on that ERPNext sign in as any
+    platform account with the same address, the administrator's included (17 Nov 2026)."""
+    roles = set(frappe.get_roles(user))
+    if roles & {"System Manager", "Administrator"}:
+        return (f"{user} is an administrator's account on the platform, which never opens "
+                f"through a business's ERPNext.")
+    if any(r.startswith(SETTINGS_GROUP_PREFIX) for r in roles):
+        return (f"{user} has Settings access on the platform, which never opens through a "
+                f"business's ERPNext.")
+    marks = _marks(user)
+    if code in marks or any(_same_customer(code, m) for m in marks):
+        return None
+    return (f"{user} is an account set up on the platform directly, not through this "
+            f"business's ERPNext, so it is not opened this way.")
+
+
+def _same_customer(code: str, other: str) -> bool:
+    """Both businesses belong to the same customer (insights/core/plans.py)."""
+    try:
+        from insights.core import plans
+    except ImportError:  # a plain Frappe site: no customers
+        return False
+    a, b = plans.client_of_business(code), plans.client_of_business(other)
+    return a is not None and b is not None and a.pk == b.pk
+
+
+def _seat_refusal(code: str, email: str) -> str | None:
+    """A newcomer takes one of the customer's seats: refused beyond them, as Settings ->
+    User Management refuses (plans.check_seat). No customer, no seats to count."""
+    try:
+        from insights.core import plans
+    except ImportError:  # a plain Frappe site: no customers, no seats
+        return None
+    c = plans.client_of_business(code)
+    return plans.seat_refusal(c, email) if c is not None else None
 
 
 def _platform_user(email: str) -> str | None:

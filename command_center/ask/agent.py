@@ -420,7 +420,9 @@ class _statement_limit:
 
     def __enter__(self):
         try:
-            if getattr(frappe.db, "db_type", "mariadb") == "mariadb":
+            # Only where the database has it: insights.compat says "mariadb" on MySQL/
+            # MariaDB and its own vendor otherwise; an unknown layer gets no limit.
+            if getattr(frappe.db, "db_type", None) == "mariadb":
                 frappe.db.sql("SET SESSION max_statement_time = %s", (self.seconds,))
                 self.on = True
         except Exception:
@@ -558,7 +560,7 @@ def _dates(fact: str) -> list:
 def _as_of(business_code):
     try:
         from command_center.www.command_center import _as_of as boot_as_of
-        d = boot_as_of()
+        d = boot_as_of(business_code)
         return (d or {}).get("date") if isinstance(d, dict) else d
     except Exception:
         return None

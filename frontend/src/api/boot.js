@@ -18,6 +18,18 @@ export const boot = raw || {
 
 export const hasSession = Boolean(raw);
 
+/**
+ * The data horizon of one business (boot.as_of_by, its own ingest state), or of all
+ * this person's businesses together ("__all__": the earliest of their dates). One
+ * business's date is never shown for another.
+ */
+export function asOfFor(scope) {
+  if (scope && scope !== "__all__" && boot.as_of_by && boot.as_of_by[scope]) {
+    return boot.as_of_by[scope];
+  }
+  return boot.as_of || null;
+}
+
 
 /**
  * The product's brand (Settings -> Branding, command_center/branding.py): its name,

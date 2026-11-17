@@ -9,6 +9,8 @@ AUX_MODELS = {("core", "errorlog"), ("django_cache", "cacheentry"),
               ("core", "usageevent"), ("core", "plannotice"),
               # the sign-in record (security.py): a rolled-back request keeps its attempt
               ("core", "securityevent"),
+              # the lockout counters (views.login_failed): an attempt always counts
+              ("core", "signincounter"),
               # every email send attempt (runtime.sendmail): a rolled-back request keeps it
               ("core", "emaillog")}
 
