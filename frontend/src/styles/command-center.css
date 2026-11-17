@@ -2944,3 +2944,13 @@ body.cc-signin .auth-forgot b{font-weight:var(--fw-semibold);color:var(--ink)}
  .auth-by-c>span::before{content:"|"}
  .auth-by-c>span:first-child::before,.auth-by-c>span.ls::before{content:none}
 }
+
+/* The sign-in card, crisper (17 Nov 2026): a defined hairline and a tight contact shadow
+   under the deep one, so its edge reads sharply against the threads; the foot is two short
+   lines, never sentences -- "Forgotten your password?" over "Ask your administrator.", then
+   "Management Team Only". */
+body.cc-signin .sg-card{border-color:var(--line2);box-shadow:var(--shadow),var(--shadow2)}
+body.cc-signin .auth-forgot{display:flex;flex-direction:column;gap:1px}
+body.cc-signin .auth-forgot>span{color:var(--mut)}
+body.cc-signin .auth-only{margin-top:6px;font-size:var(--fs-2xs);font-weight:var(--fw-semibold);
+ letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
