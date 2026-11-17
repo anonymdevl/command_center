@@ -730,3 +730,14 @@ not an app on a client's ERPNext. `insights/` is a Django project (PLATFORM.md):
 - **The analyst** never reads pay, accounts, roles, the error log or the change log
   (`tools.DENIED_DOCTYPES`, matched without regard to case); its live reads use the
   asker's own key where linked (connector_for's acting user), else the service account.
+
+## User Management (17 Nov 2026)
+
+- Anyone with Settings access in any section is a kind of administrator: the list's
+  Administrator column says **Yes** for them, with the sections on a second line and as
+  a tooltip (`platform_settings._person` `settings_admin` / `settings_words`; "All of
+  Settings" for an administrator). The separate Settings column is folded into it.
+- Administrator accounts are seen by administrators only: `may_see_person` hides them
+  from every delegate, so User Management, the people pickers (the same list) and ERPNext
+  API Keys never list them, and naming one is answered as "no one with that email". The
+  boot payload carries no list of people. `insights/test_user_management.py`.

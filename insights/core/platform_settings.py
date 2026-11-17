@@ -178,7 +178,21 @@ def _person(u, me) -> dict:
             "has_password": u.has_usable_password(), "last_login": u.last_login,
             "joined": u.date_joined, "is_me": u.pk == me.pk,
             "settings_access": _grants(u), "protected": _protected(u),
+            # Anyone with Settings access, in any section, is a kind of administrator:
+            # User Management says Yes for them and names the sections (17 Nov 2026).
+            "settings_admin": bool(u.is_superuser) or bool(_grants(u)),
+            "settings_words": settings_words(u),
             "customers": _customers_of(u)}
+
+
+def settings_words(u) -> str:
+    """What a person may open in Settings, in the screen's words: "All of Settings" for an
+    administrator, "Settings: User Management, ERPNext API Keys" for a delegate, "" for
+    anyone else."""
+    if u.is_superuser:
+        return "All of Settings"
+    given = _grants(u)
+    return ("Settings: " + ", ".join(GRANT_WORDS[k] for k in given)) if given else ""
 
 
 def _customers_of(u) -> list:
@@ -212,6 +226,10 @@ def may_see_person(me, u) -> bool:
         return True
     if u.pk == me.pk:
         return True
+    # An administrator's account is the administrators' alone to see, as in ERPNext: never
+    # listed to a delegate, never found by one (17 Nov 2026).
+    if u.is_superuser:
+        return False
     mine, theirs = _client_ids(me.username), _client_ids(u.username)
     return bool(mine & theirs) if mine else not theirs
 

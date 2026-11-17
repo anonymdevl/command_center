@@ -1529,6 +1529,14 @@ check("def _get_business" in _ps and "def _get_person" in _ps
       and "may_see_business(_actor(), b.business_code)" in _ps.split("def _get_business")[1].split("\ndef ")[0]
       and "may_see_person(_actor(), u)" in _ps.split("def _get_person")[1].split("\ndef ")[0],
       "Settings must find only the delegate's own customer's businesses and people")
+# User Management (17 Nov 2026): an administrator's account is seen by administrators
+# only -- the list, the pickers (the same list) and the keys -- never by a delegate.
+_msp = _ps.split("def may_see_person")[1].split("\ndef ")[0] if "def may_see_person" in _ps else ""
+check("if u.is_superuser:\n        return False" in _msp
+      and "if may_see_person(me, u)" in _ps.split("def people")[1].split("\ndef ")[0]
+      and "not may_see_person(me, u)" in _ps.split("def credentials")[1].split("\ndef ")[0],
+      "Settings must never show or find an administrator's account for a delegate "
+      "(platform_settings.may_see_person, people, credentials)")
 _nt = open(os.path.join(ROOT, "command_center", "alerts", "notify.py")).read()
 check("def recipients(business_code" in _nt and "recipients(business_code)" in _nt
       and "mail.send_each(" in _nt

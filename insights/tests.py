@@ -1224,7 +1224,9 @@ class SettingsPage(TransactionTestCase):
         get_user_model().objects.filter(username="second@test.com").update(is_superuser=False)
         U = get_user_model()
         self.assertEqual(U.objects.filter(is_superuser=True, is_active=True).count(), 1)
-        with mock.patch.object(ps, "_require_admin", lambda: U.objects.get(username="second@test.com")):
+        # (an administrator demoted mid-call: past the check, and still finding the others)
+        with mock.patch.object(ps, "_require_admin", lambda: U.objects.get(username="second@test.com")), \
+                mock.patch.object(ps, "may_see_person", lambda me, u: True):
             with run_as("second@test.com"), self.assertRaises(ValidationError) as e:
                 ps.set_admin("boss@test.com", 0)
         self.assertIn("last active administrator", str(e.exception))
@@ -1473,7 +1475,8 @@ class SettingsDelegation(TransactionTestCase):
                                              "password2": "hijack-long-pass-9"}),
                          ("reset_password", {"set_later": 1}),
                          ("update_person", {"full_name": "Someone Else"})):
-            self._as(self.manager, fn, 403, username="boss@test.com", **args)
+            # an administrator is not there for a delegate at all (test_user_management.py)
+            self._as(self.manager, fn, 417, username="boss@test.com", **args)
         boss = U.objects.get(username="boss@test.com")
         self.assertTrue(boss.is_superuser and boss.is_active and boss.check_password("a-long-test-pass-5"))
         self.assertEqual(boss.first_name, "")
@@ -1489,7 +1492,8 @@ class SettingsDelegation(TransactionTestCase):
         self._as(self.manager, "reset_password", username="manager@test.com",
                  password="my-own-long-pass-8", password2="my-own-long-pass-8")
         listed = {x["username"]: x for x in self._as(self.manager, "people")}
-        self.assertTrue(listed["boss@test.com"]["protected"])
+        self.assertNotIn("boss@test.com", listed)
+        self.assertTrue(listed["ama@test.com"]["protected"])
         self.assertEqual(listed["ama@test.com"]["settings_access"], ["businesses"])
         self._as(self.manager, "businesses", 403)
         self._as(self.manager, "claude", 403)
@@ -1509,10 +1513,11 @@ class SettingsDelegation(TransactionTestCase):
         self.assertEqual([c["user"] for c in self._as(self.manager, "credentials")],
                          ["manager@test.com"])
         self.assertEqual(len(self._ok("credentials")), 2)
-        self._as(self.manager, "set_credential", 403, user="boss@test.com",
+        # an administrator is not there for a delegate (test_user_management.py)
+        self._as(self.manager, "set_credential", 417, user="boss@test.com",
                  business_code="test_medical_ltd", api_key="evil", api_secret="evil")
-        self._as(self.manager, "remove_credential", 403, name=boss_key["name"])
-        self._as(self.manager, "test_credential", 403, name=boss_key["name"])
+        self._as(self.manager, "remove_credential", 417, name=boss_key["name"])
+        self._as(self.manager, "test_credential", 417, name=boss_key["name"])
         self.assertTrue(self._as(self.manager, "test_credential", name=mine["name"])["ok"])
         self._as(self.manager, "add_business", 403, business_name="Other Ltd",
                  site_url="https://erp.other", api_key="k", api_secret="s")
