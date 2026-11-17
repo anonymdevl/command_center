@@ -7005,6 +7005,226 @@ class Escalation(TransactionTestCase):
         self.assertIn('escalate_of: escalating ? whose : null', src)
 
 
+# --------------------------------------------------------------------------- Task management
+class _TaskERPNext(_AssignERPNext):
+    """The handing-out ERPNext, also able to take an assignment off someone (assign_to.
+    remove, connectors' unassign), set a field through the front door (set_value), and
+    answer -- or refuse -- the comments the task drawer reads."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.users["yaw@test"] = {"name": "yaw@test", "full_name": "Yaw Boateng",
+                                  "allowed_in_mentions": 1}
+        self.unassigned, self.set_values = [], []
+        self.comments_readable = True
+        c = self.conn
+        c.unassign = self.unassign
+        c.set_value = self.set_value
+        c._call = self.call
+
+    def call(self, method, params=None, **k):
+        if method.endswith("get_logged_user"):
+            return self.ME
+        if method == "frappe.desk.form.load.getdoc":
+            if not self.comments_readable:
+                from command_center.connectors.base import RemotePermissionDenied
+                raise RemotePermissionDenied("not permitted")
+            mine = [{"comment_type": "Comment", "content": html, "comment_email": self.ME,
+                     "creation": f"{TODAY} 09:0{i}:00"}
+                    for i, (dt_, name, html) in enumerate(self.comments)
+                    if (dt_, name) == (params["doctype"], params["name"])]
+            return {"docs": [], "docinfo": {"comments": mine}}
+        return []
+
+    def get_list(self, doctype, filters=None, fields=None, limit=20, order_by=None, **kw):
+        if doctype == "Comment" and not self.comments_readable:
+            from command_center.connectors.base import RemotePermissionDenied
+            raise RemotePermissionDenied("Comment is not readable")
+        return super().get_list(doctype, filters=filters, fields=fields, limit=limit,
+                                order_by=order_by, **kw)
+
+    def unassign(self, doctype, name, user):
+        self.unassigned.append((doctype, name, user))
+        for t in self.todos:
+            if (t["reference_type"], t["reference_name"], t["allocated_to"], t["status"]) == \
+                    (doctype, name, user, "Open"):
+                t["status"] = "Cancelled"
+        return []
+
+    def set_value(self, doctype, name, fieldname, value):
+        self.set_values.append((doctype, name, fieldname, value))
+        row = next(t for t in self.todos if t["name"] == name)
+        row[fieldname] = value
+        return row
+
+
+class TaskManagement(TransactionTestCase):
+    """Outstanding Tasks manages the work handed out (16 Nov 2026): New Task (on a
+    document or not), Reassign and Cancel Assignment (assign_to.remove + add on a document;
+    status Cancelled and a new To-Do otherwise), Edit Date And Priority, the task drawer,
+    and Sent Back More Than Once counted from the platform's own record of each Send Back
+    -- never a failure because Comments cannot be read. Each tile carries its filter."""
+
+    databases = {"default", "aux"}
+    setUp_settings = SettingsPage.setUp
+    tearDown = SettingsPage.tearDown
+    _task = Delegation._task
+
+    def setUp(self):
+        Delegation.setUp(self)
+        self.erp = _TaskERPNext(self.code)
+        for p in (mock.patch("command_center.api.actions.connector_for",
+                             lambda code, acting_user=None: self.erp.conn),
+                  mock.patch("command_center.connectors.registry.connector_for",
+                             lambda code, acting_user=None: self.erp.conn),
+                  mock.patch("command_center.api.credentials.credential_for",
+                             lambda code, user=None: {"api_key": "k", "api_secret": "s"})):
+            p.start()
+            self.patches.append(p)
+
+    def _do(self, fn, **kw):
+        from command_center.api import actions
+        from insights.compat import run_as
+        with run_as("manager@test.com"):
+            return getattr(actions, fn)(business_code=self.code, **kw)
+
+    def _work(self, fn="summary", **kw):
+        from command_center.api import work
+        from insights.compat import run_as
+        with run_as("manager@test.com"):
+            return getattr(work, fn)(business_code=self.code, **kw)
+
+    def test_new_task_with_a_document_and_without(self):
+        on_doc = self._task(subject="Agree the credit limit", priority="Low",
+                            reference_type="Customer", reference_name="Alpha Clinic")
+        self.assertEqual(self.erp.assigned[-1]["doctype"], "Customer")
+        self.assertEqual(self.erp.assigned[-1]["priority"], "Low")
+        self.assertTrue(on_doc["notified"])
+        plain = self._task(subject="Count the stock", priority="High")
+        self.assertIsNone(plain["document"])
+        self.assertEqual(self.erp.inserted[-1]["priority"], "High")
+        got = self._work()
+        self.assertEqual({t["title"] for t in got["open"]}, {"Agree the credit limit", "Count the stock"})
+
+    def test_reassign_on_a_document(self):
+        first = self._task(reference_type="Sales Invoice", reference_name="ACC-SINV-0001")
+        res = self._do("reassign_task", todo=first["name"], to_user="yaw@test")
+        self.assertEqual(self.erp.unassigned, [("Sales Invoice", "ACC-SINV-0001", "ama@test")])
+        self.assertEqual(self.erp.assigned[-1]["users"], ["yaw@test"])
+        self.assertEqual(self.erp.assigned[-1]["description"], "Chase the payment\n\nAgree a date this week.")
+        old = next(t for t in self.erp.todos if t["name"] == first["name"])
+        self.assertEqual(old["status"], "Cancelled")
+        new = next(t for t in self.erp.todos if t["status"] == "Open")
+        self.assertEqual(new["allocated_to"], "yaw@test")
+        dt_, name, html = self.erp.comments[-1]
+        self.assertEqual((dt_, name), ("Sales Invoice", "ACC-SINV-0001"))
+        self.assertIn('data-id="ama@test"', html)
+        self.assertIn("from Ama Owusu to Yaw Boateng", html)
+        self.assertTrue(res["notified"])
+        self.assertTrue(res["told"])
+        self.assertIn("Reassigned by", res["said"])
+        with self.assertRaises(Exception):
+            self._do("reassign_task", todo=new["name"], to_user="yaw@test")  # already theirs
+
+    def test_reassign_a_todo_of_its_own(self):
+        first = self._task()
+        res = self._do("reassign_task", todo=first["name"], to_user="yaw@test", note="Ama is away.")
+        self.assertIn(("ToDo", first["name"], "status", "Cancelled"), self.erp.set_values)
+        self.assertFalse(self.erp.unassigned)
+        new = self.erp.inserted[-1]
+        self.assertEqual((new["allocated_to"], new["assigned_by"]), ("yaw@test", _AssignERPNext.ME))
+        self.assertTrue(new["description"].startswith("Chase the payment\n\nAgree a date this week."))
+        self.assertIn("Ama is away.", new["description"])
+        on = {(d, n): h for d, n, h in self.erp.comments}
+        self.assertIn('data-id="yaw@test"', on[("ToDo", res["name"])], "the new person is mentioned")
+        self.assertIn('data-id="ama@test"', on[("ToDo", first["name"])], "the old one is told")
+        self.assertTrue(res["notified"])
+        self.assertTrue(res["told"])
+
+    def test_cancel_on_a_document_and_a_todo(self):
+        doc = self._task(reference_type="Sales Invoice", reference_name="ACC-SINV-0002")
+        res = self._do("cancel_task", todo=doc["name"], reason="Wrong person.")
+        self.assertEqual(self.erp.unassigned, [("Sales Invoice", "ACC-SINV-0002", "ama@test")])
+        d, n, html = self.erp.comments[-1]
+        self.assertEqual((d, n), ("Sales Invoice", "ACC-SINV-0002"))
+        self.assertIn("withdrawn", html)
+        self.assertIn("Wrong person.", html)
+        self.assertTrue(res["notified"])
+        plain = self._task(subject="Count the stock")
+        res = self._do("cancel_task", todo=plain["name"])
+        self.assertIn(("ToDo", plain["name"], "status", "Cancelled"), self.erp.set_values)
+        self.assertEqual(self.erp.comments[-1][:2], ("ToDo", plain["name"]))
+        self.assertEqual(res["status"], "Cancelled")
+        self.assertEqual(self._work()["open"], [])
+        # only open work can be changed, and only by whoever handed it out
+        with self.assertRaises(Exception):
+            self._do("cancel_task", todo=plain["name"])
+        self.erp._todo(allocated_to="ama@test", assigned_by="someone@erp.test")
+        import frappe
+        with self.assertRaises(frappe.PermissionError):
+            self._do("cancel_task", todo=self.erp.todos[-1]["name"])
+
+    def test_edit_due_date_and_priority(self):
+        t = self._task()
+        due = str(TODAY + dt.timedelta(days=10))
+        res = self._do("update_task", todo=t["name"], due_date=due, priority="High")
+        self.assertIn(("ToDo", t["name"], "date", due), self.erp.set_values)
+        self.assertIn(("ToDo", t["name"], "priority", "High"), self.erp.set_values)
+        self.assertIn("priority High", res["said"])
+        self.assertTrue(res["notified"])
+        self.assertIn('data-id="ama@test"', self.erp.comments[-1][2])
+        again = self._do("update_task", todo=t["name"], due_date=due, priority="High")
+        self.assertEqual(again["changed"], [])
+        with self.assertRaises(Exception):
+            self._do("update_task", todo=t["name"], priority="Urgent")
+
+    def test_send_back_is_recorded_and_counted_without_reading_comments(self):
+        a = self._task(subject="Fix the pump")
+        b = self._task(subject="Count the stock")
+        self.erp.comments_readable = False
+        for _ in range(2):
+            next(t for t in self.erp.todos if t["name"] == a["name"])["status"] = "Closed"
+            res = self._work("review", todo=a["name"], verdict="return", note="Still leaking.")
+        self.assertEqual(res["sent_back"], 2)
+        next(t for t in self.erp.todos if t["name"] == b["name"])["status"] = "Closed"
+        self._work("review", todo=b["name"], verdict="return", note="Shelf 4 missing.")
+        from insights.core import models as M
+        self.assertEqual(M.CommandCenterTaskSendBack.objects.filter(todo=a["name"]).count(), 2)
+        got = self._work()
+        fig = got["figures"]["work_reopened"]
+        self.assertEqual(fig["value"], 1, "only the one sent back twice")
+        self.assertEqual(fig["label"], "Sent Back More Than Once")
+        self.assertEqual(fig["note"], "you rejected the work twice or more")
+        self.assertEqual(fig["data_status"]["state"], "live", "unreadable Comments are no failure")
+        counts = {t["name"]: t["sent_back"] for t in got["open"]}
+        self.assertEqual(counts, {a["name"]: 2, b["name"]: 1})
+        # the drawer says the same, and that the comments could not be read
+        task = self._work("task", todo=a["name"])
+        self.assertEqual(task["sent_back"], 2)
+        self.assertIsNone(task["comments"])
+        self.erp.comments_readable = True
+        task = self._work("task", todo=a["name"])
+        self.assertTrue(any("Sent back by" in c["text"] for c in task["comments"]))
+        self.assertEqual(task["assigned_by"], _AssignERPNext.ME)
+
+    def test_every_tile_filters_the_list(self):
+        self._task()
+        figs = self._work()["figures"]
+        self.assertEqual({k: figs[k]["filter"] for k in ("work_open", "work_late", "work_high",
+                                                          "work_reopened", "work_to_check",
+                                                          "work_unkept")},
+                         {"work_open": "open", "work_late": "late", "work_high": "high",
+                          "work_reopened": "sent_back", "work_to_check": "check",
+                          "work_unkept": "late"})
+        self.assertEqual([figs[k]["label"] for k in ("work_open", "work_late", "work_high", "work_reopened")],
+                         ["Still Open", "Late", "High Priority", "Sent Back More Than Once"])
+        import pathlib
+        js = (pathlib.Path(__file__).resolve().parent.parent / "frontend/src/legacy/work.js").read_text()
+        for f in ("open:", "late:", "high:", "sent_back:", "check:"):
+            self.assertIn(f, js, f"work.js knows the {f} filter")
+        self.assertIn('pendingFilter = f;', js, "Today's tiles hand their filter over")
+
+
 # --------------------------------------------------------------------------- Business Health
 SIX = ("score_deliver", "score_paid", "score_paperwork", "score_approvals", "score_records",
        "score_access")

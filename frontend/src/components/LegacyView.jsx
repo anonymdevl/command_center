@@ -582,7 +582,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     setLiveCount(
       hydrateCards(root, viewKey, figures.data, opts) +
       hydrateTiles(root, viewKey, figures.data, opts) +
-      (isWork ? renderWork(root, viewKey, work.data, { ...opts, onOpen: records }) : 0));
+      (isWork ? renderWork(root, viewKey, work.data, { ...opts, onOpen: records, scope }) : 0));
     if (hasAlerts) renderAlerts(root, viewKey, alerts.data, opts);
     if (viewKey === "command") {
       renderHome(root, { figures: figures.data, alerts: alerts.data, scope, onOpen: opts.onOpen });

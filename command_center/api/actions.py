@@ -312,6 +312,165 @@ def _todo(conn, user, subject, body, due_date, priority):
 
 
 # ---------------------------------------------------------------------------
+# Managing work already handed out: reassign, withdraw, change its date or priority
+# ---------------------------------------------------------------------------
+#
+# Only on an open To-Do this manager handed out (assigned_by = their login there), and
+# only through the front door, as them:
+#
+#   reassign   on a document: frappe.desk.form.assign_to.remove(doctype, name, old) then
+#              assign_to.add for the new person (connectors' unassign() and assign()), so
+#              ERPNext cancels the old To-Do, moves Assigned To and notifies both; a To-Do
+#              of its own: status Cancelled (frappe.client.set_value), and a new To-Do
+#              with the same subject and details plus a mention for the new person.
+#              Either way a comment on the document (else the old To-Do) mentions the
+#              person it was taken from: who moved it, from whom, to whom.
+#   cancel     on a document: assign_to.remove; a To-Do of its own: status Cancelled.
+#              A mention in a comment tells them it was withdrawn.
+#   edit       the To-Do's date and priority (frappe.client.set_value), and a mention
+#              on it telling them what changed.
+
+@frappe.whitelist()
+def reassign_task(business_code: str, todo: str, to_user: str, note: str = ""):
+    """Move open work this manager handed out to someone else, without escalating."""
+    if not to_user:
+        frappe.throw("Choose who it goes to now.")
+    conn = _conn(business_code)
+    row = _handed_out_todo(conn, todo)
+    old = row.get("allocated_to")
+    if to_user == old:
+        frappe.throw("It is already with them. Choose someone else.")
+    old_name, old_ok = _person(conn, old)
+    new_name = _person(conn, to_user)[0]
+    sender = _sender()
+    body = (row.get("description") or "").strip()
+    subject = _subject(body) or todo
+    if note.strip():
+        body = f"{body}\n\n{note.strip()}" if body else note.strip()
+    doctype, name = row.get("reference_type"), row.get("reference_name")
+    if doctype and name:
+        conn.unassign(doctype, name, old)
+        out = _assign(conn, doctype, name, to_user, body, row.get("date"), row.get("priority"))
+        where = {"doctype": doctype, "name": name}
+        label = f"{doctype} {name}"
+    else:
+        conn.set_value("ToDo", todo, "status", "Cancelled")
+        out = _todo(conn, to_user, subject, body, row.get("date"), row.get("priority"))
+        where = {"doctype": "ToDo", "name": todo}
+        label = f"their To-Do {todo}"
+    line = f"Reassigned by {sender} from {old_name} to {new_name}"
+    told, told_notice = _tell(conn, where, old, old_name, old_ok,
+                              f"{line}: {subject}.", label, "it was moved")
+    out.update(reassigned_from=old, reassigned_from_name=old_name, told=told,
+               told_notice=told_notice,
+               said=f"{line}. {out.get('said') or ''}".strip())
+    return out
+
+
+@frappe.whitelist()
+def cancel_task(business_code: str, todo: str, reason: str = ""):
+    """Withdraw open work this manager handed out -- the wrong person, by mistake."""
+    conn = _conn(business_code)
+    row = _handed_out_todo(conn, todo)
+    user = row.get("allocated_to")
+    who, ok = _person(conn, user)
+    subject = _subject(row.get("description")) or todo
+    doctype, name = row.get("reference_type"), row.get("reference_name")
+    if doctype and name:
+        conn.unassign(doctype, name, user)
+        where, label = {"doctype": doctype, "name": name}, f"{doctype} {name}"
+        said = (f"{doctype} {name} is no longer assigned to {who}: ERPNext has cancelled "
+                f"their To-Do and taken them off Assigned To.")
+    else:
+        conn.set_value("ToDo", todo, "status", "Cancelled")
+        where, label = {"doctype": "ToDo", "name": todo}, f"their To-Do {todo}"
+        said = f"{who}’s To-Do {todo} is cancelled in ERPNext."
+    why = f" {reason.strip()}" if (reason or "").strip() else ""
+    notified, notice = _tell(conn, where, user, who, ok,
+                             f"{_sender()} has withdrawn this: {subject}. You no longer need "
+                             f"to do it.{why}", label, "it was withdrawn")
+    return {"ok": True, "name": todo, "status": "Cancelled", "to": user, "to_name": who,
+            "said": said, "notified": notified, "notice": notice}
+
+
+@frappe.whitelist()
+def update_task(business_code: str, todo: str, due_date: str | None = None,
+                priority: str | None = None):
+    """Change the date and priority of open work this manager handed out."""
+    if priority and priority not in TODO_PRIORITIES:
+        frappe.throw("Priority is Low, Medium or High.")
+    conn = _conn(business_code)
+    row = _handed_out_todo(conn, todo)
+    changed = []
+    if due_date is not None and str(due_date or "") != str(row.get("date") or ""):
+        conn.set_value("ToDo", todo, "date", due_date or None)
+        changed.append(f"due {_day(due_date)}" if due_date else "no due date")
+    if priority and priority != (row.get("priority") or "Medium"):
+        conn.set_value("ToDo", todo, "priority", priority)
+        changed.append(f"priority {priority}")
+    user = row.get("allocated_to")
+    who, ok = _person(conn, user)
+    if not changed:
+        return {"ok": True, "name": todo, "changed": [], "said": "Nothing changed.",
+                "notified": None, "notice": "Nothing changed, so no one was told."}
+    what = " and ".join(changed)
+    subject = _subject(row.get("description")) or todo
+    notified, notice = _tell(conn, {"doctype": "ToDo", "name": todo}, user, who, ok,
+                             f"{_sender()} has changed this to {what}: {subject}.",
+                             f"their To-Do {todo}", "what changed")
+    return {"ok": True, "name": todo, "changed": changed, "notified": notified,
+            "notice": notice, "said": f"{who}’s To-Do {todo} is now {what}."}
+
+
+def _handed_out_todo(conn, todo):
+    """The open To-Do, if this manager handed it out; refused otherwise."""
+    if not todo:
+        frappe.throw("Which task?")
+    rows = conn.get_list("ToDo", filters={"name": todo},
+                         fields=["name", "status", "allocated_to", "assigned_by", "description",
+                                 "reference_type", "reference_name", "date", "priority"],
+                         limit=1)
+    if not rows or rows[0].get("assigned_by") != conn.whoami():
+        frappe.throw("Only the person who handed this out can change it.",
+                     frappe.PermissionError)
+    if rows[0].get("status") != "Open":
+        frappe.throw(f"This task is {(rows[0].get('status') or 'not open').lower()} in "
+                     f"ERPNext, so it can no longer be changed here.")
+    return rows[0]
+
+
+def _tell(conn, where, user, who, mentionable, text, label, what):
+    """Tell someone by a mention in a comment on `where`; (notified, notice)."""
+    from html import escape
+
+    if user == conn.whoami():
+        return None, "It was your own work, so there was no one else to tell."
+    html = (f'<p><span class="mention" data-id="{escape(user)}" data-value="{escape(who)}" '
+            f'data-denotation-char="@">@{escape(who)}</span> {escape(text)}</p>')
+    try:
+        conn.comment(where["doctype"], where["name"], html)
+    except Exception as e:
+        return False, (f"{who} could not be told {what}: ERPNext refused the comment on "
+                       f"{label} ({_plain_error(e)}). Tell them yourself.")
+    if mentionable is False:
+        return False, (f"A comment on {label} says so, but {who}’s ERPNext user has Allowed "
+                       f"In Mentions switched off, so ERPNext did not notify them. Tell them "
+                       f"yourself.")
+    return True, (f"ERPNext has told {who} {what}, by mentioning them in a comment on "
+                  f"{label}: under the bell in ERPNext, and by email if their notification "
+                  f"settings allow.")
+
+
+def _subject(description) -> str:
+    text = frappe.utils.strip_html(description or "").strip()
+    return text.partition("\n")[0].strip()[:140]
+
+
+def _sender() -> str:
+    return frappe.utils.get_fullname(frappe.session.user) or frappe.session.user
+
+
+# ---------------------------------------------------------------------------
 # Escalation: up the line, to the manager ERPNext names
 # ---------------------------------------------------------------------------
 #

@@ -605,7 +605,8 @@ else:
     # person as if it were the current answer.
     _all_jsx = sorted(_src.rglob("*.jsx"))
     _imported = set()
-    for _f in _all_jsx:
+    # Importers are any module, .js included: legacy/work.js opens TaskDrawer.jsx.
+    for _f in _all_jsx + sorted(_src.rglob("*.js")):
         for _m in re.findall(r'from\s+"[^"]*/([A-Za-z0-9_]+)\.jsx"', _f.read_text()):
             _imported.add(_m)
     for _f in _all_jsx:

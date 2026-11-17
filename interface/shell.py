@@ -1388,4 +1388,43 @@ table.dt td.dt-w3 > .dt-tx{min-width:26ch;max-width:44ch;display:-webkit-box;-we
    stay centred (each is a flex row with align-items:center).
    ====================================================================== */
 .alert>.ameta,.alert>.acts{align-self:stretch}
+
+/* ======================================================================
+   Outstanding Tasks managed here (16 Nov 2026, legacy/work.js, TaskDrawer.jsx,
+   ActionDialog.jsx): New Task beside the heading, the tile that filters the list marked
+   as chosen, the filter line, rows that open the task's drawer, their four buttons, the
+   drawer's facts and comments, and the dialog's optional document and two-up fields.
+   ====================================================================== */
+.topbar .work-tools{display:flex;gap:var(--sp-2);flex:none;align-items:center}
+.bk.work-on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.work-filter{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--sp-3);
+ margin:8px 0 4px;padding:10px 14px;border:1px solid var(--line);border-radius:var(--r-sm);
+ background:var(--raised);font-size:var(--fs-sm);color:var(--ink2)}
+tr.work-row{cursor:pointer}
+tr.work-row:hover td{background:var(--raised)}
+tr.work-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.alert.work-row{cursor:pointer}
+td.work-acts{white-space:nowrap}
+td.work-acts .btn{margin:0 4px 0 0}
+.task-who{font-size:var(--fs-2xl)}
+.task-detail{white-space:pre-line}
+.task-acts{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
+.task-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px var(--sp-6);margin:0;
+ font-size:var(--fs-sm)}
+.task-facts dt{color:var(--mut);font-weight:var(--fw-semibold)}
+.task-facts dd{margin:0;color:var(--ink)}
+.task-links{display:flex;flex-wrap:wrap;gap:var(--sp-4);margin-top:4px;font-size:var(--fs-sm)}
+.task-comments{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--sp-3)}
+.task-comments li{padding:10px 14px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface)}
+.task-comments p{margin:4px 0 0;font-size:var(--fs-sm);line-height:1.55;color:var(--ink2);white-space:pre-line}
+.task-c-meta{display:flex;flex-wrap:wrap;gap:var(--sp-2);font-size:var(--fs-xs);color:var(--mut)}
+.task-c-meta b{color:var(--ink);font-weight:var(--fw-semibold)}
+.dlg-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 var(--sp-3)}
+.dlg-doc{margin:16px 0 0;padding:4px 14px 14px;border:1px solid var(--line);border-radius:var(--r-sm)}
+.dlg-doc legend{padding:0 6px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--mut)}
+.ap-act.pri.dgr{background:var(--crit);border-color:var(--crit)}
+@media(max-width:600px){
+ .dlg-two{grid-template-columns:minmax(0,1fr)}
+ .topbar .work-tools{width:100%}
+}
 """

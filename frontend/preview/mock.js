@@ -402,7 +402,8 @@ const HANDLERS = {
     ];
     const open = [
       { name: "td-01", title: "Get a payment plan from HAIRASH ENTERPRISE (sample)", status: "Open", priority: "High",
-        date: "2026-09-26", late_days: 22, to: "kwame@gigmann.example", to_name: "Kwame Mensah (sample)", url: "/app/todo" },
+        date: "2026-09-26", late_days: 22, to: "kwame@gigmann.example", to_name: "Kwame Mensah (sample)", url: "/app/todo",
+        sent_back: 2, reference: { doctype: "Customer", name: "HAIRASH ENTERPRISE" } },
       { name: "td-02", title: "Count the 5ml syringes in Kumasi (sample)", status: "Open", priority: "Medium",
         date: "2026-10-25", late_days: 0, to: "efua@gigmann.example", to_name: "Efua Owusu (sample)", url: "/app/todo" },
     ];
@@ -416,15 +417,35 @@ const HANDLERS = {
       figures: {
         work_awaiting: fig("work_awaiting", "Awaiting you", 2, "GHS 59,200 involved"),
         work_due_today: fig("work_due_today", "Due today", 0, "on your own list, today or earlier"),
-        work_to_check: fig("work_to_check", "Delegated Tasks Done", 1, "awaiting your review · done in the last 14 days"),
-        work_unkept: fig("work_unkept", "Overdue Delegated Tasks", 1, "assigned by you · oldest 22 days late"),
-        work_open: fig("work_open", "Still open", 2, "work you handed out"),
-        work_late: fig("work_late", "Late", 1, "past the date you set"),
-        work_high: fig("work_high", "High risk", 1, "marked high priority"),
+        work_to_check: { ...fig("work_to_check", "Delegated Tasks Done", 1, "awaiting your review · done in the last 14 days"), filter: "check" },
+        work_unkept: { ...fig("work_unkept", "Overdue Delegated Tasks", 1, "assigned by you · oldest 22 days late"), filter: "late" },
+        work_open: { ...fig("work_open", "Still Open", 2, "work you handed out"), filter: "open" },
+        work_late: { ...fig("work_late", "Late", 1, "past the date you set"), filter: "late" },
+        work_high: { ...fig("work_high", "High Priority", 1, "marked high priority"), filter: "high" },
+        work_reopened: { ...fig("work_reopened", "Sent Back More Than Once", 1, "you rejected the work twice or more"), filter: "sent_back" },
       } };
   },
   "command_center.api.actions.apply_workflow_action": () => ({ workflow_state: "Approved (preview)" }),
   "command_center.api.work.review": () => ({ ok: true }),
+  // One task's drawer (api/work.task). Sample, marked so.
+  "command_center.api.work.task": ({ todo }) => ({
+    name: todo, title: "Get a payment plan from HAIRASH ENTERPRISE (sample)",
+    detail: "Agree dates for the GHS 48,200 owed over 90 days, in writing.", status: "Open",
+    priority: "High", date: "2026-09-26", late_days: 22, to: "kwame@gigmann.example",
+    to_name: "Kwame Mensah (sample)", assigned_by: "ceo@gigmann.example",
+    assigned_by_name: "Samuel Mensah (sample)", created: "2026-09-19", modified: "2026-10-14 09:12",
+    sent_back: 2, url: "/app/todo", reference: { doctype: "Customer", name: "HAIRASH ENTERPRISE" },
+    document: { doctype: "Customer", name: "HAIRASH ENTERPRISE", url: "/app/customer" },
+    comments: [
+      { by: "Samuel Mensah (sample)", when: "2026-10-14 09:12", kind: "Comment",
+        text: "Sent back by Samuel Mensah (sample): the plan needs dates, not \u201csoon\u201d." },
+      { by: "Kwame Mensah (sample)", when: "2026-10-10 16:40", kind: "Comment",
+        text: "Spoke to their accountant; they will pay in three parts." },
+    ],
+  }),
+  "command_center.api.actions.reassign_task": () => ({ said: "Preview only: nothing was sent to ERPNext.", notified: false, notice: "The preview has no ERPNext, so no one was notified." }),
+  "command_center.api.actions.cancel_task": () => ({ said: "Preview only: nothing was sent to ERPNext.", notified: false, notice: "The preview has no ERPNext, so no one was notified." }),
+  "command_center.api.actions.update_task": () => ({ said: "Preview only: nothing was sent to ERPNext.", notified: false, notice: "The preview has no ERPNext, so no one was notified.", changed: [] }),
   // The alert engine's list, at the designed alerts' figures. Sample on this laptop.
   "command_center.api.alerts.open_alerts": () => ({
     new: 2, can_tune: true,

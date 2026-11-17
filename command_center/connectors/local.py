@@ -160,6 +160,12 @@ class LocalConnector(BusinessConnector):
             # Left out rather than None, so ERPNext's own defaults apply (today, Medium).
             return add({k: v for k, v in args.items() if v is not None}) or []
 
+    def unassign(self, doctype, name, user):
+        from frappe.desk.form.assign_to import remove
+
+        with acting_as(self.acting_user):
+            return remove(doctype, name, user) or []
+
     def comment(self, doctype, name, content):
         from frappe.desk.form.utils import add_comment
 

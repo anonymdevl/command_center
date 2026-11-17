@@ -16,8 +16,16 @@
  * they show how to link their own ERPNext key, or that ERPNext has not answered yet. The decisions -- approve, reject, accept, send
  * back -- open the action dialog, which asks before anything changes. Escalate on open
  * work handed out sends it to the manager of the person it was given to (ActionDialog).
+ *
+ * Outstanding Tasks manages the work too (16 Nov 2026): New Task, and on every open row
+ * Edit (date and priority), Reassign, Escalate and Cancel Assignment, each through the
+ * action dialog (api/actions). A row or card opens the task's own drawer (TaskDrawer.jsx),
+ * not ERPNext. Each tile filters the list (its figure's `filter`, api/work.TILE_FILTERS),
+ * and Today's Delegated Tasks Done and Overdue Delegated Tasks open it filtered the same way.
  */
 
+import React from "react";
+import TaskDrawer from "../components/TaskDrawer.jsx";
 import { WAITING } from "./reach.js";
 import { count, exact, shortDate } from "../format.js";
 import { guideBox } from "./guide.js";
@@ -34,13 +42,25 @@ export const WORK_TILES = {
     "Overdue Delegated Tasks": { key: "work_unkept" },
   },
   delegation: {
-    "Still open": { key: "work_open" },
+    "Still Open": { key: "work_open" },
     Late: { key: "work_late" },
-    // Sent back more than once through "Send it back", from the comments it leaves.
-    "Reopened twice+": { key: "work_reopened" },
-    "High risk": { key: "work_high" },
+    // Sent back twice or more through "Send it back": the platform's own record of each.
+    "Sent Back More Than Once": { key: "work_reopened" },
+    "High Priority": { key: "work_high" },
   },
 };
+
+/** What each filter keeps, and how the list says it. */
+const FILTERS = {
+  open: { label: "Still Open", keep: () => true },
+  late: { label: "Late", keep: (t) => t.late_days > 0 },
+  high: { label: "High Priority", keep: (t) => t.priority === "High" },
+  sent_back: { label: "Sent Back More Than Once", keep: (t) => (t.sent_back || 0) >= 2 },
+  check: { label: "Delegated Tasks Done" },
+};
+
+// Set by a Today tile just before it opens Outstanding Tasks; taken by the next render.
+let pendingFilter = null;
 
 export function renderWork(root, view, data, opts = {}) {
   if (!root || !data || !WORK_VIEWS.has(view)) return 0;
@@ -48,8 +68,8 @@ export function renderWork(root, view, data, opts = {}) {
   root.querySelector(".work-banner")?.remove();
   const live = WORK_TILES[view] ? hydrateTiles(root, view, data.figures, opts, WORK_TILES[view]) : 0;
   if (view === "approvals") approvals(root, data);
-  if (view === "myday") today(root, data);
-  if (view === "delegation") delegation(root, data);
+  if (view === "myday") today(root, data, opts);
+  if (view === "delegation") delegation(root, data, opts);
   return live;
 }
 
@@ -79,7 +99,7 @@ function unavailable(root, view, data, opts) {
     return wrap;
   };
   const anchor = view === "delegation" ? root.querySelector(".grid") : null;
-  root.querySelectorAll(".work-list, .work-table, .work-banner").forEach((n) => n.remove());
+  root.querySelectorAll(".work-list, .work-table, .work-banner, .work-tools").forEach((n) => n.remove());
   if (view === "myday") {
     const sect = Array.from(root.querySelectorAll(".sect")).find((x) => /^awaiting you/i.test(x.textContent.trim()));
     (sect || root.querySelector(".topbar")).after(box());
@@ -104,7 +124,28 @@ function approvals(root, data) {
   anchor.after(list);
 }
 
-function today(root, data) {
+function today(root, data, opts) {
+  // Delegated Tasks Done and Overdue Delegated Tasks open Outstanding Tasks filtered.
+  root.querySelectorAll(".bk").forEach((tile) => {
+    const spec = WORK_TILES.myday[tile.querySelector(".l")?.textContent?.trim()];
+    const f = spec && data.figures?.[spec.key]?.filter;
+    if (!f || !/go\('delegation'\)/.test(tile.getAttribute("onclick") || "")) return;
+    tile.removeAttribute("onclick");
+    const open = () => {
+      pendingFilter = f;
+      window.go?.("delegation");
+    };
+    tile.onclick = open;
+    tile.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        open();
+      }
+    };
+    tile.setAttribute("role", "button");
+    tile.setAttribute("tabindex", "0");
+    tile.title = `Opens Outstanding Tasks showing ${FILTERS[f].label}`;
+  });
   const now = new Date();
   setWhen(root, `${now.toLocaleDateString("en-GB", { weekday: "long" })} `
     + `${now.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`
@@ -137,17 +178,49 @@ function today(root, data) {
   if (promises) {
     promises.textContent = "Work you handed out that is past its date";
     const old = promises.nextElementSibling;
-    const table = tasksTable(data.late, { empty: "Nothing you handed out is past its date." });
+    const table = tasksTable(data.late, { empty: "Nothing you handed out is past its date.", opts });
     if (old && (old.tagName === "TABLE" || old.classList.contains("work-table"))) old.replaceWith(table);
     else promises.after(table);
   }
 }
 
-function delegation(root, data) {
+function delegation(root, data, opts) {
   setWhen(root, `${data.open.length} open · ${data.late.length} late · `
-    + `${data.check.length} to check · ${data.open.filter((t) => t.priority === "High").length} high risk`);
+    + `${data.check.length} to check · ${data.open.filter((t) => t.priority === "High").length} high priority`);
+  newTaskButton(root);
   // The designed sample (one task, its states and its evidence) goes, up to the note.
   const grid = root.querySelector(".grid");
+  // The filter lives on the screen's own markup, so leaving the screen clears it; a
+  // Today tile hands one over just before it opens this screen.
+  if (grid && pendingFilter) {
+    grid.dataset.filter = pendingFilter;
+    pendingFilter = null;
+  }
+  const current = FILTERS[grid?.dataset.filter] ? grid.dataset.filter : "";
+  const redraw = (f) => {
+    if (grid) grid.dataset.filter = f || "";
+    delegation(root, data, opts);
+  };
+  root.querySelectorAll(".bk").forEach((tile) => {
+    const spec = WORK_TILES.delegation[tile.querySelector(".l")?.textContent?.trim()];
+    const f = spec && data.figures?.[spec.key]?.filter;
+    if (!f) return;
+    const pick = () => redraw(current === f ? "" : f);
+    tile.removeAttribute("onclick");
+    tile.classList.add("clickable");
+    tile.classList.toggle("work-on", current === f);
+    tile.setAttribute("role", "button");
+    tile.setAttribute("tabindex", "0");
+    tile.setAttribute("aria-pressed", current === f ? "true" : "false");
+    tile.title = current === f ? "Shows every task again" : `Shows only ${FILTERS[f].label}`;
+    tile.onclick = pick;
+    tile.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        pick();
+      }
+    };
+  });
   let n = grid?.nextElementSibling;
   while (n && !n.classList.contains("note")) {
     const next = n.nextElementSibling;
@@ -155,13 +228,66 @@ function delegation(root, data) {
     n = next;
   }
   const wrap = el("div", "work-list");
-  wrap.append(el("div", "sect", "Marked done: check the evidence"));
-  if (!data.check.length) wrap.append(empty("Nothing to check.",
-    `Work you handed out appears here when the person marks it done, for ${14} days.`));
-  data.check.forEach((t) => wrap.append(checkCard(t)));
-  wrap.append(el("div", "sect", "Still open"));
-  wrap.append(tasksTable(data.open, { withPriority: true, empty: "Nothing you handed out is open." }));
+  const rows = current && current !== "check" ? data.open.filter(FILTERS[current].keep) : data.open;
+  if (current) {
+    const bar = el("div", "work-filter");
+    const shown = current === "check" ? data.check.length : rows.length;
+    bar.append(el("span", null, `Showing ${FILTERS[current].label}: ${count(shown)} `
+      + `${shown === 1 ? "task" : "tasks"}`), btn("Show All", "btn", () => redraw("")));
+    wrap.append(bar);
+  }
+  if (!current || current === "check") {
+    wrap.append(el("div", "sect", "Marked done: check the evidence"));
+    if (!data.check.length) wrap.append(empty("Nothing to check.",
+      `Work you handed out appears here when the person marks it done, for ${14} days.`));
+    data.check.forEach((t) => wrap.append(checkCard(t, opts)));
+  }
+  if (current !== "check") {
+    wrap.append(el("div", "sect", current ? FILTERS[current].label : "Still Open"));
+    wrap.append(tasksTable(rows, { withPriority: true, opts,
+      empty: current ? `Nothing you handed out is ${FILTERS[current].label.toLowerCase()}.`
+        : "Nothing you handed out is open." }));
+  }
   (grid || root.querySelector(".topbar")).after(wrap);
+}
+
+/** New Task, beside the screen's heading: the action dialog's own form. */
+function newTaskButton(root) {
+  const bar = root.querySelector(".topbar");
+  if (!bar || bar.querySelector(".work-tools")) return;
+  const tools = el("div", "work-tools");
+  tools.append(btn("New Task", "btn pri", () => fire("cc-action", { kind: "new_task", title: "" })));
+  bar.append(tools);
+}
+
+/** The task's own drawer (TaskDrawer.jsx), never ERPNext. */
+function openTask(t, opts) {
+  if (!opts?.openDrawer) {
+    window.open(t.url, "_blank", "noopener");
+    return;
+  }
+  opts.openDrawer(React.createElement(TaskDrawer, { task: t, scope: opts.scope }));
+}
+
+function opensTask(node, t, opts) {
+  node.classList.add("work-row");
+  node.tabIndex = 0;
+  node.setAttribute("role", "button");
+  node.title = "Opens the task";
+  node.onclick = () => openTask(t, opts);
+  node.onkeydown = (e) => {
+    if (e.target === node && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      openTask(t, opts);
+    }
+  };
+}
+
+/** What an open task's buttons send to the action dialog. */
+export function taskRequest(kind, t) {
+  return { kind, title: t.title, detail: t.detail, todo: t.name, assignee: t.to,
+           assignee_name: t.to_name, date: t.date, priority: t.priority,
+           doctype: t.reference?.doctype, docname: t.reference?.name };
 }
 
 /* ------------------------------------------------------------------ cards */
@@ -208,8 +334,9 @@ function approvalCard(a, currency) {
   return card;
 }
 
-function checkCard(t) {
+function checkCard(t, opts) {
   const card = el("div", "alert med");
+  opensTask(card, t, opts);
   card.dataset.ccWired = "1";
   card.dataset.live = "1";
   const row = el("div", "arow");
@@ -244,7 +371,7 @@ function checkCard(t) {
   return card;
 }
 
-function tasksTable(rows, { withPriority = false, empty: none } = {}) {
+function tasksTable(rows, { withPriority = false, empty: none, opts } = {}) {
   if (!rows.length) {
     const e = empty(none, "");
     e.classList.add("work-table");
@@ -261,16 +388,15 @@ function tasksTable(rows, { withPriority = false, empty: none } = {}) {
     const late = el("td", null, t.late_days ? days(t.late_days) : t.date ? "not yet due" : "no date set");
     if (t.late_days > 30) late.style.color = "var(--crit)";
     else if (t.late_days > 0) late.style.color = "var(--high)";
-    const open = el("a", "btn", "Open");
-    open.href = t.url;
-    open.target = "_blank";
-    open.rel = "noreferrer";
-    const last = el("td");
-    // Up the line: to the manager ERPNext names for the person it was given to.
-    last.append(btn("Escalate", "btn", () => fire("cc-action", {
-      kind: "escalate", title: t.title, detail: t.detail, todo: t.name,
-      assignee: t.to, assignee_name: t.to_name,
-      doctype: t.reference?.doctype, docname: t.reference?.name })), open);
+    const last = el("td", "work-acts");
+    // Edit, Reassign, Cancel: the work stays the manager's to manage (api/actions).
+    // Escalate goes up the line, to the manager ERPNext names for the person.
+    last.append(
+      btn("Edit", "btn", () => fire("cc-action", taskRequest("edit_task", t))),
+      btn("Reassign", "btn", () => fire("cc-action", taskRequest("reassign", t))),
+      btn("Escalate", "btn", () => fire("cc-action", taskRequest("escalate", t))),
+      btn("Cancel", "btn dgr", () => fire("cc-action", taskRequest("cancel_task", t))));
+    opensTask(tr, t, opts);
     tr.append(el("td", null, t.title), el("td", null, t.to_name || t.to || "—"),
       el("td", null, t.date ? shortDate(t.date) : "—"), late,
       ...(withPriority ? [el("td", null, t.priority)] : []), last);
