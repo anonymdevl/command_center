@@ -1600,4 +1600,7 @@ body.cc-signin .auth-sep{font-style:normal;color:var(--dim);margin:0 8px}
 .cc-crash b{color:var(--ink);font-size:var(--fs-md);font-weight:var(--fw-semibold)}
 .cc-crash .btn{margin-top:6px}
 .askconvs-err{margin-top:8px;font-size:var(--fs-xs);color:var(--mut)}
+
+/* The balance sheet's check when it could not be run: neutral, neither passed nor failed. */
+.fs-check.na{background:var(--raised);color:var(--mut)}
 """

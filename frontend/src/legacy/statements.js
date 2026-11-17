@@ -300,9 +300,12 @@ function bs(target, res) {
   target.append(el("h4", null, "Balance Sheet"));
   target.append(table(["", ...b.columns.filter(Boolean)], b.summary.map((r) => ({ ...r, values: r.values.slice(0, b.columns.filter(Boolean).length) }))));
   const f = b.figures;
-  target.append(el("div", `fs-check ${f.balances ? "ok" : "bad"}`, f.balances
-    ? "Balances: assets equal liabilities and equity, with the provisional profit or loss"
-    : `Does not balance: out by ${exact(Math.abs(f.difference))}`));
+  // balances: true (checked, balances), false (checked, out by the difference), or null
+  // (could not be checked -- never shown as passed, nor as failed).
+  target.append(el("div", `fs-check ${f.balances ? "ok" : f.balances === false ? "bad" : "na"}`,
+    f.balances ? "Balances: assets equal liabilities and equity, with the profit or loss since the books were last closed"
+      : f.balances === false ? `Does not balance: out by ${exact(Math.abs(f.difference ?? 0))}`
+        : "Not checked: the profit and loss since the books were last closed could not be read"));
   notes(target, b.notes);
   tree(target, "Balance Sheet by Account", ["Account", ...b.columns.filter(Boolean)], b.rows);
 }

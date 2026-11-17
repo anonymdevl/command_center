@@ -21,7 +21,7 @@ def reload_changed_facts(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0012_email_log'),
+        ('core', '0015_keep_access_single_customer'),
     ]
 
     operations = [

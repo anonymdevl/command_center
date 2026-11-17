@@ -116,7 +116,11 @@ function cap(text) {
 function drawHealth(root, figures, openDrawer) {
   const data = hist.data;
   const series = data?.weeks || [];
-  const lastWeek = series.length > 1 ? series[series.length - 2] : null;
+  // What "on last week" is measured from: the server's reading nearest seven days before the
+  // latest, over the questions scored both times (health.week_on_week), with that week's
+  // question scores from the series for the sentence -- never simply the previous square.
+  const lw = data?.last_week || null;
+  const lastWeek = lw ? { ...(series.find((w) => w.week === lw.week) || {}), ...lw } : null;
   const rows = SCORES.map(([key, , q]) => ({ key, q, f: figures[key], s: standing(figures[key]) }));
   verdict(root, figures, rows, lastWeek, data);
   let live = 0;
@@ -162,11 +166,14 @@ function verdict(root, figures, rows, lastWeek, data) {
   const before = lastWeek?.control_score;
   if (delta) {
     if (has && before !== null && before !== undefined) {
-      const d = score - Math.round(Number(before));
+      const d = data?.delta !== null && data?.delta !== undefined
+        ? Math.round(Number(data.delta)) : score - Math.round(Number(before));
       delta.hidden = false;
       delta.className = `hh-delta ${d > 0 ? "up" : d < 0 ? "dn" : "eq"}`;
       delta.textContent = d > 0 ? `▲ ${d} on last week` : d < 0 ? `▼ ${-d} on last week` : "No change on last week";
-      delta.title = `Last week's Overall Business Health was ${pct(before)} (stored ${shortDate(lastWeek.day)}).`;
+      const over = data?.delta_questions;
+      delta.title = `Overall Business Health was ${pct(before)} on ${shortDate(lastWeek.day)}`
+        + (over && over.questions < over.of ? `, compared over the ${over.questions} of ${over.of} questions scored both times.` : ".");
     } else {
       delta.hidden = true;
       delta.textContent = "";
