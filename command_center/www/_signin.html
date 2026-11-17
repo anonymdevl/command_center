@@ -63,12 +63,12 @@ d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
 
 {% macro scripts() -%}
 <script>
-/* The footer's separators: an item that starts a line carries none, so a wrapped line
-   never begins with a stray dot. The dots take no room (shell.py), so hiding one never
+/* The footer's separators: an item (or a whole group) that starts a line carries none, so
+   a wrapped line never begins with a stray separator. The dots take no room (shell.py), so hiding one never
    moves an item to another line. */
 (function () {
   function mark() {
-    document.querySelectorAll(".auth-by-l").forEach(function (line) {
+    document.querySelectorAll(".auth-by-l, .auth-by").forEach(function (line) {
       var top = null;
       Array.prototype.forEach.call(line.children, function (item) {
         var t = item.offsetTop;

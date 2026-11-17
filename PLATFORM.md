@@ -43,7 +43,7 @@ ssh -L 8200:127.0.0.1:8200 erpnext@<server>
 ```
 
 Then:
-- the platform: http://localhost:8200/command-center-login
+- the platform: http://localhost:8200/sign-in
 - administration: http://localhost:8200/admin/
 
 With a domain (its DNS pointing at this server), one command puts it on HTTPS:

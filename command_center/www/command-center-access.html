@@ -29,7 +29,7 @@ d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
       {% if retry_url %}<a class="auth-go" href="{{ retry_url }}">Try again</a>{% endif %}
       {% if erp_url %}<a class="{{ 'auth-alt' if retry_url else 'auth-go' }}" href="{{ erp_url }}"
          style="display:inline-flex;align-items:center;text-decoration:none">Back to ERPNext</a>{% endif %}
-      {% if own_sign_in %}<a class="auth-alt" href="/command-center-login"
+      {% if own_sign_in %}<a class="auth-alt" href="/sign-in"
          style="display:inline-flex;align-items:center;text-decoration:none">Platform sign-in</a>{% endif %}
     </div>
   </section>

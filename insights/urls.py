@@ -13,7 +13,9 @@ urlpatterns = [
     path("", views.home),
     path("admin/", admin.site.urls),
     re_path(r"^api/method/(?P<method>[\w.]+)/?$", views.api_method),
-    path("command-center-login", views.command_center_login),
+    path("sign-in", views.command_center_login),
+    # The old address, kept so links already sent and bookmarks still land on sign-in.
+    path("command-center-login", views.old_sign_in),
     path("management-only", views.management_only),
     path("command-center-access", views.command_center_access),
     path(invite.PATH.lstrip("/"), views.set_password),

@@ -14,7 +14,7 @@ no_cache = 1
 def get_context(context):
     user = frappe.session.user
     if user == "Guest":
-        frappe.local.flags.redirect_location = "/command-center-login"
+        frappe.local.flags.redirect_location = "/sign-in"
         raise frappe.Redirect
     if ALLOWED_ROLES.intersection(frappe.get_roles(user)):
         frappe.local.flags.redirect_location = "/command-center"

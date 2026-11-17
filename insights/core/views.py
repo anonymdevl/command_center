@@ -335,6 +335,14 @@ def command_center_login(request):
     return _page(request, "command-center-login.html", "command_center_login")
 
 
+def old_sign_in(request):
+    """/command-center-login was the sign-in page's address until 17 Nov 2026: a permanent
+    redirect to /sign-in, keeping any ?next=."""
+    from django.http import HttpResponsePermanentRedirect
+    qs = request.META.get("QUERY_STRING", "")
+    return HttpResponsePermanentRedirect("/sign-in" + (f"?{qs}" if qs else ""))
+
+
 def management_only(request):
     return _page(request, "management-only.html", "management_only")
 

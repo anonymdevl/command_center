@@ -196,10 +196,10 @@ sudo systemctl restart insights-web
 sleep 2
 
 step "check"
-CODE="$(curl -s -o /dev/null -m 15 -w '%{http_code}' "https://$DOMAIN/command-center-login" || true)"
-echo "   https://$DOMAIN/command-center-login -> HTTP ${CODE:-no answer}"
+CODE="$(curl -s -o /dev/null -m 15 -w '%{http_code}' "https://$DOMAIN/sign-in" || true)"
+echo "   https://$DOMAIN/sign-in -> HTTP ${CODE:-no answer}"
 [ "$CODE" = "200" ] || echo "   not 200: see sudo journalctl -u insights-web -n 50" >&2
 
 printf '\n== done.\n'
-echo "   The platform:    https://$DOMAIN/command-center-login"
+echo "   The platform:    https://$DOMAIN/sign-in"
 echo "   Administration:  https://$DOMAIN/admin/"

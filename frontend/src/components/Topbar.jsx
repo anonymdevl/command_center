@@ -100,7 +100,7 @@ function Who() {
     } catch (e) {
       /* private windows may refuse storage */
     }
-    window.location.replace("/command-center-login");
+    window.location.replace("/sign-in");
   };
 
   return (

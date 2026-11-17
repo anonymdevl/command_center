@@ -44,7 +44,7 @@ document.getElementById("other").onclick = function () {
   this.disabled = true;
   fetch("/api/method/logout", { method: "POST", credentials: "same-origin",
     headers: { "Accept": "application/json", "X-Frappe-CSRF-Token": window.csrf_token || "" } })
-    .finally(function () { window.location.href = "/command-center-login"; });
+    .finally(function () { window.location.href = "/sign-in"; });
 };
 </script>
 </body>

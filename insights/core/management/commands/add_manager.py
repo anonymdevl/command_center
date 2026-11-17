@@ -2,7 +2,7 @@
 
     manage.py add_manager someone@business.com "Their Name"
 
-They sign in at /command-center-login. --admin makes them a platform administrator.
+They sign in at /sign-in. --admin makes them a platform administrator.
 """
 
 import getpass

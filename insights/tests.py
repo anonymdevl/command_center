@@ -1332,7 +1332,7 @@ class PagesNotStored(TransactionTestCase):
         u = U.objects.create_user("m@test.com", "m@test.com", "a-long-test-pass-5")
         u.groups.add(Group.objects.get_or_create(name="Insights Dashboard Manager")[0])
         c = Client()
-        self.assertEqual(c.get("/command-center-login")["Cache-Control"], "no-store")
+        self.assertEqual(c.get("/sign-in")["Cache-Control"], "no-store")
         c.login(username="m@test.com", password="a-long-test-pass-5")
         self.assertEqual(c.get("/command-center")["Cache-Control"], "no-store")
 
@@ -3526,7 +3526,7 @@ class Branding(TransactionTestCase):
         whats = " | ".join(c["what"] for c in self._ok("changes"))
         self.assertIn("changed the branding: product name, tagline, company", whats)
         # the sign-in page, the app page and the boot payload
-        login = Client().get("/command-center-login").content.decode()
+        login = Client().get("/sign-in").content.decode()
         self.assertIn("<title>Sign in · Acme Insight</title>", login)
         self.assertIn("<b>Acme Insight</b>", login)
         # the vendor's footer: the product and "Built by", then each contact item whole
@@ -3592,7 +3592,7 @@ class Branding(TransactionTestCase):
         from command_center import branding
 
         def login():
-            return Client().get("/command-center-login").content.decode()
+            return Client().get("/sign-in").content.decode()
         page = login()
         self.assertIn(_MARK_TILE, page, "nothing set: the built-in mark")
         self.assertNotIn("/branding/", page)
@@ -3631,10 +3631,20 @@ class Branding(TransactionTestCase):
         self.assertEqual(self._call(self.manager, "upload_brand_logo", kind="logo_signin",
                                     data=_data_url(_png())).status_code, 403)
 
+    def test_sign_in_lives_at_sign_in_and_the_old_address_redirects(self):
+        """/sign-in is the sign-in page (17 Nov 2026); /command-center-login, its old address,
+        redirects there permanently, keeping where the person was going."""
+        self.assertEqual(Client().get("/sign-in").status_code, 200)
+        old = Client().get("/command-center-login?next=/command-center%23fin")
+        self.assertEqual(old.status_code, 301)
+        self.assertEqual(old["Location"], "/sign-in?next=/command-center%23fin")
+        from django.conf import settings
+        self.assertEqual(settings.LOGIN_URL, "/sign-in")
+
     def test_sign_in_has_no_dead_forgotten_password_link(self):
         """The standalone platform has no /login page: a forgotten password is a set-password
         link the administrator sends (User Management), and the sign-in page says so."""
-        login = Client().get("/command-center-login").content.decode()
+        login = Client().get("/sign-in").content.decode()
         self.assertNotIn('href="/login', login)
         self.assertIn("Ask your administrator to email you a link", login)
 
@@ -3645,7 +3655,7 @@ class Branding(TransactionTestCase):
         from django.conf import settings
 
         from command_center import branding
-        login = Client().get("/command-center-login").content.decode()
+        login = Client().get("/sign-in").content.decode()
         tile = re.search(r'<div class="auth-mark">(<svg class="cc-lens".*?</svg>)</div>', login, re.S)
         self.assertIsNotNone(tile, "the sign-in page draws the lens mark in its tile")
         self.assertIn('stroke="currentColor"', tile.group(1), "drawn in the theme's colour")
@@ -3685,14 +3695,14 @@ class Branding(TransactionTestCase):
         brand = self._boot(self.manager)["brand"]
         self.assertEqual((brand["logo_light_url"], brand["logo_dark_url"], brand["favicon_url"]),
                          (light, light, fav))
-        login = Client().get("/command-center-login").content.decode()
+        login = Client().get("/sign-in").content.decode()
         self.assertNotIn("cc-lens", login, "the Sign-In Logo replaces the mark")
         self.assertIn(f'<img class="auth-logo" src="{sign}" alt="">', login)
         self.assertIn(f'<link rel="icon" href="{fav}">', login, "the uploaded favicon")
         # removed: the mark again
         for kind in ("logo_light", "favicon", "logo_signin"):
             self._ok("remove_brand_logo", kind=kind)
-        login = Client().get("/command-center-login").content.decode()
+        login = Client().get("/sign-in").content.decode()
         self.assertIn(_MARK_TILE, login)
         self.assertIn(f'<link rel="icon" href="{branding.DEFAULT_FAVICON}">', login)
 
@@ -3702,7 +3712,7 @@ class Branding(TransactionTestCase):
         slogan, no feature points; one screen; and the sign-in itself exactly as it was."""
         from django.conf import settings
         self._ok("set_brand", tagline="Board Intelligence")
-        page = Client().get("/command-center-login").content.decode()
+        page = Client().get("/sign-in").content.decode()
         body = page.split("<body", 1)[1]
         # the threads: decoration, behind everything, never taking a click
         self.assertIn('<canvas class="sg-threads" id="sgthreads" aria-hidden="true"></canvas>', page)

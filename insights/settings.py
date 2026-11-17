@@ -173,7 +173,7 @@ CSRF_COOKIE_SECURE = SECURE
 # The interface sends its token as X-Frappe-CSRF-Token (frontend/src/api/client.js).
 CSRF_HEADER_NAME = "HTTP_X_FRAPPE_CSRF_TOKEN"
 CSRF_FAILURE_VIEW = "insights.core.views.csrf_failure"
-LOGIN_URL = "/command-center-login"
+LOGIN_URL = "/sign-in"
 if SECURE:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
