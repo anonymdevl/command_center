@@ -702,6 +702,63 @@ Object.assign(HANDLERS, {
   "insights.core.platform_settings.changes": () => [],
 });
 
+// Stock & Warehouses' Stock Balance and Stock Movements tabs (api/stock.py): sample items
+// and a sample ledger, searched, filtered and paged as the server does.
+const STOCK_ITEMS = [
+  ["GLV-NIT-M", "Nitrile Examination Gloves, Powder Free, Medium (sample)", "Box", 42.5],
+  ["OVN-60L", "Laboratory Drying Oven 60 Litre with Digital Controller (sample)", "Pcs", 5800],
+  ["SYR-5ML", "Syringe 5ml Luer Lock (sample)", "Pkts", 18.2],
+  ["CRT-ARM-L", "Crutches - Armpit Crutches (Large) (sample)", "Pcs", 310],
+  ["TST-PRG", "Test Kit - Diaspot Pregnancy Urine (sample)", "Pkts", 16.02],
+  ["WRM-INF", "Radiant Warmer - Infant with In-Built Suction Machine and Tube Phototherapy (sample)", "Pcs", 13395.2],
+];
+const STOCK_WAREHOUSES = ["Central Store - GMSL", "Central Warehouse - GMSL", "Kumasi Branch Store - GMSL"];
+const STOCK_LINES = STOCK_ITEMS.flatMap(([code, name, uom, rate], i) => STOCK_WAREHOUSES
+  .filter((_, j) => (i + j) % 3 !== 2)
+  .map((wh, j) => { const qty = ((i + 2) * (j + 3) * 7) % 120 + 1;
+    return { item_code: code, item_name: name, warehouse: wh, uom, qty, valuation_rate: rate,
+      value: Math.round(qty * rate * 100) / 100 }; }))
+  .sort((a, b) => b.value - a.value);
+const STOCK_VOUCHERS = [["Sales Invoice", "ACC-SINV-2026-0"], ["Purchase Receipt", "MAT-PRE-2026-0"],
+  ["Stock Entry", "MAT-STE-2026-0"], ["Delivery Note", "MAT-DN-2026-0"]];
+const STOCK_LEDGER = Array.from({ length: 180 }, (_, k) => {
+  const [code, name] = STOCK_ITEMS[k % STOCK_ITEMS.length];
+  const [vt, vn] = STOCK_VOUCHERS[k % STOCK_VOUCHERS.length];
+  const d = new Date(Date.UTC(2026, 10, 17) - Math.floor(k / 4) * 86400000).toISOString().slice(0, 10);
+  const qty = (k % 3 ? -1 : 1) * ((k * 7) % 25 + 1);
+  return { id: `SLE-${k}`, date: d, item_code: code, item_name: name,
+    warehouse: STOCK_WAREHOUSES[k % STOCK_WAREHOUSES.length], in_qty: qty > 0 ? qty : 0,
+    out_qty: qty < 0 ? -qty : 0, balance_qty: (k * 13) % 90, voucher_type: vt,
+    voucher_no: `${vn}${String(1170 - k).padStart(4, "0")}` };
+});
+const stockMatch = (q, ...texts) => (q || "").toLowerCase().split(/\s+/).filter(Boolean)
+  .every((w) => texts.join(" ").toLowerCase().includes(w));
+Object.assign(HANDLERS, {
+  "command_center.api.stock.balance": ({ q, warehouse, page }) => {
+    const rows = STOCK_LINES.filter((r) => (!warehouse || r.warehouse === warehouse)
+      && stockMatch(q, r.item_name, r.item_code));
+    const pages = Math.max(1, Math.ceil(rows.length / 10));
+    const p = Math.min(Math.max(1, Number(page) || 1), pages);
+    const units = new Set(rows.map((r) => r.uom));
+    return { kind: "stock_balance", business_code: BUSINESS, currency: "GHS", warehouses: STOCK_WAREHOUSES,
+      rows: rows.slice((p - 1) * 10, p * 10), page: p, pages, as_of: "2026-11-17 06:00:00",
+      totals: { lines: rows.length, value: rows.reduce((a, r) => a + r.value, 0),
+        qty: units.size === 1 ? rows.reduce((a, r) => a + r.qty, 0) : null,
+        uom: units.size === 1 ? [...units][0] : null } };
+  },
+  "command_center.api.stock.movements": ({ q, warehouse, from_date, to_date, skip }) => {
+    const to = to_date || "2026-11-17";
+    const from = from_date || "2026-10-18";
+    const rows = STOCK_LEDGER.filter((r) => r.date >= from && r.date <= to
+      && (!warehouse || r.warehouse === warehouse) && stockMatch(q, r.item_name, r.item_code, r.voucher_no));
+    const start = Number(skip) || 0;
+    const page = rows.slice(start, start + 50);
+    return { kind: "stock_movements", business_code: BUSINESS, from_date: from, to_date: to,
+      warehouses: STOCK_WAREHOUSES, rows: page, total: start ? null : rows.length,
+      next: start + 50 < rows.length ? { before: to, skip: start + 50 } : null };
+  },
+});
+
 const realFetch = window.fetch.bind(window);
 
 window.fetch = async (input, init = {}) => {

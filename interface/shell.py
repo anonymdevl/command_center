@@ -1615,4 +1615,37 @@ a.dw-list-row:hover .dw-list-t b{color:var(--accent-ink)}
 .dw-list-t b{font-weight:var(--fw-semibold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dw-list-t small{font-size:var(--fs-xs);color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dw-list-v{flex:none;font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold)}
+/* Stock & Warehouses' Stock Balance and Stock Movements tabs (legacy/stock.js, 17 Nov
+   2026): a search and filter bar, a record table that scrolls in its own box, long
+   names cut with an ellipsis (whole text in the cell's title), totals at the foot. */
+.sk-bar .tcount{white-space:nowrap}
+.sk-bar .sk-xl{flex:none}
+.sk-dates{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.sk-to{font-size:var(--fs-xs);color:var(--dim)}
+.pp-body .filters input.sk-date{flex:0 1 auto;min-width:0;width:auto;padding:5px 9px;
+ font-size:var(--fs-xs);color-scheme:light dark}
+table.dt.sk-t{width:100%;font-variant-numeric:tabular-nums}
+.pp-scroll table.dt.sk-bal{min-width:640px}
+.pp-scroll table.dt.sk-mov{min-width:880px}
+table.dt.sk-t th{white-space:nowrap}
+table.dt.sk-t th.num,table.dt.sk-t td.num{text-align:right;white-space:nowrap}
+table.dt.sk-t td.sk-item,table.dt.sk-t td.sk-c{max-width:0}
+table.dt.sk-bal td.sk-item{width:40%}
+table.dt.sk-bal td.sk-c{width:24%}
+table.dt.sk-mov td.sk-item{width:26%}
+table.dt.sk-mov td.sk-c{width:14%}
+table.dt.sk-t td.sk-v{white-space:nowrap}
+.sk-cut{display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+td.sk-item b.sk-cut{font-weight:var(--fw-semibold);color:var(--ink)}
+.sk-code{font-size:var(--fs-2xs);color:var(--dim);margin-top:2px}
+table.dt.sk-t td.sk-item,table.dt.sk-t td.sk-c{overflow:hidden}
+table.dt tr.sk-row{cursor:pointer}
+table.dt tr.sk-row:hover td,table.dt tr.sk-row:focus-visible td{background:var(--hover);outline:none}
+table.dt.sk-t tfoot td{border-top:1px solid var(--line2);border-bottom:0;background:var(--raised);
+ font-weight:var(--fw-semibold);color:var(--ink)}
+@media(max-width:640px){
+ .pp-scroll table.dt.sk-bal{min-width:560px}
+ .pp-scroll table.dt.sk-mov{min-width:760px}
+ table.dt.sk-t td.sk-item,table.dt.sk-t td.sk-c{min-width:120px}
+}
 """

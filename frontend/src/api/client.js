@@ -299,6 +299,9 @@ export const api = {
   tablesXlsx: (args) => download("command_center.api.export.tables_xlsx", args, "tables.xlsx"),
   statementsPdf: (args) => download("command_center.api.statements.pdf", args, "statements.pdf"),
   recordsXlsx: (args) => download("command_center.api.export.records_xlsx", args, "records.xlsx"),
+  /* Stock & Warehouses' Stock Balance and Stock Movements, as Excel (api/stock.py). */
+  stockBalanceXlsx: (args) => download("command_center.api.stock.balance_xlsx", args, "stock-balance.xlsx"),
+  stockMovementsXlsx: (args) => download("command_center.api.stock.movements_xlsx", args, "stock-movements.xlsx"),
 
   /* The nine management reports: started as a job, followed until written. */
   reportGenerate: ({ code, business_code }) =>
