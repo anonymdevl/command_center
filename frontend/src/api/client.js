@@ -257,6 +257,11 @@ export const api = {
     call("command_center.api.actions.reassign_task", { business_code, todo, to_user, note }),
   cancelTask: ({ business_code, todo, reason }) =>
     call("command_center.api.actions.cancel_task", { business_code, todo, reason }),
+  closeTask: ({ business_code, todo, note }) =>
+    call("command_center.api.actions.close_task", { business_code, todo, note }),
+  /* Close or cancel many at once, one by one: {done: [...], failed: [{todo, reason}], said}. */
+  bulkTasks: ({ business_code, action, todos, note }) =>
+    call("command_center.api.actions.bulk_tasks", { business_code, action, todos, note }),
   updateTask: ({ business_code, todo, due_date, priority }) =>
     call("command_center.api.actions.update_task", { business_code, todo, due_date, priority }),
 

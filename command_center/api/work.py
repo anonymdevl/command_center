@@ -12,7 +12,8 @@ holds both halves.
                      button on every alert leaves, by ERPNext's own assignment on the
                      document it concerns, or as a To-Do of its own (api/actions).
                      Open ones are the work in flight; ones the assignee has closed in
-                     the last fortnight are the delegated tasks done, awaiting review.
+                     the last fortnight are the delegated tasks done, awaiting review
+                     (not ones the manager closed: actions.close_task).
 
 Reading is all this module does, apart from review(): the manager's verdict on work
 they handed out, which tags the To-Do Accepted or reopens it with their reason. The
@@ -379,9 +380,11 @@ def _todos(filters, src, limit=200, extra=None):
     rows = src.list("ToDo", filters=filters,
                     fields=["name", "description", "status", "priority", "date",
                             "allocated_to", "assigned_by", "reference_type",
-                            "reference_name", "modified", "creation", "_user_tags"],
+                            "reference_name", "modified", "modified_by", "creation",
+                            "_user_tags"],
                     order_by="date asc", limit=limit)
     now = getdate(today())
+    me = src.me() if rows else None
     out = []
     for r in rows:
         r = frappe._dict(r)
@@ -401,6 +404,7 @@ def _todos(filters, src, limit=200, extra=None):
                           if r.reference_type and r.reference_name else None),
             "closed_on": str(r.modified)[:10] if r.status == "Closed" else None,
             "accepted": ACCEPTED_TAG in (r._user_tags or ""),
+            "closed_by_you": r.status == "Closed" and bool(me) and r.modified_by == me,
             "url": src.url("ToDo", r.name),
             "created": str(r.creation)[:10] if r.creation else None,
             "modified": str(r.modified)[:16] if r.modified else None,
@@ -415,7 +419,10 @@ def _handed_out(user, src):
     open_ = _todos({"assigned_by": user, "status": "Open", "allocated_to": ["!=", user]}, src)
     closed = _todos({"assigned_by": user, "status": "Closed", "allocated_to": ["!=", user],
                      "modified": [">=", since]}, src)
-    return open_ + closed
+    # Closed by the manager (actions.close_task) is not done by the assignee, so it is
+    # not work to check. ERPNext's own record says who closed it: modified_by, the
+    # manager's login there (src.me()), the same on v14, v15 and v16.
+    return open_ + [t for t in closed if not t["closed_by_you"]]
 
 
 def _mine(user, src):

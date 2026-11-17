@@ -406,6 +406,12 @@ const HANDLERS = {
         sent_back: 2, reference: { doctype: "Customer", name: "HAIRASH ENTERPRISE" } },
       { name: "td-02", title: "Count the 5ml syringes in Kumasi (sample)", status: "Open", priority: "Medium",
         date: "2026-10-25", late_days: 0, to: "efua@gigmann.example", to_name: "Efua Owusu (sample)", url: "/app/todo" },
+      { name: "td-04", title: "Send the Tema stock count sheets (sample)", status: "Open", priority: "Medium",
+        date: "2026-10-13", late_days: 5, to: "kwame@gigmann.example", to_name: "Kwame Mensah (sample)", url: "/app/todo" },
+      { name: "td-05", title: "Renew the Korle Bu service contract (sample)", status: "Open", priority: "Medium",
+        date: "2026-10-30", late_days: 0, to: "efua@gigmann.example", to_name: "Efua Owusu (sample)", url: "/app/todo" },
+      { name: "td-06", title: "Chase the GRA withholding certificate (sample)", status: "Open", priority: "Low",
+        date: null, late_days: 0, to: "yaw@gigmann.example", to_name: "Yaw Boateng (sample)", url: "/app/todo" },
     ];
     const check = [
       { name: "td-03", title: "Confirm the C-arm installation date with UBUNTU (sample)", detail: "Called them; installation booked for 4 November.",
@@ -418,9 +424,9 @@ const HANDLERS = {
         work_awaiting: fig("work_awaiting", "Awaiting you", 2, "GHS 59,200 involved"),
         work_due_today: fig("work_due_today", "Due today", 0, "on your own list, today or earlier"),
         work_to_check: { ...fig("work_to_check", "Delegated Tasks Done", 1, "awaiting your review · done in the last 14 days"), filter: "check" },
-        work_unkept: { ...fig("work_unkept", "Overdue Delegated Tasks", 1, "assigned by you · oldest 22 days late"), filter: "late" },
-        work_open: { ...fig("work_open", "Still Open", 2, "work you handed out"), filter: "open" },
-        work_late: { ...fig("work_late", "Late", 1, "past the date you set"), filter: "late" },
+        work_unkept: { ...fig("work_unkept", "Overdue Delegated Tasks", 2, "assigned by you · oldest 22 days late"), filter: "late" },
+        work_open: { ...fig("work_open", "Still Open", 5, "work you handed out"), filter: "open" },
+        work_late: { ...fig("work_late", "Late", 2, "past the date you set"), filter: "late" },
         work_high: { ...fig("work_high", "High Priority", 1, "marked high priority"), filter: "high" },
         work_reopened: { ...fig("work_reopened", "Sent Back More Than Once", 1, "you rejected the work twice or more"), filter: "sent_back" },
       } };
@@ -445,6 +451,10 @@ const HANDLERS = {
   }),
   "command_center.api.actions.reassign_task": () => ({ said: "Preview only: nothing was sent to ERPNext.", notified: false, notice: "The preview has no ERPNext, so no one was notified." }),
   "command_center.api.actions.cancel_task": () => ({ said: "Preview only: nothing was sent to ERPNext.", notified: false, notice: "The preview has no ERPNext, so no one was notified." }),
+  "command_center.api.actions.close_task": () => ({ said: "Preview only: nothing was sent to ERPNext.", status: "Closed", notified: null, notice: "The preview has no ERPNext, so nothing was closed." }),
+  "command_center.api.actions.bulk_tasks": ({ action, todos = [] }) => ({
+    action, done: todos.map((todo) => ({ todo })), failed: [],
+    said: `Preview only: ${todos.length} would be ${action === "close" ? "closed" : "cancelled"}; nothing was sent to ERPNext.` }),
   "command_center.api.actions.update_task": () => ({ said: "Preview only: nothing was sent to ERPNext.", notified: false, notice: "The preview has no ERPNext, so no one was notified.", changed: [] }),
   // The alert engine's list, at the designed alerts' figures. Sample on this laptop.
   "command_center.api.alerts.open_alerts": () => ({

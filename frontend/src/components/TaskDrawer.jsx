@@ -11,7 +11,7 @@ import { Sec } from "./Understanding.jsx";
  * is, who has it and who gave it, its dates, priority and status, the ERPNext document it
  * is about, and ERPNext's comments on the To-Do and the document when the manager may
  * read them there. The buttons are the same as the row's -- Edit, Reassign, Escalate,
- * Cancel Assignment, and Accept It / Send It Back once it is marked done -- and each goes
+ * Close, Cancel Assignment, and Accept It / Send It Back once it is marked done -- and each goes
  * through the action dialog, which asks first. ERPNext is a secondary link only.
  */
 export default function TaskDrawer({ task, scope }) {
@@ -36,7 +36,8 @@ export default function TaskDrawer({ task, scope }) {
 
   const t = { ...task, ...(data || {}) };
   const isOpen = t.status === "Open";
-  const toCheck = t.status === "Closed" && !t.accepted;
+  // Closed by the manager is not work the person marked done (api/work closed_by_you).
+  const toCheck = t.status === "Closed" && !t.accepted && !t.closed_by_you;
   const fire = (detail) => window.dispatchEvent(new CustomEvent("cc-action", { detail }));
   const req = (kind) => ({ kind, title: t.title, detail: t.detail, todo: t.name, assignee: t.to,
                            assignee_name: t.to_name, date: t.date, priority: t.priority,
@@ -52,7 +53,7 @@ export default function TaskDrawer({ task, scope }) {
           <div className="dw-big task-who" title={t.to_name || t.to}>{t.to_name || t.to || "—"}</div>
           <div className="dw-chips">
             <span className={`dw-chip${isOpen ? "" : t.status === "Cancelled" ? " dw-c-crit" : " dw-c-ok"}`}>
-              {t.accepted ? "Accepted" : toCheck ? "Marked Done" : t.status || "—"}
+              {t.accepted ? "Accepted" : toCheck ? "Marked Done" : t.closed_by_you ? "Closed by You" : t.status || "—"}
             </span>
             <span className={`dw-chip${t.priority === "High" ? " dw-c-high" : ""}`}>{t.priority || "Medium"} Priority</span>
             {t.late_days > 0 ? (
@@ -75,6 +76,7 @@ export default function TaskDrawer({ task, scope }) {
                   <button type="button" className="dw-btn" onClick={() => fire(req("edit_task"))}>Edit Date And Priority</button>
                   <button type="button" className="dw-btn" onClick={() => fire(req("reassign"))}>Reassign</button>
                   <button type="button" className="dw-btn" onClick={() => fire(req("escalate"))}>Escalate</button>
+                  <button type="button" className="dw-btn" onClick={() => fire(req("close_task"))}>Close</button>
                   <button type="button" className="dw-btn failed" onClick={() => fire(req("cancel_task"))}>Cancel Assignment</button>
                 </>
               ) : (
@@ -94,7 +96,8 @@ export default function TaskDrawer({ task, scope }) {
             <dt>Given On</dt><dd>{t.created ? shortDate(t.created) : "—"}</dd>
             <dt>Due</dt><dd>{t.date ? shortDate(t.date) : "No date set"}</dd>
             <dt>Priority</dt><dd>{t.priority || "Medium"}</dd>
-            <dt>Status</dt><dd>{t.accepted ? "Accepted" : toCheck ? `Marked done${t.closed_on ? ` on ${shortDate(t.closed_on)}` : ""}` : t.status || "—"}</dd>
+            <dt>Status</dt><dd>{t.accepted ? "Accepted" : toCheck ? `Marked done${t.closed_on ? ` on ${shortDate(t.closed_on)}` : ""}`
+              : t.closed_by_you ? `Closed by you${t.closed_on ? ` on ${shortDate(t.closed_on)}` : ""}` : t.status || "—"}</dd>
             {t.modified ? (<><dt>Last Changed</dt><dd>{shortDate(t.modified.slice(0, 10))}</dd></>) : null}
           </dl>
         </Sec>

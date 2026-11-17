@@ -22,6 +22,13 @@
  * action dialog (api/actions). A row or card opens the task's own drawer (TaskDrawer.jsx),
  * not ERPNext. Each tile filters the list (its figure's `filter`, api/work.TILE_FILTERS),
  * and Today's Delegated Tasks Done and Overdue Delegated Tasks open it filtered the same way.
+ *
+ * Close and bulk actions (17 Nov 2026): Close on every open row (finished, or no longer
+ * needed; nobody is told). Each open row has a checkbox; Select All takes every row in
+ * the current view (so after the Late tile, every late one), and while anything is
+ * selected a bar offers Close Selected and Cancel Selected, which ask first in the action
+ * dialog (BulkChange: how many, to whom) and then go through api/actions.bulk_tasks.
+ * The selection only ever holds rows on screen, so a filter cannot act on hidden work.
  */
 
 import React from "react";
@@ -61,6 +68,10 @@ const FILTERS = {
 
 // Set by a Today tile just before it opens Outstanding Tasks; taken by the next render.
 let pendingFilter = null;
+
+// The open tasks ticked on Outstanding Tasks, by To-Do name. Emptied after a bulk action.
+const selected = new Set();
+if (typeof window !== "undefined") window.addEventListener("cc-tasks-unselect", () => selected.clear());
 
 export function renderWork(root, view, data, opts = {}) {
   if (!root || !data || !WORK_VIEWS.has(view)) return 0;
@@ -244,9 +255,14 @@ function delegation(root, data, opts) {
   }
   if (current !== "check") {
     wrap.append(el("div", "sect", current ? FILTERS[current].label : "Still Open"));
-    wrap.append(tasksTable(rows, { withPriority: true, opts,
+    // Only what is on screen stays selected, so a filter never acts on hidden work.
+    const shown = new Set(rows.map((t) => t.name));
+    [...selected].forEach((name) => shown.has(name) || selected.delete(name));
+    wrap.append(tasksTable(rows, { withPriority: true, selectable: true, opts,
       empty: current ? `Nothing you handed out is ${FILTERS[current].label.toLowerCase()}.`
         : "Nothing you handed out is open." }));
+  } else {
+    selected.clear();
   }
   (grid || root.querySelector(".topbar")).after(wrap);
 }
@@ -371,7 +387,7 @@ function checkCard(t, opts) {
   return card;
 }
 
-function tasksTable(rows, { withPriority = false, empty: none, opts } = {}) {
+function tasksTable(rows, { withPriority = false, selectable = false, empty: none, opts } = {}) {
   if (!rows.length) {
     const e = empty(none, "");
     e.classList.add("work-table");
@@ -379,6 +395,9 @@ function tasksTable(rows, { withPriority = false, empty: none, opts } = {}) {
   }
   const table = el("table", "dt");
   const head = el("tr");
+  const boxes = [];
+  let sync = () => {};
+  if (selectable) head.append(el("th", "work-pick"));
   ["What", "Given to", "By when", "Late by", ...(withPriority ? ["Priority"] : []), ""].forEach((h) => head.append(el("th", null, h)));
   const thead = el("thead");
   thead.append(head);
@@ -389,14 +408,29 @@ function tasksTable(rows, { withPriority = false, empty: none, opts } = {}) {
     if (t.late_days > 30) late.style.color = "var(--crit)";
     else if (t.late_days > 0) late.style.color = "var(--high)";
     const last = el("td", "work-acts");
-    // Edit, Reassign, Cancel: the work stays the manager's to manage (api/actions).
-    // Escalate goes up the line, to the manager ERPNext names for the person.
+    // Edit, Reassign, Close, Cancel: the work stays the manager's to manage (api/actions).
+    // Escalate goes up the line, to the manager ERPNext names for the person. Close is
+    // finished or no longer needed; Cancel is withdrawn.
     last.append(
       btn("Edit", "btn", () => fire("cc-action", taskRequest("edit_task", t))),
       btn("Reassign", "btn", () => fire("cc-action", taskRequest("reassign", t))),
       btn("Escalate", "btn", () => fire("cc-action", taskRequest("escalate", t))),
+      btn("Close", "btn", () => fire("cc-action", taskRequest("close_task", t))),
       btn("Cancel", "btn dgr", () => fire("cc-action", taskRequest("cancel_task", t))));
     opensTask(tr, t, opts);
+    if (selectable) {
+      const td = el("td", "work-pick");
+      const box = checkbox(`Select ${t.title}`, selected.has(t.name), (on) => {
+        if (on) selected.add(t.name);
+        else selected.delete(t.name);
+        sync();
+      });
+      box.dataset.todo = t.name;
+      boxes.push(box);
+      td.onclick = (e) => e.stopPropagation();
+      td.append(box);
+      tr.append(td);
+    }
     tr.append(el("td", null, t.title), el("td", null, t.to_name || t.to || "—"),
       el("td", null, t.date ? shortDate(t.date) : "—"), late,
       ...(withPriority ? [el("td", null, t.priority)] : []), last);
@@ -406,7 +440,58 @@ function tasksTable(rows, { withPriority = false, empty: none, opts } = {}) {
   // In a scroller, so a phone scrolls the table rather than the whole screen.
   const wrap = el("div", "work-table");
   wrap.append(table);
-  return wrap;
+  if (!selectable) return wrap;
+
+  // Select All (every row in this view), the count, and -- while anything is selected --
+  // the bar with Close Selected and Cancel Selected, which ask first.
+  const out = el("div", "work-selectable");
+  const tools = el("div", "work-select");
+  const all = checkbox("Select All", false, (on) => {
+    rows.forEach((t) => (on ? selected.add(t.name) : selected.delete(t.name)));
+    sync();
+  });
+  const allLabel = el("label", "work-all");
+  allLabel.append(all, el("span", null, "Select All"));
+  const tally = el("span", "work-count");
+  tools.append(allLabel, tally);
+  const bar = el("div", "work-bulk");
+  bar.setAttribute("role", "region");
+  bar.setAttribute("aria-label", "Selected Tasks");
+  const barCount = el("b", "work-bulk-n");
+  const chosen = () => rows.filter((t) => selected.has(t.name))
+    .map((t) => ({ name: t.name, title: t.title, to: t.to, to_name: t.to_name }));
+  const acts = el("div", "work-bulk-acts");
+  acts.append(
+    btn("Close Selected", "btn pri", () => fire("cc-action", { kind: "bulk_tasks", action: "close", tasks: chosen() })),
+    btn("Cancel Selected", "btn dgr", () => fire("cc-action", { kind: "bulk_tasks", action: "cancel", tasks: chosen() })),
+    btn("Clear", "btn", () => {
+      selected.clear();
+      sync();
+    }));
+  bar.append(barCount, acts);
+  sync = () => {
+    const n = rows.filter((t) => selected.has(t.name)).length;
+    boxes.forEach((b) => { b.checked = selected.has(b.dataset.todo); });
+    all.checked = n > 0 && n === rows.length;
+    all.indeterminate = n > 0 && n < rows.length;
+    tally.textContent = n ? `${count(n)} of ${count(rows.length)} selected` : `${count(rows.length)} in this view`;
+    barCount.textContent = `${count(n)} Selected`;
+    bar.hidden = !n;
+  };
+  sync();
+  out.append(tools, wrap, bar);
+  return out;
+}
+
+function checkbox(label, on, change) {
+  const box = el("input");
+  box.type = "checkbox";
+  box.checked = !!on;
+  box.setAttribute("aria-label", label);
+  box.dataset.ccWired = "1";
+  box.onclick = (e) => e.stopPropagation();
+  box.onchange = () => change(box.checked);
+  return box;
 }
 
 /* ------------------------------------------------------------------ helpers */
