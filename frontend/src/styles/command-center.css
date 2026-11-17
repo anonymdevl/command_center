@@ -2925,3 +2925,22 @@ body.cc-signin .auth-forgot b{font-weight:var(--fw-semibold);color:var(--ink)}
 /* Add Person's password choices: one per line, so three never wrap two-and-one. */
 .st-choice[role="radiogroup"]{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:4px 0 8px}
 .st-choice[role="radiogroup"] .st-check{margin:0}
+
+/* ======================================================================
+   The sign-in footer on one line (17 Nov 2026): "Ultrasoft Insights | Built by Ultrasoft
+   Systems | +233… | www…". Its two groups sit side by side and wrap as whole groups --
+   on a phone, the product and builder over the contacts, as two lines. Separators are a
+   thin "|" that takes no room; one that would start a line is hidden (_signin.html marks
+   the item .ls), so no line begins with a stray bar.
+   ====================================================================== */
+.auth-by{display:flex;flex-wrap:wrap;justify-content:center;align-items:baseline;column-gap:24px;row-gap:3px}
+.auth-by>.auth-by-l{position:relative;margin:0}
+.auth-by>.auth-by-l+.auth-by-l::before,.auth-by-l>span::before{content:"|";position:absolute;
+ left:-13px;width:6px;text-align:center;color:var(--dim);font-weight:var(--fw-regular)}
+.auth-by-l>span::before{left:-12px}
+.auth-by>.auth-by-l.ls::before,.auth-by-l>span.ls::before,.auth-by-l>span:first-child::before{content:none}
+@media (max-width:480px){
+ .auth-by-c{flex-direction:row;align-items:baseline}
+ .auth-by-c>span::before{content:"|"}
+ .auth-by-c>span:first-child::before,.auth-by-c>span.ls::before{content:none}
+}
