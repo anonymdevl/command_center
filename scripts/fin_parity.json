@@ -127,10 +127,10 @@
   ],
   "notes": [
    "Money the business cannot presently use: debts over three months old, stock on the shelves and orders not yet despatched.",
-   "What the ledger says we owe suppliers, by when it falls due. What is overdue and what falls due in the next 7, 30 and 60 days, after payments not yet matched are set against the oldest bills, against the cash customers are due to pay, so a payment run can be planned rather than guessed.",
-   "The balance on every bank and cash account in the ledger. Each balance is only as good as the last time the account was checked against the bank statement, so that date is shown beside it.",
+   "What the Supplier Ledger says we owe suppliers, by when it falls due. What is overdue and what falls due in the next 7, 30 and 60 days, after payments not yet matched are set against the oldest bills, against the cash customers are due to pay, so a payment run can be planned rather than guessed.",
+   "The General Ledger balance on every bank and cash account. Each balance is only as good as the last time the account was checked against the bank statement, so that date is shown beside it.",
    "Spending against the budgets set in ERPNext. Each budget line is compared with what has been posted to it this year, so a breach shows before the money is spent rather than after.",
-   "What the ledger says is owed on each tax account. The amount due on the next VAT, withholding or PAYE filing is the balance on its account; the filing dates themselves are not kept in ERPNext.",
+   "What the General Ledger says is owed on each tax account. The amount due on the next VAT, withholding or PAYE filing is the balance on its account; the filing dates themselves are not kept in ERPNext.",
    "What each product group earns over its cost, over the last twelve months. Margin needs the cost of each item against its selling price; lines sold with no recorded cost are counted separately rather than as pure profit."
   ],
   "onclicks": [
@@ -164,7 +164,7 @@
    ],
    [
     "Receivables and payables",
-    "What each really owes by the ledger, beside the open invoices and bills",
+    "Customer and Supplier Ledger Balances beside Invoice Outstanding",
     "explain('ledger')",
     "t*:Detail"
    ],
@@ -216,8 +216,8 @@
   "table_heads": [
    [
     "Customer or Supplier",
-    "On Open Invoices",
-    "Ledger Balance",
+    "Invoice Outstanding",
+    "Party Ledger Balance",
     "Difference",
     "Why",
     "Not Yet Due",
