@@ -8924,8 +8924,10 @@ class SetPasswordLink(TransactionTestCase):
         with mock.patch("smtplib.SMTP") as smtp:
             out = self._as(self.manager, "send_set_password_link", username="ama@test.com")
             self.assertTrue(out["ok"], out)
-            # never to an administrator, nor to someone with Settings access
-            self._as(self.manager, "send_set_password_link", 403, username="boss@test.com")
+            # never to an administrator -- who is hidden from delegates altogether, so is
+            # "no one with that email" (417), as in User Management -- nor to someone with
+            # Settings access (403)
+            self._as(self.manager, "send_set_password_link", 417, username="boss@test.com")
             self._ok("set_settings_access", username="ama@test.com", sections=["businesses"])
             self._as(self.manager, "send_set_password_link", 403, username="ama@test.com")
             # the administrator may send to anyone
