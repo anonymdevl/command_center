@@ -10,8 +10,8 @@ const RULES =
 /** The Settings sections an administrator can give a manager (platform_settings.GRANTS). */
 const GRANTS = [
   ["businesses", "Businesses", "add, edit, test, pause and reload businesses"],
-  ["people", "People", "add managers, deactivate and reactivate them, reset their passwords"],
-  ["keys", "Personal ERPNext Keys", "add, replace and remove managers' personal keys"],
+  ["people", "User Management", "add managers, deactivate and reactivate them, reset their passwords"],
+  ["keys", "ERPNext API Keys", "add, replace and remove managers' personal keys"],
 ];
 const GRANT_LABEL = Object.fromEntries(GRANTS.map(([k, label]) => [k, label]));
 

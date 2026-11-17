@@ -23,13 +23,13 @@ import "../styles/settings.css";
  * screens' own panels, tables, tabs, tags, buttons and dialogs.
  */
 const TABS = [
-  ["people", "People", SettingsPeople],
+  ["people", "User Management", SettingsPeople],
   ["businesses", "Businesses", SettingsBusinesses],
   ["customers", "Customers", SettingsCustomers],
   ["claude", "Claude", SettingsClaude],
   ["email", "Email", SettingsEmail],
   ["branding", "Branding", SettingsBranding],
-  ["keys", "Personal ERPNext Keys", SettingsCredentials],
+  ["keys", "ERPNext API Keys", SettingsCredentials],
   ["recommend", "Recommendations", SettingsRecommend],
   ["changes", "Changes", SettingsChanges],
   // The administrator's alone: never given to anyone (insights/core/security.py).

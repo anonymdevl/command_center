@@ -661,7 +661,7 @@ def _manager_of(conn, user):
             return no("no_key",
                       f"Your own ERPNext key is not linked, so ERPNext cannot be asked who "
                       f"{first}’s manager is as you.",
-                      "Link your ERPNext key under Settings → Personal ERPNext Keys, or "
+                      "Link your ERPNext key under Settings → ERPNext API Keys, or "
                       "choose who it goes to yourself.")
     try:
         rows = conn.get_list("Employee", filters={"user_id": user},

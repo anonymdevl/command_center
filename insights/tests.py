@@ -1535,8 +1535,8 @@ class SettingsDelegation(TransactionTestCase):
         self.assertEqual(self._grant(who="manager@test.com")["settings_access"], [])
         whats = " | ".join(c["what"] for c in self._ok("changes"))
         for phrase in ("gave manager@test.com access to Settings: Businesses",
-                       "gave manager@test.com access to Settings: Personal ERPNext Keys",
-                       "took away manager@test.com's access to Settings: Personal ERPNext Keys",
+                       "gave manager@test.com access to Settings: ERPNext API Keys",
+                       "took away manager@test.com's access to Settings: ERPNext API Keys",
                        "took away manager@test.com's access to Settings: Businesses"):
             self.assertIn(phrase, whats)
         from django.contrib.admin.models import LogEntry
@@ -1994,7 +1994,7 @@ class ManagementScreens(TransactionTestCase):
         # no personal key linked: the work screens get a guide, not someone else's queue
         work = post("command_center.api.work.summary", business_code="test_medical_ltd")
         self.assertFalse(work["available"])
-        self.assertIn("Personal ERPNext Keys", " ".join(work["guide"]["steps"]))
+        self.assertIn("ERPNext API Keys", " ".join(work["guide"]["steps"]))
         # alerts raised for the first time are emailed once; without mail it is recorded
         alerts = post("command_center.api.alerts.open_alerts", business_code="test_medical_ltd")
         loud = [a for a in alerts["alerts"] if a["severity"] in ("crit", "high")]

@@ -58,7 +58,7 @@ RELOAD_KEY = "cc:settings:reload:{}"
 # The sections an administrator can give a manager, each a Django group.
 GRANTS = {"businesses": "Settings: Businesses", "people": "Settings: People",
           "keys": "Settings: Personal Keys"}
-GRANT_WORDS = {"businesses": "Businesses", "people": "People", "keys": "Personal ERPNext Keys"}
+GRANT_WORDS = {"businesses": "Businesses", "people": "User Management", "keys": "ERPNext API Keys"}
 # What the administrator sees, in the screen's order.
 ALL_SECTIONS = ["people", "businesses", "customers", "claude", "email", "branding", "keys",
                 "recommend", "changes", "security"]
@@ -429,7 +429,7 @@ def set_settings_access(username: str = "", sections=None):
     wanted = [str(x).strip() for x in (sections or [])]
     unknown = [x for x in wanted if x not in GRANTS]
     if unknown:
-        _say("Only Businesses, People and Personal ERPNext Keys can be given.")
+        _say("Only Businesses, User Management and ERPNext API Keys can be given.")
     if u.is_superuser:
         _say(f"{_name(u)} is an administrator and can open all of Settings already.")
     if wanted and not u.is_active:

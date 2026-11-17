@@ -71,7 +71,7 @@ def _key_guide(code, name) -> dict:
                   "and under API Access press Generate Keys. Copy the API Key and the API "
                   "Secret shown; the secret is shown only once.",
                   "Give both to a platform administrator, who adds them for you under "
-                  "Settings → Personal ERPNext Keys.",
+                  "Settings → ERPNext API Keys.",
                   "Open this screen again: what is waiting on you appears here."],
                  "/app/user", label="Open your user in ERPNext")
 

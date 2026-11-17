@@ -95,7 +95,7 @@ export function SettingsCredentials() {
     <div className="panel">
       <div className="ph">
         <div>
-          <b>Personal ERPNext Keys</b>
+          <b>ERPNext API Keys</b>
           <span>A person's own key on a business's ERPNext, so what they approve here is done as them there.</span>
         </div>
         <button className="btn pri" onClick={() => setEditing({})}>Add Key</button>
