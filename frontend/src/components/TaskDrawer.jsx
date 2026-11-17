@@ -15,6 +15,9 @@ import { Sec } from "./Understanding.jsx";
  * through the action dialog, which asks first. ERPNext is a secondary link only.
  */
 export default function TaskDrawer({ task, scope }) {
+  // The task's own business (api/work stamps every row); the scope only for a row from
+  // before that, and never "All businesses", which the server refuses for a change.
+  const business = task.business_code || scope;
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -22,11 +25,11 @@ export default function TaskDrawer({ task, scope }) {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    api.task({ business_code: scope, todo: task.name })
+    api.task({ business_code: business, todo: task.name })
       .then((d) => setData(d || null))
       .catch((e) => setError(e))
       .finally(() => setLoading(false));
-  }, [scope, task.name]);
+  }, [business, task.name]);
 
   useEffect(() => {
     load();
@@ -39,7 +42,8 @@ export default function TaskDrawer({ task, scope }) {
   // Closed by the manager is not work the person marked done (api/work closed_by_you).
   const toCheck = t.status === "Closed" && !t.accepted && !t.closed_by_you;
   const fire = (detail) => window.dispatchEvent(new CustomEvent("cc-action", { detail }));
-  const req = (kind) => ({ kind, title: t.title, detail: t.detail, todo: t.name, assignee: t.to,
+  const biz = t.business_code || business;
+  const req = (kind) => ({ kind, business_code: biz, title: t.title, detail: t.detail, todo: t.name, assignee: t.to,
                            assignee_name: t.to_name, date: t.date, priority: t.priority,
                            doctype: t.reference?.doctype, docname: t.reference?.name });
   const doc = t.document || (t.reference ? { ...t.reference } : null);
@@ -81,8 +85,8 @@ export default function TaskDrawer({ task, scope }) {
                 </>
               ) : (
                 <>
-                  <button type="button" className="dw-btn" onClick={() => fire({ kind: "review", verdict: "accept", todo: t.name, title: t.title })}>Accept It</button>
-                  <button type="button" className="dw-btn failed" onClick={() => fire({ kind: "review", verdict: "return", todo: t.name, title: t.title })}>Send It Back</button>
+                  <button type="button" className="dw-btn" onClick={() => fire({ kind: "review", verdict: "accept", business_code: biz, todo: t.name, title: t.title })}>Accept It</button>
+                  <button type="button" className="dw-btn failed" onClick={() => fire({ kind: "review", verdict: "return", business_code: biz, todo: t.name, title: t.title })}>Send It Back</button>
                 </>
               )}
             </div>

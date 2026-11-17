@@ -82,6 +82,7 @@ export function renderWork(root, view, data, opts = {}) {
   if (view === "approvals") approvals(root, data);
   if (view === "myday") today(root, data, opts);
   if (view === "delegation") delegation(root, data, opts);
+  else capNote(root, view, data);
   return live;
 }
 
@@ -120,6 +121,26 @@ function unavailable(root, view, data, opts) {
   }
   setWhen(root, down ? WAITING.foot : "your ERPNext key is not linked yet");
   return live;
+}
+
+/** A list the server cut short says so, under it (api/work limits): never a silent cap. */
+function capNote(root, view, data) {
+  root.querySelector(".work-cap")?.remove();
+  const lim = data.limits || {};
+  const said = [];
+  if (lim.approvals && (view === "approvals" || view === "myday")) {
+    said.push(`Only the oldest ${count(lim.approvals)} documents at each of your steps were read`
+      + `${lim.approvals_in?.length ? ` (${lim.approvals_in.join(", ")})` : ""}; more are waiting in ERPNext.`);
+  }
+  if (lim.handed_out && (view === "delegation" || view === "myday")) {
+    said.push(`Showing the first ${count(lim.handed_out)} tasks you handed out; ERPNext holds more.`);
+  }
+  if (lim.mine && view === "myday") said.push(`Showing the first ${count(lim.mine)} of your own To-Dos.`);
+  if (!said.length) return;
+  const list = root.querySelector(".work-list, .work-table");
+  if (!list) return;
+  const p = el("p", "dlg-hint work-cap", said.join(" "));
+  list.after(p);
 }
 
 /* ------------------------------------------------------------------ screens */
@@ -199,6 +220,7 @@ function today(root, data, opts) {
 function delegation(root, data, opts) {
   setWhen(root, `${data.open.length} open · ${data.late.length} late · `
     + `${data.check.length} to check · ${data.open.filter((t) => t.priority === "High").length} high priority`);
+  root.dataset.workBusiness = data.business_code || "";
   newTaskButton(root);
   // The designed sample (one task, its states and its evidence) goes, up to the note.
   const grid = root.querySelector(".grid");
@@ -266,6 +288,7 @@ function delegation(root, data, opts) {
     selected.clear();
   }
   (grid || root.querySelector(".topbar")).after(wrap);
+  capNote(root, "delegation", data);
 }
 
 /** New Task, beside the screen's heading: the action dialog's own form. */
@@ -273,7 +296,10 @@ function newTaskButton(root) {
   const bar = root.querySelector(".topbar");
   if (!bar || bar.querySelector(".work-tools")) return;
   const tools = el("div", "work-tools");
-  tools.append(btn("New Task", "btn pri", () => fire("cc-action", { kind: "new_task", title: "" })));
+  // The business it goes to is chosen in the dialog when the screen shows "All
+  // businesses"; preset to the one this list was read from.
+  tools.append(btn("New Task", "btn pri", () => fire("cc-action", { kind: "new_task", title: "",
+                                                                   preset_business: root.dataset.workBusiness || "" })));
   bar.append(tools);
 }
 
@@ -302,7 +328,8 @@ function opensTask(node, t, opts) {
 
 /** What an open task's buttons send to the action dialog. */
 export function taskRequest(kind, t) {
-  return { kind, title: t.title, detail: t.detail, todo: t.name, assignee: t.to,
+  // The task's own business (api/work stamps every row), never the screen's scope.
+  return { kind, business_code: t.business_code, title: t.title, detail: t.detail, todo: t.name, assignee: t.to,
            assignee_name: t.to_name, date: t.date, priority: t.priority,
            doctype: t.reference?.doctype, docname: t.reference?.name };
 }
@@ -341,7 +368,10 @@ function approvalCard(a, currency) {
   const acts = el("div", "acts");
   a.actions.forEach((action, i) => {
     acts.append(btn(action, i === 0 ? "btn pri" : /reject|cancel|return/i.test(action) ? "btn dgr" : "btn",
-      () => fire("cc-action", { kind: "decide", doctype: a.doctype, name: a.name, action,
+      // The state and stamp the card shows: the server refuses the action if the document
+      // has moved on since (api/actions.apply_workflow_action), never applies it to a later step.
+      () => fire("cc-action", { kind: "decide", business_code: a.business_code, doctype: a.doctype, name: a.name, action,
+                                state: a.state, state_field: a.state_field, modified: a.modified,
                                 title: `${a.doctype} — ${a.title}` })));
   });
   acts.append(btn("Ask AI about this", "btn", () => fire("cc-ask", {
@@ -381,8 +411,8 @@ function checkCard(t, opts) {
 
   const acts = el("div", "acts");
   acts.append(
-    btn("Accept it", "btn pri", () => fire("cc-action", { kind: "review", verdict: "accept", todo: t.name, title: t.title })),
-    btn("Send it back", "btn dgr", () => fire("cc-action", { kind: "review", verdict: "return", todo: t.name, title: t.title })),
+    btn("Accept it", "btn pri", () => fire("cc-action", { kind: "review", verdict: "accept", business_code: t.business_code, todo: t.name, title: t.title })),
+    btn("Send it back", "btn dgr", () => fire("cc-action", { kind: "review", verdict: "return", business_code: t.business_code, todo: t.name, title: t.title })),
   );
   card.append(acts);
   return card;
@@ -465,11 +495,13 @@ function tasksTable(rows, { withPriority = false, selectable = false, empty: non
   bar.setAttribute("aria-label", "Selected Tasks");
   const barCount = el("b", "work-bulk-n");
   const chosen = () => rows.filter((t) => selected.has(t.name))
-    .map((t) => ({ name: t.name, title: t.title, to: t.to, to_name: t.to_name }));
+    .map((t) => ({ name: t.name, title: t.title, to: t.to, to_name: t.to_name, business_code: t.business_code }));
   const acts = el("div", "work-bulk-acts");
   acts.append(
-    btn("Close Selected", "btn pri", () => fire("cc-action", { kind: "bulk_tasks", action: "close", tasks: chosen() })),
-    btn("Cancel Selected", "btn dgr", () => fire("cc-action", { kind: "bulk_tasks", action: "cancel", tasks: chosen() })),
+    btn("Close Selected", "btn pri", () => fire("cc-action", { kind: "bulk_tasks", action: "close", tasks: chosen(),
+                                                               business_code: rows[0]?.business_code })),
+    btn("Cancel Selected", "btn dgr", () => fire("cc-action", { kind: "bulk_tasks", action: "cancel", tasks: chosen(),
+                                                                business_code: rows[0]?.business_code })),
     btn("Clear", "btn", () => {
       selected.clear();
       sync();
