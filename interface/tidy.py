@@ -48,6 +48,14 @@ def tabify(view_html, tabs=("Overview","Detail","Not yet measured"), ov_count=3)
             head.append(b)
         else:
             rest.append(b)
+    # data-tab="Name": a block that is a tab of its own (Stock & Warehouses' Stock Balance
+    # and Stock Movements), placed after Overview and Detail, before Not yet measured.
+    own=[];kept=[]
+    for b in rest:
+        m=re.match(r'\s*<div[^>]*\sdata-tab="([^"]+)"', b)
+        if m: own.append((m.group(1), b))
+        else: kept.append(b)
+    rest=kept
     gaps=[];body=[]
     for b in rest:
         # a block is a "gap" block if its only substantive content is a thin note
@@ -63,6 +71,7 @@ def tabify(view_html, tabs=("Overview","Detail","Not yet measured"), ov_count=3)
     names=[]
     if ov: names.append(tabs[0]); panes.append("".join(ov))
     if det: names.append(tabs[1]); panes.append("".join(det))
+    for n,b in own: names.append(n); panes.append(b)
     if gaps: names.append(tabs[2]); panes.append("".join(gaps))
     if len(panes)<=1:
         return "".join(head)+"".join(panes)

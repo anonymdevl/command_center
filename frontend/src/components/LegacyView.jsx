@@ -28,6 +28,7 @@ import { PANEL_VIEWS, renderPanels } from "../legacy/panels.js";
 import { disposeWithin } from "../legacy/viz.js";
 import { renderLoads } from "../legacy/loads.js";
 import { PEOPLE_VIEWS, renderPeople } from "../legacy/people.js";
+import { STOCK_VIEWS, renderStock } from "../legacy/stock.js";
 import { REC_VIEWS, recsFailed, renderRecs } from "../legacy/recommend.js";
 import { STATEMENT_VIEWS, mountStatements } from "../legacy/statements.js";
 import { SUMMARY_VIEWS, memoFailed, renderMemo, renderShort, renderWaiting } from "../legacy/summary.js";
@@ -677,6 +678,12 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     if (!PEOPLE_VIEWS.has(viewKey)) return undefined;
     return renderPeople(ref.current, { scope, openDrawer });
   }, [viewKey, html, scope, openDrawer]);
+
+  // Stock & Warehouses' Stock Balance and Stock Movements tabs (legacy/stock.js).
+  useEffect(() => {
+    if (!STOCK_VIEWS.has(viewKey)) return undefined;
+    return renderStock(ref.current, { scope });
+  }, [viewKey, html, scope]);
 
   // The designed action buttons (Assign, the "⋯" menu, Raise it...) had no handlers.
   useEffect(() => {

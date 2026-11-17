@@ -35,6 +35,14 @@ V_PROC=f'''<div class="topbar"><div><h3>Buying and Suppliers</h3>
 {cover0()}'''
 
 # ============ INVENTORY ============
+# Stock Balance and Stock Movements are record tables drawn by frontend/src/legacy/stock.js
+# from api/stock.py (search, warehouse, dates, Excel). .ppanel, not .panel, so the panels'
+# renderer (legacy/panels.js) leaves them alone. Heading only: no line under it. Each is a
+# tab of its own (data-tab: tidy.py tabify), after Overview and Detail.
+def stock_section(key, title):
+    return (f'<div class="ppanel" data-tab="{title}" data-sk="{key}"><div class="ph"><div>'
+            f'<b>{title}</b></div></div><div class="pp-body"></div></div>')
+
 V_INV=f'''<div class="topbar"><div><h3>Stock &amp; Warehouses</h3>
 <div class="when">What is held, where, and what is promised against it</div></div></div>
 <div class="kpis six">
@@ -56,4 +64,6 @@ V_INV=f'''<div class="topbar"><div><h3>Stock &amp; Warehouses</h3>
 <div class="two">
 {panel("Stock that is not moving", thin("<b>Products holding stock that have not moved in ninety days.</b> Every product is aged by its last stock movement, with the value still sitting on the shelf."))}
 {panel("Expiry", thin("<b>Batches that expire soon, or already have.</b> Batch expiry dates drive near-expiry warnings and first-expiry-first-out picking. For a medical supplier this is the panel that matters most."))}
-</div>'''
+</div>
+{stock_section("balance", "Stock Balance")}
+{stock_section("movements", "Stock Movements")}'''
