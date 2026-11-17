@@ -3646,7 +3646,7 @@ class Branding(TransactionTestCase):
         link the administrator sends (User Management), and the sign-in page says so."""
         login = Client().get("/sign-in").content.decode()
         self.assertNotIn('href="/login', login)
-        self.assertIn("Ask your administrator.", login)
+        self.assertIn("Ask your administrator<i class=\"auth-sep\" aria-hidden=\"true\">|</i>Management Team Only", login)
         self.assertIn("Management Team Only", login)
 
     def test_built_in_mark(self):
