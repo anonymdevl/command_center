@@ -386,33 +386,55 @@ function Concentration({ data, scope, filters, openDrawer }) {
   );
 }
 
-/** The largest records themselves, each opening its document in ERPNext. */
+/**
+ * The biggest single documents, as a short list -- not bars, which made it look like a
+ * second "Where It Is Concentrated" (17 Nov 2026). That section totals by customer,
+ * supplier or warehouse; this one names the individual documents to open first: number,
+ * whose, when, how much. Left out when it would only repeat the concentration (each of
+ * those names holds exactly one record).
+ */
 function Largest({ data }) {
-  const m = data.summary.measure;
+  // The amount column: the server names it; else the first money column.
+  const m = data.summary.measure || data.columns.find((c) => c.type === "currency")?.key;
+  if (!m) return null;
   const top = [...data.rows].sort((a, b) => (Number(b[m]) || 0) - (Number(a[m]) || 0)).slice(0, 5);
-  const most = Math.max(...top.map((r) => Math.abs(Number(r[m]) || 0)), 0) || 1;
+  const dim = DIMENSION_FIELD[data.fact];
+  const conc = data.summary.concentration || [];
+  const repeats = dim && conc.length > 1
+    && top.every((r) => conc.some((c) => c.label === r[dim] && c.count === 1));
+  if (repeats) return null;
+  const doc = data.columns.find((c) => c.type === "doc");
+  const dc = dateCol(data);
   const isMoney = moneyMeasure(data);
   return (
-    <Sec title={`The Largest ${cap(nouns(data, 2))}`}>
-      <div className="dw-bars">
+    <Sec title={`Biggest Single ${cap(nouns(data, 2))}`}>
+      <p className="dw-note dw-note-top">
+        Individual {nouns(data, 2)}, largest first{dim ? ` — not totals by ${data.summary.dimension_word}` : ""}.
+      </p>
+      <ol className="dw-list">
         {top.map((r, i) => {
+          const name = (doc && r[doc.key]) || nameOf(data, r);
+          const who = dim && r[dim] && r[dim] !== name ? r[dim] : null;
+          const when = dc && r[dc.key] ? shortDate(r[dc.key]) : null;
           const body = (
             <>
-              <span className="dw-bar-l">{nameOf(data, r)}</span>
-              <span className="dw-bar-t" aria-hidden="true">
-                <i className="dw-b-start" style={{ width: `${Math.max(1, (100 * Math.abs(Number(r[m]) || 0)) / most)}%` }} />
+              <span className="dw-list-t">
+                <b>{name}</b>
+                {who || when ? <small>{[who, when].filter(Boolean).join(" · ")}</small> : null}
               </span>
-              <span className="dw-bar-v">{isMoney ? exact(r[m]) : count(r[m])}</span>
+              <span className="dw-list-v">{isMoney ? exact(r[m]) : count(r[m])}</span>
             </>
           );
-          return r.open_url ? (
-            <a key={`${r.src_name}-${i}`} className="dw-bar dw-bar-link" href={r.open_url} target="_blank"
-               rel="noreferrer" title={`Open ${r.src_doctype} ${r.src_name} in ERPNext`}>{body}</a>
-          ) : (
-            <div key={`${r.src_name}-${i}`} className="dw-bar">{body}</div>
+          return (
+            <li key={`${r.src_name}-${i}`}>
+              {r.open_url ? (
+                <a className="dw-list-row" href={r.open_url} target="_blank" rel="noreferrer"
+                   title={`Open ${r.src_doctype} ${r.src_name} in ERPNext`}>{body}</a>
+              ) : <div className="dw-list-row">{body}</div>}
+            </li>
           );
         })}
-      </div>
+      </ol>
     </Sec>
   );
 }

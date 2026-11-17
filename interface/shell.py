@@ -1603,4 +1603,16 @@ body.cc-signin .auth-sep{font-style:normal;color:var(--dim);margin:0 8px}
 
 /* The balance sheet's check when it could not be run: neutral, neither passed nor failed. */
 .fs-check.na{background:var(--raised);color:var(--mut)}
+
+/* The drawer's "Biggest Single …": a plain ruled list of documents, not bars, so it never
+   reads as a second "Where It Is Concentrated" (Records.jsx Largest). */
+.dw-list{list-style:none;margin:0;padding:0}
+.dw-list li{border-top:1px solid var(--line)}
+.dw-list li:first-child{border-top:0}
+.dw-list-row{display:flex;align-items:center;gap:12px;padding:9px 2px;color:inherit;text-decoration:none}
+a.dw-list-row:hover .dw-list-t b{color:var(--accent-ink)}
+.dw-list-t{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
+.dw-list-t b{font-weight:var(--fw-semibold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dw-list-t small{font-size:var(--fs-xs);color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dw-list-v{flex:none;font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold)}
 """

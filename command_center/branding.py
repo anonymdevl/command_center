@@ -86,6 +86,24 @@ PLATFORM_KINDS = LOGO_KINDS + (REPORT_KIND, SIGNIN_KIND)
 #   logo_signin             the built-in mark (.auth-mark, command-center-login.html),
 #                           nothing else
 DEFAULT_FAVICON = "/assets/command_center/images/command-center.svg"
+
+
+def _fingerprinted(path: str) -> str:
+    """The address with a fingerprint of the file's contents: nginx serves
+    /assets/command_center/ with a year's "immutable" caching (deploy/domain.sh), so a
+    changed icon under the same address stayed the old one in every browser that had
+    seen it (17 Nov 2026). A new drawing gets a new address and is fetched at once."""
+    import hashlib
+    from pathlib import Path
+    try:
+        here = Path(__file__).resolve().parent / "public" / path.split("/assets/command_center/", 1)[1]
+        return f"{path}?v={hashlib.sha1(here.read_bytes()).hexdigest()[:10]}"
+    except Exception:
+        return path
+
+
+# What the pages link to: the built-in icon, at an address that changes with its drawing.
+DEFAULT_FAVICON_URL = _fingerprinted(DEFAULT_FAVICON)
 CLIENT_KIND = "client"
 # A business's letterhead: the strip printed at the top of every page, and the optional
 # one at the foot.
@@ -208,7 +226,7 @@ def branding(business_code: str | None = None) -> dict:
         # One logo set serves both backgrounds.
         "logo_light": light or dark, "logo_dark": dark or light,
         "logo_light_url": url_for(light or dark), "logo_dark_url": url_for(dark or light),
-        "favicon_url": url_for(s.get("favicon")) or DEFAULT_FAVICON,
+        "favicon_url": url_for(s.get("favicon")) or DEFAULT_FAVICON_URL,
         # The sign-in page's: its own logo or nothing (the page then draws the built-in
         # mark). Never the screens' logos: a logo chosen for the sidebar is not one chosen
         # for the sign-in page.

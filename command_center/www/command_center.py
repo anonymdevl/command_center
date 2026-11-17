@@ -92,7 +92,7 @@ def _brand() -> dict:
         frappe.log_error(title="Command Center branding", message=frappe.get_traceback())
         return {**branding.DEFAULTS, "product": branding.DEFAULTS["product_name"],
                 "logo_light_url": None, "logo_dark_url": None, "logo_signin_url": None,
-                "favicon_url": branding.DEFAULT_FAVICON,
+                "favicon_url": branding.DEFAULT_FAVICON_URL,
                 "built_by": branding.DEFAULTS["company"], "contacts": []}
 
 

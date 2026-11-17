@@ -3693,7 +3693,7 @@ class Branding(TransactionTestCase):
         brand = self._boot(self.manager)["brand"]
         self.assertIsNone(brand["logo_light_url"], "the sidebar falls back to its built-in mark")
         self.assertIsNone(branding.branding()["report_logo"])
-        self.assertTrue(branding.branding()["favicon_url"].endswith("/images/command-center.svg"))
+        self.assertEqual(branding.branding()["favicon_url"], branding.DEFAULT_FAVICON_URL)
         self.assertIn(sign, login())
         # removed: the built-in mark again, and its file is deleted
         self._ok("remove_brand_logo", kind="logo_signin")
@@ -3758,8 +3758,10 @@ class Branding(TransactionTestCase):
                          "the sidebar's fallback is the lens mark")
         brand = self._boot(self.manager)["brand"]
         self.assertIsNone(brand["logo_light_url"], "nothing uploaded: the sidebar shows the mark")
-        self.assertEqual(brand["favicon_url"], branding.DEFAULT_FAVICON)
-        self.assertIn(f'<link rel="icon" href="{branding.DEFAULT_FAVICON}">', login)
+        self.assertEqual(brand["favicon_url"], branding.DEFAULT_FAVICON_URL)
+        # A year's immutable caching on /assets: the address must change with the drawing.
+        self.assertRegex(branding.DEFAULT_FAVICON_URL, r"command-center\.svg\?v=[0-9a-f]{10}$")
+        self.assertIn(f'<link rel="icon" href="{branding.DEFAULT_FAVICON_URL}">', login)
         self.assertEqual(Client().get(branding.DEFAULT_FAVICON).status_code, 200)
         # uploaded: each logo replaces the mark where it stands in
         light = self._ok("upload_brand_logo", kind="logo_light", data=_data_url(_png(6, 2)))["logo_light_url"]
@@ -3777,7 +3779,7 @@ class Branding(TransactionTestCase):
             self._ok("remove_brand_logo", kind=kind)
         login = Client().get("/sign-in").content.decode()
         self.assertIn(_MARK_TILE, login)
-        self.assertIn(f'<link rel="icon" href="{branding.DEFAULT_FAVICON}">', login)
+        self.assertIn(f'<link rel="icon" href="{branding.DEFAULT_FAVICON_URL}">', login)
 
     def test_sign_in_page_threads(self):
         """The sign-in page is "It notices you" (L3, 16 Nov 2026): a canvas of threads behind

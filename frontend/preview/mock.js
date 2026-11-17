@@ -150,6 +150,7 @@ function records(fact) {
       count: SAMPLE_CUSTOMERS.length,
       shown: SAMPLE_CUSTOMERS.length,
       total,
+      measure: "outstanding",
       measure_word: "sample values",
       top_share: 75,
       dimension_word: "customer",
