@@ -5,17 +5,26 @@
 import { api } from "../api/client.js";
 import { clearTurns, currentConversation, open } from "../askHistory.js";
 
+// The latest read per list: a slower read for the business before -- or an earlier read
+// for this one -- that lands last is not drawn (17 Nov 2026).
+const reads = new WeakMap();
+
 export async function renderConversations(root, scope) {
   const box = root?.querySelector("#askconvs");
   if (!box) return;
+  const seq = (reads.get(box) || 0) + 1;
+  reads.set(box, seq);
+  box.dataset.scope = scope || "";
+  const latest = () => reads.get(box) === seq && box.dataset.scope === (scope || "")
+    && document.body.contains(box);
   let list = [];
   try {
     list = (await api.convRecent(scope)) || [];
   } catch {
-    box.hidden = true;
+    if (latest()) box.hidden = true;
     return;
   }
-  if (!document.body.contains(box)) return;
+  if (!latest()) return;
   box.textContent = "";
   box.hidden = !list.length;
   if (!list.length) return;
@@ -36,7 +45,13 @@ export async function renderConversations(root, scope) {
     b.append(el("span", "askconv-t", c.title || "Conversation"),
       el("span", "askconv-m", `${when(c.last_at)} · ${c.turn_count || 0} question${c.turn_count === 1 ? "" : "s"}`));
     b.onclick = async () => {
-      await open(c.name, scope);
+      try {
+        await open(c.name, scope);
+      } catch (e) {
+        // Not an unhandled rejection: the list says the conversation could not be opened.
+        failedNote(box, `That conversation could not be opened: ${e?.message || "no reply"}`);
+        return;
+      }
       window.drawThread?.();
       renderConversations(root, scope);
     };
@@ -58,6 +73,13 @@ export async function renderConversations(root, scope) {
     ul.append(li);
   });
   box.append(ul);
+}
+
+function failedNote(box, text) {
+  box.querySelector(":scope > .askconvs-err")?.remove();
+  const n = el("div", "askconvs-err", text);
+  n.setAttribute("role", "status");
+  box.append(n);
 }
 
 function when(ts) {

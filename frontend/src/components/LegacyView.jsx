@@ -21,6 +21,7 @@ import { ALERT_VIEWS, alertsFailed, renderAlerts } from "../legacy/alerts.js";
 import { CORE_PANEL_VIEWS, renderCore } from "../legacy/core.js";
 import { OVERVIEW_VIEWS } from "../legacy/overview.js";
 import ReachBanner from "./ReachBanner.jsx";
+import { staleWords } from "../legacy/reach.js";
 import { renderHealthTiles, renderHome } from "../legacy/home.js";
 import { renderSchedules } from "../legacy/schedules.js";
 import { PANEL_VIEWS, renderPanels } from "../legacy/panels.js";
@@ -31,6 +32,28 @@ import { REC_VIEWS, recsFailed, renderRecs } from "../legacy/recommend.js";
 import { STATEMENT_VIEWS, mountStatements } from "../legacy/statements.js";
 import { SUMMARY_VIEWS, memoFailed, renderMemo, renderShort, renderWaiting } from "../legacy/summary.js";
 import { watchTables } from "../legacy/tables.js";
+
+// The AI's short version of the Executive Summary, asked for once per business and week
+// (busy while asked; a failed or unfinished ask is tried again after SHORT_RETRY_MS). Kept
+// outside the screen, which is drawn afresh for each business (App.jsx keys it).
+const SHORT_ASKED = new Map();
+const SHORT_RETRY_MS = 5 * 60 * 1000;
+
+/**
+ * One quiet line when a refresh failed and the screen still shows the last answers it
+ * read (useApi keeps them): when they were read, and that it is tried again. The calm
+ * words are reach.js's; a part with nothing to show says its own failure instead.
+ */
+function StaleNote({ parts }) {
+  const kept = parts.filter((p) => p && p.error && p.data && p.at);
+  if (!kept.length) return null;
+  const at = Math.min(...kept.map((p) => p.at));
+  return (
+    <div className="stale-note" role="status">
+      {staleWords(at, kept.some((p) => p.error?.status === 401 || p.error?.status === 403))}
+    </div>
+  );
+}
 
 /**
  * A designed screen, with live figures put into it.
@@ -130,23 +153,39 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     };
   }, [hasMemo, memo.reload]);
   // The short version: the one worked out from the figures is shown at once; when the AI
-  // may write today's, it is asked for once per business and day, and swapped in.
+  // may write today's, it is asked for once per business and week, and swapped in. A
+  // request that fails, or comes back still being written elsewhere, is asked again on a
+  // later read of the memo (SHORT_RETRY_MS); a failure says so under the paragraph rather
+  // than promising one that is not coming (17 Nov 2026).
   const [aiShort, setAiShort] = useState(null);
-  const asked = useRef(new Set());
+  const alive = useRef(true);
   useEffect(() => {
-    setAiShort(null);
-  }, [scope]);
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   useEffect(() => {
     const s = memo.data?.short;
     if (!hasMemo || !s?.pending) return;
     const once = `${scope}|${memo.data?.header?.week_to || ""}`;
-    if (asked.current.has(once)) return;
-    asked.current.add(once);
+    const prev = SHORT_ASKED.get(once);
+    if (prev && (prev.busy || Date.now() - prev.at < SHORT_RETRY_MS)) return;
+    SHORT_ASKED.set(once, { busy: true, at: Date.now() });
     api.summaryWrite(scope)
       .then((got) => {
-        if (got?.text) setAiShort({ scope, ...got });
+        SHORT_ASKED.set(once, { busy: false, at: Date.now() });
+        if (alive.current && got?.text) setAiShort({ scope, ...got });
       })
-      .catch(() => {});
+      .catch((e) => {
+        SHORT_ASKED.set(once, { busy: false, at: Date.now() });
+        if (!alive.current) return;
+        const signedOut = e?.status === 401 || e?.status === 403;
+        setAiShort({ scope, text: s.text, source: "fallback", pending: false,
+          why: signedOut
+            ? "You have been signed out, so the AI's version was not written; sign in again to see it."
+            : "The AI's version could not be written just now; it is asked for again in a few minutes." });
+      });
   }, [hasMemo, scope, memo.data]);
 
   // Live: while the screen is being looked at, its figures, panels, work and alerts are
@@ -583,6 +622,12 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       hydrateCards(root, viewKey, figures.data, opts) +
       hydrateTiles(root, viewKey, figures.data, opts) +
       (isWork ? renderWork(root, viewKey, work.data, { ...opts, onOpen: records, scope }) : 0));
+    // The queue could not be read and nothing is in hand: the line under the heading says
+    // so, rather than "Reading…" for ever (the banner above says why).
+    if (isWork && work.error && !work.data) {
+      const when = root.querySelector(".topbar .when");
+      if (when) when.textContent = "Could not be read just now";
+    }
     if (hasAlerts) renderAlerts(root, viewKey, alerts.data, opts);
     if (viewKey === "command") {
       renderHome(root, { figures: figures.data, alerts: alerts.data, scope, onOpen: opts.onOpen });
@@ -596,11 +641,12 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
       if (memo.error && !memo.data) memoFailed(root, memo.error);
       // The AI's paragraph, once written for this business, over the one worked out.
       if (aiShort && aiShort.scope === scope && memo.data?.short?.source !== "ai") renderShort(root, aiShort);
-      renderWaiting(root, waiting.data, { go: (k) => goRef.current?.(k) });
+      renderWaiting(root, waiting.data, { go: (k) => goRef.current?.(k), error: waiting.error,
+                                          retry: () => waiting.reload() });
     }
     if (hasPanels) {
       renderPanels(root, viewKey, panels.data, { onOpen: opts.onOpen, openDrawer, scope,
-                                                 failed: !!panels.error });
+                                                 failed: !!panels.error && !panels.data });
     }
     // The management screens: nothing left designed, a dash and a reason where a figure
     // could not be read (legacy/core.js).
@@ -616,7 +662,8 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
     });
   }, [viewKey, html, figures.data, figures.error, work.data, work.error, isWork, alerts.data,
       alerts.error, hasAlerts, scope, openDrawer, hasPanels, panels.data, panels.error, reachDown,
-      hasRecs, recs.data, recs.error, hasMemo, memo.data, memo.error, waiting.data, aiShort]);
+      hasRecs, recs.data, recs.error, hasMemo, memo.data, memo.error, waiting.data, waiting.error,
+      aiShort]);
 
   // The screen's charts (legacy/viz.js) are disposed with it, not left for the sweep.
   useEffect(() => {
@@ -633,8 +680,8 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
 
   // The designed action buttons (Assign, the "⋯" menu, Raise it...) had no handlers.
   useEffect(() => {
-    wireActions(ref.current);
-  }, [viewKey, html]);
+    wireActions(ref.current, scope);
+  }, [viewKey, html, scope]);
 
   // Every data table scrolls sideways in its own box; figures and dates stay on one line.
   useEffect(() => watchTables(ref.current), [viewKey, html]);
@@ -685,13 +732,14 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
           waiting.reload();
         }
       }} />
-      {figures.error ? (
+      <StaleNote parts={[figures, panels, work, alerts, recs, memo, waiting]} />
+      {figures.error && !figures.data ? (
         <div className="warn" style={{ margin: "0 0 14px" }}>
           <b>The live figures could not be read.</b> {figures.error.message} The cards
           below show a dash until they can be.
         </div>
       ) : null}
-      {work.error ? (
+      {work.error && !work.data ? (
         <div className="warn" style={{ margin: "0 0 14px" }}>
           <b>Your approvals and tasks could not be read.</b> {work.error.message} Open the
           screen again to retry.

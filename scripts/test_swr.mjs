@@ -6,7 +6,8 @@
 // a stand-in here: the minute's refresh never piles up behind a slow request, the latest
 // answer wins, two identical calls at once are one request, and a kept answer is only
 // ever shown for the same person, business and call.
-import { MAX_AGE, _reset, keep, keyFor, peek, runner, shared } from "../frontend/src/swr.js";
+import { MAX_AGE, _reset, answered, changed, failed as failedRead, keep, keptAt, keyFor, opened, peek, runner,
+  shared } from "../frontend/src/swr.js";
 
 let failed = 0;
 const check = (ok, what) => {
@@ -126,6 +127,29 @@ function deferred() {
   _reset(); // a reload of the page: memory gone, this tab's sessionStorage kept
   check(peek(k, now)?.ar_total === 1, "after a reload of the page it is still there");
   check(peek(null) === null && shared(null, () => 5) instanceof Promise, "no key, no keeping");
+}
+
+// 6. A failed read keeps the last good answer to the same call, never another call's
+//    (17 Nov 2026: one failed minute's refresh blanked every panel on a screen).
+{
+  const err = new Error("no reply");
+  const good = answered({ ar: 1 }, 1000);
+  let s = failedRead({ ...good, loading: true }, err);
+  check(s.data?.ar === 1 && s.error === err && s.at === 1000 && !s.loading,
+    "a failed refresh keeps the last answer, says when it was read, and carries the error");
+  s = failedRead(changed(good), err);
+  check(s.data === null && s.error === err, "a failed read after the call changed shows the failure, not the old answer");
+  s = failedRead(opened(null), err);
+  check(s.data === null && s.error === err, "a failed first read shows the failure");
+  s = failedRead(opened({ ar: 2 }, 500), err);
+  check(s.data?.ar === 2 && s.at === 500, "a kept answer to this same call (another visit) stays on a failure");
+  s = answered({ ar: 3 }, 2000);
+  check(s.own && s.error === null && s.at === 2000, "an answer clears the error");
+  _reset();
+  const k = keyFor("a@x.com", "biz_a", "kpis");
+  keep(k, { ar: 1 }, 1234);
+  check(keptAt(k, 1300) === 1234 && keptAt(keyFor("a@x.com", "biz_b", "kpis"), 1300) === null,
+    "keptAt is when this call's kept answer was read");
 }
 
 if (failed) {

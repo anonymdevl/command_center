@@ -361,36 +361,61 @@ function figureText(a) {
 }
 
 /* ------------------------------------------------------------------ largest amounts owed */
-const debtState = { scope: null, mode: "all", seq: 0 };
+/**
+ * Which band (All, Overdue, Over 90 days) the list shows is kept on the panel itself, not
+ * in this module (17 Nov 2026): a module-level choice outlived the screen, so on the way
+ * back to Home the designed "All" tab was highlighted over the overdue rows. A new panel
+ * starts from the tab its markup marks on; each read is numbered per panel and only the
+ * latest is drawn, as is the business it was read for.
+ */
+const debtSeq = new WeakMap();
 
 function debts(root, scope, onOpen) {
   const panel = root.querySelector("#debt");
   if (!panel) return;
   if (!panel.dataset.wired) {
     panel.dataset.wired = "1";
+    panel.dataset.mode = panel.querySelector(".segc button.on")?.dataset.mode || "all";
     panel.querySelectorAll(".segc button").forEach((b) => {
       b.onclick = () => {
-        debtState.mode = b.dataset.mode;
-        panel.querySelectorAll(".segc button").forEach((x) => {
-          x.classList.toggle("on", x === b);
-          x.setAttribute("aria-selected", x === b ? "true" : "false");
-        });
-        loadDebts(panel, debtState.scope, onOpen);
+        panel.dataset.mode = b.dataset.mode;
+        showMode(panel);
+        loadDebts(panel, panel.dataset.scope, onOpen);
       };
     });
+    showMode(panel);
   }
-  if (debtState.scope === scope && panel.dataset.loaded === debtState.mode) return;
-  debtState.scope = scope;
+  const mode = panel.dataset.mode;
+  if (panel.dataset.scope === scope && (panel.dataset.loaded === mode || panel.dataset.asking === mode)) return;
+  panel.dataset.scope = scope;
   loadDebts(panel, scope, onOpen);
 }
 
+/** The highlighted tab is the band the rows are for. */
+function showMode(panel) {
+  panel.querySelectorAll(".segc button").forEach((x) => {
+    const on = x.dataset.mode === panel.dataset.mode;
+    x.classList.toggle("on", on);
+    x.setAttribute("aria-selected", on ? "true" : "false");
+  });
+}
+
 function loadDebts(panel, scope, onOpen) {
-  const seq = ++debtState.seq;
+  const seq = (debtSeq.get(panel) || 0) + 1;
+  debtSeq.set(panel, seq);
   const rows = panel.querySelector("#debt-rows");
-  const mode = debtState.mode;
+  const mode = panel.dataset.mode || "all";
+  panel.dataset.asking = mode;
+  delete panel.dataset.loaded;
+  // The rows on show are for the band before: while this one is read, none are.
+  rows.textContent = "";
+  rows.append(el("div", "home-wait", "Reading the receivables…"));
+  const latest = () => debtSeq.get(panel) === seq && panel.dataset.scope === scope
+    && document.body.contains(panel);
   api.homeDebtors({ business_code: scope, mode })
     .then((d) => {
-      if (seq !== debtState.seq || !document.body.contains(panel)) return;
+      if (!latest()) return;
+      delete panel.dataset.asking;
       panel.dataset.loaded = mode;
       // By the ledger: how many customers owe, not how many invoices are open.
       setText(panel, "#debt-n", `${count(d.customers)} customer${d.customers === 1 ? "" : "s"}`);
@@ -406,7 +431,8 @@ function loadDebts(panel, scope, onOpen) {
       }
     })
     .catch((e) => {
-      if (seq !== debtState.seq) return;
+      if (!latest()) return;
+      delete panel.dataset.asking;
       rows.textContent = "";
       rows.append(el("div", "home-wait", `The receivables could not be read: ${e?.message || "no reply"}`));
     });
@@ -438,15 +464,26 @@ function debtRow(r, currency, onOpen) {
 }
 
 /* ------------------------------------------------------------------ top customers */
-const custState = { scope: undefined };
+/** Read once per panel and business; each read numbered per panel, and only the latest --
+ *  for the business still shown -- is drawn, as the receivables list does (17 Nov 2026:
+ *  a slower earlier read could land last and draw the previous business's customers). */
+const custSeq = new WeakMap();
 
 function customers(root, scope, onOpen) {
   const panel = root.querySelector("#topc");
-  if (!panel || custState.scope === scope && panel.dataset.loaded) return;
-  custState.scope = scope;
+  if (!panel) return;
+  if (panel.dataset.scope === scope && (panel.dataset.loaded || panel.dataset.asking)) return;
+  panel.dataset.scope = scope;
+  panel.dataset.asking = "1";
+  delete panel.dataset.loaded;
+  const seq = (custSeq.get(panel) || 0) + 1;
+  custSeq.set(panel, seq);
+  const latest = () => custSeq.get(panel) === seq && panel.dataset.scope === scope
+    && document.body.contains(panel);
   api.topCustomers({ business_code: scope })
     .then((d) => {
-      if (!document.body.contains(panel)) return;
+      if (!latest()) return;
+      delete panel.dataset.asking;
       panel.dataset.loaded = "1";
       const list = panel.querySelector("#topc-l");
       const bar = panel.querySelector("#topc-bar");
@@ -474,6 +511,8 @@ function customers(root, scope, onOpen) {
       });
     })
     .catch((e) => {
+      if (!latest()) return;
+      delete panel.dataset.asking;
       const list = panel.querySelector("#topc-l");
       list.textContent = "";
       list.append(el("li", "home-wait", `The sales could not be read: ${e?.message || "no reply"}`));

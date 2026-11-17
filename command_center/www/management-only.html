@@ -28,7 +28,7 @@ d.setAttribute('data-theme',t);if(a)d.setAttribute('data-accent',a)})();
     <p class="auth-sub">Everything you normally use is still in ERPNext.</p>
 
     <div class="auth-acts">
-      <a class="auth-go" href="/app">Back to ERPNext</a>
+      {% if erp_url %}<a class="auth-go" href="{{ erp_url }}">Back to ERPNext</a>{% endif %}
       <button type="button" id="other" class="auth-alt">Sign in as someone else</button>
     </div>
 

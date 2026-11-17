@@ -32,6 +32,12 @@ export function keyFor(user, scope, ...what) {
   return JSON.stringify([user || "", scope || "__all__", ...what]);
 }
 
+/** When the answer kept for a key was read (ms), or null. */
+export function keptAt(key, now = Date.now()) {
+  if (!key || peek(key, now) == null) return null;
+  return memory.get(key)?.at ?? null;
+}
+
 /** The answer kept for a key, or null. */
 export function peek(key, now = Date.now()) {
   if (!key) return null;
@@ -122,6 +128,33 @@ export function runner() {
       pending = null;
     },
   };
+}
+
+/*
+ * A hook's state, as useApi holds it: { data, error, loading, at, own }. `own` says the
+ * data is the answer to the call as it stands now (same screen, same business, same
+ * filters), not one kept from before the call changed; `at` is when it was read.
+ *
+ * A failed read keeps the last good answer to the same call (17 Nov 2026): one failed
+ * minute's refresh used to set data to null, and every panel on the screen went blank
+ * with it. The error is kept beside the data, so the screen can say quietly when it was
+ * last updated. An answer to a different call is never kept: a failed read for another
+ * business, screen or filter shows the failure, never the previous call's figures.
+ */
+export function opened(peeked, at = null) {
+  return { data: peeked ?? null, error: null, loading: true, at: peeked == null ? null : at, own: peeked != null };
+}
+/** The call changed but nothing is kept for it: what is on screen is no longer its answer. */
+export function changed(state) {
+  return { ...state, error: null, loading: true, own: false };
+}
+export function answered(data, at = Date.now()) {
+  return { data, error: null, loading: false, at, own: true };
+}
+export function failed(state, error) {
+  return state.own
+    ? { ...state, error, loading: false }
+    : { data: null, error, loading: false, at: null, own: false };
 }
 
 /** For the tests: forget everything. */

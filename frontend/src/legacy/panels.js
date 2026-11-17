@@ -42,8 +42,11 @@ const COMPOSITION = {
 // The designed marks a panel draws its answer into.
 const MARKS = ".chartwrap, .bars, .stack, .stackkey, table.dt, .funnel, ul.bul, .cover";
 
-export function renderPanels(root, viewKey, data, { onOpen, openDrawer, scope, failed = false } = {}) {
+export function renderPanels(root, viewKey, data, { onOpen, openDrawer, scope, failed: failedRead = false } = {}) {
   if (!root || !PANEL_VIEWS.has(viewKey)) return 0;
+  // A failed refresh with the last answer still in hand draws that answer (useApi keeps
+  // it); only a read with nothing to show is the failure.
+  const failed = failedRead && !data;
   // The previous screen's answer, still in hand while this one's is on its way.
   if (data?.view && data.view !== viewKey) return 0;
   if (!data && !failed) {

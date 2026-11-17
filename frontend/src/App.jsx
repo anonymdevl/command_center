@@ -6,6 +6,7 @@ import Sidebar from "./components/Sidebar.jsx";
 import Drawer from "./components/Drawer.jsx";
 import LegacyView from "./components/LegacyView.jsx";
 import ViewTools from "./components/ViewTools.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import ActionDialog from "./components/ActionDialog.jsx";
 import ScheduleDialog from "./components/ScheduleDialog.jsx";
 import Settings, { isAdministrator } from "./components/Settings.jsx";
@@ -43,14 +44,25 @@ export default function App() {
   // The drawer keeps a short history: following a link inside it (a record, a person,
   // the records behind a figure) opens the next one on top, and Back returns to the one
   // before. Closing it, or moving to another screen, clears the history.
+  // Each entry carries its own id, which keys the drawer's content (Drawer.jsx): two
+  // drawers of the same kind one after the other -- Explain This on one figure, then
+  // another figure; Back -- are two drawers, never the first one's state (its
+  // explanation, tab, search, sort) under the second one's title.
   const [drawerStack, setDrawerStack] = useState([]);
-  const drawer = drawerStack.length ? drawerStack[drawerStack.length - 1] : null;
+  const top = drawerStack.length ? drawerStack[drawerStack.length - 1] : null;
+  const drawer = top ? top.content : null;
   const setDrawer = useCallback((content) => {
-    setDrawerStack((s) => (content == null ? [] : [...s, content].slice(-20)));
+    setDrawerStack((s) => (content == null ? [] : [...s, { id: nextDrawerId(), content }].slice(-20)));
   }, []);
   const drawerBack = useCallback(() => setDrawerStack((s) => s.slice(0, -1)), []);
   // Phones: the sidebar is a drawer, open only while choosing a screen.
   const [navOpen, setNavOpen] = useState(false);
+  // Another business: a drawer open on the last one's records goes with it, as the screen
+  // does (LegacyView is keyed by the business, below).
+  const changeScope = useCallback((s) => {
+    setScope(s);
+    setDrawerStack([]);
+  }, []);
 
   // The person's latest conversation with the AI, back after a refresh or a sign-in, so
   // a follow-up in the bar still knows what was asked before.
@@ -100,7 +112,7 @@ export default function App() {
 
   return (
     <div className={`shell${navOpen ? " navopen" : ""}`}>
-      <Sidebar nav={nav} current={view} onGo={go} scope={scope} onScope={setScope} />
+      <Sidebar nav={nav} current={view} onGo={go} scope={scope} onScope={changeScope} />
       {navOpen ? <div className="scrim-nav" onClick={() => setNavOpen(false)} /> : null}
       <div className="col">
         <Topbar scope={scope} openDrawer={setDrawer} onGo={go} onMenu={() => setNavOpen((o) => !o)} />
@@ -108,24 +120,38 @@ export default function App() {
           {!settings && !plan ? <ViewTools caption={captionOf(view)} scope={scope} /> : null}
           <LicenceBanner />
           {showBanner ? <IllustrativeNotice /> : null}
-          {settings ? (
-            isAdministrator(boot) ? <Settings /> : <LegacyView viewKey="denied" {...ctx} />
-          ) : plan ? (
-            boot.plan?.can_view ? <PlanUsage /> : <LegacyView viewKey="denied" {...ctx} />
-          ) : Ported ? (
-            <Ported {...ctx} />
-          ) : (
-            <LegacyView viewKey={view} {...ctx} />
-          )}
+          {/* A screen that fails to draw says so; the shell stays (ErrorBoundary). */}
+          <ErrorBoundary resetKey={`${view}|${scope}`} where={`the ${captionOf(view)} screen`}>
+            {settings ? (
+              isAdministrator(boot) ? <Settings /> : <LegacyView viewKey="denied" {...ctx} />
+            ) : plan ? (
+              boot.plan?.can_view ? <PlanUsage /> : <LegacyView viewKey="denied" {...ctx} />
+            ) : Ported ? (
+              <Ported {...ctx} />
+            ) : (
+              // Keyed by the business: switching business draws the screen afresh from its
+              // design -- every card, tile, list, panel, report row and Home list back to
+              // loading -- so nothing the last business filled in stays on screen, or can be
+              // acted on, while the new one's answers are read (and if one of those fails,
+              // its place says so rather than showing the old business's figure).
+              <LegacyView key={scope} viewKey={view} {...ctx} />
+            )}
+          </ErrorBoundary>
         </main>
       </div>
-      <Drawer content={drawer} onClose={() => setDrawer(null)}
+      <Drawer content={drawer} entry={top?.id} onClose={() => setDrawer(null)}
               onBack={drawerStack.length > 1 ? drawerBack : null}
-              trail={[captionOf(view), ...drawerStack.slice(0, -1).map(drawerTitle)].filter(Boolean)} />
+              trail={[captionOf(view), ...drawerStack.slice(0, -1).map((e) => drawerTitle(e.content))].filter(Boolean)} />
       <ActionDialog scope={scope} />
       <ScheduleDialog scope={scope} />
     </div>
   );
+}
+
+let drawerSeq = 0;
+function nextDrawerId() {
+  drawerSeq += 1;
+  return drawerSeq;
 }
 
 /** What a drawer in the stack is about, for the breadcrumb of the one above it. */

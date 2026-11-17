@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import ErrorBoundary from "./ErrorBoundary.jsx";
 
 /**
  * The panel that answers "which records?".
@@ -15,7 +16,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from "r
  */
 const DrawerCtx = createContext({ onBack: null, onClose: () => {}, trail: [] });
 
-export default function Drawer({ content, onClose, onBack = null, trail = [] }) {
+export default function Drawer({ content, entry = null, onClose, onBack = null, trail = [] }) {
   const open = Boolean(content);
   const panel = useRef(null);
   const [scrolled, setScrolled] = useState(false);
@@ -23,7 +24,7 @@ export default function Drawer({ content, onClose, onBack = null, trail = [] }) 
   useEffect(() => {
     if (panel.current) panel.current.scrollTop = 0;
     setScrolled(false);
-  }, [content]);
+  }, [content, entry]);
 
   useEffect(() => {
     if (!open) return;
@@ -43,12 +44,17 @@ export default function Drawer({ content, onClose, onBack = null, trail = [] }) 
            role="dialog" aria-modal="true" aria-hidden={!open}
            onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 2)}>
         <DrawerCtx.Provider value={{ onBack, onClose, trail }}>
+          {/* Keyed by the stack entry (App.jsx): each drawer opened, or come back to, is
+              mounted fresh, so none shows the state of the one before it. */}
           {!open ? null : owns ? (
-            content
+            <ErrorBoundary key={entry ?? "drawer"} where="the drawer" head={<DrawerHead />}>
+              {content}
+            </ErrorBoundary>
           ) : (
-            <>
+            <React.Fragment key={entry ?? "drawer"}>
               <DrawerHead />
               <div className="dw-body">
+                <ErrorBoundary where="the drawer">
                 {content.html ? (
                   <div dangerouslySetInnerHTML={{ __html: content.html }} />
                 ) : content.node ? (
@@ -56,8 +62,9 @@ export default function Drawer({ content, onClose, onBack = null, trail = [] }) 
                 ) : (
                   content
                 )}
+                </ErrorBoundary>
               </div>
-            </>
+            </React.Fragment>
           )}
         </DrawerCtx.Provider>
       </div>

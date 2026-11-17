@@ -1586,4 +1586,18 @@ body.cc-signin .auth-sep{font-style:normal;color:var(--dim);margin:0 8px}
 @media(max-width:900px){
  .main{overflow-x:hidden}
 }
+
+/* A refresh that did not come through while the last answers stay on screen
+   (LegacyView StaleNote, 17 Nov 2026): one quiet line, never a warning. */
+.stale-note{margin:0 0 14px;padding:8px 12px;border-radius:var(--r-sm);background:var(--raised);
+ color:var(--mut);font-size:var(--fs-xs);line-height:1.5}
+
+/* A part of the page that failed to draw (components/ErrorBoundary.jsx): one calm line
+   and a Reload in its place; the rest of the page stays. */
+.cc-crash{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:0 0 14px;
+ padding:18px 20px;border:1px dashed var(--line2);border-radius:var(--r);background:var(--surface);
+ color:var(--mut);font-size:var(--fs-sm);line-height:1.5}
+.cc-crash b{color:var(--ink);font-size:var(--fs-md);font-weight:var(--fw-semibold)}
+.cc-crash .btn{margin-top:6px}
+.askconvs-err{margin-top:8px;font-size:var(--fs-xs);color:var(--mut)}
 """

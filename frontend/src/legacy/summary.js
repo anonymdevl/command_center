@@ -85,10 +85,32 @@ export function renderShort(root, short) {
   fillShort(box, short);
 }
 
-/** Waiting On You (api/summary.waiting): three counts, each opening its screen. */
-export function renderWaiting(root, data, { go } = {}) {
+/** Waiting On You (api/summary.waiting): three counts, each opening its screen. A read
+ *  that failed with nothing to show says so, with a retry, rather than "Reading…" for
+ *  ever (17 Nov 2026). */
+export function renderWaiting(root, data, { go, error, retry } = {}) {
   const box = root?.querySelector("#xm-wait");
-  if (!box || !data) return;
+  if (!box) return;
+  if (!data) {
+    if (!error) return;
+    box.textContent = "";
+    delete box.dataset.live;
+    const signedOut = error.status === 401 || error.status === 403;
+    box.append(el("p", "xm-none", signedOut
+      ? "You have been signed out: sign in again to see what is waiting on you."
+      : `What is waiting on you could not be read just now.${error.message ? ` ${error.message}` : ""}`));
+    if (retry && !signedOut) {
+      const b = el("button", "xm-link", "Try Again");
+      b.type = "button";
+      b.onclick = () => {
+        box.textContent = "";
+        box.append(el("p", "xm-none", "Reading what is waiting on you…"));
+        retry();
+      };
+      box.append(b);
+    }
+    return;
+  }
   box.textContent = "";
   box.dataset.live = "1";
   if (!data.available) {
