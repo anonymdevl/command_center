@@ -58,6 +58,35 @@ class BusinessSlow(BusinessUnreachable):
     the next screen asks again as usual (16 Nov 2026)."""
 
 
+class WriteNotConfirmed(ConnectorError):
+    """A write was sent, but its answer never came back (a timeout, a dropped connection):
+    the business's ERPNext may or may not have made it.
+
+    Not a refusal and not "unreachable": the one thing known is that nobody knows. A
+    caller never retries it blindly and never says "nothing changed" -- the person is told
+    it may have gone through and to check before trying again, and the paths that create
+    work (api/actions: a To-Do, a Task, an assignment, a mention) look for what an earlier
+    attempt left before making anything, so trying again does not make it twice.
+
+    Raised by the remote transport on a write whose answer was lost (connectors/remote.py).
+    api/actions also treats any other failure of a write that is not a definite refusal
+    as not confirmed (actions._unsure), so the words stay true whichever is raised."""
+
+
+class DocumentChanged(ConnectorError):
+    """A decision was made on a card that is out of date: the document has moved on in
+    ERPNext since the screen read it (someone else approved it, it was sent back, edited).
+
+    apply_workflow raises it rather than applying the action to whatever state the
+    document is in now: ERPNext applies a workflow action to the document's CURRENT state,
+    so "Approve" pressed on a card showing L1 would perform L2 once someone else had done
+    L1. `state` is where the document is now, when it could be read."""
+
+    def __init__(self, message: str = "", state: str | None = None):
+        super().__init__(message)
+        self.state = state
+
+
 class CredentialRequired(ConnectorError):
     """The acting person has no account of their own on the target site.
 
@@ -200,12 +229,18 @@ class BusinessConnector:
     def cancel(self, doctype, name) -> dict:
         raise NotImplementedError
 
-    def apply_workflow(self, doctype, name, action) -> dict:
+    def apply_workflow(self, doctype, name, action, expected: dict | None = None) -> dict:
         """Drive a document through a workflow transition.
 
         Kept here rather than in the API layer because a remote transition is a
         different call from a local one, and nothing above this seam should know
         that.
+
+        `expected` is what the person saw when they chose the action:
+        {"field": the workflow state field, "state": the state shown, "modified": the
+        document's modified stamp then}. The document is read fresh first and the action
+        is refused with DocumentChanged when it has moved on (check_unchanged), because
+        ERPNext applies the action to the document's current state, whatever that is.
         """
         raise NotImplementedError
 
@@ -264,6 +299,42 @@ class BusinessConnector:
     def __repr__(self):
         kind = "local" if self.is_local else "remote"
         return f"<{type(self).__name__} {self.code} ({kind})>"
+
+
+def check_unchanged(doc: dict, expected: dict | None):
+    """Refuse a workflow action when the document is no longer what the person saw.
+
+    The state is the test: a different workflow state means someone else already moved it
+    (DocumentChanged names where it is now). The modified stamp is the second test, when
+    both sides have one: the same state with a different stamp means it went away and
+    came back, or was edited, since the card was read. Stamps are compared as datetimes,
+    so "09:12:33" and "09:12:33.000000" are the same moment."""
+    if not expected:
+        return
+    field = expected.get("field") or "workflow_state"
+    want, now = expected.get("state"), (doc or {}).get(field)
+    if want is not None and str(now or "") != str(want):
+        raise DocumentChanged(
+            f"This was already moved to “{now or 'another step'}” by someone else, so "
+            f"nothing was done. Refresh to see where it is now.", state=now)
+    seen, current = expected.get("modified"), (doc or {}).get("modified")
+    if seen and current and _stamp(seen) != _stamp(current):
+        raise DocumentChanged(
+            "This was changed in ERPNext after your screen read it, so nothing was done. "
+            "Refresh to see it as it is now.", state=now)
+
+
+def _stamp(value):
+    import datetime as _dt
+    if isinstance(value, _dt.datetime):
+        return value.replace(tzinfo=None)
+    text = str(value).strip().replace("T", " ")
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return _dt.datetime.strptime(text[:26], fmt)
+        except ValueError:
+            continue
+    return text
 
 
 def desk_path(doctype: str, name: str) -> str:

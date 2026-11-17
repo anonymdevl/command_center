@@ -36,6 +36,7 @@ from command_center.connectors.base import (
     RequestRefused,
     CredentialRequired,
     RemotePermissionDenied,
+    check_unchanged,
 )
 
 TIMEOUT = 20
@@ -433,9 +434,13 @@ class RemoteConnector(BusinessConnector):
             "doctype": doctype, "name": name,
         }, write=True)
 
-    def apply_workflow(self, doctype, name, action):
+    def apply_workflow(self, doctype, name, action, expected=None):
+        # Read fresh, and refuse when it has moved on since the card was read: ERPNext's
+        # apply_workflow reloads the document and applies the action to its CURRENT state.
+        doc = self.get_doc(doctype, name)
+        check_unchanged(doc, expected)
         return self._call("frappe.model.workflow.apply_workflow", {
-            "doc": self.get_doc(doctype, name), "action": action,
+            "doc": doc, "action": action,
         }, write=True)
 
     def assign(self, doctype, name, users, description=None, date=None, priority=None):
