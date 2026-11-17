@@ -1378,6 +1378,18 @@ for _line in (_wmap.group(1) if _wmap else "").splitlines():
               f"work.js maps {_wview}/{_p.group(1)!r} to {_p.group(2)!r}, which api/work.py "
               f"does not return")
 
+# The task and approval flows (17 Nov 2026): every write goes to the record's own
+# business, a move gives before it takes, every comment is escaped, a decision is checked
+# against the card it was made on, creating work is safe to retry, bulk runs as a job and
+# says who was not told. scripts/check_flow.py holds each rule, and its selftest breaks
+# each one on purpose to prove the rule can still fail.
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import check_flow as _flow  # noqa: E402
+sys.path.pop(0)
+_fsrc = _flow.read()
+_fp = _flow.problems(_fsrc) + _flow.selftest(_fsrc)
+check(not _fp, "the task and approval flows (scripts/check_flow.py):\n    " + "\n    ".join(_fp))
+
 # The analyst's loop -- dispatch, scope, budget, the write guard -- tested offline.
 import subprocess as _sp
 _t = _sp.run([sys.executable, os.path.join(ROOT, "scripts", "test_analyst.py")],
