@@ -511,7 +511,7 @@ def bank_cleared_pct(r):
     if not banks:
         from command_center.guides import needs_setup
         return None, "no bank accounts in ERPNext", None, needs_setup(
-            r.code, "No ledger account in ERPNext is marked as a bank account.",
+            r.code, "No Account in ERPNext has Account Type Bank.",
             ["Open Chart of Accounts and click each bank account.",
              "Set Account Type to Bank and save.",
              "Match payments to each statement in Bank Reconciliation Tool; that records "

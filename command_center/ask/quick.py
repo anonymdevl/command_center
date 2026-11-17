@@ -36,16 +36,16 @@ RULES = [
      "ledger we owe suppliers {ap_total}."),
     (r"\b(unpaid|outstanding|open)\b.*\binvoices?\b|\binvoices?\b.*\b(unpaid|outstanding|not paid)\b",
      ["ar_count", "ar_open_invoices", "ar_total"],
-     "{ar_count} customer invoices are unpaid, worth {ar_open_invoices} on the invoices; by "
-     "the ledger customers owe {ar_total}."),
+     "{ar_count} customer invoices are unpaid, worth {ar_open_invoices} on the invoices; the "
+     "Customer Ledger Balance is {ar_total}."),
     (r"\b(how much|what)\b.*\b(we owe|do we owe|owed to suppliers|payables?)\b",
      ["ap_total", "ap_open_invoices", "ap_unmatched"],
-     "We owe suppliers {ap_total} by the ledger; their open bills say {ap_open_invoices}, "
+     "The Supplier Ledger Balance is {ap_total}; Purchase Invoice Outstanding is {ap_open_invoices}, "
      "and {ap_unmatched} paid to them was never matched to a bill."),
     (r"\b(how much|what)\b.*\b(owed to us|owe us|receivables?|outstanding|owed)\b",
      ["ar_total", "ar_over_90", "ar_open_invoices", "ar_unmatched"],
-     "Customers owe us {ar_total} by the ledger; {ar_over_90} of it is more than three months "
-     "late. Their open invoices say {ar_open_invoices}, because {ar_unmatched} received was "
+     "The Customer Ledger Balance is {ar_total}; {ar_over_90} of it is more than three months "
+     "late. Sales Invoice Outstanding is {ar_open_invoices}, because {ar_unmatched} received was "
      "never matched to them."),
     (r"\b(stock|inventory)\b.*\b(worth|value|valued|hold|have)\b|\b(value|worth)\b.*\b(stock|inventory)\b",
      ["stock_value", "stock_lines"], "We hold stock worth {stock_value}, across {stock_lines} "

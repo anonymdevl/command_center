@@ -295,7 +295,7 @@ check(b["drill"]["filters"].get("posting_date") == ["between", ["2025-06-01", "2
       f"revenue_best_month: drill should open June only, got {b['drill']['filters']}")
 
 d = r["largest_debt"]
-check(d["value"] == 600 and d["note"] == "UBUNTU, by the ledger" and d["drill"]["filters"]["party"] == "UBUNTU",
+check(d["value"] == 600 and d["note"] == "UBUNTU, Customer Ledger Balance" and d["drill"]["filters"]["party"] == "UBUNTU",
       f"largest_debt: UBUNTU 600 by the ledger, got {d['value']} / {d['note']!r} / {d['drill']['filters']}")
 check(r["invoices_draft"]["value"] == 1 and "5,000.00" in r["invoices_draft"]["note"],
       f"invoices_draft: {r['invoices_draft']}")

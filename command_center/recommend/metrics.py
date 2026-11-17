@@ -72,10 +72,10 @@ METRICS = (
     Metric("supplier_top2_share", "Two Largest Suppliers' Share of Purchases", "percent",
            "month", "up_bad", ("supplier_concentration",)),
     # daily snapshots of positions
-    Metric("ar_ledger", "Customers Owe, by the Ledger", "money", "day", "up_bad", ()),
+    Metric("ar_ledger", "Accounts Receivable (Customer Ledger Balance)", "money", "day", "up_bad", ()),
     Metric("ar_over_90", "Owed More Than 90 Days Late", "money", "day", "up_bad",
            ("overdue_customers", "credit_hold")),
-    Metric("ap_ledger", "Owed to Suppliers, by the Ledger", "money", "day", "up_bad",
+    Metric("ap_ledger", "Accounts Payable (Supplier Ledger Balance)", "money", "day", "up_bad",
            ("supplier_payments_due", "long_unpaid_bills")),
     Metric("unmatched_receipts", "Customer Payments Not Matched", "money", "day", "up_bad",
            ("unmatched_receipts",), "are"),

@@ -463,7 +463,7 @@ function debtRow(r, currency, onOpen) {
   // What the open invoices say, then what the ledger says is really owed.
   inv.append(el("b", null, exact(r.on_invoices ?? r.invoiced, { decimals: 0 })), el("small", null, "On invoices"));
   const owed = el("span", "debt-a");
-  owed.append(el("b", null, exact(r.owed, { decimals: 0 })), el("small", null, `Owed by the ledger${currency ? `, ${currency}` : ""}`));
+  owed.append(el("b", null, exact(r.owed, { decimals: 0 })), el("small", null, `Customer Ledger Balance${currency ? `, ${currency}` : ""}`));
   amt.append(inv, el("span", "debt-arrow", "→"), owed);
   row.append(who, days, amt);
   row.onclick = () => onOpen?.({ label: `${r.customer}: what they owe`, drill: r.drill });

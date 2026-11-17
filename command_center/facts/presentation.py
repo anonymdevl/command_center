@@ -192,13 +192,13 @@ PRESENTATION = {
     "fact_party_balance": {
         "noun": "account",
         "order_by": "owed",
-        "total": ("owed", "owed by the ledger"),
+        "total": ("owed", "Party Ledger Balance"),
         "concentrate_on": ("party", "customer or supplier"),
         "columns": [
             {"key": "src_name", "label": "Customer or supplier", "type": "doc"},
             {"key": "party_type", "label": "Kind", "type": "text"},
-            {"key": "owed", "label": "Owed by the ledger", "type": "currency"},
-            {"key": "open_invoices", "label": "On open invoices", "type": "currency"},
+            {"key": "owed", "label": "Party Ledger Balance", "type": "currency"},
+            {"key": "open_invoices", "label": "Invoice Outstanding", "type": "currency"},
             {"key": "unmatched_payments", "label": "Paid, not matched", "type": "currency"},
             {"key": "in_credit", "label": "In credit", "type": "currency"},
             {"key": "d90_plus", "label": "Over 90 days", "type": "currency"},

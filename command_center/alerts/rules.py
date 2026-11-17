@@ -72,7 +72,7 @@ def ar_overdue(f, p):
     share = (late["value"] / whole["value"] * 100) if whole.get("value") else 0
     return _finding(
         f"{money(late)} of the {money(whole)} owed is more than three months late",
-        f"{share:.0f}% of everything owed by the ledger, after payments not yet matched "
+        f"{share:.0f}% of the Customer Ledger Balance, after payments not yet matched "
         f"are set against the oldest invoices. The largest single debtor is "
         f"{(top.get('group') or {}).get('label') or 'unknown'}, at {money(top)}.",
         "Pick the three largest and agree payment dates this week.",
@@ -89,7 +89,7 @@ def ar_unmatched(f, p):
         f"{money(paid)} received from customers ({_n(n):,} payments) was never matched "
         f"to invoices",
         f"Until it is, ERPNext's invoices show these customers owing money they have "
-        f"paid: open invoices say {money(f['ar_open_invoices'])}, the ledger "
+        f"paid: Sales Invoice Outstanding is {money(f['ar_open_invoices'])}, the Customer Ledger Balance "
         f"{money(f['ar_total'])}. Every list of debtors and every reminder drawn from the "
         f"invoices is wrong by that much.",
         "Match them in ERPNext: Accounts, Payment Reconciliation, one customer at a time.",
@@ -180,7 +180,7 @@ def ap_overdue(f, p):
         return None
     return _finding(
         f"{money(late)} we owe suppliers is more than three months overdue",
-        f"Of {money(f['ap_total'])} owed to suppliers in all, by the ledger, after payments "
+        f"Of {money(f['ap_total'])} on the Supplier Ledger in all, after payments "
         f"not yet matched are set against the oldest bills. Suppliers this far "
         f"behind start holding deliveries.",
         "Agree a payment plan with the largest before supply is held.",

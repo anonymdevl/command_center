@@ -241,7 +241,7 @@ def order_awaiting_payment(r):
     invoices = facts(r, "fact_sales_invoice", {"src_docstatus": 1, "outstanding_amount": [">", 0]},
                      ["src_name", "customer", "due_date", "posting_date", "outstanding_amount"])
     if invoices and not balances:
-        return None, "the ledger balances are not loaded yet"
+        return None, "Customer Ledger Balances are not loaded yet"
     by_customer = {}
     for x in invoices:
         by_customer.setdefault(x["customer"], []).append(
@@ -259,7 +259,7 @@ def order_awaiting_payment(r):
         if line["src_name"] in unpaid and line["sales_order"] in confirmed:
             names.add(line["sales_order"])
             invoices_hit.add(line["src_name"])
-    return (len(names), f"{money(r, sum(unpaid[i] for i in invoices_hit))} unpaid by the ledger",
+    return (len(names), f"{money(r, sum(unpaid[i] for i in invoices_hit))} on the Customer Ledger",
             _orders_drill(names))
 
 

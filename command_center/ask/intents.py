@@ -226,7 +226,7 @@ def owes_and_waiting(question, business_code=None):
     if not both:
         return {"intent": "owes_and_waiting", "figures": [],
                 "answer": "No customer both owes money and is waiting on a delivery.",
-                "checked": ["what each customer owes by the ledger", "open orders by customer"],
+                "checked": ["each Customer Ledger Balance", "open orders by customer"],
                 "records": None}
 
     return {
@@ -237,7 +237,7 @@ def owes_and_waiting(question, business_code=None):
             f"{_money(sum(r['undelivered'] or 0 for r in both))} of their orders is still "
             f"to deliver. Worth knowing before chasing payment: they are waiting on us too."
         ),
-        "checked": ["what each customer owes by the ledger",
+        "checked": ["each Customer Ledger Balance",
                     "open orders grouped by customer",
                     "the two lists intersected"],
         "table": {"columns": [("customer", "Customer"), ("owed", "They owe us"),
@@ -260,7 +260,7 @@ def who_owes_most(question, business_code=None):
 
     if not top5:
         return {"intent": "who_owes_most", "figures": [],
-                "answer": "Nobody owes anything, by the ledger.",
+                "answer": "No customer has a Customer Ledger Balance.",
                 "checked": ["each customer's ledger balance"], "records": None}
 
     rows = [{"customer": r.get("party"), "owed": r.get("owed"), "on_invoices": r.get("on_invoices"),
@@ -271,9 +271,9 @@ def who_owes_most(question, business_code=None):
     return {
         "intent": "who_owes_most", "figures": ["ar_total", "ar_over_90_pct"],
         "answer": (
-            f"{top['customer']} owes the most by the ledger: {_money(top['owed'])}"
+            f"{top['customer']} has the largest Customer Ledger Balance: {_money(top['owed'])}"
             + (f", {share:.1f}% of everything owed" if share is not None else "")
-            + (f" (their open invoices say {_money(top['on_invoices'])})"
+            + (f" (Sales Invoice Outstanding {_money(top['on_invoices'])})"
                if abs((top["on_invoices"] or 0) - (top["owed"] or 0)) >= 0.5 else "")
             + f". The five largest together are "
               f"{_money(sum(r['owed'] or 0 for r in rows))} of {_money(whole)}, "
@@ -281,7 +281,7 @@ def who_owes_most(question, business_code=None):
         ),
         "checked": ["each customer's ledger balance, largest first",
                     "the receivable total, from the same balances"],
-        "table": {"columns": [("customer", "Customer"), ("owed", "Owed by the ledger"),
+        "table": {"columns": [("customer", "Customer"), ("owed", "Customer Ledger Balance"),
                               ("on_invoices", "On open invoices"), ("over_90", "Over 90 days")],
                   "rows": rows},
         "records": {"fact": "fact_party_balance", "filters": filters},
@@ -306,13 +306,13 @@ def party_brief(question, business_code=None):
                                         ("max", "days_overdue", "worst")])
         checked += [f"unpaid invoices for {name}", f"{name}'s ledger balance"]
         if ledger.get("credit"):
-            parts.append(f"by the ledger they are in credit by {_money(ledger['credit'])}")
+            parts.append(f"on the Customer Ledger they are in credit by {_money(ledger['credit'])}")
         else:
-            parts.append(f"by the ledger they owe {_money(ledger.get('owed') or 0)}"
+            parts.append(f"on the Customer Ledger they owe {_money(ledger.get('owed') or 0)}"
                          + (f", the oldest of it {_n(ledger['worst'])} days past due"
                             if ledger.get("worst") else ""))
         parts.append(
-            f"their open invoices say {_money(owed['owed'])} across {_n(owed['invoices'])} invoices, "
+            f"Sales Invoice Outstanding is {_money(owed['owed'])} across {_n(owed['invoices'])} invoices, "
             f"the oldest {_n(owed['worst'])} days past due"
             if owed.get("owed") else "nothing is open on their invoices")
 

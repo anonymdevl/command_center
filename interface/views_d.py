@@ -4,7 +4,7 @@ exec(_src('statements.py'))
 
 # ============ FINANCE ============
 V_FIN=f'''<div class="topbar"><div><h3>Finances</h3>
-<div class="when">Full ledger</div></div></div>
+<div class="when">General Ledger</div></div></div>
 {fs_block()}
 <div class="kpis six ribbon">
 {kpi("Owed to us","—","","","flat","","ar")}
@@ -24,16 +24,16 @@ V_FIN=f'''<div class="topbar"><div><h3>Finances</h3>
 {warn0()}
 {warn0()}
 {panel("Receivables and payables",
- '<div class="dt-scroll">'+dtable(["Customer or Supplier",("On Open Invoices$",True),("Ledger Balance$",True),("Difference$",True),"Why",
+ '<div class="dt-scroll">'+dtable(["Customer or Supplier",("Invoice Outstanding$",True),("Party Ledger Balance$",True),("Difference$",True),"Why",
  ("Not Yet Due",True),("1–30 Days",True),("31–60 Days",True),("61–90 Days",True),("Over 90 Days",True)])+'</div>',
- "What each really owes by the ledger, beside the open invoices and bills","ledger")}
+ "Customer and Supplier Ledger Balances beside Invoice Outstanding","ledger")}
 <div class="two">
-{panel("What we owe suppliers", thin("<b>What the ledger says we owe suppliers, by when it falls due.</b> What is overdue and what falls due in the next 7, 30 and 60 days, after payments not yet matched are set against the oldest bills, against the cash customers are due to pay, so a payment run can be planned rather than guessed."))}
-{panel("Cash and bank position", thin("<b>The balance on every bank and cash account in the ledger.</b> Each balance is only as good as the last time the account was checked against the bank statement, so that date is shown beside it."))}
+{panel("What we owe suppliers", thin("<b>What the Supplier Ledger says we owe suppliers, by when it falls due.</b> What is overdue and what falls due in the next 7, 30 and 60 days, after payments not yet matched are set against the oldest bills, against the cash customers are due to pay, so a payment run can be planned rather than guessed."))}
+{panel("Cash and bank position", thin("<b>The General Ledger balance on every bank and cash account.</b> Each balance is only as good as the last time the account was checked against the bank statement, so that date is shown beside it."))}
 </div>
 <div class="two">
 {panel("Budget against actual", thin("<b>Spending against the budgets set in ERPNext.</b> Each budget line is compared with what has been posted to it this year, so a breach shows before the money is spent rather than after."))}
-{panel("Tax and statutory deadlines", thin("<b>What the ledger says is owed on each tax account.</b> The amount due on the next VAT, withholding or PAYE filing is the balance on its account; the filing dates themselves are not kept in ERPNext."))}
+{panel("Tax and statutory deadlines", thin("<b>What the General Ledger says is owed on each tax account.</b> The amount due on the next VAT, withholding or PAYE filing is the balance on its account; the filing dates themselves are not kept in ERPNext."))}
 </div>
 {panel("Profit on what we sell", thin("<b>What each product group earns over its cost, over the last twelve months.</b> Margin needs the cost of each item against its selling price; lines sold with no recorded cost are counted separately rather than as pure profit."))}'''
 

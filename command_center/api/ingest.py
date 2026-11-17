@@ -391,7 +391,7 @@ FACT_WORDS = {
     "fact_task": "Jobs and tasks",
     "fact_person": "People",
     "fact_case": "Customer issues",
-    "fact_party_balance": "Balances owed, by the ledger",
+    "fact_party_balance": "Customer and Supplier Ledger Balances",
 }
 
 

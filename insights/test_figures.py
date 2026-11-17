@@ -414,7 +414,7 @@ class AwaitingPaymentIsTheLedger(_Business):
         with run_as("Administrator"):
             n, note, drill = order_awaiting_payment(_Reader(CODE))
         self.assertEqual(n, 1, "three orders by the invoices' outstanding; one by the ledger")
-        self.assertEqual(note, "GHS 3,000 unpaid by the ledger")
+        self.assertEqual(note, "GHS 3,000 on the Customer Ledger")
         self.assertEqual(drill["filters"]["src_name"], ["in", ["SO-2"]])
 
 
