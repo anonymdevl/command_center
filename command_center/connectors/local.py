@@ -141,11 +141,15 @@ class LocalConnector(BusinessConnector):
             d.cancel()
             return d.as_dict()
 
-    def apply_workflow(self, doctype, name, action):
+    def apply_workflow(self, doctype, name, action, expected=None):
         from frappe.model.workflow import apply_workflow
+
+        from command_center.connectors.base import check_unchanged
 
         with acting_as(self.acting_user):
             doc = frappe.get_doc(doctype, name)
+            # Refused when it has moved on since the card was read (base.check_unchanged).
+            check_unchanged(doc.as_dict(), expected)
             return apply_workflow(doc, action).as_dict()
 
     def whoami(self):

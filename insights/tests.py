@@ -6647,6 +6647,10 @@ class _AssignERPNext:
         self.conn = RemoteConnector(biz, acting_user="manager@test.com")
         self.todos, self.tasks, self.assigned, self.comments, self.inserted = [], [], [], [], []
         self.refuse_comment = False
+        # Every write in order, and failures to inject: {method: ("before" | "after", exc)}
+        # -- "before" refuses it, "after" makes it and then loses the answer, as a write
+        # timeout does (WriteNotConfirmed).
+        self.calls, self.fail = [], {}
         self.users = {"ama@test": {"name": "ama@test", "full_name": "Ama Owusu",
                                    "allowed_in_mentions": 1},
                       "kofi@test": {"name": "kofi@test", "full_name": "Kofi Mensah",
@@ -6657,7 +6661,18 @@ class _AssignERPNext:
         c.insert = self.insert
         c.assign = self.assign
         c.comment = self.comment
-        c._call = lambda method, params=None, **k: self.ME if method.endswith("get_logged_user") else []
+        c._call = self._base_call
+
+    def _base_call(self, method, params=None, **k):
+        if method.endswith("get_logged_user"):
+            return self.ME
+        if method == "frappe.desk.form.load.getdoc":
+            # The form's own load: the record's comments, as the desk reads them.
+            return {"docs": [], "docinfo": {"comments": [
+                {"comment_type": "Comment", "content": html, "comment_email": self.ME}
+                for dt_, name, html in self.comments
+                if (dt_, name) == (params["doctype"], params["name"])]}}
+        return []
 
     @staticmethod
     def _match(row, filters):
@@ -6673,8 +6688,20 @@ class _AssignERPNext:
                 return False
         return True
 
+    def _write(self, method, do):
+        """One write: logged, made, and failed as self.fail says."""
+        when, exc = self.fail.pop(method, (None, None))
+        if when == "before":
+            raise exc
+        self.calls.append(method)
+        out = do()
+        if when == "after":
+            raise exc
+        return out
+
     def get_list(self, doctype, filters=None, fields=None, limit=20, order_by=None, **kw):
-        rows = {"ToDo": self.todos, "User": list(self.users.values())}.get(doctype, [])
+        rows = {"ToDo": self.todos, "User": list(self.users.values()),
+                "Task": self.tasks}.get(doctype, [])
         rows = [r for r in rows if self._match(r, filters)]
         if doctype == "ToDo" and order_by == "creation desc":
             rows = list(reversed(rows))
@@ -6688,17 +6715,26 @@ class _AssignERPNext:
         return row
 
     def insert(self, doc):
+        return self._write("insert", lambda: self._insert(doc))
+
+    def _insert(self, doc):
         doc = dict(doc)
         self.inserted.append(doc)
         if doc["doctype"] == "ToDo":
             return self._todo(**{k: v for k, v in doc.items() if k != "doctype"})
         if doc["doctype"] == "Task":
             doc["name"] = f"TASK-{len(self.tasks) + 1:03d}"
+            doc.setdefault("owner", self.ME)
+            doc.setdefault("creation", str(TODAY))
             self.tasks.append(doc)
             return doc
         raise AssertionError(f"unexpected insert of {doc['doctype']}")
 
     def assign(self, doctype, name, users, description=None, date=None, priority=None):
+        return self._write("assign", lambda: self._assign(doctype, name, users, description,
+                                                          date, priority))
+
+    def _assign(self, doctype, name, users, description=None, date=None, priority=None):
         self.assigned.append({"doctype": doctype, "name": name, "users": list(users),
                               "description": description, "date": date, "priority": priority})
         for user in users:
@@ -6716,8 +6752,11 @@ class _AssignERPNext:
         if self.refuse_comment:
             raise RemotePermissionDenied("Test Medical Ltd refused this. Your account there "
                                          "does not have permission for it.")
-        self.comments.append((doctype, name, content))
-        return {"name": f"C-{len(self.comments)}"}
+
+        def do():
+            self.comments.append((doctype, name, content))
+            return {"name": f"C-{len(self.comments)}"}
+        return self._write("comment", do)
 
 
 class Delegation(TransactionTestCase):
@@ -7114,6 +7153,29 @@ class Escalation(TransactionTestCase):
         with self.assertRaises(Exception):
             self._escalate("ama@test", "ama@test")
 
+    def test_an_escalation_tried_again_after_a_lost_answer_is_sent_once(self):
+        from command_center.api import actions
+        from command_center.connectors.base import WriteNotConfirmed
+        self.erp.fail["insert"] = ("after", WriteNotConfirmed("no answer"))
+        with self.assertRaises(actions.NotConfirmed):
+            self._escalate("ama@test", "kwame@test")
+        for _ in range(2):
+            res = self._escalate("ama@test", "kwame@test")
+            self.assertIs(res["escalation"]["told"], True)
+        self.assertEqual(len([t for t in self.erp.todos if t["allocated_to"] == "kwame@test"]), 1,
+                         "one To-Do for Kwame, however often it is pressed")
+        self.assertEqual(len([c for c in self.erp.comments if 'data-id="kwame@test"' in c[2]]), 1)
+        self.assertEqual(len([c for c in self.erp.comments if 'data-id="ama@test"' in c[2]]), 1,
+                         "Ama is told once")
+        # escalation gives and never takes: no assignment is ever removed
+        self.assertNotIn("unassign", self.erp.calls)
+
+    def test_escalating_to_someone_whose_user_cannot_be_read(self):
+        self.erp.users.pop("ama@test")
+        res = self._escalate("ama@test", "kwame@test")
+        self.assertIsNone(res["escalation"]["told"])
+        self.assertIn("may not have been notified", res["escalation"]["told_notice"])
+
     def test_assign_and_evidence_are_unchanged(self):
         for subject in ("Chase the payment", "Please send the evidence for: Chase the payment"):
             self.erp.inserted.clear()
@@ -7180,19 +7242,23 @@ class _TaskERPNext(_AssignERPNext):
                                 order_by=order_by, **kw)
 
     def unassign(self, doctype, name, user):
-        self.unassigned.append((doctype, name, user))
-        for t in self.todos:
-            if (t["reference_type"], t["reference_name"], t["allocated_to"], t["status"]) == \
-                    (doctype, name, user, "Open"):
-                t["status"] = "Cancelled"
-        return []
+        def do():
+            self.unassigned.append((doctype, name, user))
+            for t in self.todos:
+                if (t["reference_type"], t["reference_name"], t["allocated_to"], t["status"]) == \
+                        (doctype, name, user, "Open"):
+                    t["status"] = "Cancelled"
+            return []
+        return self._write("unassign", do)
 
     def set_value(self, doctype, name, fieldname, value):
-        self.set_values.append((doctype, name, fieldname, value))
-        row = next(t for t in self.todos if t["name"] == name)
-        row[fieldname] = value
-        row["modified_by"] = self.ME   # as ERPNext records whoever saved it
-        return row
+        def do():
+            self.set_values.append((doctype, name, fieldname, value))
+            row = next(t for t in self.todos if t["name"] == name)
+            row[fieldname] = value
+            row["modified_by"] = self.ME   # as ERPNext records whoever saved it
+            return row
+        return self._write("set_value", do)
 
 
 class TaskManagement(TransactionTestCase):
@@ -7380,25 +7446,319 @@ class TaskManagement(TransactionTestCase):
         self.assertTrue(task["closed_by_you"])
         self.assertFalse(self._work("task", todo=theirs["name"])["closed_by_you"])
 
+    # ---- Reassign gives first and removes after (17 Nov 2026) -----------------------------
+    def test_reassign_gives_first_then_removes(self):
+        first = self._task(reference_type="Sales Invoice", reference_name="ACC-SINV-0001")
+        self.erp.calls.clear()
+        self._do("reassign_task", todo=first["name"], to_user="yaw@test")
+        self.assertEqual(self.erp.calls, ["assign", "unassign", "comment"],
+                         "assign_to.add for Yaw, then assign_to.remove for Ama, then tell Ama")
+        plain = self._task(subject="Count the stock")
+        self.erp.calls.clear()
+        res = self._do("reassign_task", todo=plain["name"], to_user="yaw@test")
+        self.assertEqual(self.erp.calls, ["insert", "comment", "set_value", "comment"],
+                         "Yaw's To-Do and its mention, then Ama's cancelled, then Ama told")
+        self.assertIs(res["removed"], True)
+
+    def test_a_refused_give_changes_nothing_and_can_be_tried_again(self):
+        from command_center.connectors.base import RemotePermissionDenied
+        first = self._task(reference_type="Sales Invoice", reference_name="ACC-SINV-0001")
+        self.erp.fail["assign"] = ("before", RemotePermissionDenied("Test Medical Ltd refused this."))
+        with self.assertRaises(Exception) as cm:
+            self._do("reassign_task", todo=first["name"], to_user="yaw@test")
+        self.assertIn("ERPNext did not give it to Yaw Boateng", str(cm.exception))
+        self.assertIn("Nothing changed: it is still with Ama Owusu", str(cm.exception))
+        self.assertEqual(self.erp.unassigned, [], "Ama was not taken off it")
+        self.assertEqual(next(t for t in self.erp.todos if t["name"] == first["name"])["status"], "Open")
+        # and because nothing changed, trying again works
+        res = self._do("reassign_task", todo=first["name"], to_user="yaw@test")
+        self.assertEqual(self.erp.unassigned, [("Sales Invoice", "ACC-SINV-0001", "ama@test")])
+        self.assertTrue(res["notified"])
+        # a To-Do of its own: a refused insert leaves Ama's To-Do open and uncancelled
+        plain = self._task(subject="Count the stock")
+        self.erp.set_values.clear()
+        self.erp.fail["insert"] = ("before", RemotePermissionDenied("refused"))
+        with self.assertRaises(Exception):
+            self._do("reassign_task", todo=plain["name"], to_user="yaw@test")
+        self.assertEqual(self.erp.set_values, [])
+        self.assertEqual(next(t for t in self.erp.todos if t["name"] == plain["name"])["status"], "Open")
+
+    def test_a_give_not_confirmed_says_it_may_have_gone_through_and_retry_is_not_twice(self):
+        from command_center.api import actions
+        from command_center.connectors.base import WriteNotConfirmed
+        plain = self._task(subject="Count the stock")
+        self.erp.fail["insert"] = ("after", WriteNotConfirmed("Test Medical Ltd did not answer"))
+        with self.assertRaises(actions.NotConfirmed) as cm:
+            self._do("reassign_task", todo=plain["name"], to_user="yaw@test")
+        self.assertIn("may have gone through", str(cm.exception))
+        self.assertIn("Nothing was taken off Ama Owusu", str(cm.exception))
+        self.assertEqual(next(t for t in self.erp.todos if t["name"] == plain["name"])["status"], "Open")
+        yaws = [t for t in self.erp.todos if t["allocated_to"] == "yaw@test"]
+        self.assertEqual(len(yaws), 1, "the lost answer's To-Do was made")
+        # trying again finds it, makes no second one, mentions Yaw once, then cancels Ama's
+        res = self._do("reassign_task", todo=plain["name"], to_user="yaw@test")
+        self.assertEqual(len([t for t in self.erp.todos if t["allocated_to"] == "yaw@test"]), 1)
+        self.assertTrue(res["reused"])
+        self.assertEqual(res["name"], yaws[0]["name"])
+        self.assertEqual(len([c for c in self.erp.comments if 'data-id="yaw@test"' in c[2]]), 1)
+        self.assertEqual(next(t for t in self.erp.todos if t["name"] == plain["name"])["status"], "Cancelled")
+
+    def test_a_refused_removal_says_both_have_it(self):
+        from command_center.connectors.base import RemotePermissionDenied
+        first = self._task(reference_type="Sales Invoice", reference_name="ACC-SINV-0001")
+        self.erp.fail["unassign"] = ("before", RemotePermissionDenied("refused"))
+        res = self._do("reassign_task", todo=first["name"], to_user="yaw@test")
+        self.assertIs(res["removed"], False)
+        self.assertIn("both have it", res["removed_notice"])
+        self.assertIn("take Ama off Assigned To", res["removed_notice"])
+        self.assertEqual(self.erp.assigned[-1]["users"], ["yaw@test"], "Yaw has it")
+
+    def test_new_task_retry_after_a_lost_answer_makes_no_second_todo(self):
+        from command_center.api import actions
+        from command_center.connectors.base import WriteNotConfirmed
+        self.erp.fail["insert"] = ("after", WriteNotConfirmed("no answer"))
+        with self.assertRaises(actions.NotConfirmed) as cm:
+            self._task(subject="Count the stock")
+        self.assertIn("may have gone through", str(cm.exception))
+        again = self._task(subject="Count the stock")
+        self.assertEqual(len(self.erp.todos), 1, "one To-Do, not two")
+        self.assertTrue(again["reused"])
+        self.assertIs(again["notified"], True)
+        self.assertEqual(len(self.erp.comments), 1, "the mention, once")
+        # a third press: the To-Do and its mention are both there, so nothing is sent
+        third = self._task(subject="Count the stock")
+        self.assertEqual((len(self.erp.todos), len(self.erp.comments)), (1, 1))
+        self.assertIn("not notified again", third["notice"])
+        # the mention lost too: the retry sends it, once
+        self.erp.fail["comment"] = ("after", WriteNotConfirmed("no answer"))
+        lost = self._task(subject="Fix the pump")
+        self.assertIsNone(lost["notified"], "not known whether they were told")
+        self.assertIn("may not have been notified", lost["notice"])
+        # a different person, or different words, is new work
+        self._task(subject="Count the stock", allocated_to="yaw@test")
+        self.assertEqual(len(self.erp.todos), 3)
+
+    def test_a_project_task_is_not_made_twice_on_retry(self):
+        from command_center.api import actions
+        from command_center.connectors.base import WriteNotConfirmed
+        self.erp.fail["insert"] = ("after", WriteNotConfirmed("no answer"))
+        with self.assertRaises(actions.NotConfirmed):
+            self._task(project="PROJ-0001", subject="Fix the pump")
+        res = self._task(project="PROJ-0001", subject="Fix the pump")
+        self.assertEqual(len(self.erp.tasks), 1)
+        self.assertEqual(res["task"], self.erp.tasks[0]["name"])
+        self.assertEqual(len(self.erp.assigned), 1)
+
+    def test_someone_whose_user_cannot_be_read_may_not_have_been_notified(self):
+        res = self._task(allocated_to="esi@test")   # no User row readable
+        self.assertIsNone(res["notified"])
+        self.assertIn("may not have been notified", res["notice"])
+        self.assertNotIn("has notified", res["notice"])
+        t = self._task(subject="Count the stock")
+        self.erp.users.pop("ama@test")
+        res = self._do("cancel_task", todo=t["name"])
+        self.assertIsNone(res["notified"])
+        self.assertIn("may not have been notified", res["notice"])
+
+    # ---- The business is the record's own -------------------------------------------------
+    def test_all_businesses_is_refused_for_every_write(self):
+        t = self._task(subject="Count the stock")
+        for fn, kw in (("reassign_task", {"todo": t["name"], "to_user": "yaw@test"}),
+                       ("cancel_task", {"todo": t["name"]}),
+                       ("close_task", {"todo": t["name"]}),
+                       ("update_task", {"todo": t["name"], "priority": "High"}),
+                       ("bulk_tasks", {"action": "close", "todos": [t["name"]]}),
+                       ("people", {})):
+            from command_center.api import actions
+            from insights.compat import run_as
+            with run_as("manager@test.com"), self.assertRaises(Exception) as cm:
+                getattr(actions, fn)(business_code="__all__", **kw)
+            self.assertIn("“All businesses” is not one", str(cm.exception), fn)
+        with self.assertRaises(Exception) as cm:
+            self._task(business_code="__all__")
+        self.assertIn("“All businesses” is not one", str(cm.exception))
+        from command_center.api import work
+        from insights.compat import run_as
+        self.erp.calls.clear()
+        with run_as("manager@test.com"), self.assertRaises(Exception) as cm:
+            work.review(todo=t["name"], verdict="accept", business_code="__all__")
+        self.assertIn("“All businesses” is not one", str(cm.exception))
+        self.assertEqual(self.erp.calls, [], "nothing was written anywhere")
+        # every row the screens get says which business it is in
+        got = self._work()
+        self.assertEqual(got["business_code"], self.code)
+        self.assertTrue(got["open"] and all(r["business_code"] == self.code for r in got["open"]))
+        self.assertEqual(self._work("task", todo=t["name"])["business_code"], self.code)
+
+    def test_another_businesss_alert_is_refused(self):
+        from command_center import install
+        from insights.compat import run_as
+        from insights.core import models as M
+        with run_as("Administrator"):
+            install.register_business("Second Pharmacy Ltd", "https://two.test", "k2", "s2")
+        other = M.ConnectedBusiness.objects.exclude(business_code=self.code).get().business_code
+        M.CommandCenterAlert.objects.create(name="AL-B", business_code=other,
+                                            title="Second's invoice is late",
+                                            drill_fact="fact_sales_invoice", drill_filters="{}")
+        with self.assertRaises(Exception) as cm:
+            self._task(alert="AL-B")
+        self.assertIn("This alert belongs to Second Pharmacy Ltd", str(cm.exception))
+        self.assertEqual((self.erp.todos, self.erp.assigned), ([], []), "nothing was made")
+        # with two businesses, no business named is no longer one business
+        with self.assertRaises(Exception) as cm:
+            self._task(business_code=None)
+        self.assertIn("“All businesses” is not one", str(cm.exception))
+
+    # ---- Send Back tells the person; every comment is escaped --------------------------------
+    def test_send_back_mentions_the_person_and_every_comment_is_escaped(self):
+        t = self._task(subject="Fix the pump")
+        next(x for x in self.erp.todos if x["name"] == t["name"])["status"] = "Closed"
+        res = self._work("review", todo=t["name"], verdict="return",
+                         note="<b>Still</b> leaking & <script>x</script>")
+        d, n, html = self.erp.comments[-1]
+        self.assertEqual((d, n), ("ToDo", t["name"]))
+        self.assertIn('class="mention" data-id="ama@test"', html, "ERPNext notifies her")
+        self.assertIn("Sent back by", html)
+        self.assertIn("&lt;b&gt;Still&lt;/b&gt; leaking &amp; &lt;script&gt;", html)
+        self.assertNotIn("<script>", html)
+        self.assertNotIn("<b>", html)
+        self.assertIs(res["notified"], True)
+        self.assertIn("told Ama Owusu it was sent back", res["notice"])
+        self.assertEqual(res["sent_back"], 1)
+        # accept: no mention, escaped
+        next(x for x in self.erp.todos if x["name"] == t["name"])["status"] = "Closed"
+        self._work("review", todo=t["name"], verdict="accept", note="Good <i>work</i>")
+        html = self.erp.comments[-1][2]
+        self.assertNotIn("data-id", html)
+        self.assertIn("Good &lt;i&gt;work&lt;/i&gt;", html)
+        # a note left on a record goes through the same escaping
+        from command_center.api import actions
+        from insights.compat import run_as
+        with run_as("manager@test.com"):
+            actions.add_comment(self.code, "ToDo", t["name"], "<img src=x onerror=alert(1)>")
+        self.assertEqual(self.erp.comments[-1][2], "<p>&lt;img src=x onerror=alert(1)&gt;</p>")
+
+    def test_accepted_is_an_exact_tag(self):
+        a = self._task(subject="One")
+        b = self._task(subject="Two")
+        for t, tags in ((a, ",Not Accepted"), (b, ",Urgent,Accepted")):
+            row = next(x for x in self.erp.todos if x["name"] == t["name"])
+            row.update(status="Closed", modified_by="ama@test", _user_tags=tags)
+        got = self._work()
+        self.assertEqual([t["name"] for t in got["check"]], [a["name"]],
+                         "“Not Accepted” is not Accepted; “Accepted” among others is")
+
+    # ---- Caps are said, dates are the business's ---------------------------------------------
+    def test_a_capped_list_says_so(self):
+        from command_center.api import work
+        for i in range(3):
+            self._task(subject=f"Task {i}")
+        with mock.patch.object(work, "HANDED_OUT_CAP", 2):
+            got = self._work()
+        self.assertEqual(len(got["open"]), 2)
+        self.assertEqual(got["limits"]["handed_out"], 2)
+        self.assertIn("showing the first 2", got["figures"]["work_open"]["note"])
+        got = self._work()
+        self.assertIsNone(got["limits"]["handed_out"])
+        self.assertNotIn("showing the first", got["figures"]["work_open"]["note"])
+        js = (__import__("pathlib").Path(__file__).resolve().parent.parent
+              / "frontend/src/legacy/work.js").read_text()
+        self.assertIn("lim.handed_out", js, "the list says it too")
+
+    def test_dates_are_the_businesss_own(self):
+        import datetime as _dt
+        from zoneinfo import ZoneInfo
+        from insights.core.models import ConnectedBusiness
+        # a zone whose date is not the platform's today, so the test means something
+        zone = next(z for z in ("Pacific/Kiritimati", "Pacific/Pago_Pago")
+                    if _dt.datetime.now(ZoneInfo(z)).date() != _dt.date.today())
+        there = _dt.datetime.now(ZoneInfo(zone)).date()
+        ConnectedBusiness.objects.filter(business_code=self.code).update(timezone=zone)
+        due = str(min(there, TODAY))
+        self._task(subject="Due on the earlier day", due_date=due)
+        got = self._work()
+        self.assertEqual(got["today"], str(there))
+        self.assertEqual(got["open"][0]["late_days"], max((there - min(there, TODAY)).days, 0))
+        self.assertEqual(got["figures"]["work_open"]["as_of"]["date"], str(there))
+
+    # ---- A stale approval card is refused --------------------------------------------------
+    def test_an_approval_on_a_stale_card_is_refused(self):
+        from command_center.api import actions
+        from insights.compat import run_as
+        doc = {"name": "PUR-ORD-0001", "doctype": "Purchase Order",
+               "workflow_state": "Pending L2", "modified": "2026-11-17 09:00:00.000000"}
+        applied = []
+        self.erp.conn.get_doc = lambda dt_, name: dict(doc)
+        base_call = self.erp.conn._call
+
+        def call(method, params=None, **k):
+            if method == "frappe.model.workflow.apply_workflow":
+                applied.append(params["action"])
+                return {**doc, "workflow_state": "Approved"}
+            return base_call(method, params, **k)
+        self.erp.conn._call = call
+
+        def decide(**kw):
+            with run_as("manager@test.com"):
+                return actions.apply_workflow_action(self.code, "Purchase Order", "PUR-ORD-0001",
+                                                     "Approve", **kw)
+        # the card showed L1; someone else has already approved L1
+        with self.assertRaises(actions.MovedOn) as cm:
+            decide(expected_state="Pending L1", state_field="workflow_state")
+        self.assertIn("already moved to “Pending L2” by someone else", str(cm.exception))
+        self.assertEqual(applied, [], "L2 was not approved by a press on L1's card")
+        # same state, changed since the card was read
+        with self.assertRaises(actions.MovedOn):
+            decide(expected_state="Pending L2", expected_modified="2026-11-17 08:00:00",
+                   state_field="workflow_state")
+        # no state from the card: refused, not applied blind
+        with self.assertRaises(Exception):
+            decide()
+        self.assertEqual(applied, [])
+        # the card is current: applied
+        got = decide(expected_state="Pending L2", expected_modified="2026-11-17 09:00:00",
+                     state_field="workflow_state")
+        self.assertEqual((applied, got["workflow_state"]), (["Approve"], "Approved"))
+        # the card sends what it showed
+        js = (__import__("pathlib").Path(__file__).resolve().parent.parent
+              / "frontend/src/legacy/work.js").read_text()
+        self.assertIn("state: a.state, state_field: a.state_field, modified: a.modified", js)
+
+    def _bulk(self, **kw):
+        """bulk_tasks as the dialog sends it, its job run straight away, then the batch as
+        bulk_status reads it."""
+        from insights.compat import runtime
+        with mock.patch("frappe.enqueue",
+                        lambda method, **k: runtime.enqueue(method, now=True, **k)):
+            started = self._do("bulk_tasks", **kw)
+        self.assertTrue(started["bulk_id"])
+        from command_center.api import actions
+        from insights.compat import run_as
+        with run_as("manager@test.com"):
+            return actions.bulk_status(started["bulk_id"])
+
     def test_bulk_close_and_cancel_report_each_and_cap_the_size(self):
         a = self._task(subject="One")
         b = self._task(subject="Two", allocated_to="yaw@test")
         c = self._task(subject="Three", reference_type="Sales Invoice", reference_name="ACC-SINV-0009")
         other = self.erp._todo(allocated_to="ama@test", assigned_by="someone@erp.test")
-        res = self._do("bulk_tasks", action="close", todos=json.dumps([a["name"], other["name"], b["name"]]),
-                       note="Done at the stock take.")
+        res = self._bulk(action="close", todos=json.dumps([a["name"], other["name"], b["name"]]),
+                         note="Done at the stock take.")
+        self.assertEqual(res["state"], "done")
         self.assertEqual([d["todo"] for d in res["done"]], [a["name"], b["name"]])
         self.assertEqual([f["todo"] for f in res["failed"]], [other["name"]])
         self.assertIn("Only the person who handed this out", res["failed"][0]["reason"])
         self.assertEqual(res["said"], "2 closed, 1 could not be: Only the person who handed this "
-                                      "out can change it.")
+                                      "out can change it. No one was mentioned, so no one was "
+                                      "notified.")
         self.assertEqual(other["status"], "Open", "the refused one is untouched")
         closed = [c_ for c_ in self.erp.comments if "Closed by" in c_[2]]
         self.assertEqual(len(closed), 2)
         self.assertFalse(any("data-id" in c_[2] for c_ in closed))
         # cancel goes the cancel_task way: off the document, and the person is told
-        res = self._do("bulk_tasks", action="cancel", todos=[c["name"]])
-        self.assertEqual(res["said"], "1 cancelled")
+        res = self._bulk(action="cancel", todos=[c["name"]])
+        self.assertEqual(res["said"], "1 cancelled. All 1 were told.")
+        self.assertEqual((res["told"], res["not_told"]), (1, []))
         self.assertEqual(self.erp.unassigned, [("Sales Invoice", "ACC-SINV-0009", "ama@test")])
         self.assertIn("withdrawn", self.erp.comments[-1][2])
         self.assertIn('data-id="ama@test"', self.erp.comments[-1][2])
@@ -7410,6 +7770,43 @@ class TaskManagement(TransactionTestCase):
             self._do("bulk_tasks", action="delete", todos=[a["name"]])
         with self.assertRaises(Exception):
             self._do("bulk_tasks", action="close", todos=[])
+
+    def test_bulk_cancel_says_who_was_not_told_and_why(self):
+        """Bulk Cancel used to report only how many were cancelled, so it read as if every
+        person had been told. Now it says how many were told, and who was not and why."""
+        self.erp.users["kofi@test"] = {"name": "kofi@test", "full_name": "Kofi Mensah",
+                                       "allowed_in_mentions": 0}
+        a = self._task(subject="One")
+        k = self._task(subject="Two", allocated_to="kofi@test")
+        res = self._bulk(action="cancel", todos=[a["name"], k["name"]], note="Wrong list.")
+        self.assertEqual(res["told"], 1)
+        self.assertEqual([(n["todo"], n["to_name"]) for n in res["not_told"]],
+                         [(k["name"], "Kofi Mensah")])
+        self.assertIn("Allowed In Mentions", res["not_told"][0]["reason"])
+        self.assertEqual(res["said"], "2 cancelled. 1 of 2 were told; the others may not know "
+                                      "(listed below).")
+        # the dialog shows both lists, and follows the job until it has finished
+        import pathlib
+        jsx = (pathlib.Path(__file__).resolve().parent.parent
+               / "frontend/src/components/ActionDialog.jsx").read_text()
+        self.assertIn("api.bulkStatus(cur.bulk_id)", jsx)
+        self.assertIn("res?.not_told", jsx)
+
+    def test_a_bulk_batch_that_stops_says_so(self):
+        from command_center.api import actions
+        from insights.compat import run_as
+        with run_as("manager@test.com"):
+            actions._bulk_put({"bulk_id": "b1", "state": "running", "action": "close",
+                               "total": 5, "done": [{"todo": "TD-1", "notified": None}],
+                               "failed": [], "updated": actions._clock() - actions.BULK_STALE - 5})
+            got = actions.bulk_status("b1")
+            self.assertEqual(got["state"], "stalled")
+            self.assertIn("stopped part-way", got["said"])
+            self.assertIn("The other 4 were not changed", got["said"])
+            self.assertEqual(actions.bulk_status("nope")["state"], "unknown")
+        # another manager cannot read it
+        with run_as("Administrator"):
+            self.assertEqual(actions.bulk_status("b1")["state"], "unknown")
 
     def test_every_tile_filters_the_list(self):
         self._task()
@@ -7776,6 +8173,136 @@ class ApprovalsSkipFinishedDocuments(SimpleTestCase):
         from command_center.api import work
         got = work._approvals("samuel@x", self._src(states={}))
         self.assertEqual([a["name"] for a in got], ["ACC-PAY-2026-00010"])
+
+    # The rule is the plain cancellation only (17 Nov 2026): the action named Cancel that
+    # leads to a cancelled state. A step to Document Status 2 under another name is a
+    # decision, and so is a Cancel that leads anywhere else.
+    def _make(self, transitions, states, docs, roles=frozenset({"DIR"})):
+        case = self
+
+        class Src:
+            listed = []
+
+            def roles(self, user): return set(roles) if roles is not None else None
+            def workflows(self): return [case.WF]
+            def transitions(self, wf): return transitions
+            def states(self, wf): return states
+            def fields(self, doctype): return {"paid_amount"}, None
+
+            def list(self, doctype, filters=None, limit=None, **kw):
+                Src.listed.append((filters, limit))
+                wanted = set(filters["workflow_state"][1])
+                return [d for d in docs if d["workflow_state"] in wanted][:limit]
+
+            def actions(self, doctype, row):
+                return [(t["action"], t["next_state"]) for t in transitions
+                        if t["state"] == row["workflow_state"]
+                        and (roles is None or t["allowed"] in roles)]
+
+            def fullname(self, user): return user
+            def url(self, doctype, name): return f"/app/x/{name}"
+        return Src()
+
+    @staticmethod
+    def _doc(name, state, docstatus):
+        return {"name": name, "owner": "a@x", "creation": "2026-11-01", "modified": "2026-11-01",
+                "docstatus": docstatus, "workflow_state": state}
+
+    def test_reject_to_a_cancelled_state_is_a_decision(self):
+        from command_center.api import work
+        src = self._make(
+            [{"state": "Pending Final", "allowed": "DIR", "action": "Approve", "next_state": "Final"},
+             {"state": "Pending Final", "allowed": "DIR", "action": "Reject", "next_state": "Rejected"}],
+            {"Pending Final": "1", "Final": "1", "Rejected": "2"},
+            [self._doc("PE-1", "Pending Final", 1)])
+        got = work._approvals("samuel@x", src)
+        self.assertEqual([(a["name"], a["actions"]) for a in got], [("PE-1", ["Approve", "Reject"])])
+
+    def test_a_cancellation_request_is_waiting(self):
+        from command_center.api import work
+        src = self._make(
+            [{"state": "Cancel Requested", "allowed": "DIR", "action": "Approve Cancellation",
+              "next_state": "Cancelled"}],
+            {"Cancel Requested": "1", "Cancelled": "2"},
+            [self._doc("PE-2", "Cancel Requested", 1)])
+        got = work._approvals("samuel@x", src)
+        self.assertEqual([(a["name"], a["actions"]) for a in got],
+                         [("PE-2", ["Approve Cancellation"])])
+        self.assertIn("Cancel Requested", src.listed[0][0]["workflow_state"][1])
+
+    def test_cancel_to_a_draft_state_is_a_decision(self):
+        from command_center.api import work
+        transitions = [{"state": "Draft", "allowed": "DIR", "action": "Cancel", "next_state": "Withdrawn"}]
+        docs = [self._doc("PE-3", "Draft", 0)]
+        for states in ({"Draft": "0", "Withdrawn": "0"}, {}):
+            got = work._approvals("samuel@x", self._make(transitions, states, docs))
+            self.assertEqual([(a["name"], a["actions"]) for a in got], [("PE-3", ["Cancel"])],
+                             f"states known: {bool(states)}")
+
+    def test_without_the_states_only_a_submitted_documents_cancel_is_finished(self):
+        from command_center.api import work
+        transitions = [{"state": "Approved", "allowed": "DIR", "action": "Cancel", "next_state": "Cancelled"},
+                       {"state": "Draft", "allowed": "DIR", "action": "Cancel", "next_state": "Cancelled"}]
+        docs = [self._doc("PE-4", "Approved", 1), self._doc("PE-5", "Draft", 0)]
+        got = work._approvals("samuel@x", self._make(transitions, {}, docs))
+        self.assertEqual([a["name"] for a in got], ["PE-5"])
+
+    def test_a_step_allowed_to_all_is_this_persons(self):
+        """Has Role lists only the roles given by hand; ERPNext also gives every user All
+        and Guest (and Desk User on v15/v16), so a step allowed to All is theirs."""
+        from command_center.api import work
+
+        class Conn:
+            code = "X"
+
+            def get_list(self, doctype, filters=None, fields=None, **kw):
+                if doctype == "Has Role":
+                    return [{"role": "Accounts User"}]
+                if doctype == "User":
+                    return [{"user_type": "System User"}]
+                return []
+        roles = work._Remote(Conn()).roles("samuel@x")
+        self.assertTrue({"Accounts User", "All", "Guest", "Desk User"} <= roles)
+        src = self._make([{"state": "Pending", "allowed": "All", "action": "Approve",
+                           "next_state": "Approved"}], {"Pending": "0", "Approved": "1"},
+                         [self._doc("PE-6", "Pending", 0)], roles=roles)
+        self.assertEqual([a["name"] for a in work._approvals("samuel@x", src)], ["PE-6"])
+        self.assertIsNone(work._Remote(Conn()).roles("Administrator"), "every role")
+
+    def test_a_capped_queue_says_so(self):
+        from command_center.api import work
+        docs = [self._doc(f"PE-{i}", "Pending", 0) for i in range(3)]
+        src = self._make([{"state": "Pending", "allowed": "DIR", "action": "Approve",
+                           "next_state": "Approved"}], {"Pending": "0", "Approved": "1"}, docs)
+        with mock.patch.object(work, "APPROVALS_CAP", 2):
+            got = work._approvals("samuel@x", src)
+        self.assertEqual(len(got), 2)
+        self.assertTrue(got.capped)
+        self.assertEqual(got.capped_in, ("Payment Entry",))
+        self.assertEqual(src.listed[0][1], 3, "one more than the cap is asked for, to know")
+
+    def test_a_card_that_has_moved_on_is_refused_before_anything_is_sent(self):
+        import types
+        from command_center.connectors.base import DocumentChanged, check_unchanged
+        from command_center.connectors.remote import RemoteConnector
+        biz = types.SimpleNamespace(business_code="X", business_name="X Ltd", currency="GHS",
+                                    site_url="https://x.test", name="X")
+        conn = RemoteConnector(biz, acting_user="m@x")
+        sent = []
+        conn.get_doc = lambda dt_, name: {"name": name, "approval_status": "Pending L2",
+                                          "modified": "2026-11-17 09:00:00"}
+        conn._call = lambda method, params=None, **k: sent.append(method) or {}
+        with self.assertRaises(DocumentChanged) as cm:
+            conn.apply_workflow("Purchase Order", "PO-1", "Approve",
+                                expected={"field": "approval_status", "state": "Pending L1"})
+        self.assertEqual(cm.exception.state, "Pending L2")
+        self.assertEqual(sent, [])
+        conn.apply_workflow("Purchase Order", "PO-1", "Approve",
+                            expected={"field": "approval_status", "state": "Pending L2",
+                                      "modified": "2026-11-17 09:00:00.000000"})
+        self.assertEqual(sent, ["frappe.model.workflow.apply_workflow"],
+                         "the same moment, written two ways, is the same")
+        check_unchanged({"workflow_state": "A"}, None)   # nothing to compare: allowed
 
 
 # --------------------------------------------------------------------------- Executive Summary

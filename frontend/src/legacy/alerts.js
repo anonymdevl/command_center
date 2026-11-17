@@ -115,8 +115,10 @@ function card(a, onOpen) {
   }
   c.append(meta);
 
+  // The alert's own business goes with every action on it: in "All businesses" the
+  // screen's scope is no business at all (api/actions._business refuses it).
   const ctx = { title: a.title, detail: [a.why, a.next_step && `Next: ${a.next_step}`].filter(Boolean).join("\n"),
-                owner: a.owner_label, alert: a.name,
+                owner: a.owner_label, alert: a.name, business_code: a.business_code,
                 doctype: a.document?.doctype, docname: a.document?.name };
   const acts = el("div", "acts");
   acts.append(

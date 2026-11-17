@@ -19,9 +19,12 @@ function csrfToken() {
 }
 
 export class ApiError extends Error {
-  constructor(message, { status, method, exc } = {}) {
+  constructor(message, { status, method, exc, excType } = {}) {
     super(message);
     this.name = "ApiError";
+    // The server's exception class: "NotConfirmed" (a write ERPNext did not confirm -- it
+    // may have gone through) and "MovedOn" (a stale approval card) are told apart by it.
+    this.excType = excType || null;
     this.status = status;
     this.method = method;
     this.exc = exc;
@@ -73,6 +76,7 @@ export async function call(method, args = {}, { signal } = {}) {
       status: res.status,
       method,
       exc: body?.exc,
+      excType: body?.exc_type,
     });
   }
   return body.message;
@@ -246,8 +250,10 @@ export const api = {
 
   /* Today, Approvals and Outstanding Tasks (api/work.py), and the decisions on them. */
   work: (business_code) => call("command_center.api.work.summary", { business_code }),
-  decide: ({ business_code, doctype, name, action }) =>
-    call("command_center.api.actions.apply_workflow_action", { business_code, doctype, name, action }),
+  /* The card's own state and stamp go with it: refused if the document has moved on. */
+  decide: ({ business_code, doctype, name, action, expected_state, expected_modified, state_field }) =>
+    call("command_center.api.actions.apply_workflow_action",
+      { business_code, doctype, name, action, expected_state, expected_modified, state_field }),
   review: ({ business_code, todo, verdict, note }) =>
     call("command_center.api.work.review", { business_code, todo, verdict, note }),
   /* One task handed out, for its drawer: details, dates, document, comments. */
@@ -259,9 +265,11 @@ export const api = {
     call("command_center.api.actions.cancel_task", { business_code, todo, reason }),
   closeTask: ({ business_code, todo, note }) =>
     call("command_center.api.actions.close_task", { business_code, todo, note }),
-  /* Close or cancel many at once, one by one: {done: [...], failed: [{todo, reason}], said}. */
+  /* Close or cancel many at once, one by one, as a background job: bulkTasks starts it
+     ({bulk_id, state}), bulkStatus follows it to {done, failed, told, not_told, said}. */
   bulkTasks: ({ business_code, action, todos, note }) =>
     call("command_center.api.actions.bulk_tasks", { business_code, action, todos, note }),
+  bulkStatus: (bulk_id) => call("command_center.api.actions.bulk_status", { bulk_id }),
   updateTask: ({ business_code, todo, due_date, priority }) =>
     call("command_center.api.actions.update_task", { business_code, todo, due_date, priority }),
 

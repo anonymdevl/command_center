@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
-import { brand } from "../api/boot.js";
+import { boot, brand } from "../api/boot.js";
 
 /**
  * Put a piece of work on someone's desk, from wherever it was noticed.
@@ -38,6 +38,17 @@ import { brand } from "../api/boot.js";
  * "bulk_tasks" is Close Selected / Cancel Selected on Outstanding Tasks (BulkChange): it
  * says how many and to whom before anything changes, then sends them one by one
  * (api/actions bulk_tasks) and says how many were done and why any were not.
+ *
+ * The business (17 Nov 2026). Every action goes to the business of the record it acts
+ * on -- the alert's, the task row's, the approval card's, the drawer's (req.business_code,
+ * set where the event is fired) -- never to the screen's scope: in "All businesses" that
+ * is no business, and it used to fall back to the default one, so business B's alert was
+ * assigned on business A's ERPNext. A request that carries none (a designed screen's
+ * button) goes to the business shown, or, in "All businesses", to the one chosen here;
+ * the people listed are always that business's. Bulk Close / Cancel runs as a job the
+ * dialog follows (bulk_status), and says how many were told and who was not. A write
+ * ERPNext did not confirm ("NotConfirmed") says it may have gone through and to check
+ * before trying again; trying again does not make the To-Do twice (api/actions).
  */
 
 const KINDS = {
@@ -53,6 +64,46 @@ const CHANGES = new Set(["reassign", "cancel_task", "close_task", "edit_task"]);
 const PRIORITIES = ["Low", "Medium", "High"];
 
 let peopleCache = {};
+
+const realScopes = () => (boot.scopes || []).filter((s) => s.code && s.code !== "__all__");
+
+/** The business an action goes to: the record's own; else the one on screen; never
+ *  "All businesses" (api/actions._business refuses it). "" when it must be chosen. */
+export function businessOf(req, scope) {
+  if (req?.business_code) return req.business_code;
+  if (scope && scope !== "__all__") return scope;
+  const real = realScopes();
+  return real.length === 1 ? real[0].code : "";
+}
+
+/** People of one business, read once per business. */
+function loadPeople(business, set) {
+  if (!business) {
+    set([]);
+    return;
+  }
+  if (peopleCache[business]) {
+    set(peopleCache[business]);
+    return;
+  }
+  api.people(business).then((p) => {
+    peopleCache[business] = p || [];
+    set(peopleCache[business]);
+  }).catch(() => set([]));
+}
+
+/** A refusal in words; one ERPNext did not confirm says it may have gone through. */
+function Failure({ error, unsure }) {
+  if (!error) return null;
+  return (
+    <div className="dlg-err" role="alert">
+      {unsure ? <b>Not confirmed: it may have gone through. Check in ERPNext before trying again. </b> : null}
+      {error}
+    </div>
+  );
+}
+
+const unsureOf = (err) => err?.excType === "NotConfirmed";
 
 const firstName = (name) => (name || "").trim().split(/\s+/)[0] || name || "";
 
@@ -113,6 +164,10 @@ export default function ActionDialog({ scope }) {
   const [prio, setPrio] = useState("Medium");
   const [docType, setDocType] = useState("");
   const [docName, setDocName] = useState("");
+  // The business it goes to (businessOf), and whether it has to be chosen here.
+  const [biz, setBiz] = useState("");
+  const [pickBiz, setPickBiz] = useState(false);
+  const [unsure, setUnsure] = useState(false);
   const first = useRef(null);
 
   useEffect(() => {
@@ -131,7 +186,11 @@ export default function ActionDialog({ scope }) {
       setDocName("");
       setState("idle");
       setError("");
+      setUnsure(false);
       setDone(null);
+      const fixed = businessOf(r, scope);
+      setBiz(fixed || r.preset_business || "");
+      setPickBiz(!fixed);
       setMgr(null);
       setMgrState("idle");
       // A delegated task says who it was given to; otherwise ERPNext is asked (below).
@@ -143,25 +202,23 @@ export default function ActionDialog({ scope }) {
     };
     window.addEventListener("cc-action", open);
     return () => window.removeEventListener("cc-action", open);
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
     if (!req) return;
     const esc = (e) => e.key === "Escape" && setReq(null);
     document.addEventListener("keydown", esc);
-    if (!KINDS[req.kind]) return () => document.removeEventListener("keydown", esc);
-    const key = scope || "__all__";
-    if (peopleCache[key]) {
-      setPeople(peopleCache[key]);
-    } else {
-      api.people(scope).then((p) => {
-        peopleCache[key] = p || [];
-        setPeople(peopleCache[key]);
-      }).catch(() => setPeople([]));
-    }
+    setTimeout(() => first.current?.focus(), 30);
+    return () => document.removeEventListener("keydown", esc);
+  }, [req]);
+
+  // The people, and whose work it is, of the business it goes to: never another's.
+  useEffect(() => {
+    if (!req || !KINDS[req.kind]) return undefined;
+    loadPeople(biz, setPeople);
     let stale = false;
-    if (req.kind === "escalate" && !req.assignee) {
-      api.whoseWork({ business_code: scope, doctype: req.doctype || null, name: req.docname || null,
+    if (biz && req.kind === "escalate" && !req.assignee) {
+      api.whoseWork({ business_code: biz, doctype: req.doctype || null, name: req.docname || null,
                       todo: req.todo || null, alert: req.alert || null })
         .then((w) => {
           if (stale || !w?.user) return;
@@ -169,17 +226,13 @@ export default function ActionDialog({ scope }) {
           setWhose((cur) => cur || w.user);
         }).catch(() => {});
     }
-    setTimeout(() => first.current?.focus(), 30);
-    return () => {
-      stale = true;
-      document.removeEventListener("keydown", esc);
-    };
-  }, [req, scope]);
+    return () => { stale = true; };
+  }, [req, biz]);
 
   // Escalate: whenever whose work it is changes, ask ERPNext who their manager is.
   const escalating = req?.kind === "escalate";
   useEffect(() => {
-    if (!escalating || !whose) {
+    if (!escalating || !whose || !biz) {
       setMgr(null);
       setMgrState("idle");
       return undefined;
@@ -187,7 +240,7 @@ export default function ActionDialog({ scope }) {
     let stale = false;
     setMgrState("loading");
     setMgr(null);
-    api.managerOf({ business_code: scope, user: whose }).then((m) => {
+    api.managerOf({ business_code: biz, user: whose }).then((m) => {
       if (stale) return;
       setMgr(m || null);
       setMgrState("done");
@@ -199,7 +252,7 @@ export default function ActionDialog({ scope }) {
       setWho("");
     });
     return () => { stale = true; };
-  }, [escalating, whose, scope]);
+  }, [escalating, whose, biz]);
 
   if (!req) return null;
   if (req.kind === "bulk_tasks") {
@@ -226,6 +279,10 @@ export default function ActionDialog({ scope }) {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (!biz) {
+      setError("Choose the business this goes to.");
+      return;
+    }
     if (escalating && !whose) {
       setError("Choose whose work this is.");
       return;
@@ -248,11 +305,12 @@ export default function ActionDialog({ scope }) {
     }
     setState("saving");
     setError("");
+    setUnsure(false);
     try {
       const title = creating ? subject.trim()
         : `${k.lead}${req.title || `From ${brand.product}`}`.slice(0, 140);
       const res = await api.createTask({
-        business_code: scope,
+        business_code: biz,
         subject: title.slice(0, 140),
         description: note,
         allocated_to: who,
@@ -274,9 +332,11 @@ export default function ActionDialog({ scope }) {
       setState("done");
     } catch (err) {
       setError(err?.message || "ERPNext did not accept it.");
+      setUnsure(unsureOf(err));
       setState("failed");
     }
   };
+  const bizName = realScopes().find((s) => s.code === biz)?.label;
 
   return (
     <div className="dlg-scrim" onMouseDown={(e) => e.target === e.currentTarget && setReq(null)}>
@@ -292,6 +352,7 @@ export default function ActionDialog({ scope }) {
                 {done.notice}
               </p>
             ) : null}
+            {pickBiz && bizName ? <p className="dlg-hint">In {bizName}’s ERPNext.</p> : null}
             {done.escalation?.told_notice ? (
               <p className={done.escalation.told === false ? "dlg-err" : "dlg-hint"}
                  role={done.escalation.told === false ? "alert" : undefined}>
@@ -324,12 +385,21 @@ export default function ActionDialog({ scope }) {
               </>
             ) : null}
             {req.owner ? <p className="dlg-hint">Suggested owner: {req.owner}</p> : null}
+            {pickBiz ? (
+              <>
+                <label htmlFor="dlg-biz">Business</label>
+                <select id="dlg-biz" value={biz} onChange={(e) => { setBiz(e.target.value); setWho(""); setWhose(""); setPrefill(null); }}>
+                  <option value="">Choose the business it belongs to</option>
+                  {realScopes().map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
+                </select>
+              </>
+            ) : null}
 
             {escalating ? (
               <>
                 <label htmlFor="dlg-whose">Whose work is this?</label>
                 <select id="dlg-whose" ref={first} value={whose} onChange={(e) => setWhose(e.target.value)}>
-                  <option value="">{people.length ? "Choose a person" : "Loading people…"}</option>
+                  <option value="">{!biz ? "Choose the business first" : people.length ? "Choose a person" : "Loading people…"}</option>
                   {extra(whose, ownerName)}
                   {people.map((p) => (
                     <option key={p.user} value={p.user}>{p.name}</option>
@@ -364,7 +434,7 @@ export default function ActionDialog({ scope }) {
               <>
                 <label htmlFor="dlg-who">To</label>
                 <select id="dlg-who" ref={creating ? null : first} value={who} onChange={(e) => setWho(e.target.value)}>
-                  <option value="">{people.length ? "Choose a person" : "Loading people…"}</option>
+                  <option value="">{!biz ? "Choose the business first" : people.length ? "Choose a person" : "Loading people…"}</option>
                   {people.map((p) => (
                     <option key={p.user} value={p.user}>{p.name}</option>
                   ))}
@@ -408,7 +478,7 @@ export default function ActionDialog({ scope }) {
               </fieldset>
             ) : null}
 
-            {error ? <div className="dlg-err" role="alert">{error}</div> : null}
+            <Failure error={error} unsure={unsure} />
             <div className="dlg-acts">
               <button type="button" className="ap-act" onClick={() => setReq(null)}>Cancel</button>
               <button type="submit" className="ap-act pri" disabled={state === "saving"}>
@@ -440,25 +510,24 @@ const CHANGE_WORDS = {
 /** Reassign, withdraw, or change the date and priority of open work handed out. Asks first. */
 function TaskChange({ req, scope, close }) {
   const w = CHANGE_WORDS[req.kind];
-  const [people, setPeople] = useState(peopleCache[scope || "__all__"] || []);
+  // The task's own business (legacy/work.js taskRequest), never the screen's scope.
+  const business = businessOf(req, scope);
+  const [people, setPeople] = useState(peopleCache[business] || []);
   const [to, setTo] = useState("");
   const [note, setNote] = useState("");
   const [due, setDue] = useState(req.date || "");
   const [prio, setPrio] = useState(PRIORITIES.includes(req.priority) ? req.priority : "Medium");
   const [state, setState] = useState("idle");
   const [error, setError] = useState("");
+  const [unsure, setUnsure] = useState(false);
   const [res, setRes] = useState(null);
   const them = req.assignee_name || req.assignee || "them";
   const onDoc = req.doctype && req.docname;
 
   useEffect(() => {
     if (req.kind !== "reassign" || people.length) return;
-    const key = scope || "__all__";
-    api.people(scope).then((p) => {
-      peopleCache[key] = p || [];
-      setPeople(peopleCache[key]);
-    }).catch(() => setPeople([]));
-  }, [req.kind, scope, people.length]);
+    loadPeople(business, setPeople);
+  }, [req.kind, business, people.length]);
 
   useEffect(() => {
     const esc = (e) => e.key === "Escape" && close();
@@ -469,10 +538,10 @@ function TaskChange({ req, scope, close }) {
   const toName = people.find((p) => p.user === to)?.name || to;
   const what = req.kind === "reassign"
     ? (onDoc
-      ? `ERPNext takes ${req.doctype} ${req.docname} off ${them} and assigns it to ${to ? toName : "the person you choose"}, `
-        + "so both are notified there. A comment on the document says you moved it."
-      : `${them}’s To-Do is cancelled in ERPNext and a new one with the same subject and details goes to `
-        + `${to ? toName : "the person you choose"}, who is mentioned on it. A comment on the old To-Do tells ${them}.`)
+      ? `ERPNext assigns ${req.doctype} ${req.docname} to ${to ? toName : "the person you choose"} first, and only then takes it off ${them}, `
+        + "so both are notified there and it is never with no one. A comment on the document says you moved it."
+      : `A new To-Do with the same subject and details goes to ${to ? toName : "the person you choose"}, who is mentioned on it; `
+        + `only then is ${them}’s To-Do cancelled in ERPNext. A comment on the old To-Do tells ${them}.`)
     : req.kind === "cancel_task"
       ? (onDoc
         ? `ERPNext takes ${req.doctype} ${req.docname} off ${them}: their To-Do is cancelled and they leave Assigned To. `
@@ -489,22 +558,29 @@ function TaskChange({ req, scope, close }) {
       setError("Choose who it goes to now.");
       return;
     }
+    if (!business) {
+      setError("Open this task from the business it belongs to, then try again.");
+      return;
+    }
     setState("saving");
     setError("");
+    setUnsure(false);
     try {
       const got = req.kind === "reassign"
-        ? await api.reassignTask({ business_code: scope, todo: req.todo, to_user: to, note })
+        ? await api.reassignTask({ business_code: business, todo: req.todo, to_user: to, note })
         : req.kind === "cancel_task"
-          ? await api.cancelTask({ business_code: scope, todo: req.todo, reason: note })
+          ? await api.cancelTask({ business_code: business, todo: req.todo, reason: note })
           : req.kind === "close_task"
-          ? await api.closeTask({ business_code: scope, todo: req.todo, note })
-          : await api.updateTask({ business_code: scope, todo: req.todo, due_date: due || "", priority: prio });
+          ? await api.closeTask({ business_code: business, todo: req.todo, note })
+          : await api.updateTask({ business_code: business, todo: req.todo, due_date: due || "", priority: prio });
       setRes(got || {});
       setState("done");
       window.dispatchEvent(new CustomEvent("cc-work-changed"));
     } catch (err) {
       setError(err?.message || "ERPNext did not accept it.");
+      setUnsure(unsureOf(err));
       setState("failed");
+      window.dispatchEvent(new CustomEvent("cc-work-changed"));
     }
   };
 
@@ -520,6 +596,7 @@ function TaskChange({ req, scope, close }) {
             <div className="dlg-ok" aria-hidden="true">✓</div>
             <h3 id="dlg-t">{req.kind === "reassign" ? `Reassigned to ${res.to_name || toName}` : w.done}</h3>
             <p className="dlg-sub">{res.said || "Done in ERPNext, as you."}</p>
+            {notice(res.removed_notice, res.removed === true)}
             {notice(res.notice, res.notified)}
             {notice(res.told_notice, res.told)}
             <div className="dlg-acts">
@@ -575,7 +652,7 @@ function TaskChange({ req, scope, close }) {
                 </div>
               </div>
             ) : null}
-            {error ? <div className="dlg-err" role="alert">{error}</div> : null}
+            <Failure error={error} unsure={unsure} />
             <div className="dlg-acts">
               <button type="button" className="ap-act" onClick={close}>{req.kind === "cancel_task" ? "Keep It" : "Cancel"}</button>
               <button type="submit" className={`ap-act pri${req.kind === "cancel_task" ? " dgr" : ""}`} disabled={state === "saving"}>
@@ -603,14 +680,20 @@ function bulkPlan(action, tasks) {
   return `${action === "close" ? "Close" : "Cancel"} ${n} ${n === 1 ? "task" : "tasks"}: ${people}`;
 }
 
-/** Close Selected / Cancel Selected: says how many and to whom first, then one by one. */
+/** Close Selected / Cancel Selected: says how many and to whom first, then one by one, as
+ *  a job on the server (api/actions bulk_tasks) that this follows (bulk_status) until it
+ *  has finished: how many were done, which could not be and why, and -- for Cancel --
+ *  how many were told and who was not, and why. Closing the dialog does not stop it. */
 function BulkChange({ req, scope, close }) {
   const closing = req.action === "close";
+  const business = businessOf(req, scope);
   const [note, setNote] = useState("");
-  const [state, setState] = useState("idle");
+  const [state, setState] = useState("idle"); // idle | saving | running | done | failed
   const [error, setError] = useState("");
   const [res, setRes] = useState(null);
   const tasks = req.tasks || [];
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
 
   useEffect(() => {
     const esc = (e) => e.key === "Escape" && state !== "saving" && close();
@@ -618,17 +701,39 @@ function BulkChange({ req, scope, close }) {
     return () => document.removeEventListener("keydown", esc);
   }, [close, state]);
 
+  const follow = async (got) => {
+    let cur = got || {};
+    while (alive.current && !cur.finished && cur.state !== "unknown") {
+      setRes(cur);
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((ok) => { setTimeout(ok, 1500); });
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        cur = (await api.bulkStatus(cur.bulk_id)) || cur;
+      } catch {
+        /* a missed poll is asked again */
+      }
+    }
+    if (!alive.current) return;
+    setRes(cur);
+    setState("done");
+    window.dispatchEvent(new CustomEvent("cc-tasks-unselect"));
+    window.dispatchEvent(new CustomEvent("cc-work-changed"));
+  };
+
   const submit = async (e) => {
     e.preventDefault();
+    if (!business) {
+      setError("Open these tasks from the business they belong to, then try again.");
+      return;
+    }
     setState("saving");
     setError("");
     try {
-      const got = await api.bulkTasks({ business_code: scope, action: req.action,
+      const got = await api.bulkTasks({ business_code: business, action: req.action,
                                         todos: tasks.map((t) => t.name), note });
-      setRes(got || {});
-      setState("done");
-      window.dispatchEvent(new CustomEvent("cc-tasks-unselect"));
-      window.dispatchEvent(new CustomEvent("cc-work-changed"));
+      setState("running");
+      follow(got);
     } catch (err) {
       setError(err?.message || "ERPNext did not accept it.");
       setState("failed");
@@ -637,23 +742,47 @@ function BulkChange({ req, scope, close }) {
 
   const titleOf = Object.fromEntries(tasks.map((t) => [t.name, t.title]));
   const failed = res?.failed || [];
+  const notTold = res?.not_told || [];
+  const working = state === "saving" || state === "running";
+  const shown = state === "done" || state === "running";
   return (
     <div className="dlg-scrim" onMouseDown={(e) => e.target === e.currentTarget && state !== "saving" && close()}>
       <div className="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
-        {state === "done" ? (
+        {shown ? (
           <>
-            <div className="dlg-ok" aria-hidden="true">{failed.length ? "!" : "✓"}</div>
-            <h3 id="dlg-t">{closing ? "Tasks Closed" : "Assignments Cancelled"}</h3>
-            <p className="dlg-sub">{res.said}</p>
+            <div className="dlg-ok" aria-hidden="true">
+              {state === "running" ? "…" : failed.length || notTold.length || res?.state !== "done" ? "!" : "✓"}
+            </div>
+            <h3 id="dlg-t">{state === "running" ? (closing ? "Closing Tasks" : "Cancelling Assignments")
+              : closing ? "Tasks Closed" : "Assignments Cancelled"}</h3>
+            <p className="dlg-sub" role="status">{res?.said || "Starting…"}</p>
             {failed.length ? (
-              <ul className="dlg-fails">
-                {failed.slice(0, 20).map((f) => (
-                  <li key={f.todo}><b>{titleOf[f.todo] || f.todo}</b> {f.reason}</li>
-                ))}
-              </ul>
+              <>
+                <p className="dlg-hint">Not {closing ? "closed" : "cancelled"}:</p>
+                <ul className="dlg-fails">
+                  {failed.slice(0, 50).map((f) => (
+                    <li key={f.todo}>
+                      <b>{titleOf[f.todo] || f.todo}</b>{" "}
+                      {f.unsure ? "ERPNext did not confirm it; it may have gone through. " : ""}{f.reason}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+            {notTold.length ? (
+              <>
+                <p className="dlg-hint">Cancelled, but not told:</p>
+                <ul className="dlg-fails">
+                  {notTold.slice(0, 50).map((f) => (
+                    <li key={f.todo}><b>{f.to_name || f.to || titleOf[f.todo] || f.todo}</b> {f.reason}</li>
+                  ))}
+                </ul>
+              </>
             ) : null}
             <div className="dlg-acts">
-              <button type="button" className="ap-act pri" onClick={close}>Done</button>
+              <button type="button" className="ap-act pri" onClick={close}>
+                {state === "running" ? "Close (It Carries On)" : "Done"}
+              </button>
             </div>
           </>
         ) : (
@@ -667,12 +796,12 @@ function BulkChange({ req, scope, close }) {
             <textarea id="dlg-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
             {error ? <div className="dlg-err" role="alert">{error}</div> : null}
             <div className="dlg-acts">
-              <button type="button" className="ap-act" onClick={close} disabled={state === "saving"}>Keep Them</button>
-              <button type="submit" className={`ap-act pri${closing ? "" : " dgr"}`} disabled={state === "saving"}>
-                {state === "saving" ? "Working…" : closing ? `Close ${tasks.length}` : `Cancel ${tasks.length}`}
+              <button type="button" className="ap-act" onClick={close} disabled={working}>Keep Them</button>
+              <button type="submit" className={`ap-act pri${closing ? "" : " dgr"}`} disabled={working}>
+                {working ? "Working…" : closing ? `Close ${tasks.length}` : `Cancel ${tasks.length}`}
               </button>
             </div>
-            <p className="dlg-foot">They are sent one by one; one that ERPNext refuses does not stop the others, and you are told which and why.</p>
+            <p className="dlg-foot">They are sent one by one; one that ERPNext refuses does not stop the others, and you are told which and why, and who was not told.</p>
           </form>
         )}
       </div>
@@ -695,8 +824,10 @@ function inDays(n) {
 }
 
 function Decision({ req, scope, note, setNote, close }) {
+  const business = businessOf(req, scope);
   const [state, setState] = useState("idle");
   const [error, setError] = useState("");
+  const [unsure, setUnsure] = useState(false);
   const [result, setResult] = useState(null);
   const [until, setUntil] = useState(inDays(7));
   const alertVerb = req.kind === "alert" ? ALERT_VERBS[req.verb] : null;
@@ -716,21 +847,32 @@ function Decision({ req, scope, note, setNote, close }) {
         : "Give a reason. It is kept so the rule can be tuned.");
       return;
     }
+    if (!alertVerb && !business) {
+      setError("Open this from the business it belongs to, then try again.");
+      return;
+    }
     setState("saving");
     setError("");
+    setUnsure(false);
     try {
+      // A decision carries the state and stamp its card showed: refused, never applied to
+      // a later step, when someone else has moved the document on (api/actions).
       const res = alertVerb
         ? await api.alertAct({ name: req.alert, action: req.verb, reason: note,
                                until: req.verb === "defer" ? until : null })
         : req.kind === "decide"
-          ? await api.decide({ business_code: scope, doctype: req.doctype, name: req.name, action: req.action })
-          : await api.review({ business_code: scope, todo: req.todo, verdict: req.verdict, note });
+          ? await api.decide({ business_code: business, doctype: req.doctype, name: req.name, action: req.action,
+                               expected_state: req.state, expected_modified: req.modified, state_field: req.state_field })
+          : await api.review({ business_code: business, todo: req.todo, verdict: req.verdict, note });
       setResult(res || {});
       setState("done");
       window.dispatchEvent(new CustomEvent(alertVerb ? "cc-alerts-changed" : "cc-work-changed"));
     } catch (err) {
       setError(err?.message || "ERPNext did not accept it.");
+      setUnsure(unsureOf(err));
       setState("failed");
+      // A card the document has moved on from is read again, so the queue shows where it is.
+      if (err?.excType === "MovedOn") window.dispatchEvent(new CustomEvent("cc-work-changed"));
     }
   };
 
@@ -750,6 +892,11 @@ function Decision({ req, scope, note, setNote, close }) {
                 ? `${req.doctype} ${req.name} is now at “${result.workflow_state || "its next step"}”.`
                 : back ? "It is open on their list again, with your note." : "It is off your list."}
             </p>
+            {back && result?.notice ? (
+              <p className={result.notified === false ? "dlg-err" : "dlg-hint"} role={result.notified === false ? "alert" : undefined}>
+                {result.notice}
+              </p>
+            ) : null}
             <div className="dlg-acts">
               <button type="button" className="ap-act pri" onClick={close}>Done</button>
             </div>
@@ -771,7 +918,7 @@ function Decision({ req, scope, note, setNote, close }) {
                 <textarea id="dlg-note" rows={4} value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
               </>
             ) : null}
-            {error ? <div className="dlg-err" role="alert">{error}</div> : null}
+            <Failure error={error} unsure={unsure} />
             <div className="dlg-acts">
               <button type="button" className="ap-act" onClick={close}>Cancel</button>
               <button type="submit" className="ap-act pri" disabled={state === "saving"} autoFocus={req.kind === "decide"}>

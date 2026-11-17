@@ -453,8 +453,11 @@ const HANDLERS = {
   "command_center.api.actions.cancel_task": () => ({ said: "Preview only: nothing was sent to ERPNext.", notified: false, notice: "The preview has no ERPNext, so no one was notified." }),
   "command_center.api.actions.close_task": () => ({ said: "Preview only: nothing was sent to ERPNext.", status: "Closed", notified: null, notice: "The preview has no ERPNext, so nothing was closed." }),
   "command_center.api.actions.bulk_tasks": ({ action, todos = [] }) => ({
-    action, done: todos.map((todo) => ({ todo })), failed: [],
+    bulk_id: "preview", state: "done", finished: true, total: todos.length,
+    action, done: todos.map((todo) => ({ todo })), failed: [], not_told: [],
     said: `Preview only: ${todos.length} would be ${action === "close" ? "closed" : "cancelled"}; nothing was sent to ERPNext.` }),
+  "command_center.api.actions.bulk_status": () => ({ bulk_id: "preview", state: "done", finished: true,
+    done: [], failed: [], not_told: [], said: "Preview only: nothing was sent to ERPNext." }),
   "command_center.api.actions.update_task": () => ({ said: "Preview only: nothing was sent to ERPNext.", notified: false, notice: "The preview has no ERPNext, so no one was notified.", changed: [] }),
   // The alert engine's list, at the designed alerts' figures. Sample on this laptop.
   "command_center.api.alerts.open_alerts": () => ({
