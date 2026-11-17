@@ -41,3 +41,16 @@ export function waitingLine(business, lastLoaded) {
   return `Not updated yet: ${slowWords(business)}. This fills in as soon as it does.`
     + (at ? ` The last read was at ${at}.` : "");
 }
+
+/**
+ * A refresh that did not come through while the last answers are still on screen
+ * (useApi keeps them, 17 Nov 2026): when they were read, and that it is tried again --
+ * or, signed out, that signing in again brings the screen up to date.
+ */
+export function staleWords(at, signedOut = false) {
+  const when = readAt(new Date(at).toISOString());
+  const shown = when ? `Last updated ${when}` : "Showing the last figures read";
+  return signedOut
+    ? `${shown}. You have been signed out: sign in again to see the latest.`
+    : `${shown}. The latest refresh did not come through; it is tried again in a minute.`;
+}

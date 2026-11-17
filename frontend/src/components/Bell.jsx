@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api, plansApi } from "../api/client.js";
 import { boot } from "../api/boot.js";
-import { follow, OPEN_KEY } from "../legacy/reports.js";
+import { follow, OPEN_KEY, SIGNED_OUT } from "../legacy/reports.js";
 import Icon from "./Icon.jsx";
+import { settingsSections } from "./Settings.jsx";
 
 /**
  * The bell: how many alerts are open, and a short list of them.
@@ -50,7 +51,9 @@ export default function Bell({ scope, onGo }) {
       load();
       // Shown on the Reports screen already: no toast. Otherwise, a word, once.
       if (!run?.mine || document.querySelector(`.rp[data-run="${run.name}"]`)) return;
-      setToast({ run, ok: d.state === "done" });
+      // Signed out while it was followed: it was not "could not be written" -- it carries
+      // on, and signing in again shows it (17 Nov 2026).
+      setToast({ run, ok: d.state === "done", out: d.state === SIGNED_OUT });
     };
     load();
     const t = setInterval(load, 60000);
@@ -166,12 +169,17 @@ export default function Bell({ scope, onGo }) {
         <div className="cc-toast" role="status" aria-live="polite">
           <span className={`bell-dot ${toast.ok ? "info" : "crit"}`} aria-hidden="true" />
           <span className="bell-t">
-            <b>{reportWords({ ...toast.run, state: toast.ok ? "done" : "failed" })}</b>
+            <b>{toast.out ? `Signed out — sign in again to see your ${toast.run.title}`
+              : reportWords({ ...toast.run, state: toast.ok ? "done" : "failed" })}</b>
             <span>{bizLabel(toast.run.business_code)}</span>
           </span>
-          <button type="button" className="btn" onClick={() => openReport({ ...toast.run, state: toast.ok ? "done" : "failed" })}>
-            {toast.ok ? "View Report" : "Open Reports"}
-          </button>
+          {toast.out ? (
+            <button type="button" className="btn" onClick={() => window.location.reload()}>Sign In</button>
+          ) : (
+            <button type="button" className="btn" onClick={() => openReport({ ...toast.run, state: toast.ok ? "done" : "failed" })}>
+              {toast.ok ? "View Report" : "Open Reports"}
+            </button>
+          )}
           <button type="button" className="cc-toast-x" aria-label="Close" onClick={() => setToast(null)}>×</button>
         </div>
       ) : null}
@@ -282,10 +290,16 @@ export default function Bell({ scope, onGo }) {
             <button type="button" className="lnk" onClick={() => { setOpen(false); onGo?.("command"); }}>
               See them on Home
             </button>
-            {data?.can_tune ? (
-              <a className="lnk" href="/app/command-center-alert-rule" target="_blank" rel="noreferrer">
-                Adjust the rules ↗
-              </a>
+            {data?.can_tune && settingsSections(boot).includes("recommend") ? (
+              // The rules are set in the platform's own Settings (Recommendations), not in
+              // a Frappe desk the standalone platform does not have (/app/... was a 404).
+              <button type="button" className="lnk" onClick={() => {
+                setOpen(false);
+                try { sessionStorage.setItem("cc-settings-tab", "recommend"); } catch { /* private mode */ }
+                onGo?.("settings");
+              }}>
+                Adjust the rules
+              </button>
             ) : null}
           </div>
         </div>

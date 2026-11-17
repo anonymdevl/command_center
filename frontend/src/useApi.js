@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { keep, peek, runner, shared } from "./swr.js";
+import { answered, changed, failed, keep, keptAt, opened, peek, runner, shared } from "./swr.js";
 
 /**
  * Fetch on mount and whenever the dependencies change.
@@ -21,6 +21,12 @@ import { keep, peek, runner, shared } from "./swr.js";
  *
  * reload() reads again now; reload({ background: true }) -- the minute's refresh -- is
  * skipped while the last request is still on its way, so refreshes never pile up.
+ *
+ * A failed read keeps the last good answer to the same call, with the error beside it
+ * and `at` (when that answer was read), so one failed refresh never blanks a screen; a
+ * failed read for a call that changed shows the failure, never the old call's answer
+ * (swr.js opened/changed/answered/failed). Consumers: `error && !data` is the failure
+ * state; `error && data` is "last updated at".
  */
 export function useApi(fn, deps = [], { skip = false, key = null } = {}) {
   const fnRef = useRef(fn);
@@ -32,9 +38,8 @@ export function useApi(fn, deps = [], { skip = false, key = null } = {}) {
   const runRef = useRef(null);
   if (!runRef.current) runRef.current = runner();
   const ctrlRef = useRef(null);
-  const [state, setState] = useState(() => ({
-    data: skip ? null : peek(key), error: null, loading: !skip,
-  }));
+  const [state, setState] = useState(() => (skip ? { ...opened(null), loading: false }
+    : opened(peek(key), keptAt(key))));
 
   const go = useCallback((mode) => {
     if (skipRef.current) return;
@@ -48,14 +53,17 @@ export function useApi(fn, deps = [], { skip = false, key = null } = {}) {
     const call = () => fnRef.current({ signal: ctrl?.signal });
     runRef.current.run(() => (k && mode !== "reload" ? shared(k, call) : call()), {
       background: mode === "background",
-      onStart: () => setState((s) => ({ ...s, loading: true, error: null })),
+      // The minute's refresh keeps the error it is retrying until it is answered, so the
+      // note that the screen is not up to date does not flicker away and back.
+      onStart: () => setState((s) => ({ ...s, loading: true,
+                                        error: mode === "background" ? s.error : null })),
       onData: (data) => {
         if (k) keep(k, data);
-        setState({ data, error: null, loading: false });
+        setState(answered(data));
       },
       onError: (error) => {
         if (error?.name === "AbortError") return;
-        setState({ data: null, error, loading: false });
+        setState((s) => failed(s, error));
       },
     });
   }, []);
@@ -64,10 +72,13 @@ export function useApi(fn, deps = [], { skip = false, key = null } = {}) {
     const run = runRef.current;
     run.invalidate();
     if (skip) {
-      setState({ data: null, error: null, loading: false });
+      setState({ ...opened(null), loading: false });
       return undefined;
     }
-    if (keyRef.current) setState({ data: peek(keyRef.current), error: null, loading: true });
+    // The call changed: what is shown is the kept answer to this call, or -- without a
+    // key -- the last call's, marked as not this call's, so a failure does not keep it.
+    if (keyRef.current) setState(opened(peek(keyRef.current), keptAt(keyRef.current)));
+    else setState(changed);
     go("open");
     return () => {
       run.invalidate();

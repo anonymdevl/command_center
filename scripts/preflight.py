@@ -1314,7 +1314,7 @@ check(not _dead,
       f"button(s) {', '.join(map(repr, _dead))} have no onclick and legacy/actions.js does "
       f"not know them, so they would do nothing when pressed.")
 check("<ActionDialog" in open(os.path.join(ROOT, "frontend", "src", "App.jsx")).read()
-      and "wireActions(ref.current)" in open(os.path.join(ROOT, "frontend", "src", "components",
+      and "wireActions(ref.current" in open(os.path.join(ROOT, "frontend", "src", "components",
                                                          "LegacyView.jsx")).read(),
       "the action dialog is not mounted or the screens' buttons are not wired, so Assign, "
       "Escalate and the alert menus do nothing.")
@@ -1658,6 +1658,84 @@ if _node:
                  capture_output=True, text=True, timeout=120)
     check(_t.returncode == 0,
           "scripts/test_swr.mjs failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+
+# --------------------------------------------------------------------------
+# Screen faults of 17 Nov 2026: each rule is the one place its fault would come back.
+# --------------------------------------------------------------------------
+import pathlib as _pl
+_fe = _pl.Path(ROOT) / "frontend" / "src"
+_frontend_code = sorted(list(_fe.rglob("*.js")) + list(_fe.rglob("*.jsx")))
+# A relative "/app/..." link is a 404 on the standalone platform: links into a
+# business's ERPNext go through erpLinks.js (its site_url in front), never as "/app/x".
+_rel_app = re.compile(r"""(?:href\s*=\s*\{?\s*|window\.open\(\s*|\.href\s*=\s*|\|\|\s*)["'`]/app(?:/|["'`])""")
+for _f in _frontend_code:
+    for _n, _line in enumerate(_f.read_text().splitlines(), 1):
+        check(not _rel_app.search(_line),
+              f"{_f.relative_to(ROOT)}:{_n} links to a relative /app/ path, a 404 on the "
+              "platform: build it with erpLinks.erpUrl (the business's own ERPNext address)")
+for _tpl in sorted((_pl.Path(ROOT) / "command_center" / "www").glob("*.html")):
+    check(not re.search(r"""href=["']/app(?:/|["'])""", _tpl.read_text()),
+          f"{_tpl.name} links to a relative /app/ path, a 404 on the platform: link the "
+          "business's own ERPNext (its site_url), or offer no link")
+# Switching business draws the screen afresh (LegacyView keyed by the business), so no
+# card, list or row of the last business stays on screen or can be acted on.
+_app_jsx = (_fe / "App.jsx").read_text()
+check(re.search(r"<LegacyView\s+key=\{scope\}\s+viewKey=\{view\}", _app_jsx) is not None,
+      "App.jsx: the designed screen must be keyed by the business (<LegacyView key={scope} "
+      "viewKey={view} ...>): without it, switching business leaves the last business's "
+      "figures and tasks on screen, and they can be acted on")
+# Each drawer in the stack is mounted fresh: keyed by its own entry, or the second drawer
+# shows the first one's explanation, tab, search and sort.
+_drawer_jsx = (_fe / "components" / "Drawer.jsx").read_text()
+check(_drawer_jsx.count("key={entry") >= 2 and "entry={top?.id}" in _app_jsx,
+      "Drawer.jsx must key its content by the stack entry (key={entry ...}) and App.jsx pass "
+      "entry={top?.id}: otherwise one drawer carries the previous drawer's state")
+# Where a designed tile navigates is read through hydrate.js goTarget (kept as data-go),
+# never by testing the onclick attribute, which hydration and Today's wiring remove.
+for _f in sorted((_fe / "legacy").glob("*.js")):
+    _t = _f.read_text()
+    if _f.name == "hydrate.js":
+        _t = re.sub(r"export function goTarget\(node\) \{.*?\n\}", "", _t, flags=re.S)
+    for _n, _line in enumerate(_t.splitlines(), 1):
+        check(not ("go\\(" in _line and 'getAttribute("onclick")' in _line),
+              f"legacy/{_f.name}: navigation decided from a tile's onclick attribute "
+              f"({_line.strip()[:60]}...): use hydrate.js goTarget, which survives the "
+              "attribute being removed")
+# One failed refresh never blanks a screen: useApi keeps the last good answer (swr.failed).
+_use_api = (_fe / "useApi.js").read_text()
+check("failed(s, error)" in _use_api and "data: null, error" not in _use_api,
+      "useApi.js must keep the last good answer on a failed read (swr.js failed()); "
+      "setting data to null blanked every panel on one failed refresh")
+# Error boundaries around the app, each screen and each drawer.
+check("<ErrorBoundary" in (_fe / "main.jsx").read_text() and "<ErrorBoundary" in _app_jsx
+      and "<ErrorBoundary" in _drawer_jsx,
+      "the app, each screen and each drawer must sit in an ErrorBoundary: one malformed "
+      "answer unmounted the whole app")
+# Only one "⋯" menu open at a time.
+check("let openMenu = null" in (_fe / "legacy" / "actions.js").read_text(),
+      "legacy/actions.js menu(): opening one menu must close any other (openMenu)")
+# The phone rules: text breaks inside its box, chips wrap when longer than their row,
+# phone table rows stay one line and scroll in their own box, the main column never
+# scrolls sideways on a phone. test_phone.mjs measures them; these keep the rules named.
+_shell_py = open(os.path.join(ROOT, "interface", "shell.py")).read()
+for _rule in (".main{overflow-wrap:anywhere}", ".chip{max-width:100%;white-space:normal}",
+              "table.dt td{white-space:nowrap}", ".main{overflow-x:hidden}"):
+    check(_rule in _shell_py, f"interface/shell.py PHONE, EVERY SCREEN lost {_rule!r}")
+# The screens' small pure parts (money across unit boundaries, data-go, the stale line).
+if _node:
+    _t = _sp.run([_node, os.path.join(ROOT, "scripts", "test_screens.mjs")],
+                 capture_output=True, text=True, timeout=120)
+    check(_t.returncode == 0,
+          "scripts/test_screens.mjs failed:\n" + (_t.stdout + _t.stderr)[-1500:])
+    # Every screen and Settings section at 375 and 428 wide, with long strings: nothing
+    # wider than the screen. Needs Chrome; says so when it was skipped.
+    _t = _sp.run([_node, os.path.join(ROOT, "scripts", "test_phone.mjs")],
+                 capture_output=True, text=True, timeout=600)
+    _out = "\n".join(l for l in (_t.stdout + _t.stderr).splitlines() if "allow list" not in l)
+    check(_t.returncode == 0, "scripts/test_phone.mjs failed (the page scrolls sideways on a "
+          "phone):\n" + _out[-2500:])
+    if "SKIPPED" in _out:
+        print("note: " + _out.strip().splitlines()[0])
 
 # Business Overview's front page keeps every tile, figure, footnote, flag and click it had
 # (Michael, 16 Nov 2026: appearance only, not content), and places every area once.

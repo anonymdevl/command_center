@@ -36,7 +36,7 @@ import TaskDrawer from "../components/TaskDrawer.jsx";
 import { WAITING } from "./reach.js";
 import { count, exact, shortDate } from "../format.js";
 import { guideBox } from "./guide.js";
-import { hydrateTiles } from "./hydrate.js";
+import { goTarget, hydrateTiles } from "./hydrate.js";
 import { menu } from "./actions.js";
 
 export const WORK_VIEWS = new Set(["myday", "approvals", "delegation"]);
@@ -70,11 +70,18 @@ const FILTERS = {
 // Set by a Today tile just before it opens Outstanding Tasks; taken by the next render.
 let pendingFilter = null;
 
-// The open tasks ticked on Outstanding Tasks, by To-Do name. Emptied after a bulk action.
+// The open tasks ticked on Outstanding Tasks, by To-Do name. Emptied after a bulk action,
+// and when the business changes: a To-Do name ticked for one business must never be acted
+// on under another (17 Nov 2026).
 const selected = new Set();
+let selectedFor;
 if (typeof window !== "undefined") window.addEventListener("cc-tasks-unselect", () => selected.clear());
 
 export function renderWork(root, view, data, opts = {}) {
+  if (opts.scope !== selectedFor) {
+    selected.clear();
+    selectedFor = opts.scope;
+  }
   if (!root || !data || !WORK_VIEWS.has(view)) return 0;
   if (!data.available) return unavailable(root, view, data, opts);
   root.querySelector(".work-banner")?.remove();
@@ -162,7 +169,9 @@ function today(root, data, opts) {
   root.querySelectorAll(".bk").forEach((tile) => {
     const spec = WORK_TILES.myday[tile.querySelector(".l")?.textContent?.trim()];
     const f = spec && data.figures?.[spec.key]?.filter;
-    if (!f || !/go\('delegation'\)/.test(tile.getAttribute("onclick") || "")) return;
+    // By data-go (hydrate.js goTarget), not the onclick this removes: read by the onclick,
+    // the second draw found none and the tile fell back to its figure's ERPNext link.
+    if (!f || goTarget(tile) !== "delegation") return;
     tile.removeAttribute("onclick");
     const open = () => {
       pendingFilter = f;

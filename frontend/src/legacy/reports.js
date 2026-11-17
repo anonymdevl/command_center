@@ -26,10 +26,16 @@ export const OPEN_KEY = "cc-report-open";
 /* ---------------------------------------------------------------- following a run */
 const following = new Set();
 
+/** The finish announced when the session ended while a run was followed: the run is
+ *  not over, only no longer visible to this page (Bell.jsx, mountReports). */
+export const SIGNED_OUT = "signed_out";
+
 /**
  * Poll a run until it is written or has failed, from whichever page is open; once per
  * run. Announces "cc-report-progress" while it is written and "cc-report-finished" at
- * the end, each with { id, state, run (the row), report?, error? }.
+ * the end, each with { id, state, run (the row), report?, error? }. Signed out or
+ * refused part-way, the finish says so (state SIGNED_OUT, the last row seen) -- never the
+ * last poll's "running", which the bell read as "could not be written" (17 Nov 2026).
  */
 export function follow(id) {
   if (!id || following.has(id)) return;
@@ -41,8 +47,11 @@ export function follow(id) {
       try {
         state = await api.reportStatus(id);
       } catch (e) {
-        // Signed out or refused: stop. A network blip: try again shortly.
-        if (e?.status === 401 || e?.status === 403) break;
+        // Signed out or refused: stop, and say so. A network blip: try again shortly.
+        if (e?.status === 401 || e?.status === 403) {
+          state = { state: SIGNED_OUT, run: state?.run || null };
+          break;
+        }
         await sleep(RETRY_MS);
         continue;
       }
@@ -57,25 +66,36 @@ export function follow(id) {
 /* ---------------------------------------------------------------- the Run button */
 export async function runReport(code, scope) {
   const out = document.getElementById("rpout");
-  const btn = document.querySelector(`button[data-report="${code}"]`);
   if (!out) return;
+  // This screen, as it is now: the business can change, and the screen be drawn afresh,
+  // while the run is started. What comes back is written here only if this is still the
+  // screen on show -- never into the next business's "Last run" (17 Nov 2026).
+  const screen = out.closest(".view") || document;
+  const btn = screen.querySelector(`button[data-report="${code}"]`);
   if (btn) btn.disabled = true;
   const box = boxFor(out, code);
   box.textContent = "";
   delete box.dataset.run;
   box.append(el("div", "rp-head", "", [el("b", "", "Starting the report…")]));
   box.scrollIntoView({ behavior: "smooth", block: "start" });
+  const here = () => document.body.contains(out);
   try {
     const started = await api.reportGenerate({ code, business_code: scope });
     const run = started.run || { name: started.job_id, code, title: started.title, state: "running" };
-    writing(box, run, started.already);
-    setLast(document.querySelector(`[data-last="${code}"]`), run);
     follow(run.name);
     window.dispatchEvent(new CustomEvent("cc-reports-changed"));
+    if (!here()) return;
+    writing(box, run, started.already);
+    setLast(screen.querySelector(`[data-last="${code}"]`), run);
   } catch (e) {
-    failed(box, e?.message);
+    if (!here()) return;
+    failed(box, e?.message, signedOut(e) ? "You have been signed out. " : undefined);
     if (btn) btn.disabled = false;
   }
+}
+
+function signedOut(e) {
+  return e?.status === 401 || e?.status === 403;
 }
 
 /* ---------------------------------------------------------------- the screen */
@@ -92,7 +112,7 @@ export function mountReports(root, scope) {
 
   const load = () =>
     api.reportLatest(scope).then((d) => {
-      if (!alive) return;
+      if (!alive || !document.body.contains(root)) return;
       for (const [code, slot] of Object.entries(d?.runs || {})) fillRow(root, code, slot);
       // Anything still being written is shown being written, and followed.
       for (const slot of Object.values(d?.runs || {})) {
@@ -108,6 +128,16 @@ export function mountReports(root, scope) {
     const d = e.detail || {};
     const row = d.run && typeof d.run === "object" ? d.run : null;
     if (!alive) return;
+    if (d.state === SIGNED_OUT) {
+      // Not failed: it carries on on the server and is kept; this page can no longer see
+      // it. Found by its id, as the last row seen may be none.
+      const box = out?.querySelector(`.rp[data-run="${CSS.escape(String(d.id || ""))}"]`);
+      if (box) {
+        note(box, "You have been signed out, so this page can no longer follow the report. "
+          + "It carries on and is kept: sign in again to see it.");
+      }
+      return;
+    }
     if (row && (row.business_code || "__all__") === here) {
       const box = out?.querySelector(`.rp[data-code="${row.code}"]`);
       if (box && box.dataset.run === row.name) {
@@ -256,6 +286,12 @@ function writing(box, run, already) {
       + " — reports take one to three minutes";
   }
   tick();
+}
+
+function note(box, text) {
+  box.textContent = "";
+  delete box.dataset.run;
+  box.append(el("div", "rp-head", "", [el("b", "", "Signed out")]), el("p", "rp-sub", text));
 }
 
 function failed(box, message, lead = "The report could not be written. ") {

@@ -496,8 +496,25 @@ function titleFor(figure, closing) {
   ].filter(Boolean).join(" ");
 }
 
+/**
+ * The screen a designed card or tile opens: go('x') in its generated onclick. Kept as
+ * data-go the first time it is read, because the onclick does not last -- a screen that
+ * wires the tile itself (Today's tiles, work.js) removes it, and on the next draw a tile
+ * read by its onclick looked like one that opens nothing, was wired to its figure's
+ * ERPNext list instead (/app/todo, a 404 on the platform) and lost its navigation. Read
+ * by this, the answer is the same on every draw, whatever ran first.
+ */
+export function goTarget(node) {
+  if (!node?.getAttribute) return null;
+  if (node.dataset.go) return node.dataset.go;
+  const m = /(?:^|[^\w.])go\(\s*['"]([\w-]+)['"]\s*\)/.exec(node.getAttribute("onclick") || "");
+  if (!m) return null;
+  node.dataset.go = m[1];
+  return m[1];
+}
+
 function navigates(tile) {
-  return /(^|[^\w.])go\(/.test(tile.getAttribute("onclick") || "");
+  return !!goTarget(tile);
 }
 
 function wireOpen(card, figure, onOpen) {

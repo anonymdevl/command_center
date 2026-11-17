@@ -19,7 +19,7 @@
 
 import { GUIDE_STATES, guideWords } from "./guide.js";
 import { WAITING } from "./reach.js";
-import { CARD_KPIS, TILE_KPIS } from "./hydrate.js";
+import { CARD_KPIS, TILE_KPIS, goTarget } from "./hydrate.js";
 import { HEALTH_QUESTIONS } from "./home.js";
 import { OVERVIEW_VIEWS, renderOverview } from "./overview.js";
 import { WORK_TILES } from "./work.js";
@@ -118,7 +118,7 @@ function finish(node, view, kind, figs, done, reachDown) {
   } else {
     flag(node, reachDown ? WAITING.pill : "not read", "f-dim");
   }
-  if (!/(^|[^\w.])go\(/.test(node.getAttribute("onclick") || "")) {
+  if (!goTarget(node)) {
     // Nothing to open: not drawn as something that opens (no arrow, shell.py).
     node.removeAttribute("onclick");
     node.classList.remove("clickable");

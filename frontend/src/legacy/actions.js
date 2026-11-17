@@ -20,6 +20,7 @@
  *   Approve, Defer, Dismiss in an alert's menu  ->  removed: they need the alert engine
  *       to remember a decision, and a button that pretends to is worse than none.
  */
+import { erpUrl } from "../erpLinks.js";
 import { brand } from "../api/boot.js";
 
 const TO_DIALOG = {
@@ -31,13 +32,13 @@ const SAMPLE_DECISIONS = new Set(["approve", "reject", "accept it", "send it bac
 const SAMPLE_NOTE = "This is a sample from the design, so there is nothing in ERPNext to decide yet. "
   + "Deciding your real ERPNext approvals from here is the approvals inbox, which is not built yet.";
 
-export function wireActions(root) {
+export function wireActions(root, scope = null) {
   if (!root) return;
-  root.querySelectorAll(".alert").forEach(wireAlert);
+  root.querySelectorAll(".alert").forEach((card) => wireAlert(card, scope));
   // Buttons outside the alert cards: findings rows, panels.
   root.querySelectorAll("button").forEach((b) => {
     if (b.dataset.ccWired || b.getAttribute("onclick") || b.closest(".tabbar, .alert[data-cc-wired]")) return;
-    const fn = handlerFor(label(b), contextFor(b), b, null);
+    const fn = handlerFor(label(b), { ...contextFor(b), scope }, b, null);
     if (fn) attach(b, fn);
   });
 }
@@ -48,10 +49,11 @@ export function wireActions(root) {
  * means. The dead "⋯" is replaced by a working menu of the same items, plus the records
  * behind the alert; "Ask AI about this" sits after the main button.
  */
-function wireAlert(card) {
+function wireAlert(card, scope) {
   if (card.dataset.ccWired) return;
   card.dataset.ccWired = "1";
   const ctx = {
+    scope,
     title: text(card, ".awhat"),
     detail: [text(card, ".awhy"), text(card, ".asw")].filter(Boolean).join("\n"),
     owner: ownerOf(card),
@@ -90,7 +92,12 @@ function handlerFor(name, ctx, anchor, source) {
   if (TO_DIALOG[name]) return () => openDialog(TO_DIALOG[name], ctx);
   if (SAMPLE_DECISIONS.has(name)) return () => notice(anchor, SAMPLE_NOTE);
   if (name === "open the pack") return source ? () => source.click() : null;
-  if (name === "load older") return () => window.open("/app/version", "_blank", "noopener");
+  if (name === "load older") {
+    // The full change log is in the business's own ERPNext (erpLinks.js), never a
+    // relative /app/... on the platform; without its address there is nothing to open.
+    const href = erpUrl("/app/version", ctx.scope);
+    return href ? () => window.open(href, "_blank", "noopener") : null;
+  }
   // Defer, Dismiss and anything else unlisted: removed from an alert (only an alert
   // engine could remember them), left alone elsewhere.
   return null;
@@ -98,7 +105,9 @@ function handlerFor(name, ctx, anchor, source) {
 
 /* ------------------------------------------------------------------ helpers */
 function openDialog(kind, ctx) {
-  window.dispatchEvent(new CustomEvent("cc-action", { detail: { kind, ...ctx } }));
+  // The business is for links (load older); what the dialog is sent stays as it was.
+  const { scope: _scope, ...detail } = ctx;
+  window.dispatchEvent(new CustomEvent("cc-action", { detail: { kind, ...detail } }));
 }
 
 function askAbout(title) {
@@ -150,7 +159,13 @@ function button(name, cls, onClick) {
   return b;
 }
 
-/** A small menu: opens on click, closes on the next click anywhere or Escape. */
+// The one "⋯" menu open on the page, if any: opening another closes it (17 Nov 2026 --
+// the trigger stops its click, so the document listener that closes an open menu never
+// heard it, and two menus could stand open at once).
+let openMenu = null;
+
+/** A small menu: opens on click, closes on the next click anywhere or Escape. Only one
+ *  is ever open. */
 export function menu(items) {
   const wrap = document.createElement("span");
   wrap.className = "amenu";
@@ -181,11 +196,14 @@ export function menu(items) {
     trigger.setAttribute("aria-expanded", "false");
     document.removeEventListener("click", close);
     document.removeEventListener("keydown", onKey);
+    if (openMenu === close) openMenu = null;
   };
   const onKey = (e) => e.key === "Escape" && close();
   trigger.onclick = (e) => {
     e.stopPropagation();
     if (wrap.classList.contains("on")) return close();
+    if (openMenu) openMenu();
+    openMenu = close;
     wrap.classList.add("on");
     // Open upwards when there is no room below (the last alert on a screen).
     const r = trigger.getBoundingClientRect();

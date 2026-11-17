@@ -1785,6 +1785,39 @@ class DocumentLinks(TransactionTestCase):
                                                           "src_doctype": "Task", "src_name": "T-1"}))
 
 
+class BackToErpnext(TransactionTestCase):
+    """"Back to ERPNext" on the page for someone without access goes to their business's
+    own ERPNext -- the one they signed in from -- never "/app", which is a 404 on the
+    standalone platform (17 Nov 2026); with no one address to give, there is no link."""
+
+    databases = {"default", "aux"}
+
+    def test_link(self):
+        from insights.core.models import ConnectedBusiness, DefaultValue
+        U = get_user_model()
+        U.objects.create_user("clerk@test.com", "clerk@test.com", "a-long-test-pass-8")
+        c = Client()
+        c.login(username="clerk@test.com", password="a-long-test-pass-8")
+
+        def page():
+            r = c.get("/management-only")
+            self.assertEqual(r.status_code, 200)
+            return r.content.decode()
+
+        self.assertNotIn('href="/app"', page())
+        self.assertNotIn("Back to ERPNext", page())
+        for code in ("biz_a", "biz_b"):
+            ConnectedBusiness.objects.create(name=code, business_name=code, business_code=code,
+                                             status="Active", is_local=0, currency="GHS",
+                                             site_url=f"https://{code}.test/")
+        # two businesses and no sign-in mark: which one is not known, so no link
+        self.assertNotIn("Back to ERPNext", page())
+        DefaultValue.objects.create(parent="clerk@test.com", defkey="cc_sso_business", defvalue="biz_b")
+        html = page()
+        self.assertIn('href="https://biz_b.test/app"', html)
+        self.assertNotIn('href="/app"', html)
+
+
 class NothingIllustrative(TransactionTestCase):
     """The department screens carry nothing that is not the business's own: every card
     and tile names a figure, every panel has a builder, every finding box is filled by

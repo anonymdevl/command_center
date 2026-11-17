@@ -14,6 +14,7 @@
  * in the drawer. Built as DOM in the designed classes, never as HTML.
  */
 
+import { deskPath, erpUrl } from "../erpLinks.js";
 import { api } from "../api/client.js";
 import { money, exact } from "../format.js";
 import { menu } from "./actions.js";
@@ -106,10 +107,15 @@ function card(a, onOpen) {
     meta.append(m);
   }
   if (a.todo) {
-    const t = el("a", "chip", "");
-    t.href = a.todo_url || `/app/todo/${encodeURIComponent(a.todo)}`;
-    t.target = "_blank";
-    t.rel = "noreferrer";
+    // In the business's own ERPNext (erpLinks.js); without its address, the To-Do is
+    // named and not linked -- a relative /app/... is a 404 on the platform.
+    const href = erpUrl(a.todo_url || deskPath("ToDo", a.todo), a.business_code);
+    const t = el(href ? "a" : "span", "chip", "");
+    if (href) {
+      t.href = href;
+      t.target = "_blank";
+      t.rel = "noreferrer";
+    }
     t.append(document.createTextNode("To-Do "), el("b", null, a.todo));
     meta.append(t);
   }
