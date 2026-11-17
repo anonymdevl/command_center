@@ -879,7 +879,7 @@ class PlatformEndToEnd(TransactionTestCase):
         self.assertEqual(len(check["lines"]), len(audit.LINES))
         for x in check["lines"]:
             self.assertTrue(x["ok"] or x["reason"], f"{x['key']} differs and says nothing")
-        self.assertIn("Customer ledger balance", audit.table(check))
+        self.assertIn("Customer Ledger Balance", audit.table(check))
 
 
 LEDGER_SIGN = {"Customer": 1, "Supplier": -1}
@@ -5734,12 +5734,12 @@ class FigureUnderstanding(TransactionTestCase):
         self.assertEqual(s["status"], {"state": "attention", "label": "Needs Attention"})
         self.assertEqual(
             s["headline"],
-            "The open invoices say GHS 202,000, but the ledger says GHS 143,500 is owed; "
+            "The open invoices say GHS 202,000, but the Customer Ledger says GHS 143,500 is owed; "
             "GHS 60,000 of the gap is money received, not matched to an invoice. "
             "Reconciling the 2 customers concerned clears all of it.")
         aged = self._understand("ar_over_90")
         self.assertTrue(aged["headline"].startswith(
-            "GHS 80,000 of the GHS 143,500 owed by the ledger is over 90 days late (55.7%)"),
+            "GHS 80,000 of the GHS 143,500 Customer Ledger Balance is over 90 days late (55.7%)"),
             aged["headline"])
         self.assertIn("Collecting from Alpha Clinic clears all of it.", aged["headline"])
         # A clean book reads On Target and says the two agree.
@@ -5754,7 +5754,7 @@ class FigureUnderstanding(TransactionTestCase):
         clean = self._understand("ar_total")
         self.assertEqual(clean["status"]["label"], "On Target")
         self.assertEqual(clean["headline"],
-                         "The open invoices and the ledger agree: GHS 30,000 is owed.")
+                         "The open invoices and the Customer Ledger agree: GHS 30,000 is owed.")
         # Nothing checked is no chip, never On Target by default.
         from command_center.insight.build import status
         self.assertIsNone(status([]))
@@ -6145,7 +6145,7 @@ class AdaptiveRecommendations(TransactionTestCase):
         self.assertIn("low", um["baseline"]["chart"])
         odd = recs["adaptive_anomaly:ap_ledger"]
         self.assertEqual((odd["source"], odd["source_label"]), ("adaptive", "Adaptive"))
-        self.assertIn("Owed to Suppliers, by the Ledger", odd["title"])
+        self.assertIn("Accounts Payable (Supplier Ledger Balance)", odd["title"])
         self.assertTrue(2 <= len(odd["what_to_do"]) <= 4)
         self.assertNotIn("adaptive_anomaly:stock_value", recs)
         # a figure a firing rule already speaks to is not said twice

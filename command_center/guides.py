@@ -114,7 +114,7 @@ RECONCILE_STEPS = [
     "Press Allocate to set each payment against the invoices it pays (oldest first, or "
     "as the remittance says), check the amounts, then press Reconcile.",
     "Repeat for the next customer or supplier. The invoices' outstanding amounts then "
-    "agree with the ledger, and this platform shows the difference gone at its next load.",
+    "agree with the Customer or Supplier Ledger, and this platform shows the difference gone at its next load.",
 ]
 
 

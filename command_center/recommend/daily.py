@@ -32,9 +32,9 @@ BRIEF_PARENT = "__cc_brief"
 DIGEST_PARENT = "__cc_rec_digest"
 TOP = 5
 # Headline figures the brief may compare with yesterday: the same ones the cards show.
-BRIEF_FIGURES = (("ar_total", "Customers owe us, by the ledger"),
+BRIEF_FIGURES = (("ar_total", "Accounts Receivable (Customer Ledger Balance)"),
                  ("ar_over_90", "Of which more than 90 days late"),
-                 ("ap_total", "We owe suppliers, by the ledger"),
+                 ("ap_total", "Accounts Payable (Supplier Ledger Balance)"),
                  ("cash_in_month", "Money received, last full month"),
                  ("revenue_last_month", "Invoiced, last full month"),
                  ("order_book_late", "Orders past their promised date, still to deliver"),

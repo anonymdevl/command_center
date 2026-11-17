@@ -77,7 +77,7 @@ SIDES = {
         "who": "customer", "whos": "customers", "invoices": "open invoices",
         "invoice": "Sales Invoice", "invoice_fact": "fact_sales_invoice", "party_col": "customer",
         "verb": "received", "payment_type": "Receive", "notes": "credit notes",
-        "owed_label": "Owed to us, by the ledger", "credit_word": "in credit",
+        "owed_label": "Customer Ledger Balance", "credit_word": "in credit", "ledger": "Customer Ledger",
         "total": "ar_total", "open": "ar_open_invoices", "unmatched": "ar_unmatched",
         "in_credit": "ar_in_credit", "report": "Accounts Receivable",
     },
@@ -85,7 +85,7 @@ SIDES = {
         "who": "supplier", "whos": "suppliers", "invoices": "open supplier bills",
         "invoice": "Purchase Invoice", "invoice_fact": "fact_purchase_invoice",
         "party_col": "supplier", "verb": "paid", "payment_type": "Pay", "notes": "debit notes",
-        "owed_label": "We owe suppliers, by the ledger", "credit_word": "paid in advance",
+        "owed_label": "Supplier Ledger Balance", "credit_word": "paid in advance", "ledger": "Supplier Ledger",
         "total": "ap_total", "open": "ap_open_invoices", "unmatched": "ap_unmatched",
         "in_credit": "ap_in_credit", "report": "Accounts Payable",
     },
@@ -160,7 +160,7 @@ def bridge(rows, w) -> dict:
     n_credit = sum(1 for r in rows if flt(r.get("in_credit")) > CENT)
     n_owing = sum(1 for r in rows if flt(r.get("owed")) > CENT)
     steps += [
-        {"id": "net", "label": "Net, by the ledger", "value": t["ledger_balance"], "kind": "total"},
+        {"id": "net", "label": "Net Ledger Balance", "value": t["ledger_balance"], "kind": "total"},
         {"id": "in_credit", "label": f"{w['whos'].capitalize()} {w['credit_word']}, set aside",
          "value": t["in_credit"], "kind": "position", "count": n_credit, "count_word": w["whos"],
          "key": w["in_credit"],
@@ -303,7 +303,7 @@ def ledger(ctx, party_type: str, key: str) -> dict:
         f"{w['invoices'].capitalize()} should equal what the ledger says is owed",
         "ok" if abs(gap) <= tol else "bad",
         (f"They agree: {money(cur, t['open_invoices'])} on the invoices, "
-         f"{money(cur, owed)} by the ledger." if abs(gap) <= tol else
+         f"{money(cur, owed)} Ledger Balance." if abs(gap) <= tol else
          f"They differ by {money(cur, gap)}: the invoices say {money(cur, t['open_invoices'])}, "
          f"the ledger {money(cur, owed)}. The difference is payments and credits recorded "
          f"but never set against the invoices they settle.")))
@@ -327,7 +327,7 @@ def ledger(ctx, party_type: str, key: str) -> dict:
         checks.append(check(
             "Most of what is owed should be inside its terms, little over 90 days",
             "ok" if share <= 10 else "warn" if share <= 25 else "bad",
-            f"{share}% of the {money(cur, owed)} owed by the ledger is over 90 days late "
+            f"{share}% of the {money(cur, owed)} Ledger Balance is over 90 days late "
             f"({money(cur, over)}), after payments not yet matched are set against the "
             f"oldest invoices. Healthy is 10% or less."))
     if t["undated"] > CENT:
@@ -388,7 +388,7 @@ def ledger(ctx, party_type: str, key: str) -> dict:
                                         w, cur),
             "chips": [
                 {"label": w["invoices"].capitalize(), "value": t["open_invoices"], "unit": "currency"},
-                {"label": "By the ledger", "value": owed, "unit": "currency"},
+                {"label": "Ledger Balance", "value": owed, "unit": "currency"},
                 {"label": "Difference", "value": gap, "unit": "currency",
                  "state": "bad" if abs(gap) > tol else "ok"},
                 {"label": "Not explained", "value": b["unexplained"], "unit": "currency",
@@ -413,8 +413,8 @@ def ledger_headline(focus, b, contrib, aged, over, share, n_credit, tol, w, cur)
                 ("all of it." if every else f"{contrib['top_share']}% of it."))
     if focus == "ageing":
         if over <= CENT or share is None:
-            return f"Nothing owed is over 90 days late: {short(cur, owed)} is owed by the ledger."
-        return (f"{short(cur, over)} of the {short(cur, owed)} owed by the ledger is over 90 days "
+            return f"Nothing owed is over 90 days late: {short(cur, owed)} is the {w['ledger']} Balance."
+        return (f"{short(cur, over)} of the {short(cur, owed)} {w['ledger']} Balance is over 90 days "
                 f"late ({share}%), after payments not yet matched are set against the oldest "
                 f"invoices." + lead)
     if focus == "unmatched":
@@ -428,10 +428,10 @@ def ledger_headline(focus, b, contrib, aged, over, share, n_credit, tol, w, cur)
         return (f"{plural(n_credit, w['who'])} {'is' if n_credit == 1 else 'are'} "
                 f"{w['credit_word']} by {short(cur, t['in_credit'])}." + lead)
     if abs(gap) <= tol:
-        return (f"The {w['invoices']} and the ledger agree: {short(cur, owed)} is owed.")
+        return (f"The {w['invoices']} and the {w['ledger']} agree: {short(cur, owed)} is owed.")
     parts = sorted([s for s in b["steps"] if s["kind"] in ("process", "unexplained")
                     and abs(s["value"]) > CENT], key=lambda s: -abs(s["value"]))
-    said = (f"The {w['invoices']} say {short(cur, t['open_invoices'])}, but the ledger says "
+    said = (f"The {w['invoices']} say {short(cur, t['open_invoices'])}, but the {w['ledger']} says "
             f"{short(cur, owed)} is owed")
     if parts:
         p = parts[0]

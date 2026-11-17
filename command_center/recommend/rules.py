@@ -258,7 +258,7 @@ def unmatched_receipts(ctx, p):
         title=f"Match {ms(ctx, paid)} of customer payments to the invoices they pay.",
         why=(f"{m(ctx, paid)} received in {plural(n, 'payment')} from "
              f"{plural(len(top), 'customer')} is not matched to any invoice. Until it is, the "
-             f"open invoices say customers owe {m(ctx, on_docs)} where the ledger says "
+             f"Sales Invoice Outstanding is {m(ctx, on_docs)} where the Customer Ledger Balance is "
              f"{m(ctx, owed)}, and every reminder drawn from the invoices is wrong. "
              f"Largest: {largest}."),
         what_to_do=[f"Start with the largest: {top[0]['party']}.",
@@ -284,7 +284,7 @@ def customers_in_credit(ctx, p):
     return [_rec(
         title=f"{plural(len(rows), 'customer')} {'holds' if len(rows) == 1 else 'hold'} "
               f"{ms(ctx, total)} in credit: refund it or use it.",
-        why=(f"By the ledger {plural(len(rows), 'customer')} have paid {m(ctx, total)} more than "
+        why=(f"On the Customer Ledger {plural(len(rows), 'customer')} have paid {m(ctx, total)} more than "
              f"they were billed. Largest: {largest}. Money held for customers is owed back "
              f"to them unless it is an advance for an order still to come."),
         what_to_do=["Ask each of the largest whether the credit is an advance for an order.",
@@ -315,17 +315,17 @@ def overdue_customers(ctx, p):
         out.append(_rec(
             key=party,
             title=f"Get a payment date from {party} for {ms(ctx, late)} more than 90 days late.",
-            why=(f"{party} owes {m(ctx, r['owed'])} by the ledger; {m(ctx, late)} of it is more "
+            why=(f"{party} owes {m(ctx, r['owed'])} on the Customer Ledger; {m(ctx, late)} of it is more "
                  f"than 90 days past due once payments not yet matched are set against the "
                  f"oldest invoices{since_txt}."),
             what_to_do=[f"Call {party} this week and agree a date for the {ms(ctx, late)}.",
-                        "Send the statement of account so both sides work from the ledger.",
+                        "Send the statement of account so both sides work from the Customer Ledger.",
                         "If no date is agreed, stop new credit until it is paid."],
             how=how(ctx, f"{party}'s account in the General Ledger, to send with the call:",
                     ["Open the General Ledger report for the customer (the link below).",
                      "Print or email it as their statement (Menu, Print or Email).",
                      "Record the date agreed as a comment on the customer, or a To-Do."],
-                    href=_ledger_href(ctx, "Customer", party), label="Open their ledger"),
+                    href=_ledger_href(ctx, "Customer", party), label="Open General Ledger"),
             ask=f"What should I say to {party} about what they owe?",
             drill={"fact": "fact_party_balance", "filters": {"party_type": "Customer",
                                                              "party": party}},
@@ -356,7 +356,7 @@ def credit_hold(ctx, p):
               f"{ms(ctx, at_stake)} is over 90 days late.",
         why=(f"{plural(len(who), 'customer')} were invoiced again in the last "
              f"{int(p['days'])} days while owing more than {m(ctx, p['amount'])} over 90 "
-             f"days late by the ledger. {listed}."),
+             f"days late on the Customer Ledger. {listed}."),
         what_to_do=[f"Agree with sales that {names(who)} buy for cash or not at all until "
                     f"they pay.",
                     "Set a credit limit on each so new orders stop for approval.",
@@ -403,7 +403,7 @@ def days_to_pay_worsening(ctx, p):
         why=(f"Payments matched to invoices in the 90 days to {date(ctx.as_of)} came "
              f"{a:.0f} days after the due date on average (weighted by amount, "
              f"{plural(len(recent), 'payment')}), against {b:.0f} days in the 90 days before "
-             f"({plural(len(before), 'payment')}). Customers owe {m(ctx, owed)} by the ledger "
+             f"({plural(len(before), 'payment')}). Customers owe {m(ctx, owed)} on the Customer Ledger "
              f"now; the later they pay, the longer it waits."),
         what_to_do=["Find which customers slowed down: open the payments behind it.",
                     "Send reminders before the due date, not after it.",
@@ -457,13 +457,13 @@ def supplier_payments_due(ctx, p):
     days = int(p["days"])
     held_short = (f"the bank and cash accounts hold {ms(ctx, cash)}" if cash >= 0 else
                   f"the bank and cash accounts are {ms(ctx, -cash)} overdrawn")
-    held_long = (f"The bank and cash accounts hold {m(ctx, cash)} as the ledger has them."
+    held_long = (f"The bank and cash accounts hold {m(ctx, cash)} per the General Ledger."
                  if cash >= 0 else
-                 f"The bank and cash accounts are {m(ctx, -cash)} overdrawn as the ledger has "
-                 f"them; if that is not so, the bank reconciliation is behind.")
+                 f"The bank and cash accounts are {m(ctx, -cash)} overdrawn per the General Ledger"
+                 f"; if that is not so, the bank reconciliation is behind.")
     return [_rec(
         title=f"{ms(ctx, due)} is due to suppliers within {days} days; {held_short}.",
-        why=(f"By the ledger {m(ctx, overdue)} is already overdue to suppliers and "
+        why=(f"On the Supplier Ledger {m(ctx, overdue)} is already overdue to suppliers and "
              f"{m(ctx, soon)} more falls due by {date(edge)} ({m(ctx, in_week)} of it within "
              f"7 days). {held_long} "
              f"Customers are due to pay {m(ctx, coming)} in the same {days} days."),
@@ -494,7 +494,7 @@ def unmatched_supplier_payments(ctx, p):
                  key=lambda r: -r["unmatched_payments"])
     largest = "; ".join(f"{r['party']} {m(ctx, r['unmatched_payments'])}" for r in top[:3])
     ahead = [r for r in rows if r["in_credit"] > 0]
-    ahead_txt = (f" By the ledger {m(ctx, sum(r['in_credit'] for r in ahead))} of it is really "
+    ahead_txt = (f" On the Supplier Ledger {m(ctx, sum(r['in_credit'] for r in ahead))} of it is really "
                  f"paid ahead of the bills ({plural(len(ahead), 'supplier')} in credit); the "
                  f"rest pays bills it was never matched to." if ahead else "")
     return [_rec(
@@ -502,11 +502,11 @@ def unmatched_supplier_payments(ctx, p):
               f"payment run.",
         why=(f"{m(ctx, paid)} paid in {plural(n, 'payment')} is matched to no bill, so the "
              f"bills show {m(ctx, sum(r['open_invoices'] for r in rows))} to pay where the "
-             f"ledger says {m(ctx, sum(r['owed'] for r in rows))}. A payment run drawn from "
+             f"Supplier Ledger Balance is {m(ctx, sum(r['owed'] for r in rows))}. A payment run drawn from "
              f"the bills would pay some twice. Largest: {largest}.{ahead_txt}"),
         what_to_do=[f"Start with {top[0]['party']}.",
                     "Match each payment to the bills it pays in Payment Reconciliation.",
-                    "Pay from the ledger balance, not from the list of open bills, until done."],
+                    "Pay from the Supplier Ledger Balance, not from the list of open Purchase Invoices, until done."],
         how=payment_reconciliation(ctx.code, f"Match the {plural(n, 'payment')} to their bills "
                                              f"in ERPNext:"),
         ask="Which suppliers have payments not matched to bills, and how much do we really "
@@ -1215,7 +1215,7 @@ def bills_not_matching(ctx, p):
               f"before paying.",
         why=(f"{plural(len(flagged), 'unpaid supplier bill')} from "
              f"{plural(len(by), 'supplier')} {'does' if len(flagged) == 1 else 'do'} not rest on "
-             f"both a purchase order and a goods receipt. Against what the ledger says is owed "
+             f"both a purchase order and a goods receipt. Against what the Supplier Ledger says is owed "
              f"to those suppliers, {m(ctx, value)} is at stake. Most with "
              f"{names(sorted(by, key=lambda s: -by[s]))}."),
         what_to_do=["Before paying, confirm each was ordered and the goods arrived.",
@@ -1241,7 +1241,7 @@ def long_unpaid_bills(ctx, p):
     largest = "; ".join(f"{r['party']} {m(ctx, r['d90_plus'])}" for r in rows[:3])
     return [_rec(
         title=f"Agree a plan for {ms(ctx, total)} owed to suppliers over 90 days.",
-        why=(f"By the ledger, once payments not yet matched are set against the oldest bills, "
+        why=(f"On the Supplier Ledger, once payments not yet matched are set against the oldest bills, "
              f"{m(ctx, total)} owed to {plural(len(rows), 'supplier')} is more than 90 days "
              f"past due. Largest: {largest}. Suppliers this far behind start holding "
              f"deliveries."),
@@ -1535,7 +1535,7 @@ RULES = (
          twin_alert="Customer payments not matched"),
     Rule("customers_in_credit", "cash", "Customers in credit, to refund or use", "med",
          "Finance", customers_in_credit, (Param("amount", "Recommend when more than", 1000, A),)),
-    Rule("overdue_customers", "cash", "Customers more than 90 days late, by the ledger", "high",
+    Rule("overdue_customers", "cash", "Customer Ledger Balance Over 90 Days", "high",
          "Finance", overdue_customers,
          (Param("amount", "Per customer, more than", 10000, A),
           Param("crit_amount", "Critical from", 100000, A),
@@ -1622,7 +1622,7 @@ RULES = (
          (Param("days", "Late by more than", 7, D), Param("count", "At least (orders)", 1, C))),
     Rule("bills_not_matching", "buying", "Bills without an order or goods receipt", "med",
          "Finance", bills_not_matching, (Param("amount", "Recommend when more than", 1000, A),)),
-    Rule("long_unpaid_bills", "buying", "Suppliers unpaid over 90 days, by the ledger", "med",
+    Rule("long_unpaid_bills", "buying", "Supplier Ledger Balance Over 90 Days", "med",
          "Finance", long_unpaid_bills, (Param("amount", "Recommend when more than", 10000, A),),
          twin_alert="Overdue supplier invoices"),
     # people and control

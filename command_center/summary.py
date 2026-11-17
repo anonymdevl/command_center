@@ -444,7 +444,7 @@ def fallback(data: dict) -> str:
     if by.get("ap_total"):
         pos.append(f"we owe suppliers {by['ap_total']['text']}")
     if pos:
-        out.append(("By the ledger, " + " and ".join(pos)) + (
+        out.append(("On the Customer and Supplier Ledgers, " + " and ".join(pos)) + (
             f"; stock held is {by['stock_value']['text']} at cost." if by.get("stock_value") else "."))
     elif by.get("stock_value"):
         out.append(f"Stock held is {by['stock_value']['text']} at cost.")

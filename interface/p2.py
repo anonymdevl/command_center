@@ -98,12 +98,12 @@ V_COMMAND=f'''<div class="topbar"><div><h3 class="hello" id="greet">Good morning
 <div class="sect"><span>Top actions</span><span class="lnk" onclick="go('brief')">See every recommendation →</span></div>
 <div class="rec-live-list" data-rec="top"><div class="work-empty"><b>Working out what to do first&hellip;</b></div></div>
 <div class="panel debt" id="debt"><div class="debt-h"><div><h4>Largest amounts owed <span class="debt-n" id="debt-n"></span></h4>
-<p>Customers with the most money still to collect, by the ledger</p></div>
+<p>Customers with the most still to collect, by Customer Ledger Balance</p></div>
 <div class="segc" role="tablist" aria-label="Which debts">
 <button type="button" class="on" data-mode="all" role="tab" aria-selected="true">All</button>
 <button type="button" data-mode="overdue" role="tab" aria-selected="false">Overdue</button>
 <button type="button" data-mode="over90" role="tab" aria-selected="false">Over 90 days</button></div></div>
-<div class="debt-cols"><span>Customer</span><span>Waiting</span><span>On invoices → owed by the ledger</span></div>
+<div class="debt-cols"><span>Customer</span><span>Waiting</span><span>Invoice Outstanding → Customer Ledger Balance</span></div>
 <div class="debt-rows" id="debt-rows"><div class="home-wait">Reading the receivables…</div></div></div>
 <div class="counts">
 <div class="count dark" onclick="go('cx')"><span class="count-i" aria-hidden="true">●</span><b id="cnt-cases">—</b><span>customer issues open</span></div>

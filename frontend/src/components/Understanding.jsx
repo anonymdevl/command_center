@@ -383,8 +383,8 @@ function Contributors({ c, cur, scope, openDrawer }) {
           <thead>
             <tr><th>Name</th><th style={{ textAlign: "right" }}>{col}</th>
               <th style={{ textAlign: "right" }}>Share</th>
-              <th style={{ textAlign: "right" }}>Open invoices</th>
-              <th style={{ textAlign: "right" }}>By the ledger</th><th>Act</th></tr>
+              <th style={{ textAlign: "right" }}>Invoice Outstanding</th>
+              <th style={{ textAlign: "right" }}>Ledger Balance</th><th>Act</th></tr>
           </thead>
           <tbody>
             {c.rows.map((r) => (
