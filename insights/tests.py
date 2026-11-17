@@ -879,7 +879,7 @@ class PlatformEndToEnd(TransactionTestCase):
         self.assertEqual(len(check["lines"]), len(audit.LINES))
         for x in check["lines"]:
             self.assertTrue(x["ok"] or x["reason"], f"{x['key']} differs and says nothing")
-        self.assertIn("Customer ledger balance", audit.table(check))
+        self.assertIn("Customer Ledger Balance", audit.table(check))
 
 
 LEDGER_SIGN = {"Customer": 1, "Supplier": -1}
@@ -5754,7 +5754,7 @@ class FigureUnderstanding(TransactionTestCase):
         clean = self._understand("ar_total")
         self.assertEqual(clean["status"]["label"], "On Target")
         self.assertEqual(clean["headline"],
-                         "The open invoices and the ledger agree: GHS 30,000 is owed.")
+                         "The open invoices and the Customer Ledger agree: GHS 30,000 is owed.")
         # Nothing checked is no chip, never On Target by default.
         from command_center.insight.build import status
         self.assertIsNone(status([]))
@@ -6145,7 +6145,7 @@ class AdaptiveRecommendations(TransactionTestCase):
         self.assertIn("low", um["baseline"]["chart"])
         odd = recs["adaptive_anomaly:ap_ledger"]
         self.assertEqual((odd["source"], odd["source_label"]), ("adaptive", "Adaptive"))
-        self.assertIn("Owed to Suppliers, by the Ledger", odd["title"])
+        self.assertIn("Accounts Payable (Supplier Ledger Balance)", odd["title"])
         self.assertTrue(2 <= len(odd["what_to_do"]) <= 4)
         self.assertNotIn("adaptive_anomaly:stock_value", recs)
         # a figure a firing rule already speaks to is not said twice
