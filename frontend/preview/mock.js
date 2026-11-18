@@ -19,6 +19,7 @@
  */
 
 import VIEW_HTML from "../src/legacy/views.json";
+import { setOpen } from "../src/legacy/fold.js";
 
 export const PREVIEW_MARKER = "CC_PREVIEW_MOCK";
 
@@ -924,8 +925,9 @@ if (Q.get("phone")) {
     });
     return out;
   };
-  // A folded row (legacy/fold.js) is one line at any width: its title ellipsises and its
-  // pill, figure, button and chevron never wrap or run past the row (17 Nov 2026).
+  // A folded row (legacy/fold.js) is one line at any width: its title and its quiet line
+  // ellipsise, and its number, figure, button and chevron never wrap or run past the row
+  // (17 Nov 2026).
   const folds = () => [...document.querySelectorAll("#cc-main .fold-row")]
     .filter((row) => row.getClientRects().length && row.scrollWidth > row.clientWidth + 1)
     .map((row) => `fold row "${(row.textContent || "").trim().slice(0, 40)}": `
@@ -950,12 +952,14 @@ if (Q.get("phone")) {
       measure(v, report);
       walked.push(v);
       // And again with every folded row open: what moved into the expansion fits too.
-      const shut = [...document.querySelectorAll("#cc-main .fold-t[aria-expanded='false']")];
+      // Opened directly, not clicked: a click opens one row per list (legacy/fold.js).
+      const shut = [...document.querySelectorAll("#cc-main .fold-t[aria-expanded='false']")]
+        .map((t) => t.closest(".fold"));
       if (shut.length) {
-        shut.forEach((t) => t.click());
+        shut.forEach((card) => setOpen(card, true));
         await wait(300);
         measure(`${v} (rows open)`, report);
-        shut.forEach((t) => t.click());
+        shut.forEach((card) => setOpen(card, false));
       }
       if (v === "settings") {
         const tabs = [...document.querySelectorAll(".st-tabs .tab")];

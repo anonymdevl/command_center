@@ -30,7 +30,10 @@
 // Folded rows (17 Nov 2026): every one-line row that opens for the rest (legacy/fold.js)
 // fits its line at each width, open or closed; its toggle is a button with aria-expanded
 // and aria-controls; Enter and Space work it; and its primary action is clicked without
-// opening it -- on a phone and on a desktop.
+// opening it -- on a phone and on a desktop. As a numbered list (the owner's choice that
+// day): every row is numbered and has no coloured pill; open, everything in it starts at
+// the title's left edge and its buttons are one line, beside the facts on a desktop and
+// at the right under them on a phone; opening a row closes the other open one.
 //
 // It also fails when fewer screens were walked than there are, so a preview that stops
 // rendering cannot pass by measuring nothing. Needs Google Chrome (or CHROME=<path>);
@@ -284,6 +287,56 @@ try {
           say(open() && !panel.hidden, "the chevron opens " + name);
           t.click();
           say(!open() && panel.hidden, "the toggle closes " + name);
+        }
+        // The numbered list (17 Nov 2026, the owner's "E · Numbered list"): each row is
+        // numbered and carries no coloured pill; open, everything in it starts at the
+        // title's left edge, its buttons are on one line -- on a desktop beside the facts,
+        // on a phone under them at the right -- and opening a row closes the others.
+        const near = (a, b) => Math.abs(a - b) <= 1.5;
+        for (const t of toggles) {
+          const card = t.closest(".fold");
+          const name = (t.textContent || "").trim().slice(0, 40);
+          const panel = document.getElementById(t.getAttribute("aria-controls") || "-");
+          if (!panel) continue;
+          say(getComputedStyle(t, "::before").content.includes("counter(fold"), name + " is numbered");
+          const painted = [...card.querySelectorAll(":scope > .fold-row *")]
+            .filter((n) => !n.closest(".fold-pri") && getComputedStyle(n).backgroundColor !== "rgba(0, 0, 0, 0)");
+          say(!painted.length, name + " has no coloured pill on its row"
+            + (painted.length ? " (" + painted[0].tagName.toLowerCase() + "." + painted[0].className + ")" : ""));
+          t.click();
+          await wait(60);
+          const edge = card.querySelector(".fold-title").getBoundingClientRect().left;
+          const starts = [...panel.children].filter((n) => n.getClientRects().length)
+            .map((n) => n.classList.contains("fold-foot") ? n.firstElementChild : n.classList.contains("fold-main") ? n.firstElementChild : n)
+            .filter(Boolean);
+          const off = starts.filter((n) => !near(n.getBoundingClientRect().left, edge));
+          say(starts.length > 0 && !off.length, name + ": everything opened starts at the title's left edge"
+            + (off.length ? " (" + off[0].className + " at " + Math.round(off[0].getBoundingClientRect().left) + ", title at " + Math.round(edge) + ")" : ""));
+          const foot = panel.querySelector(":scope > .fold-foot");
+          const acts = foot?.querySelector(":scope > .acts");
+          const facts = foot?.querySelector(":scope > .ameta");
+          if (acts && acts.children.length) {
+            const tops = [...acts.children].map((b) => Math.round(b.getBoundingClientRect().top));
+            say(tops.every((y) => Math.abs(y - tops[0]) <= 2), name + "'s buttons are on one line");
+            const a = acts.getBoundingClientRect();
+            if (${w} >= 768 && facts) {
+              const m = facts.getBoundingClientRect();
+              say(a.top < m.bottom - 1 && a.left >= m.right - 1, name + "'s buttons are on the facts' line, at their right");
+            } else {
+              say(near(a.right, foot.getBoundingClientRect().right), name + "'s buttons are at the right");
+            }
+          }
+          const next = card.nextElementSibling?.classList.contains("fold") ? card.nextElementSibling : null;
+          if (next) {
+            next.querySelector(":scope > .fold-row > .fold-t").click();
+            await wait(60);
+            say(t.getAttribute("aria-expanded") === "false" && panel.hidden, "opening the row after " + name + " closes it");
+            next.querySelector(":scope > .fold-row > .fold-t").click();
+          } else {
+            t.click();
+          }
+          await wait(30);
+          say(t.getAttribute("aria-expanded") === "false", name + " closes again");
         }
         const first = toggles[0];
         if (first) {

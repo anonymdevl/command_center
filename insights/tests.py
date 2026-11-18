@@ -8798,9 +8798,13 @@ class ExecutiveSummary(TransactionTestCase):
         spec.loader.exec_module(mod)
         src = mod.sources()
         self.assertEqual(mod.compare(src), [])
-        # the check can fail: the alerts' line dropped, the lists put inside the memo
-        broken = {**src, "views": src["views"].replace("Every one links to the record behind it.", "")}
-        self.assertTrue(any("what every alert states" in p for p in mod.compare(broken)))
+        # the check can fail: the Alerts heading dropped, the line on what every alert
+        # states (removed by the owner, 17 Nov 2026) back, the lists put inside the memo
+        head = '<div class="sect"><span>Alerts</span></div>'
+        broken = {**src, "views": src["views"].replace(head, "")}
+        self.assertTrue(any("the Alerts heading is gone" in p for p in mod.compare(broken)))
+        back = {**src, "views": src["views"].replace(head, head + mod.MARKUP[7][0])}
+        self.assertTrue(any("what every alert states is back" in p for p in mod.compare(back)))
         inside = {**src, "views": src["views"].replace('<div class="xm-below">',
                                                        '<div class="rec-live-list"></div><div class="xm-below">')}
         self.assertTrue(any("inside the memo" in p for p in mod.compare(inside)))

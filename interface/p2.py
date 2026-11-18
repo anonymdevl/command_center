@@ -103,7 +103,7 @@ V_COMMAND=f'''<div class="topbar"><div><h3 class="hello" id="greet">Good morning
 <button type="button" class="on" data-mode="all" role="tab" aria-selected="true">All</button>
 <button type="button" data-mode="overdue" role="tab" aria-selected="false">Overdue</button>
 <button type="button" data-mode="over90" role="tab" aria-selected="false">Over 90 Days</button></div></div>
-<div class="debt-cols"><span>Customer</span><span>Customer Ledger Balance</span><span>Waiting</span></div>
+<div class="debt-cols"><span>Customer</span><span>Customer Ledger Balance</span></div>
 <div class="debt-rows" id="debt-rows"><div class="home-wait">Reading Accounts Receivable…</div></div></div>
 <div class="counts">
 <div class="count dark" onclick="go('cx')"><span class="count-i" aria-hidden="true">●</span><b id="cnt-cases">—</b><span>customer issues open</span></div>
@@ -144,6 +144,4 @@ V_BRIEF=f'''<div class="xm" id="xm"><div class="topbar"><div><h3>Executive Summa
 <div class="sect"><span>Recommendations</span><span class="rec-sub" id="rec-sub"></span></div>
 <div class="rec-live-list" data-rec="all"><div class="work-empty"><b>Working out what to do first&hellip;</b></div></div>
 <div class="sect"><span>Alerts</span></div>
-<div class="banner">Each item states six things: <b>what happened · why it matters · the figure ·
-where it came from · who owns it · how long it has been true</b>. Every one links to the record behind it.</div>
 <div class="alert-live-list"><div class="work-empty"><b>Reading the alerts&hellip;</b></div></div>'''

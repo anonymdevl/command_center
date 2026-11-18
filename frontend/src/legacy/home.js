@@ -441,21 +441,19 @@ function loadDebts(panel, scope, onOpen) {
     });
 }
 
-/* One row (legacy/fold.js): the customer, the Customer Ledger Balance and how long it
-   has waited. Invoice Outstanding, the open invoices and the last payment open under it,
-   as the button that opens the customer's Customer Ledger Balance. */
+/* One numbered row (legacy/fold.js): the customer and the Customer Ledger Balance, with
+   how long it is overdue as the quiet line under the name (in the danger colour past 90
+   days). Under it, one line: Invoice Outstanding, the open invoices, the last payment, and
+   Open Ledger, which opens the customer's Customer Ledger Balance. */
 function debtRow(r, currency, onOpen) {
   const row = el("div", "debt-row");
-  const who = el("span", "debt-who");
-  who.append(el("span", "av2", initials(r.customer)));
   const name = el("span", "debt-name");
   name.append(el("b", null, r.customer));
-  who.append(name);
-  const days = el("span", `dpill ${r.days > 90 ? "crit" : r.days > 30 ? "high" : "ok"}`,
-    r.days > 0 ? `${count(r.days)} days` : "not yet due");
+  const late = r.days > 0 ? `Overdue ${count(r.days)} day${r.days === 1 ? "" : "s"}` : "Not yet due";
+  const days = el("span", r.days > 90 ? "debt-late fold-crit" : "debt-late", late);
   // What the ledger says is really owed. On the row its label is the column heading; on
-  // the narrowest screens, where the heading is not shown, it is in the expansion
-  // (shell.py, FOLDED ROWS).
+  // the narrowest screens, where the heading is not shown, it is on the line under it
+  // (shell.py, NUMBERED ROWS).
   const owed = () => {
     const o = el("span", "debt-a");
     const fig = el("b");
@@ -465,21 +463,29 @@ function debtRow(r, currency, onOpen) {
     return o;
   };
 
+  // What the open invoices say, beside what the ledger says is owed.
+  const facts = el("div", "ameta debt-inv");
+  const narrow = owed();
+  narrow.classList.add("fold-fig-x");
+  facts.append(narrow, chip("Invoice Outstanding", exact(r.on_invoices ?? r.invoiced, { decimals: 0 })),
+    el("span", null, `${count(r.invoices)} open invoice${r.invoices === 1 ? "" : "s"}`),
+    r.last_paid ? chip("Last Paid", shortDate(r.last_paid)) : el("span", null, "no payment on record"));
+  const acts = el("div", "acts");
   const open = el("button", "debt-open");
   open.type = "button";
   open.dataset.ccWired = "1";
   open.title = `Open ${r.customer}'s Customer Ledger Balance`;
-  const inv = el("span", "debt-a");
-  // What the open invoices say, beside what the ledger says is owed.
-  inv.append(el("b", null, exact(r.on_invoices ?? r.invoiced, { decimals: 0 })), el("small", null, "Invoice Outstanding"));
-  const narrow = owed();
-  narrow.classList.add("fold-fig-x");
-  open.append(inv, narrow,
-    el("span", "debt-inv", `${count(r.invoices)} open invoice${r.invoices === 1 ? "" : "s"}`
-      + (r.last_paid ? ` · last paid ${shortDate(r.last_paid)}` : " · no payment on record")),
-    el("span", "debt-arrow", "→"));
+  open.append(document.createTextNode("Open Ledger "), el("span", "debt-arrow", "→"));
   open.onclick = () => onOpen?.({ label: `${r.customer}: Customer Ledger Balance`, drill: r.drill });
-  return fold(row, { key: `debt:${r.customer}`, head: [who, owed(), days], body: [open] });
+  acts.append(open);
+  return fold(row, { key: `debt:${r.customer}`, title: name, meta: [days], figure: owed(), foot: facts, acts });
+}
+
+/** Label and value, as the expansion's line shows them (shell.py, NUMBERED ROWS). */
+function chip(label, value) {
+  const c = el("span", "chip", `${label} `);
+  c.append(el("b", null, value || "—"));
+  return c;
 }
 
 /* ------------------------------------------------------------------ top customers */

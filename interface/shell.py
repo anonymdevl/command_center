@@ -1689,106 +1689,155 @@ table.dt.sk-t tfoot td{border-top:1px solid var(--line2);border-bottom:0;backgro
  .rec-group>.rec-area{margin-bottom:var(--sp-3)}
 }
 /* ======================================================================
-   FOLDED ROWS (17 Nov 2026, the approved declutter mockups; legacy/fold.js)
-   "Cards and action lists collapsible, so the interface stays simple." An approval, a
-   recommendation, an alert, a task marked done and a debtor are each one line -- the
-   essentials and the primary action -- and open in place for the rest. Consecutive rows
-   read as one ruled list: a hairline between them, one frame around them. No tint, glow
-   or shadow; tokens only, so both themes and every accent hold.
-     row       the toggle (pill, title, figure), the primary button, the chevron; one
-               line at any width: the title ellipsises, nothing else wraps or shrinks
-     narrow    under 480px of panel the figure leaves the row for the expansion
-               (.fold-fig-x), and a debtor's avatar goes
-     open      the expansion under a hairline, in the order the card had it
+   NUMBERED ROWS (17 Nov 2026; legacy/fold.js. The owner's choice, "E · Numbered list",
+   over the first folded cards.)
+   An approval, a recommendation, an alert, a task marked done and a debtor are each one
+   numbered row, and open in place for the rest. Editorial, not cards: hairlines between
+   the rows, no box, no tint, no coloured pill. Tokens only, so both themes and every
+   accent hold.
+     row     the number (the list's own count) | the title, one line, and under it one
+             quiet line in small capitals ("CRITICAL · SALES · FINANCE") | the figure |
+             the primary button, on the lists that have one | the chevron. One line at
+             any width: the title ellipsises, nothing else wraps or shrinks.
+     colour  only Critical, and a debt overdue past 90 days, is in the danger colour;
+             the primary button is a neutral filled one, the rest are hairline-outlined
+     open    hung from a hairline at the title's left edge, so everything in it starts
+             where the title starts: the why and the step, the figure box to their right,
+             then ONE line -- the facts on the left, the buttons on the right
+     narrow  under 480px of panel the figure leaves the row for the expansion
+             (.fold-fig-x), and the buttons go under the facts, still on one line
    ====================================================================== */
-.alert.fold{display:block;padding:0;margin:0;border-radius:0;border-top-width:0;box-shadow:none}
-:not(.alert.fold)+.alert.fold,.alert.fold:first-child{border-top-width:1px;
- border-top-left-radius:var(--r-sm);border-top-right-radius:var(--r-sm)}
-.alert.fold:not(:has(+ .alert.fold)){border-bottom-left-radius:var(--r-sm);
- border-bottom-right-radius:var(--r-sm);margin-bottom:var(--sp-3)}
+.fold,.debt-cols{--fold-pad:8px;--fold-num:28px;--fold-gap:16px}
+:has(> .fold),[data-fold-list]{counter-reset:fold}
+[data-fold-list] .rec-group{counter-reset:none}
+.alert.fold{display:block;padding:0;margin:0;background:none;border:0;border-top:1px solid var(--line);
+ border-radius:0;box-shadow:none;counter-increment:fold}
+.alert.fold:not(:has(+ .alert.fold)){border-bottom:1px solid var(--line);margin-bottom:var(--sp-3)}
 .alert.fold:hover,.alert.fold:is(.crit,.high,.med,.info):hover{border-color:var(--line)}
-.fold-row{display:flex;align-items:center;gap:var(--sp-3);min-width:0;padding:10px var(--sp-4);cursor:pointer}
+.fold-row{display:flex;align-items:center;gap:var(--fold-gap);min-width:0;padding:12px var(--fold-pad);cursor:pointer}
 .fold-row:hover{background:var(--hover)}
-.fold-t{display:flex;align-items:center;gap:10px;flex:1 1 auto;min-width:0;margin:0;padding:4px 0;
- border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
-.fold-t:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:var(--r-xs)}
-.fold-t>*{flex:none;white-space:nowrap}
-.fold-t .asev{margin:0}
-.fold-t .awhat{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:var(--fs-md);
- font-weight:var(--fw-semibold);letter-spacing:-.01em;line-height:1.4}
-.fold-t .asev.rec-area-tag{margin:0;max-width:34%;overflow:hidden;text-overflow:ellipsis;display:inline-block}
-.fold-t .afig{background:none;padding:0;border-radius:0;font-size:var(--fs-md);font-weight:var(--fw-semibold);
- letter-spacing:-.01em;line-height:1.4;text-align:right}
-.fold-t .afig small{display:inline;margin:0 0 0 4px}
+.fold-t{display:grid;grid-template-columns:var(--fold-num) minmax(0,1fr) auto;column-gap:var(--fold-gap);
+ align-items:baseline;flex:1 1 auto;min-width:0;margin:0;padding:0;border:0;background:none;font:inherit;
+ color:inherit;text-align:left;cursor:pointer}
+.fold-t:focus-visible{outline:2px solid var(--accent);outline-offset:6px;border-radius:var(--r-xs)}
+.fold-t::before{content:counter(fold,decimal-leading-zero);content:counter(fold,decimal-leading-zero) / "";
+ font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--dim);font-variant-numeric:tabular-nums;
+ letter-spacing:.02em}
+.fold-tt{display:flex;flex-direction:column;gap:3px;min-width:0}
+.fold-t .fold-title{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ font-size:var(--fs-md);font-weight:var(--fw-semibold);letter-spacing:-.01em;line-height:1.4;color:var(--ink)}
+.fold-t .debt-name b{font-weight:inherit}
+.fold-on .fold-t .fold-title{white-space:normal;overflow-wrap:anywhere}
+.fold-k{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ font-size:var(--fs-2xs);font-weight:var(--fw-medium);letter-spacing:.08em;text-transform:uppercase;
+ line-height:1.4;color:var(--mut)}
+.fold-crit{color:var(--crit);font-weight:var(--fw-semibold)}
+.fold-t>.afig{background:none;padding:0;border-radius:0;font-size:var(--fs-md);font-weight:var(--fw-semibold);
+ letter-spacing:-.01em;line-height:1.4;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.fold-t>.afig .cx{font-size:var(--fs-2xs);color:var(--mut);font-weight:var(--fw-medium);margin-right:4px}
+.fold-t>.afig .mag{font-size:inherit;color:var(--ink2);font-weight:inherit;margin-left:1px}
+.fold-t>.afig small{display:inline;margin:0 0 0 4px;font-size:var(--fs-2xs);color:var(--mut)}
+.fold-on.fold-boxed>.fold-row .fold-t>.afig{visibility:hidden}
 .fold-pri{flex:none;display:inline-flex}
-.fold-pri .btn{white-space:nowrap}
 .fold-chev{flex:none;width:16px;height:16px;display:grid;place-items:center;color:var(--dim)}
 .fold-chev::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;
  border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);transition:transform .15s}
 .fold-on>.fold-row .fold-chev::before{transform:translateY(2px) rotate(-135deg)}
 .fold-row:hover .fold-chev{color:var(--ink2)}
-.fold-b{border-top:1px solid var(--line);padding:var(--sp-3) var(--sp-4) var(--sp-4);min-width:0}
+/* Buttons: restrained corners; the primary is the ink itself, the rest a hairline. */
+.fold .btn,.fold .amenu-b{border-radius:6px;padding:5px 12px;background:transparent;border:1px solid var(--line2);
+ color:var(--ink2);font-size:var(--fs-xs);font-weight:var(--fw-medium);line-height:1.4;box-shadow:none}
+.fold .amenu-b{width:auto;height:auto;padding:5px 10px;display:inline-flex;align-items:center}
+.fold .btn:hover,.fold .amenu-b:hover,.fold .amenu.on .amenu-b{border-color:var(--mut);color:var(--ink);background:transparent}
+.fold .btn.pri{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.fold .btn.pri:hover{background:var(--ink);border-color:var(--ink);color:var(--surface);filter:none;opacity:.86}
+.fold .btn.dgr{color:var(--crit);border-color:var(--line2)}
+.fold .btn.dgr:hover{border-color:var(--crit)}
+/* The expansion: one left edge, the title's. The hairline sits in the gap before it. */
+.fold-b{margin:0 var(--fold-pad) 16px calc(var(--fold-pad) + var(--fold-num) + var(--fold-gap) / 2);
+ padding:2px 0 2px calc(var(--fold-gap) / 2 - 1px);border-left:1px solid var(--line2);border-radius:0;min-width:0}
 .fold-b[hidden]{padding:0;border:0;margin:0}
 .fold-b>*{min-width:0}
 .fold-b>*+*{margin-top:var(--sp-3)}
-.fold-b .awhy{margin-top:0}
-.fold-b>.ameta{margin-top:var(--sp-2)}
-.fold-b>.acts{margin-top:var(--sp-3)}
-.fold-b>.rec-steps{background:var(--raised);border-radius:var(--r-sm);padding:12px 16px;
+.fold-main{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:var(--sp-6);align-items:start}
+.fold-text{min-width:0}
+.fold-text>*+*,.fold-what>*+*{margin-top:6px}
+.fold-b .awhy{margin:0;font-size:var(--fs-sm);color:var(--ink2);line-height:1.55}
+.fold-b .asw{margin:0;font-size:var(--fs-sm);color:var(--ink);font-weight:var(--fw-medium);line-height:1.55}
+.fold-what>.asw,.fold-text>.asw{margin-top:6px}
+.fold-b .rec-why-now{margin:0;font-size:var(--fs-xs);color:var(--mut);line-height:1.5}
+.fold-b .work-detail{margin:6px 0 0}
+.fold-b .fold-what.work-row{cursor:pointer;border-radius:var(--r-xs)}
+.fold-b .fold-what.work-row:hover .awhy{color:var(--ink)}
+.fold-b .fold-what.work-row:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.fold-box{display:flex;flex-direction:column;align-items:flex-end;gap:8px;padding:10px 14px;border:1px solid var(--line);
+ border-radius:6px;background:none;text-align:right}
+.fold-box .afig{background:none;padding:0;font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em;
+ font-variant-numeric:tabular-nums}
+.fold-box .afig .cx{font-size:var(--fs-xs);color:var(--mut)}
+.fold-box .afig .mag{font-size:var(--fs-lg);color:var(--ink2)}
+.fold-box .afig small{display:block;margin-top:2px;text-align:right}
+.fold-b>.rec-steps{padding:var(--sp-3) 0 0;border-top:1px solid var(--line);border-radius:0;background:none;
  font-size:var(--fs-sm);color:var(--ink2);line-height:1.55}
 .fold-b>.rec-steps .rec-learned{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
 .fold-b>.rec-reason{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.fold-b .work-detail{margin:var(--sp-2) 0 0}
-.fold-b .fold-what.work-row{cursor:pointer;border-radius:var(--r-xs)}
-.fold-b .fold-what.work-row:hover .awhy{color:var(--ink2)}
-.fold-b .fold-what.work-row:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
-.fold-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:var(--sp-2)}
-.fold-tags .asev{margin:0}
-.fold-b .afig.fold-fig-x,.fold-fig-x{display:none}
-/* Largest Receivables: the customer, the Customer Ledger Balance, how long it has waited;
-   the columns line up with the heading row above them. */
-.debt-cols{grid-template-columns:minmax(0,1fr) 180px 110px 16px}
-.debt-cols span:last-child{text-align:left}
-.debt-cols span:nth-child(2){text-align:right}
-.debt-rows>.debt-row.fold{display:block;padding:0;border-bottom:1px solid var(--line);cursor:default}
+.fold-b>.afig.fold-fig-x{background:none;padding:0;font-size:var(--fs-lg);font-weight:var(--fw-semibold)}
+.fold-fig-x,.fold-b .afig.fold-fig-x,.fold-foot .debt-a.fold-fig-x{display:none}
+/* The last line: the facts as plain grey words on the left, the buttons on the right. */
+.fold-foot{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2) var(--sp-4);min-width:0}
+/* Each fact's dot sits in the gap before it; the first on each line falls outside the box
+   and is clipped, so a line never starts with one. */
+.fold-foot>.ameta{flex:1 1 auto;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 17px;min-width:0;margin:0;
+ overflow:hidden;font-size:var(--fs-xs);color:var(--mut);line-height:1.5}
+.fold-foot>.ameta>*{position:relative}
+.fold-foot>.ameta>*::before{content:"·";position:absolute;left:-11px;color:var(--dim);font-weight:var(--fw-regular)}
+.fold-foot .chip,.fold-foot .chip.src,.fold-foot a.chip{background:none;border:0;border-radius:0;padding:0;
+ font-size:var(--fs-xs);color:var(--mut);white-space:nowrap;max-width:none}
+.fold-foot .chip b{color:var(--ink2);font-weight:var(--fw-medium)}
+.fold-foot .chip.src,.fold-foot a.chip{cursor:pointer;text-decoration:underline;text-decoration-color:var(--line2);
+ text-underline-offset:3px;white-space:normal}
+.fold-foot .chip.src b{color:inherit;font-weight:inherit}
+.fold-foot .chip.src:hover,.fold-foot a.chip:hover{background:none;color:var(--ink);text-decoration-color:currentColor}
+.fold-foot .rec-src{cursor:help}
+.fold-foot>.acts{flex:none;display:flex;flex-wrap:nowrap;align-items:center;gap:6px;margin:0 0 0 auto}
+/* Largest Receivables: the customer and the Customer Ledger Balance, the heading's two
+   columns over them; the line under it ends in Open Ledger. */
+.debt-cols{display:grid;grid-template-columns:minmax(0,1fr) auto;
+ padding-left:calc(22px + var(--fold-num) + var(--fold-gap));padding-right:calc(22px + 16px + var(--fold-gap))}
+.debt-cols span:last-child{text-align:right}
+.debt-rows>.debt-row.fold{--fold-pad:22px;display:block;padding:0;border:0;border-bottom:1px solid var(--line);
+ cursor:default;counter-increment:fold}
 .debt-rows>.debt-row.fold:last-child{border-bottom:0}
 .debt-rows>.debt-row.fold:hover{background:none}
-.debt-row>.fold-row{padding:12px 22px}
-.debt-row .fold-t{display:grid;grid-template-columns:minmax(0,1fr) 180px 110px;gap:var(--sp-3);padding:0}
-.debt-row .fold-t .debt-a{align-items:flex-end;text-align:right}
-.debt-row .fold-t .debt-a small{display:none}
-.debt-a b .cx{color:var(--mut);font-size:var(--fs-xs);font-weight:var(--fw-medium)}
-.debt-row .fold-t .av2{width:30px;height:30px;border-radius:var(--r-xs)}
-.debt-row .fold-t .dpill{justify-self:start}
-.debt-row>.fold-b{padding:0 22px 12px;border-top:0}
-.debt-open{display:flex;align-items:center;gap:var(--sp-4);width:100%;padding:10px 12px 10px 42px;margin:0;
- border:0;border-top:1px solid var(--line);background:none;font:inherit;color:var(--ink);text-align:left;cursor:pointer}
-.debt-open:hover{background:var(--hover)}
-.debt-open:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.debt-open .debt-a{align-items:flex-start}
-.debt-inv{flex:1 1 auto;min-width:0;font-size:var(--fs-xs);color:var(--mut)}
-.debt-open .debt-arrow{flex:none}
+.debt-row .fold-t>.debt-a{align-items:flex-end}
+.debt-row .fold-t>.debt-a b{font-size:var(--fs-md)}
+.debt-row .fold-t>.debt-a b .cx{color:var(--mut);font-size:var(--fs-2xs);font-weight:var(--fw-medium)}
+.debt-row .fold-t>.debt-a small{display:none}
+.fold-foot .debt-open{display:inline-flex;align-items:baseline;gap:6px;width:auto;margin:0;padding:0;border:0;
+ background:none;font:inherit;font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--ink2);cursor:pointer;
+ text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px;white-space:nowrap}
+.fold-foot .debt-open:hover{color:var(--ink);text-decoration-color:currentColor}
+.fold-foot .debt-open:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.fold-foot .debt-open .debt-arrow{text-decoration:none;color:inherit}
 @container panel (max-width:720px){
- .debt-row .fold-t{grid-template-columns:minmax(0,1fr) auto auto}
- .debt-row>.fold-row{padding:12px 16px}
- .debt-row>.fold-b{padding:0 16px 12px}
- .debt-open{padding-left:12px}
-}
-@container panel (max-width:620px){
- .fold-b>.arow{flex-direction:column;gap:var(--sp-3)}
- .fold-b .afig{text-align:left}
+ .debt-rows>.debt-row.fold{--fold-pad:16px}
 }
 @container panel (max-width:480px){
- .fold-row{padding:10px var(--sp-3);gap:var(--sp-2)}
- .fold-t{gap:var(--sp-2)}
- .fold-b{padding:var(--sp-3)}
- .fold-t>.afig{display:none}
- .fold-b .afig.fold-fig-x,.fold-fig-x{display:block}
- .fold-b>.afig.fold-fig-x{display:table;padding:8px 12px;font-size:var(--fs-lg)}
- .fold-pri .btn{padding:6px 12px}
- .debt-row .av2{display:none}
- .debt-row .fold-t .debt-a b .cx,.debt-a.fold-fig-x b .cx{display:none}
- .debt-open{flex-wrap:wrap;row-gap:var(--sp-2)}
- .debt-open .debt-a.fold-fig-x{display:flex}
+ .fold,.debt-rows>.debt-row.fold{--fold-num:20px;--fold-gap:10px}
+ .alert.fold{--fold-pad:4px}
+ .fold-t>.afig,.fold-t>.debt-a{display:none}
+ .fold-fig-x,.fold-b .afig.fold-fig-x{display:block}
+ .fold-foot .debt-a.fold-fig-x{display:inline-flex;flex-direction:row-reverse;align-items:baseline;gap:4px}
+ .fold-foot .debt-a.fold-fig-x b{font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--ink2)}
+ .fold-foot .debt-a.fold-fig-x b .cx{display:none}
+ .fold-foot .debt-a.fold-fig-x small{font-size:var(--fs-xs);color:var(--mut)}
+ .fold-main{grid-template-columns:minmax(0,1fr)}
+ .fold-box{justify-self:start;align-items:flex-start;text-align:left;margin-top:var(--sp-3)}
+ .fold-box .afig small{text-align:left}
+ .fold-foot{flex-wrap:wrap}
+ .fold-foot>.acts{flex:1 0 100%;justify-content:flex-end}
+ .fold-pri .btn{padding:5px 10px}
+ .fold-t .fold-title{white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+ .fold-on .fold-t .fold-title{display:block;-webkit-line-clamp:none}
 }
 """
