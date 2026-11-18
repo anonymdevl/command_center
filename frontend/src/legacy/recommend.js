@@ -17,7 +17,7 @@
  */
 
 import { api } from "../api/client.js";
-import { count, money } from "../format.js";
+import { count, money, shortDate } from "../format.js";
 import { menu } from "./actions.js";
 import { guideBox } from "./guide.js";
 import { sparkline } from "./spark.js";
@@ -37,6 +37,8 @@ export function renderRecs(root, view, data, { onOpen } = {}) {
   const list = el("div", "rec-live-list");
   list.dataset.rec = slot.dataset.rec || "";
   list.dataset.live = "1";
+  // One numbered list, one row open at a time, across the areas (legacy/fold.js).
+  list.dataset.foldList = "1";
   if (!recs.length) list.append(empty(data));
   if (view === "command") {
     recs.slice(0, TOP).forEach((r) => list.append(card(r, onOpen)));
@@ -143,46 +145,39 @@ function brief(root, b) {
   }
 }
 
-/* One row (legacy/fold.js): priority, what to do, its area; the why, the step, the
-   figure, the owner and every action open under it. */
+/* One numbered row (legacy/fold.js): what to do and the money at stake, with its priority,
+   area and owner as the quiet line under the title; the why and the step open under it
+   with the figure box beside them, then the owner, since when, its source and the record
+   on one line with every action. */
 function card(r, onOpen) {
   const c = el("div", `alert ${r.severity}`);
   c.id = `rec-${r.name}`;
   c.dataset.live = "1";
   c.dataset.ccWired = "1";
 
-  const head = [el("span", "asev", WORDS[r.severity] || r.severity), el("span", "awhat", r.title),
-    r.area_label ? el("span", "asev rec-area-tag", r.area_label) : null];
+  const word = WORDS[r.severity] || r.severity;
+  // Its owner, unless the owner is the area itself ("Sales · Sales").
+  const owner = (r.owner_role || "").toLowerCase() === (r.area_label || "").toLowerCase() ? null : r.owner_role;
+  const meta = [r.severity === "crit" ? el("span", "fold-crit", word) : word, r.area_label, owner];
 
-  const row = el("div", "arow");
-  const body = el("div");
-  const tags = el("div", "fold-tags");
-  if (r.source_label) {
-    const src = el("span", `asev rec-src rec-src-${r.source || "rule"}`, r.source_label);
-    if (r.learned?.explain) src.title = r.learned.explain;
-    tags.append(src);
-  }
-  if (r.timeframe) tags.append(el("span", "asev rec-area-tag", r.timeframe));
-  if (tags.children.length) body.append(tags);
-  body.append(el("div", "awhy", r.why || ""));
-  if (r.why_now) body.append(el("div", "rec-why-now", `Why now: ${r.why_now}`));
+  const text = [el("div", "awhy", r.why || "")];
+  if (r.why_now) text.push(el("div", "rec-why-now", `Why now: ${r.why_now}`));
   if (r.ai_priority?.reason) {
     const nth = ORDINAL[r.ai_priority.rank] || `number ${r.ai_priority.rank}`;
-    body.append(el("div", "rec-why-now", `The daily AI review puts this ${nth} today: ${r.ai_priority.reason}`));
+    text.push(el("div", "rec-why-now", `The daily AI review puts this ${nth} today: ${r.ai_priority.reason}`));
   }
   if (r.reopened_after_done) {
-    body.append(el("div", "asw", `→ Marked done on ${r.reopened_after_done}, and the figures still show it.`));
+    text.push(el("div", "asw", `→ Marked done on ${r.reopened_after_done}, and the figures still show it.`));
   } else if (r.what_to_do?.length) {
-    body.append(el("div", "asw", `→ ${r.what_to_do[0]}`));
+    text.push(el("div", "asw", `→ ${r.what_to_do[0]}`));
   }
-  row.append(body);
   const fig = figure(r);
   const chart = r.baseline?.chart ? sparkline(r.baseline.chart, r.baseline.says) : null;
+  let side = null;
   if (fig || chart) {
-    const side = el("div", "rec-side");
+    side = el("div", "rec-side");
     if (fig) side.append(fig);
     if (chart) side.append(chart);
-    row.append(side);
   }
 
   const steps = el("div", "rec-steps");
@@ -193,16 +188,24 @@ function card(r, onOpen) {
   if (r.how_in_erpnext) steps.append(guideBox(r.how_in_erpnext, { compact: true }));
   steps.append(...learnedNotes(r));
 
-  const meta = el("div", "ameta");
+  // Owner, since when, where it comes from (Rule, Adaptive, AI-found; the learned weight in
+  // its tooltip), when it is for, and the records behind it: plain words on one line.
+  const facts = el("div", "ameta");
+  facts.append(chip("Owner", r.owner_role), chip("Since", shortDate(r.first_seen) || "—"));
+  if (r.source_label) {
+    const src = el("span", `rec-src rec-src-${r.source || "rule"}`, r.source_label);
+    if (r.learned?.explain) src.title = r.learned.explain;
+    facts.append(src);
+  }
+  if (r.timeframe) facts.append(el("span", "rec-when", r.timeframe));
   if (r.drill?.fact || r.drill?.href) {
     const src = el("span", "chip src", "");
     src.append(document.createTextNode("Records · "), el("b", null, "open the records"));
     src.onclick = () => (r.drill.href
       ? window.open(r.drill.href, "_blank", "noopener")
       : onOpen?.({ label: r.title, drill: r.drill }));
-    meta.append(src);
+    facts.append(src);
   }
-  meta.append(chip("Owner", r.owner_role), chip("Seen since", (r.first_seen || "").slice(0, 10)));
 
   const acts = el("div", "acts");
   const what = btn(steps.hidden ? "What To Do" : "Hide Steps", "btn pri", () => {
@@ -220,7 +223,8 @@ function card(r, onOpen) {
       ["Snooze 30 Days", () => act(c, r, "snooze", { days: 30 }), false],
     ]),
   );
-  return fold(c, { key: `rec:${r.name}`, head, body: [row, steps, meta, acts] });
+  return fold(c, { key: `rec:${r.name}`, title: el("span", "awhat", r.title), meta, figure: figure(r, { row: true }),
+                   text, box: side, more: [steps], foot: facts, acts });
 }
 
 /** Under What To Do: the evidence (AI-found), the usual range, the threshold, the weight. */
@@ -251,13 +255,15 @@ function learnedNotes(r) {
   return out;
 }
 
-function figure(r) {
-  const f = el("div", "afig");
+/** The money at stake, or the count: in the figure box, or on the row (a span, without
+ *  "at stake", which the box says). */
+function figure(r, { row = false } = {}) {
+  const f = el(row ? "span" : "div", "afig");
   if (r.money_at_stake) {
     const m = money(r.money_at_stake, r.currency || "");
     f.append(el("span", "cx", m.currency), document.createTextNode(m.figure));
     if (m.suffix) f.append(el("span", "mag", m.suffix));
-    f.append(el("small", null, "at stake"));
+    if (!row) f.append(el("small", null, "at stake"));
     return f;
   }
   if (r.count) {
@@ -281,7 +287,7 @@ function reason(c, r) {
     e.preventDefault();
     act(c, r, "not_relevant", { reason: input.value });
   };
-  c.querySelector(".acts")?.before(form);
+  c.querySelector(".fold-foot")?.before(form);
   input.focus();
 }
 
@@ -296,7 +302,7 @@ function act(c, r, action, extra = {}) {
     .catch((e) => {
       c.querySelectorAll("button").forEach((b) => { b.disabled = false; });
       c.querySelector(".rec-note")?.remove();
-      c.querySelector(".acts")?.before(el("div", "rec-note", e?.message || "That did not work."));
+      c.querySelector(".fold-foot")?.before(el("div", "rec-note", e?.message || "That did not work."));
     });
 }
 

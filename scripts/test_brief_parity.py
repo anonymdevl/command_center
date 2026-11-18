@@ -9,8 +9,9 @@ as it was at d44a652, each item with the file it must still be in. This fails if
 it is lost:
 
   markup    the heading, the line under it, the Daily Brief box, the Recommendations and
-            Alerts headings, the line on what every alert states, the two live lists --
-            all still in views.json, in the same order, and all below the memo, outside it
+            Alerts headings, the two live lists -- all still in views.json, in the same
+            order, and all below the memo, outside it. The line on what every alert states
+            was removed by the owner (17 Nov 2026, REMOVED): it must stay gone
   hooks     recommend.js still draws the full list on this screen (areas, Recently Closed,
             What Worked, the Daily Brief) with every action on every card; alerts.js still
             draws the alerts here with every action; core.js still writes the line under
@@ -21,9 +22,9 @@ it is lost:
 
 When git can see d44a652, the markup inventory is re-derived from that commit's views.json,
 so INVENTORY is proven to be the old screen and not a copy of the new one. Finally the check
-proves it can fail: a copy with the banner dropped, the sub-heading removed, the lists put
-inside the memo, the screen taken out of REC_VIEWS and the PDF button removed must each be
-caught.
+proves it can fail: a copy with the Alerts heading dropped, the removed banner back, the
+sub-heading removed, the lists put inside the memo, the screen taken out of REC_VIEWS and the
+PDF button removed must each be caught.
 """
 
 from __future__ import annotations
@@ -71,7 +72,7 @@ HOOKS = (
     ("recommend.js", '["Snooze 7 Days", () => act(c, r, "snooze", { days: 7 }), false]', "Snooze 7 Days"),
     ("recommend.js", '["Snooze 30 Days", () => act(c, r, "snooze", { days: 30 }), false]', "Snooze 30 Days"),
     ("recommend.js", 'el("b", null, "open the records")', "each card's records"),
-    ("recommend.js", 'chip("Owner", r.owner_role), chip("Seen since"', "owner and seen since"),
+    ("recommend.js", 'chip("Owner", r.owner_role), chip("Since"', "owner and seen since"),
     ("recommend.js", "c.id = `rec-${r.name}`;", "each card's id (a decision scrolls to it)"),
     ("alerts.js", 'export const ALERT_VIEWS = new Set(["command", "brief", "health", "risk"]);',
      "the alerts are drawn here"),
@@ -105,7 +106,14 @@ HOOKS = (
 WAS = {
     ("recommend.js", 'group.append(el("div", "rec-area", "Recently closed"));'):
         'list.append(el("div", "rec-area", "Recently closed"));',
+    ("recommend.js", 'chip("Owner", r.owner_role), chip("Since"'): 'chip("Owner", r.owner_role), chip("Seen since"',
     ("alerts.js", 'btn("Ask AI", "btn"'): 'btn("Ask AI about this", "btn"',
+}
+# Removed since BASE_REF on purpose, each with why: (MARKUP text) -> the decision. The
+# check then holds the other way -- it must stay gone.
+REMOVED = {
+    MARKUP[7][0]: "17 Nov 2026, the owner: the interface stays lean; the alerts say these six "
+                  "things themselves, row by row",
 }
 # What the memo's code may never touch: the screen below it.
 MEMO_MUST_NOT = ("rec-live-list", "alert-live-list", "rec-brief", "rec-sub", "brief-when", ".alert:not",
@@ -155,6 +163,10 @@ def compare(src: dict) -> list:
     at = -1
     for text, what in MARKUP:
         i = page.find(text)
+        if text in REMOVED:
+            if i >= 0:
+                lost.append(f"views.json: {what} is back, though it was removed on purpose ({REMOVED[text]})")
+            continue
         if i < 0:
             lost.append(f"views.json: {what} is gone ({text[:60]!r})")
         elif i < at:
@@ -223,9 +235,11 @@ def main() -> int:
 
     # 3. The check can fail.
     page = src["views"]
+    alerts_head = MARKUP[6][0]
     banner = MARKUP[7][0]
     cases = (
-        ("the banner dropped", {"views": page.replace(banner, "")}),
+        ("the Alerts heading dropped", {"views": page.replace(alerts_head, "")}),
+        ("the removed banner back", {"views": page.replace(alerts_head, alerts_head + banner)}),
         ("the count beside Recommendations removed",
          {"views": page.replace('<span class="rec-sub" id="rec-sub"></span>', "")}),
         ("the lists inside the memo",

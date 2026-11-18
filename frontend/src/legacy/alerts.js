@@ -70,9 +70,10 @@ export function alertsFailed(root, view, error) {
   slot.append(e);
 }
 
-/* One row (legacy/fold.js): severity, what happened, the figure and Assign; why it
-   matters, the next step, where it came from, who owns it and the other actions open
-   under it. */
+/* One numbered row (legacy/fold.js): what happened, the figure and Assign, with the
+   severity, whether it is assigned and its owner as the quiet line under the title; why it
+   matters and the next step open under it, then where it came from, who owns it, how old
+   it is and the other actions on one line. */
 function card(a, onOpen) {
   const c = el("div", `alert ${a.severity}`);
   c.id = `alert-${a.name}`;
@@ -80,12 +81,12 @@ function card(a, onOpen) {
   c.dataset.ccWired = "1";
 
   const fig = () => (a.figure === null || a.figure === undefined ? null : figure(a));
-  const head = [el("span", "asev", WORDS[a.severity] || a.severity),
-    a.status === "Actioned" ? el("span", "asev astate", "Assigned") : null,
-    el("span", "awhat", a.title), fig()];
+  const word = WORDS[a.severity] || a.severity;
+  const meta = [a.severity === "crit" ? el("span", "fold-crit", word) : word,
+    a.status === "Actioned" ? "Assigned" : null, a.owner_label];
   const what = el("div", "fold-what");
   what.append(el("div", "awhy", a.why || ""), el("div", "asw", `→ ${a.next_step || ""}`));
-  // On the narrowest screens the figure leaves the row for here (shell.py, FOLDED ROWS).
+  // On the narrowest screens the figure leaves the row for here (shell.py, NUMBERED ROWS).
   const narrow = fig();
   narrow?.classList.add("fold-fig-x");
 
@@ -93,21 +94,16 @@ function card(a, onOpen) {
     act(a.name, "acknowledge");
     onOpen?.({ label: a.title, drill: { fact: a.drill_fact, filters: a.drill_filters } });
   };
-  const meta = el("div", "ameta");
-  if (a.drill_fact) {
-    const src = el("span", "chip src", "");
-    src.append(document.createTextNode(`${a.source_label || "Records"} · `), el("b", null, "open the records"));
-    src.onclick = records;
-    meta.append(src);
-  }
+  const facts = el("div", "ameta");
   // The age is the oldest item's ("oldest over 2 years"), worded so by the server, the
   // same words as the bell.
-  meta.append(chip("Owner", a.owner_label));
-  if (a.elapsed) meta.append(chip("Age", a.elapsed));
+  facts.append(chip("Owner", a.owner_label));
+  if (a.elapsed) facts.append(chip("Age", a.elapsed));
   if (a.emailed) {
-    const m = chip("Email", a.emailed.replace(/^Emailed to /, "sent to ").replace(/^Not emailed: /, "not sent: "));
+    // Why it was not sent is in its tooltip, so the line stays one line.
+    const m = chip("Email", a.emailed.replace(/^Emailed to /, "sent to ").replace(/^Not emailed: .*/s, "not sent"));
     m.title = a.emailed;
-    meta.append(m);
+    facts.append(m);
   }
   if (a.todo) {
     // In the business's own ERPNext (erpLinks.js); without its address, the To-Do is
@@ -120,7 +116,14 @@ function card(a, onOpen) {
       t.rel = "noreferrer";
     }
     t.append(document.createTextNode("To-Do "), el("b", null, a.todo));
-    meta.append(t);
+    facts.append(t);
+  }
+  // The record behind it, last on the line.
+  if (a.drill_fact) {
+    const src = el("span", "chip src", "");
+    src.append(document.createTextNode(`${a.source_label || "Records"} · `), el("b", null, "open the records"));
+    src.onclick = records;
+    facts.append(src);
   }
 
   // The alert's own business goes with every action on it: in "All businesses" the
@@ -144,7 +147,8 @@ function card(a, onOpen) {
       ["Dismiss…", () => fire("cc-action", { kind: "alert", verb: "dismiss", alert: a.name, title: a.title }), true],
     ]),
   );
-  return fold(c, { key: `alert:${a.name}`, head, primary: assign, body: [what, narrow, meta, acts] });
+  return fold(c, { key: `alert:${a.name}`, title: el("span", "awhat", a.title), meta, figure: fig(),
+                   primary: assign, text: [what], more: [narrow], foot: facts, acts });
 }
 
 function figure(a) {
