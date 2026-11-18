@@ -21,10 +21,9 @@ import { count, money, shortDate } from "../format.js";
 import { menu } from "./actions.js";
 import { guideBox } from "./guide.js";
 import { sparkline } from "./spark.js";
-import { fold } from "./fold.js";
+import { fold, severityTag } from "./fold.js";
 
 export const REC_VIEWS = new Set(["command", "brief"]);
-const WORDS = { crit: "Critical", high: "High", med: "Medium", info: "For information" };
 const TOP = 5;
 // Which cards have their steps open: kept across the minute's refresh.
 const opened = new Set();
@@ -155,10 +154,9 @@ function card(r, onOpen) {
   c.dataset.live = "1";
   c.dataset.ccWired = "1";
 
-  const word = WORDS[r.severity] || r.severity;
   // Its owner, unless the owner is the area itself ("Sales · Sales").
   const owner = (r.owner_role || "").toLowerCase() === (r.area_label || "").toLowerCase() ? null : r.owner_role;
-  const meta = [r.severity === "crit" ? el("span", "fold-crit", word) : word, r.area_label, owner];
+  const meta = [severityTag(r.severity), r.area_label, owner];
 
   const text = [el("div", "awhy", r.why || "")];
   if (r.why_now) text.push(el("div", "rec-why-now", `Why now: ${r.why_now}`));

@@ -1716,8 +1716,9 @@ table.dt.sk-t tfoot td{border-top:1px solid var(--line2);border-bottom:0;backgro
              quiet line in small capitals ("CRITICAL · SALES · FINANCE") | the figure |
              the primary button, on the lists that have one | the chevron. One line at
              any width: the title ellipsises, nothing else wraps or shrinks.
-     colour  only Critical, and a debt overdue past 90 days, is in the danger colour;
-             the primary button is a neutral filled one, the rest are hairline-outlined
+     colour  the severity word is in its severity's colour (18 Nov 2026: High had none),
+             a debt overdue past 90 days in the danger colour; the primary button is a
+             neutral filled one, the rest are hairline-outlined
      open    hung from a hairline at the title's left edge, so everything in it starts
              where the title starts: the why and the step, the figure box to their right,
              then ONE line -- the facts on the left, the buttons on the right
@@ -1749,6 +1750,8 @@ table.dt.sk-t tfoot td{border-top:1px solid var(--line2);border-bottom:0;backgro
  font-size:var(--fs-2xs);font-weight:var(--fw-medium);letter-spacing:.08em;text-transform:uppercase;
  line-height:1.4;color:var(--mut)}
 .fold-crit{color:var(--crit);font-weight:var(--fw-semibold)}
+.fold-sev{font-weight:var(--fw-semibold)}
+.sev-crit{color:var(--crit)}.sev-high{color:var(--high)}.sev-med{color:var(--med)}.sev-info{color:var(--info)}
 .fold-t>.afig{background:none;padding:0;border-radius:0;font-size:var(--fs-md);font-weight:var(--fw-semibold);
  letter-spacing:-.01em;line-height:1.4;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .fold-t>.afig .cx{font-size:var(--fs-2xs);color:var(--mut);font-weight:var(--fw-medium);margin-right:4px}

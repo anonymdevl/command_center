@@ -1,3 +1,13 @@
+/** The severities, as every list, card and the bell name them. */
+export const SEVERITY = { crit: "Critical", high: "High", med: "Medium", info: "For information" };
+
+/** A row's severity word, in its severity's colour (shell.py, .fold-sev). */
+export function severityTag(severity) {
+  const tag = el("span", `fold-sev sev-${severity}`);
+  tag.textContent = SEVERITY[severity] || severity;
+  return tag;
+}
+
 /**
  * One line per item, the rest on demand: a numbered list (17 Nov 2026; the owner's
  * choice, "E · Numbered list", over the first folded cards).

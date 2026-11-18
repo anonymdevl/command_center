@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { reveal } from "../legacy/fold.js";
+import { SEVERITY, reveal } from "../legacy/fold.js";
 import { api, plansApi } from "../api/client.js";
 import { boot } from "../api/boot.js";
 import { follow, OPEN_KEY, SIGNED_OUT } from "../legacy/reports.js";
@@ -24,7 +24,6 @@ import { settingsSections } from "./Settings.jsx";
  * (legacy/reports.js follow), and a finish away from the Reports screen also says so in
  * a small toast, once.
  */
-const WORDS = { crit: "Critical", high: "High", med: "Medium", info: "For information" };
 
 export default function Bell({ scope, onGo }) {
   const [data, setData] = useState(null);
@@ -191,7 +190,7 @@ export default function Bell({ scope, onGo }) {
                     <span className={`bell-dot ${a.severity}`} aria-hidden="true" />
                     <span className="bell-t">
                       <b>{a.title}</b>
-                      <span>{[WORDS[a.severity] || a.severity, a.owner_label, a.elapsed].filter(Boolean).join(" · ")}</span>
+                      <span>{[SEVERITY[a.severity] || a.severity, a.owner_label, a.elapsed].filter(Boolean).join(" · ")}</span>
                     </span>
                   </button>
                 </li>
