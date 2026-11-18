@@ -1727,6 +1727,7 @@ table.dt.sk-t tfoot td{border-top:1px solid var(--line2);border-bottom:0;backgro
 .fold-t .fold-title{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
  font-size:var(--fs-md);font-weight:var(--fw-semibold);letter-spacing:-.01em;line-height:1.4;color:var(--ink)}
 .fold-t .debt-name b{font-weight:inherit}
+.fold-on .fold-t .fold-title{white-space:normal;overflow-wrap:anywhere}
 .fold-k{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
  font-size:var(--fs-2xs);font-weight:var(--fw-medium);letter-spacing:.08em;text-transform:uppercase;
  line-height:1.4;color:var(--mut)}
@@ -1836,5 +1837,7 @@ table.dt.sk-t tfoot td{border-top:1px solid var(--line2);border-bottom:0;backgro
  .fold-foot{flex-wrap:wrap}
  .fold-foot>.acts{flex:1 0 100%;justify-content:flex-end}
  .fold-pri .btn{padding:5px 10px}
+ .fold-t .fold-title{white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+ .fold-on .fold-t .fold-title{display:block;-webkit-line-clamp:none}
 }
 """
