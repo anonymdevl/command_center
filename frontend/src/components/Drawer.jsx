@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import ErrorBoundary from "./ErrorBoundary.jsx";
 
 /**
@@ -14,7 +14,7 @@ import ErrorBoundary from "./ErrorBoundary.jsx";
  * their title and actions in it -- says so with a static `ownsHeader` and places
  * <DrawerHead>; everything else gets the plain one here, with Back and close.
  */
-const DrawerCtx = createContext({ onBack: null, onClose: () => {}, trail: [] });
+const DrawerCtx = createContext({ onBack: null, onClose: () => {}, trail: [], titleId: null });
 
 export default function Drawer({ content, entry = null, onClose, onBack = null, trail = [] }) {
   const open = Boolean(content);
@@ -26,6 +26,32 @@ export default function Drawer({ content, entry = null, onClose, onBack = null, 
     setScrolled(false);
   }, [content, entry]);
 
+  // The keyboard goes where the eye goes (18 Nov 2026): opening a drawer puts the focus
+  // in it, Tab stays in it while it is open, and closing it puts the focus back on what
+  // opened it -- the row, tile or link -- so the next Tab carries on from there.
+  const titleId = useId();
+  const opener = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const was = document.activeElement;
+    if (was instanceof HTMLElement && was !== document.body && !panel.current?.contains(was)) {
+      opener.current = was;
+    }
+    panel.current?.focus({ preventScroll: true });
+    return () => {
+      const back = opener.current;
+      opener.current = null;
+      if (back?.isConnected && !document.querySelector(".dlg-scrim")) back.focus({ preventScroll: true });
+    };
+  }, [open]);
+  // Another panel in the same drawer (a record, Back): the focus is not left on a control
+  // that has gone.
+  useEffect(() => {
+    if (open && panel.current && !panel.current.contains(document.activeElement)) {
+      panel.current.focus({ preventScroll: true });
+    }
+  }, [open, entry]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => {
@@ -33,6 +59,7 @@ export default function Drawer({ content, entry = null, onClose, onBack = null, 
       if (document.querySelector(".dlg-scrim")) return;
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowLeft" && e.altKey && onBack) onBack();
+      else if (e.key === "Tab") keepTab(e, panel.current);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -43,9 +70,10 @@ export default function Drawer({ content, entry = null, onClose, onBack = null, 
     <>
       <div className={`scrim${open ? " on" : ""}`} onClick={onClose} />
       <div ref={panel} className={`drawer${open ? " on" : ""}${scrolled ? " dw-scrolled" : ""}`}
-           role="dialog" aria-modal="true" aria-hidden={!open}
+           role="dialog" aria-modal="true" aria-hidden={!open} tabIndex={-1}
+           aria-labelledby={open ? titleId : undefined}
            onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 2)}>
-        <DrawerCtx.Provider value={{ onBack, onClose, trail }}>
+        <DrawerCtx.Provider value={{ onBack, onClose, trail, titleId }}>
           {/* Keyed by the stack entry (App.jsx): each drawer opened, or come back to, is
               mounted fresh, so none shows the state of the one before it. */}
           {!open ? null : owns ? (
@@ -79,7 +107,7 @@ export default function Drawer({ content, entry = null, onClose, onBack = null, 
  * opened from, its title, its actions, and close.
  */
 export function DrawerHead({ title = null, actions = null }) {
-  const { onBack, onClose, trail } = useContext(DrawerCtx);
+  const { onBack, onClose, trail, titleId } = useContext(DrawerCtx);
   const crumb = [...(trail || []), title].filter(Boolean);
   return (
     <header className="dw-head">
@@ -93,7 +121,7 @@ export function DrawerHead({ title = null, actions = null }) {
         {crumb.length > 1 ? (
           <div className="dw-crumb" title={crumb.join(" › ")}>{crumb.join(" › ")}</div>
         ) : null}
-        {title ? <h4 className="dw-title" title={title}>{title}</h4> : null}
+        {title ? <h4 className="dw-title" id={titleId || undefined} title={title}>{title}</h4> : null}
       </div>
       <div className="dw-acts">
         {actions}
@@ -108,6 +136,33 @@ export function DrawerHead({ title = null, actions = null }) {
 /** Back, close and the breadcrumb, for a drawer's own controls. */
 export function useDrawer() {
   return useContext(DrawerCtx);
+}
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), '
+  + 'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Tab and Shift-Tab go round the drawer's own controls, never to the screen under it. */
+function keepTab(e, box) {
+  if (!box) return;
+  const all = [...box.querySelectorAll(FOCUSABLE)].filter((n) => n.offsetParent !== null || n === document.activeElement);
+  if (!all.length) {
+    e.preventDefault();
+    box.focus({ preventScroll: true });
+    return;
+  }
+  const first = all[0];
+  const last = all[all.length - 1];
+  const at = document.activeElement;
+  if (!box.contains(at) || at === box) {
+    e.preventDefault();
+    (e.shiftKey ? last : first).focus();
+  } else if (e.shiftKey && at === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && at === last) {
+    e.preventDefault();
+    first.focus();
+  }
 }
 
 /** An element built with DOM calls, placed as it is. */
