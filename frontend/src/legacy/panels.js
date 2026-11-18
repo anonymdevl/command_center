@@ -478,7 +478,8 @@ function renderFindings(root, findings, failed) {
       return;
     }
     if (f.title) w.append(el("b", null, f.title));
-    if (f.text) w.append(document.createTextNode(` ${f.text}`));
+    // The sentence in its own block, so it can be folded to a line (lean.js).
+    if (f.text) w.append(el("span", "warn-t", f.text));
     if (f.ask) {
       const acts = el("div", "acts");
       const b = el("button", "btn", f.ask_label || "Ask About It");

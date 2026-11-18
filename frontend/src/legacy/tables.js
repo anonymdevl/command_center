@@ -16,7 +16,7 @@
  * could no longer shrink, Finances' "Why" column was squeezed to one word wide and one
  * row filled the page). By the length of its text it gets a floor and a ceiling of
  * width (shell.py, "TABLE TEXT"): a short name a little, a sentence a comfortable
- * measure, a long explanation no more than three lines, the rest of it ended with an
+ * measure, a long explanation no more than two lines, the rest of it ended with an
  * ellipsis and the whole of it in the cell's title (and, where the row opens, there).
  * The table may then be wider than its panel; it scrolls in its own box, never the page.
  * On a phone every text cell is one line, clipped with an ellipsis at its ceiling: it
@@ -40,7 +40,7 @@ function box(table) {
 
 // Text length bands (characters) and the width class each gets: dt-w1 a short name, a
 // little floor; dt-w2 a phrase or sentence, a floor and a ceiling; dt-w3 an explanation,
-// a wider floor and ceiling, and at most three lines.
+// a wider floor and ceiling, and at most two lines.
 const BANDS = [[60, "dt-w3"], [24, "dt-w2"], [12, "dt-w1"]];
 const WIDTHS = BANDS.map(([, c]) => c);
 
@@ -72,7 +72,7 @@ function fit(td) {
   WIDTHS.forEach((c) => td.classList.toggle(c, c === band));
   if (!band) return;
   // A cell of plain text carries its words in one block, which holds the width (a
-  // table cell's own max-width is not honoured) and is clamped to three lines.
+  // table cell's own max-width is not honoured) and is clamped to two lines.
   const kids = [...td.childNodes];
   if (kids.length && kids.every((n) => n.nodeType === 3)) {
     const tx = document.createElement("span");
@@ -81,7 +81,7 @@ function fit(td) {
     td.textContent = "";
     td.append(tx);
   }
-  // A phrase or an explanation can be cut short (three lines on a laptop, one on a phone,
+  // A phrase or an explanation can be cut short (two lines on a laptop, one on a phone,
   // shell.py): its whole text is in its title.
   const tx = td.querySelector(":scope > .dt-tx");
   if (tx && band !== "dt-w1") tx.title = text;

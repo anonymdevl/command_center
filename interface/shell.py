@@ -1217,7 +1217,8 @@ table.dt.fs-t :is(.fs-bar-h,.fs-bar-c){width:20%;min-width:96px;padding-left:var
    Finances' "Why" column was squeezed to one word wide and one row filled the page.
    legacy/tables.js gives each text cell a band by the length of its text, and its plain
    words one block (.dt-tx) that holds the width: a floor, so it wraps at a readable
-   measure, and a ceiling, so it does not run on; an explanation stops at three lines,
+   measure, and a ceiling, so it does not run on; an explanation stops at two lines (three
+   until 18 Nov 2026: "too busy with plenty text"),
    its whole text in the title (and where the row opens, there). A table then wider
    than its panel scrolls sideways in its own box (.dt-x, .dt-scroll), never the page.
    ====================================================================== */
@@ -1229,7 +1230,7 @@ table.dt td > .dt-tx{display:block;overflow-wrap:break-word}
 table.dt td.dt-w1 > .dt-tx{min-width:12ch;max-width:28ch}
 table.dt td.dt-w2 > .dt-tx{min-width:18ch;max-width:34ch}
 table.dt td.dt-w3 > .dt-tx{min-width:26ch;max-width:44ch;display:-webkit-box;-webkit-box-orient:vertical;
- -webkit-line-clamp:3;line-clamp:3;overflow:hidden}
+ -webkit-line-clamp:2;line-clamp:2;overflow:hidden}
 @container panel (max-width:560px){
  table.dt td.dt-w3{min-width:24ch}
  table.dt td.dt-w3 > .dt-tx{min-width:24ch;max-width:34ch}
@@ -1840,4 +1841,35 @@ table.dt.sk-t tfoot td{border-top:1px solid var(--line2);border-bottom:0;backgro
  .fold-t .fold-title{white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
  .fold-on .fold-t .fold-title{display:block;-webkit-line-clamp:none}
 }
+
+/* ======================================================================
+   LEAN CARDS (18 Nov 2026; legacy/lean.js). "Some of the cards are too busy with plenty
+   text": a card leads with its heading, its figure or chart and one line of reading. A
+   subtitle, a note, a finding's sentence and a screen's banner show one line; a panel's
+   list of explanations three; words cut short end in a chevron and open on a click. A
+   "How This Works" box is its heading until clicked. The words themselves are unchanged.
+   ====================================================================== */
+.lean.lean:not(.lean-open){display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:var(--lean,1);
+ line-clamp:var(--lean,1);overflow:hidden}
+.lean.lean-open{display:block}
+.lean-box.lean-box:not(.lean-open){max-height:calc(var(--lean,3) * 1lh);overflow:hidden;
+ -webkit-mask-image:linear-gradient(#000 55%,transparent);mask-image:linear-gradient(#000 55%,transparent)}
+.lean-can{position:relative;cursor:pointer;padding-right:20px}
+.lean-can:is([data-lean="pad"]){padding-right:34px}
+.lean-can::after{content:"";position:absolute;right:4px;top:calc(var(--lean-pt,0px) + .5lh - 5px);width:6px;height:6px;
+ border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;color:var(--mut);opacity:.75;
+ transform:rotate(45deg);transition:transform .15s,opacity .15s}
+.lean-can[data-lean="pad"]::after{right:16px}
+.lean-can:hover::after{opacity:1}
+.lean-can[aria-expanded="true"]::after{transform:rotate(-135deg);top:calc(var(--lean-pt,0px) + .5lh - 1px)}
+.lean-can:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.warn > b{display:block;margin-bottom:2px}
+.warn > .warn-t{margin-bottom:2px}
+.lean-note > h4{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:0}
+.lean-note > h4::after{content:"";flex:none;width:7px;height:7px;border-right:1.5px solid currentColor;
+ border-bottom:1.5px solid currentColor;transform:rotate(45deg) translate(-2px,-2px);color:var(--mut);transition:transform .15s}
+.lean-note.lean-open > h4{margin-bottom:10px}
+.lean-note.lean-open > h4::after{transform:rotate(-135deg) translate(-2px,-2px)}
+.lean-note:not(.lean-open) > :not(h4){display:none}
+.lean-note > h4:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
 """

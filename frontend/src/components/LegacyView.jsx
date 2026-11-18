@@ -33,6 +33,7 @@ import { REC_VIEWS, recsFailed, renderRecs } from "../legacy/recommend.js";
 import { STATEMENT_VIEWS, mountStatements } from "../legacy/statements.js";
 import { SUMMARY_VIEWS, memoFailed, renderMemo, renderShort, renderWaiting } from "../legacy/summary.js";
 import { watchTables } from "../legacy/tables.js";
+import { watchLean } from "../legacy/lean.js";
 
 // The AI's short version of the Executive Summary, asked for once per business and week
 // (busy while asked; a failed or unfinished ask is tried again after SHORT_RETRY_MS). Kept
@@ -692,6 +693,7 @@ export default function LegacyView({ viewKey, scope, go, openDrawer }) {
 
   // Every data table scrolls sideways in its own box; figures and dates stay on one line.
   useEffect(() => watchTables(ref.current), [viewKey, html]);
+  useEffect(() => watchLean(ref.current), [viewKey, html]);
 
   // Tabs inside the generated markup are plain DOM, so they are wired here
   // rather than reimplemented.

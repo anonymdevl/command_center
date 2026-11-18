@@ -20,6 +20,7 @@
 
 import VIEW_HTML from "../src/legacy/views.json";
 import { setOpen } from "../src/legacy/fold.js";
+import REAL_PANELS from "./real-panels.json";
 
 export const PREVIEW_MARKER = "CC_PREVIEW_MOCK";
 
@@ -787,7 +788,12 @@ window.fetch = async (input, init = {}) => {
   } catch {
     /* no args */
   }
-  const handler = HANDLERS[method];
+  // ?real=1 -- the panels as the platform answers them for the test business of
+  // insights/tests.py (written by insights/dump_panels.py), so the notes, subtitles
+  // and findings on a screen are the real ones, at their real length.
+  const real = new URLSearchParams(window.location.search).get("real")
+    && method === "command_center.api.panels.get" && REAL_PANELS[args.view];
+  const handler = real ? () => REAL_PANELS[args.view] : HANDLERS[method];
   const json = (status, body) =>
     new Response(JSON.stringify(body), {
       status,
