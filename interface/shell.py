@@ -502,6 +502,10 @@ body.cc-auth{height:auto;grid-template-rows:auto auto;align-content:safe center;
  padding:14px 22px;background:var(--panel);border-bottom:1px solid var(--line);
  transition:box-shadow .15s}
 .drawer.dw-scrolled .dw-head{box-shadow:var(--shadow)}
+.drawer:focus{outline:none}
+/* Markup that opens on Enter (legacy/keys.js) shows where the keyboard is. */
+[data-keys]:focus{outline:none}
+[data-keys]:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:var(--r-xs)}
 .dw-titles{flex:1;min-width:0}
 .dw-crumb{font-size:var(--fs-2xs);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
  margin-bottom:2px}
@@ -640,6 +644,8 @@ table.dt.dw-t tfoot td{position:sticky;bottom:0;z-index:1;padding:10px 12px;back
  .dw-titles{flex:1 1 calc(100% - 110px)}
  .dw-acts{order:3;width:100%}
  .dw-acts .dw-x{margin-left:auto}
+ /* Close alone keeps its place beside the title: a row of its own was empty but for it. */
+ .dw-acts:has(> .dw-x:only-child){order:0;width:auto}
  .dw-hero{padding:18px 16px 16px}
  .dw-big{font-size:var(--fs-2xl)}
  .dw-tabs{padding:8px 12px}
