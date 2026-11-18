@@ -73,11 +73,15 @@ window.csrf_token = {{ csrf_token | safe }};
     }).then(function (x) {
       var b = x.b || {};
       // Two-factor: ERPNext's own login runs the code step, then returns here.
+      // Signed in, the sign-in page gives its place in the history to what comes next
+      // (18 Nov 2026): kept, Back from the first screen came here, and a signed-in person
+      // is sent straight on to the platform again -- Back reloaded the screen, never
+      // reaching the page before.
       if (b.verification || b.tmp_id || (b.message && b.message.verification)) {
-        window.location.href = "/login?redirect-to=" + encodeURIComponent(HOME);
+        window.location.replace("/login?redirect-to=" + encodeURIComponent(HOME));
         return;
       }
-      if (x.r.ok) { window.location.href = HOME; return; }
+      if (x.r.ok) { window.location.replace(HOME); return; }
       var text = x.r.status === 401 ? "That email or password is not right."
         : (b.message && typeof b.message === "string" ? b.message : "") ||
           (b._server_messages ? "ERPNext refused the sign-in. Try again in a moment." :
