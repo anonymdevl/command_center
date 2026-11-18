@@ -1483,7 +1483,17 @@ td.work-acts .btn{margin:0 4px 0 0}
    selected -- kept in view at the foot of the panel, and stacked on a phone.
    ====================================================================== */
 th.work-pick,td.work-pick{width:36px;padding-right:0;text-align:center}
-.work-pick input,.work-all input{width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer}
+/* The tick boxes take the colours of the card they sit on (18 Nov 2026): the browser's own
+ box was white on the dark theme. Empty, an outline; ticked, the accent with a tick, and
+ with a dash while only some rows are ticked. */
+:is(.work-pick,.work-all) input{appearance:none;flex:none;display:inline-grid;place-content:center;
+ width:16px;height:16px;margin:0;border:1.5px solid var(--mut);border-radius:4px;background:transparent;cursor:pointer}
+:is(.work-pick,.work-all) input:hover{border-color:var(--ink2)}
+:is(.work-pick,.work-all) input:is(:checked,:indeterminate){background:var(--accent);border-color:var(--accent)}
+:is(.work-pick,.work-all) input:checked::after{content:"";width:8px;height:4px;margin-top:-2px;
+ border:solid var(--on-accent);border-width:0 0 2px 2px;transform:rotate(-45deg)}
+:is(.work-pick,.work-all) input:indeterminate::after{content:"";width:8px;height:2px;background:var(--on-accent)}
+:is(.work-pick,.work-all) input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .work-select{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--sp-3);
  margin:4px 0 8px;font-size:var(--fs-sm);color:var(--ink2)}
 .work-all{display:inline-flex;align-items:center;gap:var(--sp-2);cursor:pointer;font-weight:var(--fw-semibold);

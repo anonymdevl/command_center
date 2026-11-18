@@ -172,9 +172,12 @@ div.work-table table.dt{min-width:560px}
 
 /* ---- Home in the approved mockup's layout (legacy/home.js) ---- */
 .hero-row{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:16px}
-.bk.hero.sig{min-height:220px;padding:22px 22px 20px}
+.bk.hero.sig{min-height:190px;padding:22px 22px 20px}
 .bk.hero .l{font-size:var(--fs-lg);color:var(--ink);font-weight:var(--fw-semibold);letter-spacing:-.01em}
-.bk.hero .hd{font-size:var(--fs-sm);color:var(--ink2);margin-top:4px;max-width:28ch;line-height:1.45}
+/* Lean (18 Nov 2026): the title, the figure's name on one line, and its reading; the
+ figure carries the card. The ledger behind it is named on the screen the card opens. */
+.bk.hero .hd{font-size:var(--fs-sm);color:var(--ink2);margin-top:4px;line-height:1.45;
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bk.hero .v{order:0;margin-top:10px;font-size:var(--fs-sm);font-weight:var(--fw-medium);color:var(--ink)}
 .bk.hero .n{font-size:clamp(34px,16cqi,52px)}
 @container panel (max-width:760px){.hero-row{grid-template-columns:1fr}.bk.hero.sig{min-height:170px}}
