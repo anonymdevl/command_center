@@ -18,10 +18,9 @@ import { deskPath, erpUrl } from "../erpLinks.js";
 import { api } from "../api/client.js";
 import { money, exact } from "../format.js";
 import { menu } from "./actions.js";
-import { fold } from "./fold.js";
+import { fold, severityTag } from "./fold.js";
 
 export const ALERT_VIEWS = new Set(["command", "brief", "health", "risk"]);
-const WORDS = { crit: "Critical", high: "High", med: "Medium", info: "For information" };
 
 export function renderAlerts(root, view, data, { onOpen } = {}) {
   if (!root || !data || !ALERT_VIEWS.has(view)) return;
@@ -81,8 +80,7 @@ function card(a, onOpen) {
   c.dataset.ccWired = "1";
 
   const fig = () => (a.figure === null || a.figure === undefined ? null : figure(a));
-  const word = WORDS[a.severity] || a.severity;
-  const meta = [a.severity === "crit" ? el("span", "fold-crit", word) : word,
+  const meta = [severityTag(a.severity),
     a.status === "Actioned" ? "Assigned" : null, a.owner_label];
   const what = el("div", "fold-what");
   what.append(el("div", "awhy", a.why || ""), el("div", "asw", `→ ${a.next_step || ""}`));

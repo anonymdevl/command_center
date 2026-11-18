@@ -20,7 +20,7 @@ import { api } from "../api/client.js";
 import { count, exact, money, shortDate } from "../format.js";
 import { GUIDE_STATES, guideBox, guideWords, hasGuide } from "./guide.js";
 import { WAITING } from "./reach.js";
-import { fold, reveal } from "./fold.js";
+import { SEVERITY, fold, reveal } from "./fold.js";
 
 const SCORES = [
   ["score_deliver", "Delivering what we sold", "Can we deliver what we sold?"],
@@ -32,7 +32,6 @@ const SCORES = [
 ];
 /** Business Health's question tile label -> its figure. */
 export const HEALTH_QUESTIONS = Object.fromEntries(SCORES.map(([k, , q]) => [q, k]));
-const WORDS = { crit: "Critical", high: "High", med: "Medium", info: "For information" };
 
 export function renderHome(root, { figures, alerts, scope, onOpen }) {
   if (!root?.querySelector("#mbrief")) return;
@@ -347,7 +346,7 @@ function brief(root, data) {
   list.forEach((a) => {
     const c = el("button", `mb-chip ${a.severity}`);
     c.type = "button";
-    c.title = `${WORDS[a.severity] || ""}: ${a.title}`;
+    c.title = `${SEVERITY[a.severity] || ""}: ${a.title}`;
     c.append(el("b", null, figureText(a)), document.createTextNode(` ${(a.label || a.rule).toLowerCase()}`));
     c.onclick = () => reveal(`alert-${a.name}`, "alert-flash");
     chips.append(c);
