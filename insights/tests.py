@@ -9024,7 +9024,7 @@ class SetPasswordLink(TransactionTestCase):
 
 
 class TaskEngineers(SimpleTestCase):
-    """Who is doing a task (18 Nov 2026, Project Insights): the task's own engineer field
+    """Who is doing a task (18 Nov 2026, Engineering & Installations): the task's own engineer field
     where the site has one (a table on Task linking Employee), otherwise the people it is
     assigned to, named as their employee record or account names them; nobody otherwise.
     A task left open under a Completed project is not counted as open work."""

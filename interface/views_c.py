@@ -68,7 +68,7 @@ ENG_GAPS=f'''<div class="two">
 </div>
 {panel("Maintenance we should be selling", thin("<b>Service visits scheduled after an installation.</b> Every installation should create the next service visit; recurring maintenance revenue is only asked for when it is scheduled."))}'''
 
-V_ENG=('<div class="topbar"><div><h3>Project Insights</h3>'
+V_ENG=('<div class="topbar"><div><h3>Engineering &amp; Installations</h3>'
  '<div class="when">Where sold revenue gets stuck</div></div></div>'
  +ENG_KPIS+
  '<div class="tabbar" data-g="teng">'

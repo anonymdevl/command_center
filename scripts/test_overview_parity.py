@@ -71,7 +71,7 @@ WORDING = {
     "Sales & money owed": "Sales and Payments",
     "Buying & suppliers": "Buying and Suppliers",
     "Stock & warehouses": "Stock & Warehouses",
-    "Engineering & installs": "Project Insights",
+    "Engineering & installs": "Engineering & Installations",
     "Money in & out": "Finances",
     "Systems & access": "Systems and Access",
     "owed to us": "Accounts Receivable",

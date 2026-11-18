@@ -7,7 +7,7 @@ exec(_src('p4.py'))
 doms=[("Sales and Payments","Accounts Receivable","sales"),
  ("Buying and Suppliers","Accounts Payable","proc"),
  ("Stock & Warehouses","Stock Value","inv"),
- ("Project Insights","open jobs","eng"),
+ ("Engineering & Installations","open jobs","eng"),
  ("Customer Service &amp; Issues","open complaints and service cases","cx"),
  ("Finances","Payment Entries and Journal Entries","fin"),
  ("People","Employees","hr"),
