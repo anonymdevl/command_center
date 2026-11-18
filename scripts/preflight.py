@@ -1630,8 +1630,10 @@ if os.path.exists(_vpy):
     check(_t.returncode == 0,
           "the platform's models changed without a migration: run "
           "manage.py makemigrations core\n" + (_t.stdout + _t.stderr)[-600:])
+    # 30 minutes (18 Nov 2026): the suite takes about 11 minutes alone and ran past the
+    # 15 it had whenever the machine was busy, failing preflight with every test passing.
     _t = _sp.run([_vpy, "manage.py", "test", "insights", "-v", "1"], cwd=ROOT,
-                 capture_output=True, text=True, timeout=900)
+                 capture_output=True, text=True, timeout=1800)
     check(_t.returncode == 0,
           "the platform's end-to-end test (manage.py test insights) failed:\n"
           + (_t.stdout + _t.stderr)[-2000:])
