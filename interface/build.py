@@ -126,7 +126,7 @@ NAVGROUPS=[
  ("Areas of the business",[("sales","Sales and Payments",["ceo","fin","sales","audit"]),
               ("proc","Buying and Suppliers",["ceo","fin","audit"]),
               ("inv","Stock & Warehouses",["ceo","fin","sales","audit"]),
-              ("eng","Project Insights",["ceo","sales","audit"]),
+              ("eng","Engineering & Installations",["ceo","sales","audit"]),
               ("cx","Customer Service & Issues",["ceo","sales","audit"]),
               ("fin","Finances",["ceo","fin","audit"]),
               ("hr","HR & Payroll",["ceo","hr","audit"]),

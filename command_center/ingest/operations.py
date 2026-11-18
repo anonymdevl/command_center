@@ -25,7 +25,7 @@ ALL = 10_000_000
 CLOSED_ORDER = {"Completed", "Closed", "Cancelled"}
 CLOSED_TASK = {"Completed", "Cancelled", "Template"}
 # A project closed with a task still open: the work is finished with as far as the
-# business has said, so the task is not counted as open work (Project Insights lists such
+# business has said, so the task is not counted as open work (Engineering & Installations lists such
 # projects among the records to tidy).
 CLOSED_PROJECT = {"Completed", "Cancelled"}
 CLOSED_CASE = {"Closed", "Resolved"}

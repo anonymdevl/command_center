@@ -1,4 +1,4 @@
-"""Project Insights' figures for every project, open and completed (18 Nov 2026).
+"""Engineering & Installations' figures for every project, open and completed (18 Nov 2026).
 
 The rest of the screen is about the work still open. These are about the projects
 themselves: what is open, overdue or not started, what was finished and when, and for

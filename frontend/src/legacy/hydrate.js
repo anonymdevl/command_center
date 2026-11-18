@@ -195,7 +195,7 @@ export const TILE_KPIS = {
     "Sales and Payments": { key: "ar_total" },
     "Buying and Suppliers": { key: "ap_total" },
     "Stock & Warehouses": { key: "stock_value" },
-    "Project Insights": { key: "tasks_open", unit: "tasks" },
+    "Engineering & Installations": { key: "tasks_open", unit: "tasks" },
     "Customer Service & Issues": { key: "cases_open", unit: "open cases" },
     People: { key: "people_total", unit: "employees" },
     // Payment entries plus journals, counted live: the facts hold neither, and

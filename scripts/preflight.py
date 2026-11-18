@@ -1065,7 +1065,7 @@ CAPTIONS = [
     "Home", "Executive Summary", "Today", "Business Overview", "Business Health",
     "Risk and Compliance", "Approvals", "Outstanding Tasks", "Ask AI", "Reports",
     "Sales and Payments", "Buying and Suppliers", "Stock & Warehouses",
-    "Project Insights", "Customer Service & Issues", "Finances", "HR & Payroll",
+    "Engineering & Installations", "Customer Service & Issues", "Finances", "HR & Payroll",
     "Systems and Access", "Internal Audit",
 ]
 _nav = json.loads(open(os.path.join(ROOT, "frontend", "src", "legacy",

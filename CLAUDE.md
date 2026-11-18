@@ -562,7 +562,7 @@ remember a decision. A new button label needs a handler there, or preflight fail
 Settled by Michael, in this order, and enforced by preflight: Home, Executive Summary,
 Today, Business Overview, Business Health, Risk and Compliance, Approvals, Outstanding
 Tasks, Ask AI, Reports, Sales and Payments, Buying and Suppliers, Stock & Warehouses,
-Project Insights, Customer Service & Issues, Finances, HR & Payroll, Systems and Access,
+Engineering & Installations, Customer Service & Issues, Finances, HR & Payroll, Systems and Access,
 Internal Audit.
 
 They live in the NAV tuples in `interface/build.py` and nowhere else. Each screen's own
