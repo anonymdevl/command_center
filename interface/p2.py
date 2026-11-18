@@ -80,10 +80,13 @@ def alert(sev, what, why, sowhat, fig, cur, srcdt, srcnm, owner, elapsed, drawer
 # hero tiles, the morning brief, the largest amounts owed, two counts, the health gauge
 # and the top customers -- then the day's six figures and the alerts, kept from before.
 # The tiles hydrate from TILE_KPIS.command; everything with an id is filled by
-# legacy/home.js from api/home.py, api/alerts.py and the health KPIs.
+# legacy/home.js from api/home.py, api/alerts.py and the health KPIs. A tile is its title,
+# the figure's name and the figure (18 Nov 2026): it has no footnote, so the KPI's note
+# ("Customer Ledger Balance, 153 customers; Sales Invoice Outstanding ...") is not drawn
+# on it -- the same figure under This Morning's Figures carries that note.
 _HOME_TILES = "".join(
     f'<div class="bk hero" onclick="go(\'{go}\')"><div class="l">{label}</div>'
-    f'<div class="hd">{desc}</div><div class="v">&nbsp;</div>'
+    f'<div class="hd">{desc}</div>'
     f'<div class="n">—</div></div>'
     for label, desc, go in (
         ("Sales and Payments", "Accounts Receivable", "sales"),
