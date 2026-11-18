@@ -712,3 +712,6 @@ def compute(keys, business_code=None, side_by_side: bool = True) -> dict:
 # The department screens' figures (kpi/live_departments.py) join these.
 from command_center.kpi.live_departments import FIGURES as _DEPARTMENTS  # noqa: E402
 LIVE.update(_DEPARTMENTS)
+# Project Insights' figures over every project, open and completed (kpi/live_projects.py).
+from command_center.kpi.live_projects import FIGURES as _PROJECTS  # noqa: E402
+LIVE.update(_PROJECTS)

@@ -584,6 +584,12 @@ class RemoteConnector(BusinessConnector):
         """A doctype's fields as the peer defines them -- its own version, its own
         custom fields. frappe.desk.form.load.getdoctype is what the desk calls to open
         a form, so any user who may read the doctype may read its definition."""
+        # A doctype's child tables come in the same answer as the doctype (Task's engineer
+        # table with Task): they are kept, so reading one of them asks nothing again --
+        # and a child table, which a site may refuse to describe on its own, is still read.
+        known = self.__dict__.setdefault("_metas", {})
+        if doctype in known:
+            return known[doctype]
         # getdoctype answers in the response's `docs`, not in `message`.
         res = self._call("frappe.desk.form.load.getdoctype", {"doctype": doctype},
                          whole=True) or {}
@@ -591,6 +597,7 @@ class RemoteConnector(BusinessConnector):
         if not docs:
             # It answered, but not with a definition: refused, not unreachable.
             raise RequestRefused(f"{self.name} did not describe {doctype}.")
+        known.update({d["name"]: d for d in docs if d.get("name")})
         return next((d for d in docs if d.get("name") == doctype), docs[0])
 
     # -- health ------------------------------------------------------------

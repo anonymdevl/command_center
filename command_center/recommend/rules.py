@@ -1358,13 +1358,13 @@ def approvals_bottleneck(ctx, p):
 
 
 def overdue_tasks_by_owner(ctx, p):
-    rows = ctx.rows("fact_task", ["assigned_to", "days_late"],
+    rows = ctx.rows("fact_task", ["engineers", "days_late"],
                     lambda t: [t.is_open == 1, t.days_late > 0])
     if len(rows) <= p["count"]:
         return []
     by = defaultdict(list)
     for r in rows:
-        for who in (r["assigned_to"] or "Nobody").split(","):
+        for who in (r["engineers"] or "Nobody").split(","):
             by[who.strip() or "Nobody"].append(int(_num(r["days_late"])))
     top = sorted(by, key=lambda w: -len(by[w]))
     listed = "; ".join(f"{w}: {len(by[w])}, the oldest {max(by[w])} days late" for w in top[:3])

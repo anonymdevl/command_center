@@ -1750,6 +1750,15 @@ table.dt.sk-t tfoot td{border-top:1px solid var(--line2);border-bottom:0;backgro
  font-size:var(--fs-2xs);font-weight:var(--fw-medium);letter-spacing:.08em;text-transform:uppercase;
  line-height:1.4;color:var(--mut)}
 .fold-crit{color:var(--crit);font-weight:var(--fw-semibold)}
+/* ---- PROJECT TABLES (18 Nov 2026): Every Project's choices, its next rows, and how much
+   of each project's work is done ---- */
+.dt-filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:2px 0 12px}
+.dt-more{display:block;margin:12px auto 0}
+.pg{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.pg-bar{width:64px;height:6px;border-radius:var(--r-pill);background:var(--line2);overflow:hidden;display:inline-block}
+.pg-bar i{display:block;height:100%;background:var(--accent)}
+.pg-bar i.pg-done{background:var(--ok)}
+.pg-n,.pg-none{color:var(--mut);font-size:var(--fs-xs);white-space:nowrap}
 .fold-sev{font-weight:var(--fw-semibold)}
 .sev-crit{color:var(--crit)}.sev-high{color:var(--high)}.sev-med{color:var(--med)}.sev-info{color:var(--info)}
 .fold-t>.afig{background:none;padding:0;border-radius:0;font-size:var(--fs-md);font-weight:var(--fw-semibold);

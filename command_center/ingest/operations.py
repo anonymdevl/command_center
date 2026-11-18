@@ -24,6 +24,10 @@ ALL = 10_000_000
 # a string comparison, because an installation can add its own.
 CLOSED_ORDER = {"Completed", "Closed", "Cancelled"}
 CLOSED_TASK = {"Completed", "Cancelled", "Template"}
+# A project closed with a task still open: the work is finished with as far as the
+# business has said, so the task is not counted as open work (Project Insights lists such
+# projects among the records to tidy).
+CLOSED_PROJECT = {"Completed", "Cancelled"}
 CLOSED_CASE = {"Closed", "Resolved"}
 
 
@@ -130,20 +134,31 @@ class TaskIngestor(Ingestor):
         if since:
             filters["modified"] = [">", since]
 
-        tasks = _paged(conn, "Task",
-                       ["name", "modified", "subject", "status", "priority",
-                        "project", "owner", "exp_start_date", "exp_end_date",
-                        "completed_on", "_assign"],
-                       filters, limit)
+        fields = ["name", "modified", "subject", "status", "priority", "project", "owner",
+                  "exp_start_date", "exp_end_date", "completed_on", "_assign"]
+        tasks = _paged(conn, "Task", fields, filters, limit)
+        if since:
+            # A project closed, reopened or moved to another customer changes what its
+            # tasks say without saving them: their rows are read again with it.
+            moved = [p["name"] for p in conn.get_list(
+                "Project", filters={"modified": [">", since]}, fields=["name"], limit=ALL)]
+            seen = {t["name"] for t in tasks}
+            for part in _chunks(moved):
+                tasks += [t for t in _paged(conn, "Task", fields, {"project": ["in", part]})
+                          if t["name"] not in seen]
 
-        projects = _project_names(conn, {t.get("project") for t in tasks})
+        projects = _projects(conn, {t.get("project") for t in tasks})
+        engineers = _engineers(conn, tasks, whole=not since)
 
         rows = []
         for t in tasks:
             status = t.get("status") or ""
-            is_open = 0 if status in CLOSED_TASK else 1
+            project = projects.get(t.get("project")) or {}
+            is_open = 0 if (status in CLOSED_TASK
+                            or project.get("status") in CLOSED_PROJECT) else 1
             due = t.get("exp_end_date")
             who = _first_assignee(t.get("_assign"))
+            names = engineers.get(t["name"]) or []
             rows.append({
                 "src_name": t["name"],
                 "src_modified": t["modified"],
@@ -152,16 +167,20 @@ class TaskIngestor(Ingestor):
                 "status": status,
                 "priority": t.get("priority"),
                 "project": t.get("project"),
-                "project_name": projects.get(t.get("project")),
+                "project_name": project.get("project_name"),
+                "customer": project.get("customer"),
+                "project_type": project.get("project_type"),
+                "project_status": project.get("status"),
                 "owner_user": t.get("owner"),
                 "assigned_to": who,
+                "engineers": ", ".join(names) or None,
                 "exp_start_date": t.get("exp_start_date"),
                 "exp_end_date": due,
                 "completed_on": t.get("completed_on"),
                 "as_of_date": getdate(as_of),
                 **late_age(due, is_open, as_of),
                 "is_open": is_open,
-                "is_assigned": 1 if who else 0,
+                "is_assigned": 1 if names else 0,
             })
         return rows
 
@@ -288,15 +307,117 @@ class CaseIngestor(Ingestor):
         return rows
 
 
-def _project_names(conn, projects) -> dict:
-    names = [p for p in projects if p]
+def _chunks(names, size=300):
+    names = sorted(n for n in names if n)
+    return [names[i:i + size] for i in range(0, len(names), size)]
+
+
+def _projects(conn, projects) -> dict:
+    """Project -> its name, customer, type and status."""
     out = {}
-    for i in range(0, len(names), 300):
-        for d in conn.get_list("Project",
-                               filters={"name": ["in", names[i:i + 300]]},
-                               fields=["name", "project_name"], limit=100000):
-            out[d["name"]] = d.get("project_name")
+    for part in _chunks(projects):
+        for d in conn.get_list("Project", filters={"name": ["in", part]},
+                               fields=["name", "project_name", "customer", "project_type",
+                                       "status"], limit=ALL):
+            out[d["name"]] = d
     return out
+
+
+def _fields_of(conn, doctype) -> list[dict]:
+    """A doctype's fields as the site defines them, its custom fields included."""
+    if hasattr(conn, "get_meta"):
+        return conn.get_meta(doctype).get("fields") or []
+    return [{"fieldname": f.fieldname, "fieldtype": f.fieldtype, "options": f.options}
+            for f in frappe.get_meta(doctype).fields]
+
+
+def engineer_fields(conn) -> list[tuple[str, str, str]]:
+    """The site's own engineer field on Task, where it has one: each table on Task whose
+    rows link an Employee (Gigmann's "Service Engineers"), as (table field, child doctype,
+    link field). None on a site that keeps no such table, or whose Task cannot be read."""
+    try:
+        task = _fields_of(conn, "Task")
+    except Exception:
+        return []
+    out = []
+    for f in task:
+        if f.get("fieldtype") not in ("Table", "Table MultiSelect") or not f.get("options"):
+            continue
+        try:
+            child = _fields_of(conn, f["options"])
+        except Exception:
+            continue
+        out += [(f["fieldname"], f["options"], c["fieldname"]) for c in child
+                if c.get("fieldtype") == "Link" and c.get("options") == "Employee"]
+    return out
+
+
+def _engineers(conn, tasks, whole=True) -> dict:
+    """Task -> the names of the people doing it, in order.
+
+    The task's own engineer field first (employees, named as their Employee record names
+    them). Where a task has none there, the people it is assigned to: each as the
+    employee whose account they sign in with, or by their account's name when no employee
+    is linked to it. A task naming nobody either way has no entry; it is reported as
+    not assigned, never guessed from notes or descriptions."""
+    def clean(name):
+        return " ".join(str(name or "").split())
+
+    try:
+        staff = conn.get_list("Employee", fields=["name", "employee_name", "user_id"],
+                              limit=ALL)
+    except Exception:
+        staff = []
+    by_id = {e["name"]: clean(e.get("employee_name")) or e["name"] for e in staff}
+    by_user = {e["user_id"]: by_id[e["name"]] for e in staff if e.get("user_id")}
+
+    linked = {}
+    for table, child, link in engineer_fields(conn):
+        filters = {"parenttype": "Task", "parentfield": table}
+        parts = [None] if whole else _chunks(t["name"] for t in tasks)
+        for part in parts:
+            if part is not None:
+                filters["parent"] = ["in", part]
+            for row in conn.get_list(child, filters=dict(filters), fields=["parent", link],
+                                     limit=ALL, parent_doctype="Task", order_by="idx asc"):
+                if row.get(link):
+                    linked.setdefault(row["parent"], []).append(
+                        by_id.get(row[link]) or row[link])
+
+    users = {}
+    for t in tasks:
+        if t["name"] not in linked:
+            users[t["name"]] = _assignees(t.get("_assign"))
+    unknown = sorted({u for us in users.values() for u in us if u not in by_user})
+    account = {}
+    for part in _chunks(unknown):
+        try:
+            account.update({u["name"]: clean(u.get("full_name")) or u["name"] for u in
+                            conn.get_list("User", filters={"name": ["in", part]},
+                                          fields=["name", "full_name"], limit=ALL)})
+        except Exception:
+            pass
+
+    out = {}
+    for t in tasks:
+        names = linked.get(t["name"]) or [by_user.get(u) or account.get(u) or u
+                                          for u in users.get(t["name"], [])]
+        if names:
+            out[t["name"]] = list(dict.fromkeys(names))
+    return out
+
+
+def _assignees(assign) -> list[str]:
+    """Everyone a task is assigned to (Frappe keeps them as a JSON list in _assign)."""
+    if not assign:
+        return []
+    try:
+        users = frappe.parse_json(assign)
+    except Exception:
+        return []
+    if isinstance(users, str):
+        users = [users]
+    return [u for u in (users or []) if u]
 
 
 def _first_assignee(assign) -> str | None:
@@ -306,14 +427,7 @@ def _first_assignee(assign) -> str | None:
     inventing a rule about which of them is accountable -- and is_assigned records
     only whether anyone is, which is the question the screens actually ask.
     """
-    if not assign:
-        return None
-    try:
-        users = frappe.parse_json(assign)
-    except Exception:
-        return None
-    if isinstance(users, str):
-        users = [users]
+    users = _assignees(assign)
     return users[0] if users else None
 
 
