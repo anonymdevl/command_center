@@ -23,8 +23,12 @@
   "col_who",
   "project",
   "project_name",
+  "customer",
+  "project_type",
+  "project_status",
   "owner_user",
   "assigned_to",
+  "engineers",
   "sec_time",
   "exp_start_date",
   "exp_end_date",
@@ -153,6 +157,24 @@
    "label": "Project name"
   },
   {
+   "fieldname": "customer",
+   "fieldtype": "Data",
+   "label": "Customer",
+   "search_index": 1
+  },
+  {
+   "fieldname": "project_type",
+   "fieldtype": "Data",
+   "label": "Project type",
+   "search_index": 1
+  },
+  {
+   "fieldname": "project_status",
+   "fieldtype": "Data",
+   "label": "Project status",
+   "description": "The project's own status. A task left open under a Completed or Cancelled project is not counted as open work."
+  },
+  {
    "fieldname": "owner_user",
    "fieldtype": "Data",
    "label": "Raised by"
@@ -162,6 +184,12 @@
    "fieldtype": "Data",
    "label": "Assigned to",
    "search_index": 1
+  },
+  {
+   "fieldname": "engineers",
+   "fieldtype": "Small Text",
+   "label": "Engineers",
+   "description": "Who is doing the work: the employees in the task's own engineer field where the site has one (a table linking Employee), otherwise the people it is assigned to. Blank where neither names anyone."
   },
   {
    "fieldname": "sec_time",
@@ -211,7 +239,7 @@
    "fieldname": "is_assigned",
    "fieldtype": "Check",
    "label": "Has an owner",
-   "description": "Zero where nobody is assigned. Unowned work is the finding, not a blank."
+   "description": "Zero where nobody is named on the task, in its engineer field or as an assignee. Unowned work is the finding, not a blank."
   }
  ]
 }

@@ -268,10 +268,16 @@ function drawTrend(panel, spec) {
   const title = panel.querySelector(".ph b")?.textContent?.trim() || "";
   let top = 0;
   values.forEach((v, i) => { if (v > values[top]) top = i; });
+  // Several series (Completed Work by Month, by type of work) are drawn stacked, one
+  // colour each in the palette's order; one series is the area it always was.
+  const series = (spec.series || []).filter((x) => x && Array.isArray(x.values)
+    && x.values.length === labels.length);
   chartIn(panel, "trend", wrap, {
-    type: "area", title, unit: spec._cur || "", unit2: "", labels, total: labels.length, note: "",
-    series: [{ name: title, values }], time: true,
-    peak: spec.peak && values[top] > 0 ? { index: top, text: spec.peak } : null,
+    type: series.length ? "stacked" : "area", title, unit: spec.count ? "" : spec._cur || "", unit2: "", labels,
+    total: labels.length, note: "", time: true,
+    series: series.length ? series.map((x) => ({ name: String(x.name), values: x.values.map(num) }))
+      : [{ name: title, values }],
+    peak: !series.length && spec.peak && values[top] > 0 ? { index: top, text: spec.peak } : null,
   });
   return true;
 }
@@ -387,6 +393,7 @@ function drawTable(panel, spec, onOpen) {
   }
   rows.forEach((r) => {
     const tr = el("tr");
+    if (r.keys) tr.dataset.keys = JSON.stringify(r.keys);
     // A rule above a subtotal row, as the designed tables draw one.
     if (r.rule) tr.style.borderTop = "2px solid var(--line2)";
     (r.cells || []).forEach((c) => {
@@ -406,6 +413,8 @@ function drawTable(panel, spec, onOpen) {
         td.append(a);
       } else if (c.bold) {
         td.append(el("b", null, c.text ?? ""));
+      } else if (c.progress) {
+        td.append(progress(c.progress));
       } else {
         td.textContent = c.text ?? "";
       }
@@ -428,7 +437,90 @@ function drawTable(panel, spec, onOpen) {
     });
     body.append(tr);
   });
+  if (spec.filters || spec.page) filterRows(panel, table, spec);
   return true;
+}
+
+/** How much of a project's work is done: a bar and "2 of 3"; "None listed" without tasks. */
+function progress({ done = 0, total = 0 }) {
+  if (!total) return el("span", "pg-none", "None listed");
+  const box = el("span", "pg");
+  const bar = el("span", "pg-bar");
+  const fill = el("i", done >= total ? "pg-done" : null);
+  fill.style.width = `${Math.round((100 * done) / total)}%`;
+  bar.append(fill);
+  box.append(bar, el("span", "pg-n", `${done} of ${total}`));
+  return box;
+}
+
+/**
+ * A long table's choices and its next rows (Every Project, 18 Nov 2026): one segmented
+ * choice per filter, each option keeping the rows whose keys hold it ("all" keeps every
+ * row), and the first spec.page of what is kept, with the rest a click away.
+ */
+function filterRows(panel, table, spec) {
+  const page = spec.page || 1e9;
+  const picked = panel._picked || (panel._picked = {});
+  let shown = page;
+  const bar = ensure(panel, ".dt-filters", () => el("div", "dt-filters"));
+  (table.closest(".dt-x, .dt-scroll") || table).before(bar);
+  bar.textContent = "";
+  (spec.filters || []).forEach((f) => {
+    if (!picked[f.name]) picked[f.name] = "all";
+    const seg = el("div", "segc");
+    seg.setAttribute("role", "group");
+    (f.options || []).forEach((o) => {
+      const b = el("button", picked[f.name] === o.key ? "on" : null, o.label);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(picked[f.name] === o.key));
+      b.addEventListener("click", () => {
+        picked[f.name] = o.key;
+        seg.querySelectorAll("button").forEach((x) => {
+          x.classList.toggle("on", x === b);
+          x.setAttribute("aria-pressed", String(x === b));
+        });
+        shown = page;
+        apply();
+      });
+      seg.append(b);
+    });
+    bar.append(seg);
+  });
+  const more = ensure(panel, ".dt-more", () => {
+    const b = el("button", "dt-more btn");
+    b.type = "button";
+    return b;
+  });
+  more.onclick = () => { shown += page; apply(); };
+  function keeps(tr) {
+    const keys = tr.dataset.keys ? JSON.parse(tr.dataset.keys) : {};
+    return Object.entries(picked).every(([name, key]) => key === "all"
+      || [].concat(keys[name] ?? []).includes(key));
+  }
+  function apply() {
+    const rows = [...table.querySelectorAll("tbody tr")].filter((tr) => tr.dataset.keys);
+    const kept = rows.filter(keeps);
+    rows.forEach((tr) => { tr.hidden = true; });
+    kept.slice(0, shown).forEach((tr) => { tr.hidden = false; });
+    const left = kept.length - Math.min(shown, kept.length);
+    more.hidden = left <= 0;
+    more.textContent = `Show ${Math.min(left, page)} More of ${left}`;
+    let none = table.querySelector("tbody tr.dt-none");
+    if (!kept.length) {
+      if (!none) {
+        none = el("tr", "dt-none");
+        const td = el("td", null, spec.empty || "Nothing matches.");
+        td.colSpan = table.querySelectorAll("thead th").length || 1;
+        td.style.color = "var(--dim)";
+        none.append(td);
+        table.querySelector("tbody").append(none);
+      }
+      none.hidden = false;
+    } else if (none) {
+      none.hidden = true;
+    }
+  }
+  apply();
 }
 
 /* ------------------------------------------------------------------ guide */

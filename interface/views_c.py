@@ -21,13 +21,46 @@ ENG_OV=f'''{panel("What the late jobs are costing us",
  bars0()+thin("Open jobs, the jobs someone is assigned to, and the engineers available to do them."),"","capacity")}'''
 
 ENG_DETAIL=f'''{panel("Every job past its promised date",
- dtable(["Job","Customer","Promised","Late by","Progress","Assigned to",""]),
+ dtable(["Job","Customer","Promised","Late by","Progress","Engineer",""]),
  "Click a job to see its record","late")}
 {panel("Every open job",
- dtable(["Job","Customer","Type","Status"]),"Open jobs, most overdue first","jobs")}
+ dtable(["Job","Customer","Type","Status"]),"Open jobs, most overdue first","jobs")}'''
+
+# Every project, open and completed, and the work finished (18 Nov 2026, the approved
+# mockups in insights-wording/projects-mockup). Engineers come from the task's own engineer
+# field where the site has one, else from who it is assigned to (ingest/operations.py).
+ENG_PROJECTS=f'''<div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+{kpi("Open Projects","—",explain="projects")}
+{kpi("Overdue Projects","—",explain="projects")}
+{kpi("Not Started","—",explain="projects")}
+{kpi("Projects Completed","—",explain="projects")}
+</div>
+{panel("Every Project",
+ dtable(["Project","Customer","Status","Tasks","Finished or Due","Engineer","Type"]),
+ "Most overdue first, then the latest completed","projects")}
 {panel("Why these numbers probably understate the problem",
  '<ul class="bul"></ul>'
- +thin("Where the job records themselves make the figures above less reliable than they look."))}'''
+ +thin("Where the project and job records themselves make the figures less reliable than they look."))}'''
+
+ENG_DONE=f'''<div class="kpis" style="grid-template-columns:repeat(5,1fr)">
+{kpi("This Quarter","—",explain="projectsdone")}
+{kpi("Last 12 Months","—",explain="projectsdone")}
+{kpi("Customers","—",explain="projectsdone")}
+{kpi("On Time","—",explain="projectsdone")}
+{kpi("Turnaround","—",explain="projectsdone")}
+</div>
+{panel("Completed Work by Month", trend0(200), "Projects completed, by type","projectsdone")}
+<div class="two">
+{panel("By Type of Work", dtable(["Type",("Completed",True),("On Time",True),("Turnaround",True)]))}
+{panel("Work by Engineer", dtable(["Engineer",("Projects",True),("Tasks",True)]))}
+</div>
+{panel("Recently Completed", dtable(["Project","Type","Tasks","Finished","Engineer",""]))}
+<div class="two">
+{panel("Customers We Serve Most", dtable(["Customer",("Projects",True),("Tasks",True),"Last Visit","Open Now"]))}
+{panel("Back Within 90 Days", dtable(["Customer","Job",("Visits",True),"Last"]),
+ "The same job at the same customer again within 90 days")}
+</div>
+{panel("Most Frequent Jobs", dtable(["Job",("Finished",True)]))}'''
 
 ENG_GAPS=f'''<div class="two">
 {panel("What engineering earns", thin("<b>What each project has billed against what it has cost.</b> Parts issued, hours booked and purchases linked to a project add up to its cost; its invoices to what it earned."))}
@@ -40,11 +73,15 @@ V_ENG=('<div class="topbar"><div><h3>Project Insights</h3>'
  +ENG_KPIS+
  '<div class="tabbar" data-g="teng">'
  '<button class="tab on" onclick="tab(this,&#39;teng&#39;,0)">Overview</button>'
- '<button class="tab" onclick="tab(this,&#39;teng&#39;,1)">Every job</button>'
- '<button class="tab" onclick="tab(this,&#39;teng&#39;,2)">Not yet measured</button></div>'
+ '<button class="tab" onclick="tab(this,&#39;teng&#39;,1)">Every Project</button>'
+ '<button class="tab" onclick="tab(this,&#39;teng&#39;,2)">Completed Work</button>'
+ '<button class="tab" onclick="tab(this,&#39;teng&#39;,3)">Every Job</button>'
+ '<button class="tab" onclick="tab(this,&#39;teng&#39;,4)">Earnings &amp; Service</button></div>'
  '<div class="tabpane on" data-g="teng" data-i="0">'+ENG_OV+'</div>'
- '<div class="tabpane" data-g="teng" data-i="1">'+ENG_DETAIL+'</div>'
- '<div class="tabpane" data-g="teng" data-i="2">'+ENG_GAPS+'</div>')
+ '<div class="tabpane" data-g="teng" data-i="1">'+ENG_PROJECTS+'</div>'
+ '<div class="tabpane" data-g="teng" data-i="2">'+ENG_DONE+'</div>'
+ '<div class="tabpane" data-g="teng" data-i="3">'+ENG_DETAIL+'</div>'
+ '<div class="tabpane" data-g="teng" data-i="4">'+ENG_GAPS+'</div>')
 
 # ============ CUSTOMER EXPERIENCE ============
 V_CX=f'''<div class="topbar"><div><h3>Customer Service &amp; Issues</h3>

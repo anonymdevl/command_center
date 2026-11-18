@@ -108,6 +108,17 @@ export const CARD_KPIS = {
     Engineers: "engineers",
     // Open jobs with hours, expenses or project costs booked against them.
     "Jobs costed": "tasks_costed",
+    // Every Project and Completed Work: every project, open and completed
+    // (kpi/live_projects.py).
+    "Open Projects": "projects_open",
+    "Overdue Projects": "projects_overdue",
+    "Not Started": "projects_not_started",
+    "Projects Completed": "projects_completed",
+    "This Quarter": "projects_done_quarter",
+    "Last 12 Months": "projects_done_year",
+    Customers: "customers_served",
+    "On Time": "tasks_on_time",
+    "Turnaround": "projects_turnaround",
   },
   hr: {
     // Two different cards, two different figures. Both were mapped to headcount, which

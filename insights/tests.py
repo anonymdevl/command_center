@@ -9021,3 +9021,70 @@ class SetPasswordLink(TransactionTestCase):
         self._ok("reset_password", username="ama@test.com", password="fallback-long-pass-7",
                  password2="fallback-long-pass-7")
         self.assertTrue(Client().login(username="ama@test.com", password="fallback-long-pass-7"))
+
+
+class TaskEngineers(SimpleTestCase):
+    """Who is doing a task (18 Nov 2026, Project Insights): the task's own engineer field
+    where the site has one (a table on Task linking Employee), otherwise the people it is
+    assigned to, named as their employee record or account names them; nobody otherwise.
+    A task left open under a Completed project is not counted as open work."""
+
+    class Site:
+        def __init__(self, field=True):
+            self.field = field
+
+        def get_meta(self, doctype):
+            if doctype == "Task":
+                return {"fields": [{"fieldname": "service_engineers", "fieldtype": "Table MultiSelect",
+                                    "options": "Task Service Engineer"}] if self.field else []}
+            if doctype == "Task Service Engineer":
+                return {"fields": [{"fieldname": "employee", "fieldtype": "Link", "options": "Employee"}]}
+            raise RuntimeError("not described")
+
+        def get_list(self, doctype, filters=None, fields=None, **kw):
+            data = {
+                "Task": [
+                    {"name": "T1", "status": "Open", "project": "P1", "_assign": '["ama@x.com"]'},
+                    {"name": "T2", "status": "Open", "project": "P1", "_assign": '["ama@x.com", "kofi@x.com"]'},
+                    {"name": "T3", "status": "Open", "project": "P2", "_assign": None},
+                ],
+                "Project": [{"name": "P1", "project_name": "Install", "customer": "Ridge",
+                             "project_type": "INSTALLATION", "status": "Open"},
+                            {"name": "P2", "project_name": "Repair", "customer": "Korle Bu",
+                             "project_type": "REPAIR", "status": "Completed"}],
+                "Employee": [{"name": "E1", "employee_name": "William  Anane ", "user_id": None},
+                             {"name": "E2", "employee_name": "Ama Mensah", "user_id": "ama@x.com"}],
+                "Task Service Engineer": [{"parent": "T1", "employee": "E1", "parenttype": "Task",
+                                           "parentfield": "service_engineers"}],
+                "User": [{"name": "kofi@x.com", "full_name": "Kofi Boateng"}],
+            }[doctype]
+            out = []
+            for r in data:
+                ok = all((r.get(k) in v[1]) if isinstance(v, list) and v[0] == "in" else
+                         (True if isinstance(v, list) else r.get(k) == v)
+                         for k, v in (filters or {}).items())
+                if ok:
+                    out.append({f: r.get(f) for f in (fields or ["name"])})
+            return out
+
+    def _rows(self, field=True):
+        from command_center.ingest.operations import TaskIngestor
+        return {r["src_name"]: r for r in TaskIngestor().extract(self.Site(field), as_of="2026-11-18")}
+
+    def test_the_engineer_field_comes_first_then_assignees(self):
+        rows = self._rows()
+        self.assertEqual(rows["T1"]["engineers"], "William Anane", "the field, the name tidied")
+        self.assertEqual(rows["T2"]["engineers"], "Ama Mensah, Kofi Boateng",
+                         "no field rows: assignees, as employee or account")
+        self.assertIsNone(rows["T3"]["engineers"], "nobody named is nobody, not a guess")
+        self.assertEqual([rows[t]["is_assigned"] for t in ("T1", "T2", "T3")], [1, 1, 0])
+        self.assertEqual((rows["T1"]["customer"], rows["T1"]["project_type"]), ("Ridge", "INSTALLATION"))
+
+    def test_a_site_without_the_field_uses_assignees(self):
+        self.assertEqual(self._rows(field=False)["T1"]["engineers"], "Ama Mensah")
+
+    def test_an_open_task_under_a_completed_project_is_not_open_work(self):
+        rows = self._rows()
+        self.assertEqual((rows["T3"]["status"], rows["T3"]["project_status"], rows["T3"]["is_open"]),
+                         ("Open", "Completed", 0))
+        self.assertEqual(rows["T1"]["is_open"], 1)

@@ -145,7 +145,8 @@ PRESENTATION = {
         "concentrate_on": ("assigned_to", "person"),
         "columns": [
             {"key": "subject", "label": "What", "type": "text"},
-            {"key": "assigned_to", "label": "Owner", "type": "text"},
+            {"key": "engineers", "label": "Engineer", "type": "text"},
+            {"key": "customer", "label": "Customer", "type": "text"},
             {"key": "project_name", "label": "Project", "type": "text"},
             {"key": "priority", "label": "Priority", "type": "text"},
             {"key": "exp_end_date", "label": "Due", "type": "date"},

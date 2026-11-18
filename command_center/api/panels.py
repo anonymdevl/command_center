@@ -36,7 +36,7 @@ the records drawer or {"href"} for a page on the business's ERPNext.
 from __future__ import annotations
 
 import datetime as dt
-from collections import defaultdict
+from collections import Counter, defaultdict
 from urllib.parse import quote
 
 import frappe
@@ -856,8 +856,8 @@ def inv_reserved(ctx):
 # --------------------------------------------------------------------------- projects (tasks)
 def _tasks(ctx):
     return ctx.rows("fact_task", ["src_name", "subject", "project", "project_name", "status",
-                                  "assigned_to", "exp_end_date", "days_late", "is_open",
-                                  "is_assigned"])
+                                  "assigned_to", "engineers", "customer", "project_type",
+                                  "exp_end_date", "days_late", "is_open", "is_assigned"])
 
 
 TASK_STEPS = ["Open Project, click New for each installation or service job, and set the "
@@ -924,7 +924,7 @@ def eng_late(ctx):
         {"text": _late(t["days_late"]), "tone": "crit", "nowrap": True},
         {"text": f"{_num(progress.get(t['src_name'])):.0f}%" if _num(progress.get(t["src_name"]))
          else ("Not started" if (t["status"] or "") == "Open" else t["status"] or "")},
-        {"text": t["assigned_to"] or "Nobody", "tone": "" if t["assigned_to"] else "high"},
+        {"text": t["engineers"] or "Nobody", "tone": "" if t["engineers"] else "high"},
         {"ask": f"Why is the {t['subject'] or t['src_name']} job still open?", "text": "Ask why"},
     ]} for t in late]
     return {"kind": "table", "rows": rows, "empty": "No open job is past its promised date."}
@@ -953,6 +953,254 @@ def eng_open(ctx):
     if tasks:
         res["subtitle"] = f"{len(open_):,} open of {len(tasks):,} in total"
     return res
+
+
+# --------------------------------------------------------------------------- projects: every project, completed work
+# Every project, open and completed, and the work finished: kpi/live_projects.py works the
+# projects out once per screen (their own status, type, customer and dates from ERPNext,
+# their work from the task fact), so the cards and these panels cannot disagree.
+STAGES = {"overdue": ("Overdue", "t-od"), "not_started": ("Not Started", "t-wt"),
+          "in_progress": ("In Progress", "t-oo"), "completed": ("Completed", "t-ok"),
+          "cancelled": ("Cancelled", "t-dr")}
+SMALL_WORDS = {"and", "of", "on", "for", "the", "to", "in"}
+
+
+def _book(ctx):
+    from command_center.kpi.live_projects import book
+    return book(ctx.reader())
+
+
+def _kind(text) -> str:
+    """A project type as a heading says it: "MAINTENANCE AND SERVICING" is Maintenance and
+    Servicing; a type already in mixed case is left as the business wrote it."""
+    text = (text or "").strip()
+    if not text:
+        return "No Type Set"
+    if not text.isupper():
+        return text
+    words = text.lower().split()
+    return " ".join(w if i and w in SMALL_WORDS else "-".join(x.capitalize() for x in w.split("-"))
+                    for i, w in enumerate(words))
+
+
+def _project_cell(ctx, p):
+    from command_center.kpi.live_projects import stem
+    return {"text": stem(p["title"]) or p["name"], "sub": p["name"],
+            "drill": {"href": f"{ctx.site()}/app/project/{p['name']}"}}
+
+
+def _engineer_cell(names):
+    return ({"text": ", ".join(names)} if names else {"text": "Not assigned", "tone": "dim"})
+
+
+def eng_projects(ctx):
+    b = _book(ctx)
+    projects = b["projects"]
+    if not projects:
+        return _guide(ctx, "No project is recorded in ERPNext.", TASK_STEPS, "/app/project")
+    order = {"overdue": 0, "not_started": 1, "in_progress": 2, "completed": 3, "cancelled": 4}
+    projects = sorted(projects, key=lambda p: (
+        order[p["stage"]], -p["days_late"],
+        -(p["finished"].toordinal() if p["finished"] else 0),
+        p["due"].toordinal() if p["due"] else 10 ** 9))
+    rows = []
+    for p in projects:
+        word, tag = STAGES[p["stage"]]
+        if p["stage"] == "overdue":
+            word = f"{p['days_late']:,} Day{'s' if p['days_late'] != 1 else ''} Late"
+        elif p["stage"] == "completed" and p["open_tasks"]:
+            word, tag = f"Completed, {p['open_tasks']} Task{'s' if p['open_tasks'] != 1 else ''} Open", "t-wt"
+        status = ["open"] if p["status"] not in ("Completed", "Cancelled") else []
+        status += [p["stage"]]
+        rows.append({"keys": {"status": status, "type": _kind(p["type"])}, "cells": [
+            _project_cell(ctx, p),
+            {"text": p["customer"] or "No customer", "tone": "" if p["customer"] else "dim"},
+            {"text": word, "tag": tag},
+            {"progress": {"done": p["done"], "total": p["tasks"]}},
+            {"text": _date(p["finished"] or p["due"]) if (p["finished"] or p["due"]) else "—",
+             "nowrap": True},
+            _engineer_cell(p["engineers"]),
+            {"text": _kind(p["type"])},
+        ]})
+    n = Counter(p["stage"] for p in b["projects"])
+    open_ = sum(1 for p in b["projects"] if p["status"] not in ("Completed", "Cancelled"))
+    kinds = Counter(_kind(p["type"]) for p in b["projects"])
+    filters = [
+        {"name": "status", "options": [
+            {"key": "all", "label": f"All {len(b['projects']):,}"},
+            {"key": "open", "label": f"Open {open_:,}"},
+            {"key": "overdue", "label": f"Overdue {n['overdue']:,}"},
+            {"key": "completed", "label": f"Completed {n['completed']:,}"}]},
+        {"name": "type", "options": [{"key": "all", "label": "Every Type"}] + [
+            {"key": k, "label": k} for k, _ in kinds.most_common(4) if k != "No Type Set"]},
+    ]
+    return {"kind": "table", "rows": rows, "filters": filters, "page": 20,
+            "empty": "No project matches."}
+
+
+def _months(as_of, n=12):
+    out, y, m = [], as_of.year, as_of.month
+    for _ in range(n):
+        out.append((y, m))
+        m -= 1
+        if not m:
+            y, m = y - 1, 12
+    return out[::-1]
+
+
+def eng_done_months(ctx):
+    from command_center.kpi.live_projects import completed_since, year_back
+    b = _book(ctx)
+    done = completed_since(b, year_back(b["as_of"]))
+    if not any(p["status"] == "Completed" for p in b["projects"]):
+        return {"kind": "list", "items": [{"text": "No project is marked Completed yet."}]}
+    months = _months(b["as_of"])
+    kinds = [k for k, _ in Counter(_kind(p["type"]) for p in done).most_common()]
+    shown, rest = kinds[:4], kinds[4:]
+    series = []
+    for k in shown + (["Other"] if rest else []):
+        want = set(rest) if k == "Other" else {k}
+        series.append({"name": k, "values": [
+            sum(1 for p in done if _kind(p["type"]) in want
+                and (p["finished"].year, p["finished"].month) == ym) for ym in months]})
+    labels = [frappe.utils.getdate(f"{y}-{m:02d}-01").strftime("%b %Y") for y, m in months]
+    total = len(done)
+    return {"kind": "trend", "labels": labels, "series": series, "count": True,
+            "values": [sum(s["values"][i] for s in series) for i in range(len(months))],
+            "subtitle": f"{total:,} project{'s' if total != 1 else ''} in the last 12 months"}
+
+
+def eng_done_types(ctx):
+    from command_center.kpi.live_projects import on_time, turnaround
+    b = _book(ctx)
+    done = [p for p in b["projects"] if p["status"] == "Completed"]
+    if not done:
+        return {"kind": "table", "rows": [], "empty": "No project is marked Completed yet."}
+    by = {}
+    for p in done:
+        by.setdefault(_kind(p["type"]), []).append(p)
+    names = {p["name"]: _kind(p["type"]) for p in done}
+    tasks = {}
+    for t in b["tasks"]:
+        if t["status"] == "Completed" and t["project"] in names:
+            tasks.setdefault(names[t["project"]], []).append(t)
+    rows = []
+    for k, ps in sorted(by.items(), key=lambda kv: -len(kv[1])):
+        ok, measured = on_time(tasks.get(k, []))
+        days, _ = turnaround(ps)
+        rows.append({"cells": [
+            {"text": k},
+            {"text": f"{len(ps):,}", "num": True},
+            {"text": f"{round(100 * ok / measured)}%" if measured else "—", "num": True,
+             "tone": "" if not measured or ok == measured else "high"},
+            {"text": f"{round(days)} day{'s' if round(days) != 1 else ''}" if days is not None
+             else "—", "num": True},
+        ]})
+    return {"kind": "table", "rows": rows, "subtitle": "Every completed project"}
+
+
+def eng_done_engineers(ctx):
+    from command_center.kpi.live_projects import tasks_done_since, year_back
+    b = _book(ctx)
+    done = tasks_done_since(b, year_back(b["as_of"]))
+    if not done:
+        return {"kind": "table", "rows": [], "empty": "No task was finished in the last 12 months."}
+    jobs, projects = Counter(), {}
+    nobody = 0
+    for t in done:
+        names = [n.strip() for n in (t["engineers"] or "").split(",") if n.strip()]
+        if not names:
+            nobody += 1
+        for n in names:
+            jobs[n] += 1
+            projects.setdefault(n, set()).add(t["project"])
+    rows = [{"cells": [{"text": n}, {"text": f"{len(projects[n]):,}", "num": True},
+                       {"text": f"{c:,}", "num": True}]} for n, c in jobs.most_common(8)]
+    if nobody:
+        rows.append({"cells": [{"text": "Not assigned", "tone": "dim"}, {"text": "", "num": True},
+                               {"text": f"{nobody:,}", "num": True, "tone": "dim"}]})
+    return {"kind": "table", "rows": rows, "subtitle": "Tasks finished, last 12 months"}
+
+
+def eng_done_recent(ctx):
+    b = _book(ctx)
+    done = sorted([p for p in b["projects"] if p["finished"]], key=lambda p: p["finished"],
+                  reverse=True)[:8]
+    rows = []
+    for p in done:
+        left = p["open_tasks"]
+        rows.append({"cells": [
+            {**_project_cell(ctx, p), "sub": f"{p['name']} · {p['customer']}" if p["customer"]
+             else p["name"]},
+            {"text": _kind(p["type"])},
+            {"progress": {"done": p["done"], "total": p["tasks"]}},
+            {"text": _date(p["finished"]), "nowrap": True},
+            _engineer_cell(p["engineers"]),
+            {"text": f"{left} Task{'s' if left != 1 else ''} Open" if left else "Completed",
+             "tag": "t-wt" if left else "t-ok"},
+        ]})
+    return {"kind": "table", "rows": rows, "empty": "No completed project records when it finished."}
+
+
+def eng_done_customers(ctx):
+    from command_center.kpi.live_projects import tasks_done_since, year_back
+    b = _book(ctx)
+    done = [t for t in tasks_done_since(b, year_back(b["as_of"])) if t["customer"]]
+    if not done:
+        return {"kind": "table", "rows": [], "empty": "No finished task names a customer."}
+    jobs, projects, last = Counter(), {}, {}
+    for t in done:
+        c = t["customer"]
+        jobs[c] += 1
+        projects.setdefault(c, set()).add(t["project"])
+        last[c] = max(last.get(c) or t["completed_on"], t["completed_on"])
+    still = Counter(p["customer"] for p in b["projects"]
+                    if p["customer"] and p["status"] not in ("Completed", "Cancelled"))
+    rows = [{"cells": [
+        {"text": c}, {"text": f"{len(projects[c]):,}", "num": True},
+        {"text": f"{n:,}", "num": True}, {"text": _date(last[c]), "nowrap": True},
+        {"text": f"{still[c]:,} Open", "tag": "t-wt"} if still[c] else {"text": "—", "tone": "dim"},
+    ]} for c, n in jobs.most_common(8)]
+    return {"kind": "table", "rows": rows, "subtitle": "Last 12 months"}
+
+
+def eng_done_repeat(ctx):
+    """The same job at the same customer again within 90 days: equipment back for repair,
+    or a fault that did not stay fixed."""
+    from command_center.kpi.live_projects import _day, is_repeat_work, stem, year_back
+    b = _book(ctx)
+    since = year_back(b["as_of"])
+    kind = {p["name"]: p["type"] for p in b["projects"]}
+    seen = {}
+    for t in b["tasks"]:
+        if (t["status"] == "Completed" and t["customer"] and _day(t["completed_on"])
+                and is_repeat_work(t, kind.get(t["project"]))):
+            seen.setdefault((t["customer"], stem(t["subject"]).lower()), []).append(t)
+    rows = []
+    for (customer, _), ts in seen.items():
+        days = sorted({_day(t["completed_on"]) for t in ts})
+        # The visits leading up to the latest, each within 90 days of the one before.
+        run = 1
+        while run < len(days) and (days[-run] - days[-run - 1]).days <= 90:
+            run += 1
+        if run > 1 and days[-1] >= since:
+            rows.append((days[-1], run, customer, stem(ts[0]["subject"])))
+    rows.sort(key=lambda x: x[0], reverse=True)
+    out = [{"cells": [{"text": c}, {"text": what}, {"text": f"{n} visits", "num": True},
+                      {"text": _date(last), "nowrap": True}]} for last, n, c, what in rows[:8]]
+    return {"kind": "table", "rows": out,
+            "empty": "Nothing was back within 90 days in the last 12 months."}
+
+
+def eng_done_jobs(ctx):
+    from command_center.kpi.live_projects import stem, tasks_done_since, year_back
+    b = _book(ctx)
+    done = tasks_done_since(b, year_back(b["as_of"]))
+    count = Counter(stem(t["subject"]) for t in done if stem(t["subject"]))
+    rows = [{"cells": [{"text": k}, {"text": f"{n:,}", "num": True}]}
+            for k, n in count.most_common(8)]
+    return {"kind": "table", "rows": rows, "subtitle": "Last 12 months",
+            "empty": "No task was finished in the last 12 months."}
 
 
 # --------------------------------------------------------------------------- service (cases)
@@ -1696,6 +1944,27 @@ def eng_quality(ctx):
         items.append({"text": f"{_plural(len(orphan), 'late job')} {'belongs' if len(orphan) == 1 else 'belong'} "
                               f"to a project with no customer, so what {'it is' if len(orphan) == 1 else 'they are'} "
                               f"costing us cannot be counted."})
+    projects = _book(ctx)["projects"]
+    closed_open = [p for p in projects if p["status"] in ("Completed", "Cancelled") and p["open_tasks"]]
+    if closed_open:
+        items.append({"text": f"{_plural(len(closed_open), 'project')} marked Completed or Cancelled "
+                              f"still {'has' if len(closed_open) == 1 else 'have'} a task open "
+                              f"({closed_open[0]['name']} is one); those tasks are not counted as open work."})
+    empty = [p for p in projects if not p["tasks"] and p["status"] != "Cancelled"]
+    if empty:
+        items.append({"text": f"{_plural(len(empty), 'project')} {'has' if len(empty) == 1 else 'have'} "
+                              f"no task, so {'its' if len(empty) == 1 else 'their'} work cannot be counted."})
+    undated_done = [p for p in projects if p["status"] == "Completed" and not p["finished"]]
+    if undated_done:
+        items.append({"text": f"{_plural(len(undated_done), 'completed project')} "
+                              f"{'records' if len(undated_done) == 1 else 'record'} no finish date "
+                              f"(no Actual End Date and no task completed on a date), so "
+                              f"{'it is' if len(undated_done) == 1 else 'they are'} in no month's count."})
+    unnamed = [t for t in tasks if not t["engineers"]]
+    if unnamed:
+        items.append({"text": f"{_plural(len(unnamed), 'task')} {'names' if len(unnamed) == 1 else 'name'} "
+                              f"no engineer, in an engineer field or as an assignee, so "
+                              f"{'its' if len(unnamed) == 1 else 'their'} work is counted to nobody."})
     if not items:
         return {"kind": "list", "items": [{"text": "No duplicate, undated or inconsistent job "
                                                    "was found in the records."}], "note": ""}
@@ -2505,6 +2774,14 @@ SCREENS = {
         "Sales Orders To Deliver — Stock and Purchase Orders": _cover("inv"),
     },
     "eng": {
+        "Every Project": eng_projects,
+        "Completed Work by Month": eng_done_months,
+        "By Type of Work": eng_done_types,
+        "Work by Engineer": eng_done_engineers,
+        "Recently Completed": eng_done_recent,
+        "Customers We Serve Most": eng_done_customers,
+        "Back Within 90 Days": eng_done_repeat,
+        "Most Frequent Jobs": eng_done_jobs,
         "Can we actually deliver the work we are holding?": eng_capacity,
         "Every job past its promised date": eng_late,
         "Every open job": eng_open,
