@@ -475,7 +475,10 @@ def set_password(request):
             **ctx, csrf=get_token(request))
     resp = HttpResponse(html, status=status)
     resp["Cache-Control"] = "no-store"
-    resp["Referrer-Policy"] = "no-referrer"   # the link's token never leaves in a Referer
+    # The link's token never leaves in a Referer: strict-origin sends the site's origin
+    # alone. Not no-referrer: under it a browser posts the form with Origin "null", which
+    # the request-token check refuses (18 Nov 2026, the first live invite).
+    resp["Referrer-Policy"] = "strict-origin"
     resp["X-Robots-Tag"] = "noindex, nofollow"
     return resp
 

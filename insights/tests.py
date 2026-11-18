@@ -8851,14 +8851,18 @@ class SetPasswordLink(TransactionTestCase):
         return out, self._sent(smtp)
 
     def _set(self, path, pw=NEW_PW, pw2=None):
-        """Open the link in a fresh browser that enforces the request token, and post."""
+        """Open the link in a fresh browser that enforces the request token, and post over
+        HTTPS with the Origin a browser sends under the page's Referrer-Policy: "null"
+        under no-referrer, which Django's request-token check refuses (18 Nov 2026, the
+        first live invite ended on "Your session token has expired")."""
         c = Client(enforce_csrf_checks=True)
-        page = c.get(path)
+        page = c.get(path, secure=True)
         self.assertEqual(page.status_code, 200, page.content[:300])
         html = page.content.decode()
         fields = dict(re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)"', html))
         fields.update(password=pw, password2=pw if pw2 is None else pw2)
-        return c, c.post("/command-center-set-password", fields)
+        origin = "null" if page["Referrer-Policy"] == "no-referrer" else "https://testserver"
+        return c, c.post("/command-center-set-password", fields, secure=True, HTTP_ORIGIN=origin)
 
     def test_an_invite_sends_one_email_with_a_link_that_works_once(self):
         from insights.core.models import EmailLog, SecurityEvent
@@ -8888,7 +8892,7 @@ class SetPasswordLink(TransactionTestCase):
         page = Client().get(path)
         self.assertIn('name="robots" content="noindex', page.content.decode())
         self.assertIn("At least 10 characters", page.content.decode())
-        self.assertEqual(page["Referrer-Policy"], "no-referrer")
+        self.assertEqual(page["Referrer-Policy"], "strict-origin")
         c, done = self._set(path)
         self.assertEqual((done.status_code, done["Location"]), (302, "/command-center"))
         self.assertTrue(get_user_model().objects.get(username="ama@test.com").check_password(self.NEW_PW))
