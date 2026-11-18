@@ -1140,7 +1140,12 @@ class SettingsPage(TransactionTestCase):
                         mock.patch.dict(settings.CONFIG),
                         mock.patch.dict(frappe.conf),
                         mock.patch("insights.compat.enqueue",
-                                   lambda fn, **kw: self.enqueued.append((fn, kw)))]
+                                   lambda fn, **kw: self.enqueued.append((fn, kw))),
+                        # Jobs are only recorded here, never run, so a background answer
+                        # (speed.stored) must not be started either: its lock would stay
+                        # held and the next caller outside a request would wait out
+                        # speed.BG_LOCK -- 30 minutes, spinning, as time.sleep is off.
+                        mock.patch("command_center.speed._bg_start", lambda *a, **k: None)]
         for p in self.patches:
             p.start()
         U = get_user_model()
