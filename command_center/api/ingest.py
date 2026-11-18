@@ -444,9 +444,12 @@ def scheduled_load():
     Runs without a user, so it takes system connectors directly rather than the
     management-only entry point: the local business read as the system, a peer read
     with its read-only service account. Failures are logged per fact and per business
-    and stop nothing else.
+    and stop nothing else. Then the heavy reads are worked out again behind the screens
+    (background.py), so the morning's first look is answered at once.
     """
     _load_all(full=False)
+    from command_center import background
+    background.after_load()
 
 
 def scheduled_full_load():
@@ -459,6 +462,8 @@ def scheduled_full_load():
     own daily load, and is not rebuilt.
     """
     _load_all(full=True, remote_only=True)
+    from command_center import background
+    background.after_load()
 
 
 def _load_all(full: bool, remote_only: bool = False):

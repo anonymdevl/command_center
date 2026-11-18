@@ -132,6 +132,12 @@ scheduler_events = {
         # Reports whose scheduled time has come (Command Center Report Schedule).
         "command_center.api.reports.send_due",
     ],
+    # The heavy reads -- the change history, the Internal Audit screen's heavy panels,
+    # the year-to-date statements -- worked out behind the screens for every business,
+    # then its screens kept warm (background.py; also after the nightly load).
+    "hourly_long": [
+        "command_center.background.hourly",
+    ],
     "daily": [
         "command_center.api.changes.prune_consumed_events",
         "command_center.api.ingest.prune_load_log",

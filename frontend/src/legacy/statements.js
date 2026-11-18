@@ -17,11 +17,14 @@
 import { api } from "../api/client.js";
 import { exact, money } from "../format.js";
 import { guideBox } from "./guide.js";
-import { waitingLine } from "./reach.js";
+import { readAt, waitingLine } from "./reach.js";
 
 export const STATEMENT_VIEWS = new Set(["fin"]);
 const SECTIONS = ["summary", "tb", "cf"];
 const STORE = "cc-fs-period";
+// An answer still being worked out behind the screens (api/statements.py) is asked for
+// again this soon, rather than at the five minutes' refresh.
+const PENDING_RETRY_MS = 20000;
 const ARROW = "M7 17 17 7M8.5 7H17v8.5";
 
 /** Attach to the Finances screen. Returns { refresh, destroy }. */
@@ -30,7 +33,7 @@ export function mountStatements(root, { scope } = {}) {
   if (!box) return null;
   const saved = load();
   const st = { period: saved.period || "ytd", from: saved.from || "", to: saved.to || "",
-    data: {}, seq: 0, scope, alive: true };
+    data: {}, seq: 0, scope, alive: true, retry: null };
 
   const periods = [...box.querySelectorAll(".fs-p")];
   const custom = box.querySelector("#fs-custom");
@@ -103,6 +106,12 @@ export function mountStatements(root, { scope } = {}) {
           if (!st.alive || seq !== st.seq) return;
           st.data[section] = res;
           draw(box, section, res);
+          if (res?.pending && !st.retry) {
+            st.retry = setTimeout(() => {
+              st.retry = null;
+              if (st.alive && seq === st.seq) fetchAll(false);
+            }, PENDING_RETRY_MS);
+          }
         })
         .catch((e) => {
           if (!st.alive || seq !== st.seq || e?.name === "AbortError") return;
@@ -117,7 +126,10 @@ export function mountStatements(root, { scope } = {}) {
   fetchAll(true);
   return {
     refresh: () => fetchAll(false),
-    destroy: () => { st.alive = false; },
+    destroy: () => {
+      st.alive = false;
+      if (st.retry) clearTimeout(st.retry);
+    },
   };
 }
 
@@ -174,7 +186,9 @@ function whenLine(box, res) {
     w.textContent = "";
     return;
   }
-  const at = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  // When ERPNext's reports were read: the year to date is read behind the screens.
+  const at = (res.read_at && readAt(res.read_at))
+    || new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   w.textContent = `${res.period.span} · amounts in ${res.currency || "the company's currency"} · `
     + `from ${res.business}'s own ERPNext reports · read ${at}`;
 }

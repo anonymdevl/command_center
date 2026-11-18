@@ -1386,7 +1386,7 @@ def overdue_tasks_by_owner(ctx, p):
 
 def self_approvals(ctx, p):
     from command_center.kpi.live import self_approved
-    n, _ = self_approved(ctx.reader())
+    n = self_approved(ctx.reader())[0]
     if not n or n <= p["count"]:
         return []
     what, whats = ("submitted purchase order or payment",

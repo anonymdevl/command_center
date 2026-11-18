@@ -750,7 +750,11 @@ class PlatformEndToEnd(TransactionTestCase):
                                 f"{key}: {got[key]}")
             self.assertTrue(got[key]["drill"], f"{key} opens to nothing")
 
-        # every designed screen's charts and tables answer from the loaded records
+        # every designed screen's charts and tables answer from the loaded records -- once
+        # the heavy ones have been worked out behind the screens (background.py, hourly)
+        from command_center import background
+        with run_as("Administrator"):
+            background.run_all()
         from command_center.api import panels as panels_api
         for view, builders in panels_api.SCREENS.items():
             r = c.post("/api/method/command_center.api.panels.get",
@@ -2054,6 +2058,10 @@ class ManagementScreens(TransactionTestCase):
             return r.json()["message"]
 
         from command_center.kpi.live_governance import LIVE as GOV
+        # The approval record is read behind the screens (kpi/history.py, hourly).
+        from command_center import background
+        with run_as("Administrator"):
+            background.run_all()
         got = post("command_center.api.kpi.get", keys=sorted(GOV), business_code="test_medical_ltd")
         for key, fig in got.items():
             self.assertIn(fig["data_status"]["state"], ("live", "needs_setup", "stale"), f"{key}: {fig}")
@@ -2947,7 +2955,8 @@ class Recommendations(TransactionTestCase):
                          "creation": (now - dt.timedelta(days=70)).strftime("%Y-%m-%d %H:%M:%S"),
                          "base_grand_total": 30000} for i in range(3)]
             if "name" in f:
-                return [{"name": "PO-1", "owner": "a@test.com"}]
+                # The change history's read of the documents its steps name (kpi/history.py)
+                return [{"name": "PO-1", "owner": "a@test.com", "docstatus": 1}]
             return [{"name": "PO-1", "supplier": "Sup One", "base_grand_total": 9000,
                      "base_net_total": 9000,
                      "transaction_date": d(60), "schedule_date": d(30), "per_received": 0,

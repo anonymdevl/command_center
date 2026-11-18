@@ -56,18 +56,75 @@ def get(view: str, business_code: str | None = None) -> dict:
     # Kept per business and per whose view of its ERPNext (speed.py): a complete answer
     # is returned at once while it is fresh, and read again in the background once it
     # is not; the scheduler reads the screens people look at again after each refresh.
-    out = speed.cached("panels", business_code, {"view": view}, compute,
-                       {"view": view, "business_code": business_code}, complete=complete)
+    what, kwargs = cache_spec(view, business_code)
+    out = speed.cached("panels", business_code, what, compute, kwargs, complete=complete)
+    if view in BEHIND:
+        out = _with_behind(view, business_code, out)
     return {k: v for k, v in out.items() if k != "_failed"}
 
 
-def compute(view: str, business_code: str | None = None) -> dict:
+# A screen's panels too heavy to read while a person waits -- the whole of the purchase
+# orders, payments and journals, the change log -- worked out behind the screens
+# (speed.stored, background.py) and joined to the rest, which is read as usual.
+BEHIND = {"aud": ("Decisions taken", "Where approvals currently sit", "The latest changes",
+                  "What an auditor would raise on day one")}
+
+
+def cache_spec(view: str, business_code: str | None = None):
+    """(what is asked, compute's kwargs) for the screen's panels read as usual -- one
+    definition for get() and the scheduler's warming (speed._always)."""
+    kwargs = {"view": view, "business_code": business_code}
+    if view in BEHIND:
+        kwargs["part"] = "front"
+    return {k: v for k, v in kwargs.items() if k != "business_code"}, kwargs
+
+
+def behind_spec(view: str, business_code: str | None = None):
+    return ({"view": view, "part": "behind"},
+            {"view": view, "business_code": business_code, "part": "behind"})
+
+
+def _with_behind(view, business_code, front: dict) -> dict:
+    """The screen's answer with its heavy panels, as last worked out behind the screens
+    -- or, nothing kept yet, each said not answered yet while the job reads them."""
+    from command_center import speed
+    what, kwargs = behind_spec(view, business_code)
+    pending = False
+    if speed._business(business_code)["down"]:
+        behind = compute(**kwargs)  # known down: fails fast and says so, as every panel does
+    else:
+        got = speed.stored("panels", business_code, what, compute, kwargs, complete=complete)
+        if got is None:
+            pending = True
+            behind = {"panels": {t: {"kind": "unreachable"} for t in BEHIND[view]},
+                      "unreachable": True, **_Ctx(business_code).business()}
+        elif "failed" in got:
+            behind = got["failed"].get("answer") or {
+                "panels": {t: {"kind": "failed"} for t in BEHIND[view]}}
+        else:
+            behind = got["data"]
+    out = {**front, "panels": {**front.get("panels", {}), **behind.get("panels", {})}}
+    if behind.get("unreachable") and not out.get("unreachable"):
+        out.update({"unreachable": True, "business": behind.get("business"),
+                    "last_loaded": behind.get("last_loaded")})
+    if pending:
+        out["pending"] = True
+    return out
+
+
+def compute(view: str, business_code: str | None = None, part: str | None = None) -> dict:
     """The screen's panels, findings and line under the heading, read now. Each panel is
     independent of the others, so they are read side by side (speed.parallel); a panel
-    that fails is that panel's problem, as before."""
+    that fails is that panel's problem, as before. `part`: "behind" only the screen's
+    BEHIND panels, "front" all the others and its findings; None, everything."""
     from command_center import speed
     from command_center.kpi.live_departments import is_down
     builders = SCREENS.get(view) or {}
+    heavy = BEHIND.get(view, ())
+    if part == "behind":
+        builders = {t: fn for t, fn in builders.items() if t in heavy}
+    elif part == "front":
+        builders = {t: fn for t, fn in builders.items() if t not in heavy}
     with speed.interactive():
         ctx = _Ctx(business_code)
         try:
@@ -75,7 +132,7 @@ def compute(view: str, business_code: str | None = None) -> dict:
         except Exception:
             pass  # asked again (and failing as that panel's problem) where it is needed
         extra = [(name, table[view]) for name, table in (("findings", FINDINGS), ("when", WHEN))
-                 if view in table]
+                 if view in table and part != "behind"]
         jobs = list(builders.items()) + extra
         answers = speed.parallel([(lambda fn=fn: fn(ctx)) for _, fn in jobs])
     panels = {}
@@ -1222,12 +1279,12 @@ HISTORY_ROWS = (("Customer payments", "Payment Entry"), ("Customer invoices", "S
 
 
 def aud_history(ctx):
-    """The change log, by what was changed -- the same counts as the cards above it."""
-    from command_center.kpi.live import BUSINESS_DOCTYPES
-    r = ctx.reader()
-    named = [(label, dt_, r.count("Version", {"ref_doctype": dt_})) for label, dt_ in HISTORY_ROWS]
-    business = r.count("Version", {"ref_doctype": ["in", list(BUSINESS_DOCTYPES)]})
-    total = r.count("Version")
+    """The change log, by what was changed -- the same counts as the cards above it,
+    from the one summary read behind the screens (kpi/history.py)."""
+    from command_center.kpi import history
+    h = history.summary(ctx.reader())["data"]
+    named = [(label, dt_, h["by_doctype"].get(dt_, 0)) for label, dt_ in HISTORY_ROWS]
+    business, total = h["business"], h["total"]
     rest = max(business - sum(n for *_, n in named), 0)
     rows = [{"cells": [{"text": label, "sub": dt_}, {"text": f"{n:,}", "num": True}]}
             for label, dt_, n in named]

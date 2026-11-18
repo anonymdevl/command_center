@@ -58,6 +58,13 @@ class BusinessSlow(BusinessUnreachable):
     the next screen asks again as usual (16 Nov 2026)."""
 
 
+class NotWorkedOut(BusinessSlow):
+    """An answer read only in the background (speed.stored: the change history, the
+    Internal Audit screen's heavy panels, the default financial statements) has not been
+    worked out yet; the background job was started. Shown as a part not answered yet --
+    the same calm state as a slow read -- and filled at the next refresh."""
+
+
 class WriteUnconfirmed(BusinessUnreachable):
     """A write was sent and the business's ERPNext did not confirm it in time (no answer
     within WRITE_TIMEOUT, or its proxy gave up: 502/504). It may have gone through: a

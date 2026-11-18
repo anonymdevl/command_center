@@ -30,7 +30,6 @@ from __future__ import annotations
 
 from command_center.kpi.live import (CONFLICTS, Live, NeedsSetup, _read, _staff)
 
-APPROVED_DOCTYPES = ("Purchase Order", "Payment Entry")
 SCORE_KEYS = ("score_deliver", "score_paid", "score_paperwork")
 QUESTIONS = (("score_deliver", "Can we deliver what we sold?"),
              ("score_paid", "Are we getting paid?"),
@@ -56,30 +55,12 @@ def _today():
 def approval_record(r) -> dict:
     """Submitted purchase orders and payments whose approval steps the change log holds:
     how many, and how many had every step taken by the account that raised them (the
-    same test as kpi/live.self_approved). Cached ten minutes: the change log is the
-    largest table on a site."""
-    import frappe
-    key = f"cc:live:approval_record:{r.code or 'local'}"
-    hit = frappe.cache().get_value(key)
-    if hit:
-        return hit
-    steps = {}
-    for v in _read(r, "Version", {"ref_doctype": ["in", list(APPROVED_DOCTYPES)],
-                                  "data": ["like", '%"workflow_state"%']},
-                   ["ref_doctype", "docname", "owner"]):
-        steps.setdefault((v["ref_doctype"], v["docname"]), set()).add(v["owner"])
-    decided = alone = 0
-    for doctype in APPROVED_DOCTYPES:
-        names = [n for d, n in steps if d == doctype]
-        for i in range(0, len(names), 500):
-            for d in _read(r, doctype, {"name": ["in", names[i:i + 500]], "docstatus": 1},
-                           ["name", "owner"]):
-                decided += 1
-                if steps.get((doctype, d["name"])) == {d["owner"]}:
-                    alone += 1
-    out = {"decided": decided, "alone": alone}
-    frappe.cache().set_value(key, out, expires_in_sec=300)
-    return out
+    same test as kpi/live.self_approved), with when it was read. Worked out behind the
+    screens (kpi/history.py): the change log is the largest table on a site."""
+    from command_center.kpi import history
+    got = history.summary(r)
+    return {"decided": got["data"]["decided"], "alone": got["data"]["alone"],
+            "status": history.status(got)}
 
 
 def score_approvals(r):
@@ -96,7 +77,7 @@ def score_approvals(r):
     ok = got["decided"] - got["alone"]
     return (round(100 * ok / got["decided"], 4),
             f"of {got['decided']:,} approved purchase orders and payments had someone other "
-            f"than the raiser approve them", {"href": "/app/version"}, None, got["decided"])
+            f"than the raiser approve them", {"href": "/app/version"}, got["status"], got["decided"])
 
 
 # --------------------------------------------------------------------------- records

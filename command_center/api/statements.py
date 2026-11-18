@@ -37,8 +37,9 @@ accounts, a refusal of the platform's account. A business that does not answer i
 standard "can't reach" state. Never a figure that was not read.
 
 Everything here is a read, under the asking manager's own key on that ERPNext when they
-have linked one and the business's read-only account otherwise. Answers are kept five
-minutes per business and period.
+have linked one and the business's read-only account otherwise. Year to date, the
+period the screen opens with, is worked out behind the screens (speed.stored); any other
+period is kept five minutes per business, whose view and period.
 """
 
 from __future__ import annotations
@@ -58,9 +59,13 @@ REPORTS = {"pl": "Profit and Loss Statement", "bs": "Balance Sheet",
 CACHE_SECONDS = 300          # an open screen asks again every five minutes
 META_SECONDS = 6 * 3600      # fiscal years, the chart of accounts, the reports' filters
 SECTIONS = ("summary", "tb", "cf")
+# The period the screen opens with (legacy/statements.js), worked out behind the screens
+# hourly and after the nightly load (background.py); any other is read when asked for.
+STORED_PERIODS = ("ytd",)
 PERIODS = {"this_month": "This Month", "last_month": "Last Month", "quarter": "This Quarter",
            "ytd": "Year to Date", "last_year": "Last Year", "custom": "Custom"}
 MAX_CUSTOM_DAYS = 3 * 366
+FAILED = "The statements could not be read just now. They will be asked for again shortly."
 COGS = "Cost of Goods Sold"
 CURRENT_ASSET_TYPES = {"Bank", "Cash", "Receivable", "Stock", "Tax"}
 FIXED_ASSET_TYPES = {"Fixed Asset", "Accumulated Depreciation", "Capital Work in Progress"}
@@ -102,10 +107,28 @@ def get(business_code: str | None = None, period: str = "ytd", from_date: str | 
     code = _business_code(business_code)
     if not code:
         return _choose()
-    key = "cc:stmts:" + _digest([code, section, period, from_date, to_date, _today()])
+    if period in STORED_PERIODS and not from_date and not to_date:
+        return _stored(code, section, period)
+    from command_center import speed
+    # Whose view of its ERPNext: a person's own key has answers of their own (speed.py).
+    key = "cc:stmts:" + _digest([code, speed.scope(speed._business(code)), section, period,
+                                 from_date, to_date, _today()])
     cached = frappe.cache().get_value(key)
     if cached:
         return cached
+    out = work_out(code, section, period, from_date, to_date)
+    if complete(out):
+        frappe.cache().set_value(key, out, expires_in_sec=CACHE_SECONDS)
+    return out
+
+
+def complete(out) -> bool:
+    return isinstance(out, dict) and out.get("state") == "ok"
+
+
+def work_out(code: str, section: str = "summary", period: str = "ytd",
+             from_date: str | None = None, to_date: str | None = None) -> dict:
+    """One section, read now from the business's ERPNext."""
     ctx = _Ctx(code)
     out = ctx.head()
     try:
@@ -124,10 +147,26 @@ def get(business_code: str | None = None, period: str = "ytd", from_date: str | 
         if is_down(e):
             return {**out, **ctx.unreachable()}
         frappe.log_error(title=f"Command Center statements {section}", message=frappe.get_traceback())
-        return {**out, "state": "failed",
-                "message": "The statements could not be read just now. They will be asked for again shortly."}
-    frappe.cache().set_value(key, out, expires_in_sec=CACHE_SECONDS)
+        return {**out, "state": "failed", "message": FAILED}
     return out
+
+
+def _stored(code: str, section: str, period: str) -> dict:
+    """The period the screen opens with, as last worked out behind the screens
+    (speed.stored, background.py), with when it was read -- or, nothing kept yet, the
+    calm "not answered yet" while the job reads it."""
+    from command_center import speed
+    if speed._business(code)["down"]:
+        return work_out(code, section, period)  # known down: says so at once
+    got = speed.stored("statements", code, {"section": section, "period": period}, work_out,
+                       {"code": code, "section": section, "period": period}, complete=complete)
+    if got is None:
+        ctx = _Ctx(code)
+        return {**ctx.head(), **ctx.unreachable(), "pending": True}
+    if "failed" in got:
+        return got["failed"].get("answer") or {**_Ctx(code).head(), "state": "failed",
+                                               "message": FAILED}
+    return {**got["data"], "read_at": got.get("read_at")}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -167,6 +206,9 @@ class _Ctx:
         self._company = row.get("erpnext_company") or None
         self._conn = None
         self._site = None
+        from command_center import speed
+        # Whose view of its ERPNext the reports are run under (speed.scope).
+        self.scope = speed.scope(speed._business(code))
 
     # -- reading ------------------------------------------------------------------
     @property
@@ -291,7 +333,7 @@ class _Ctx:
     def run(self, report: str, filters: dict) -> dict:
         """One run of one of the four reports, kept five minutes."""
         f = {k: v for k, v in filters.items() if v is not None}
-        key = "cc:stmts-run:" + _digest([self.code, report, f])
+        key = "cc:stmts-run:" + _digest([self.code, self.scope, report, f])
         got = frappe.cache().get_value(key)
         if got is not None:
             return got

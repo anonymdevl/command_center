@@ -193,29 +193,35 @@ def last_refreshed(r):
 
 
 # --------------------------------------------------------------------------- change log
+# Read behind the screens and kept (kpi/history.py): the change log is the largest table
+# on a site, and these figures are stated as at the time it was read.
+def _history(r):
+    from command_center.kpi import history
+    got = history.summary(r)
+    return got["data"], history.status(got)
+
+
 def versions_total(r):
     import frappe
-    first = _first_version(r)
-    return r.count("Version"), (f"since {frappe.utils.format_date(first, 'd MMMM yyyy')}"
-                                if first else "nothing recorded")
+    h, st = _history(r)
+    first = h["first"]
+    return h["total"], (f"since {frappe.utils.format_date(first, 'd MMMM yyyy')}"
+                        if first else "nothing recorded"), None, st
 
 
 def versions_business(r):
-    return (r.count("Version", {"ref_doctype": ["in", list(BUSINESS_DOCTYPES)]}),
-            "invoices, orders, payments, stock")
-
-
-def _first_version(r):
-    return r.edge("Version", "creation", last=False)
+    h, st = _history(r)
+    return h["business"], "invoices, orders, payments, stock", None, st
 
 
 def versions_earliest(r):
     import frappe
-    first = _first_version(r)
+    h, st = _history(r)
+    first = h["first"]
     if not first:
-        return None, "nothing recorded"
+        return None, "nothing recorded", None, st
     months = frappe.utils.month_diff(frappe.utils.today(), first)
-    return str(first)[:10], f"{months} months of history"
+    return str(first)[:10], f"{months} months of history", None, st
 
 
 # --------------------------------------------------------------------------- purchase orders
@@ -466,30 +472,9 @@ def self_approved(r):
 
     The change log records each step as a change to workflow_state, with who made it.
     A document whose steps are not in the log (no workflow, or the log not kept for that
-    doctype) is not counted either way. Cached for ten minutes: the change log is the
-    largest table on a site, and the card sits on a screen people reopen.
-    """
-    import frappe
-    key = f"cc:live:self_approved:{r.code or 'local'}"
-    hit = frappe.cache().get_value(key)
-    if hit:
-        return tuple(hit)
-    steps = {}
-    for v in _read(r, "Version", {"ref_doctype": ["in", list(APPROVED_DOCTYPES)],
-                                  "data": ["like", '%"workflow_state"%']},
-                   ["ref_doctype", "docname", "owner"]):
-        steps.setdefault((v["ref_doctype"], v["docname"]), set()).add(v["owner"])
-    found = 0
-    for doctype in APPROVED_DOCTYPES:
-        names = [n for d, n in steps if d == doctype]
-        for i in range(0, len(names), 500):
-            for d in _read(r, doctype, {"name": ["in", names[i:i + 500]], "docstatus": 1},
-                           ["name", "owner"]):
-                if steps.get((doctype, d["name"])) == {d["owner"]}:
-                    found += 1
-    out = (found, "found in the change history")
-    frappe.cache().set_value(key, list(out), expires_in_sec=600)
-    return out
+    doctype) is not counted either way. Worked out behind the screens (kpi/history.py)."""
+    h, st = _history(r)
+    return h["alone"], "found in the change history", None, st
 
 
 # --------------------------------------------------------------------------- bank
@@ -647,18 +632,22 @@ def compute(keys, business_code=None, side_by_side: bool = True) -> dict:
     with speed.interactive():
         jobs = [(lambda spec=LIVE[k]: read(spec)) for k in wanted]
         answers = speed.parallel(jobs) if side_by_side else [speed.attempt(j) for j in jobs]
-    read_at = frappe.utils.now_datetime().strftime("%H:%M")
+    now_at = frappe.utils.now_datetime().strftime("%H:%M")
     out = {}
     for key, (ok, got) in zip(wanted, answers):
         spec = LIVE[key]
         drill = None
         counted = None
+        read_at = None
         if ok:
             value, note = got[0], got[1]
             drill = got[2] if len(got) > 2 else None
             # A fourth element is the figure's own status: needs_setup (guides.py) when
             # nothing behind it is recorded in ERPNext yet.
             state = (got[3] if len(got) > 3 and got[3] else {"state": "live", "message": None})
+            # A figure read behind the screens (kpi/history.py) says when it was read.
+            read_at = state.get("read_at")
+            state = {k: v for k, v in state.items() if k != "read_at"}
             # A fifth is how many records a share was counted over (Business Health's
             # "counted from", command_center/health.py).
             counted = got[4] if len(got) > 4 else None
@@ -678,13 +667,18 @@ def compute(keys, business_code=None, side_by_side: bool = True) -> dict:
                 # (the guarded reader fails the others at once), and the card says so
                 # rather than "could not be read".
                 value, note, state = None, "waiting for ERPNext", unreachable_status(got)
+                from command_center.connectors.base import NotWorkedOut
+                if isinstance(got, NotWorkedOut):
+                    state["pending"] = True  # worked out behind the screens, started now
             else:
                 frappe.log_error(title=f"Command Center live figure {key}",
                                  message=getattr(got, "__cc_traceback__", "") or repr(got))
                 value, note, state = None, "could not be read", {"state": "failed",
                                                                 "message": "This figure could not be read."}
         site = "" if not reader or reader.local else (reader.conn.base_url or "")
-        as_of = {"date": frappe.utils.today(), "basis": f"read from ERPNext at {read_at}"}
+        as_of = ({"date": read_at[:10], "basis": f"read from ERPNext at {read_at[11:16]}"}
+                 if read_at else
+                 {"date": frappe.utils.today(), "basis": f"read from ERPNext at {now_at}"})
         if spec.source != "erp":
             # Worked out from loaded facts: as of the data they cover, and as fresh as
             # their last load -- the same statement an engine figure makes.
