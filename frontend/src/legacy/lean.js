@@ -91,11 +91,14 @@ function check(host) {
   const can = open || (shown && el.scrollHeight > el.clientHeight + 1);
   if (host.classList.contains("lean-can") === can) return;
   host.classList.toggle("lean-can", can);
-  if (can) {
+  // Inside a heading that is itself a button (What Is This?, legacy/keys.js) the words open
+  // on a click only: a button inside a button is announced as neither.
+  const nested = host.parentElement?.closest("[onclick], [role=button]");
+  if (can && !nested) {
     host.tabIndex = 0;
     host.setAttribute("role", "button");
     host.setAttribute("aria-expanded", String(open));
-  } else {
+  } else if (!can) {
     host.removeAttribute("tabindex");
     host.removeAttribute("role");
     host.removeAttribute("aria-expanded");
