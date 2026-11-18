@@ -86,9 +86,9 @@ _HOME_TILES = "".join(
     f'<div class="hd">{desc}</div><div class="v">&nbsp;</div>'
     f'<div class="n">—</div></div>'
     for label, desc, go in (
-        ("Sales and Payments", "Accounts Receivable (Customer Ledger Balance)", "sales"),
-        ("Buying and Suppliers", "Accounts Payable (Supplier Ledger Balance)", "proc"),
-        ("Stock &amp; Warehouses", "Stock Value (Stock Balance)", "inv")))
+        ("Sales and Payments", "Accounts Receivable", "sales"),
+        ("Buying and Suppliers", "Accounts Payable", "proc"),
+        ("Stock &amp; Warehouses", "Stock Value", "inv")))
 
 V_COMMAND=f'''<div class="topbar"><div><h3 class="hello" id="greet">Good morning</h3>
 <div class="when">Here is where the business stands this morning.</div></div></div>
